@@ -6,24 +6,31 @@ function handleRegister(e) {
 
   const name = document.getElementById("name").value.trim();
   const phone = document.getElementById("phone").value.trim();
-  const email = document.getElementById("email").value.trim().toLowerCase();
-  const password = document.getElementById("password").value;
+  const email = document.getElementById("regEmail").value.trim().toLowerCase();
+  const password = document.getElementById("regPassword").value;
+  const confirmPassword = document.getElementById("confirmPassword").value;
 
-  // Check if user already exists
+  if (!name || !phone || !email || !password || !confirmPassword) {
+    alert("Please fill in all fields.");
+    return false;
+  }
+
+  if (password !== confirmPassword) {
+    alert("Passwords do not match.");
+    return false;
+  }
+
+  if (!/^[0-9]{10}$/.test(phone)) {
+    alert("Please enter a valid 10-digit phone number.");
+    return false;
+  }
+
   if (localStorage.getItem(email)) {
     alert("An account with this email already exists.");
     return false;
   }
 
-  // Create user object
-  const user = {
-    name,
-    phone,
-    email,
-    password,
-  };
-
-  // Store user data in localStorage
+  const user = { name, phone, email, password };
   localStorage.setItem(email, JSON.stringify(user));
 
   alert("Registration successful! You can now log in.");
@@ -43,7 +50,6 @@ function handleLogin(e) {
   const storedUser = JSON.parse(localStorage.getItem(email));
 
   if (storedUser && storedUser.password === password) {
-    // Save session info
     localStorage.setItem("loggedInUser", email);
     window.location.href = "index.html";
   } else {
@@ -71,4 +77,15 @@ window.addEventListener("DOMContentLoaded", () => {
       nameEl.textContent = user.name;
     }
   }
+});
+
+// =========================
+// 🧩 Attach Event Listeners
+// =========================
+document.addEventListener("DOMContentLoaded", () => {
+  const regForm = document.getElementById("registerForm");
+  const loginForm = document.getElementById("loginForm");
+
+  if (regForm) regForm.addEventListener("submit", handleRegister);
+  if (loginForm) loginForm.addEventListener("submit", handleLogin);
 });
