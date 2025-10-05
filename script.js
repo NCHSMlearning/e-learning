@@ -8,21 +8,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
   sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-  // =========================
-  // 🧭 Handle User Registration
-  // =========================
+  // Attach form listeners
   const regForm = document.getElementById("registerForm");
   if (regForm) regForm.addEventListener("submit", handleRegister);
 
-  // =========================
-  // 🔐 Handle User Login
-  // =========================
   const loginForm = document.getElementById("loginForm");
   if (loginForm) loginForm.addEventListener("submit", handleLogin);
 
-  // =========================
-  // 🙋 Display Logged-In User Name on Dashboard
-  // =========================
+  // Display logged-in user name
   const user = JSON.parse(localStorage.getItem("loggedInUser"));
   const nameEl = document.getElementById("userName");
   if (nameEl && user) {
@@ -57,28 +50,38 @@ async function handleRegister(e) {
     return false;
   }
 
-  const { data: authData, error: authError } = await sb.auth.signUp({
-    email: email,
-    password: password
-  });
+  try {
+    // 1️⃣ Sign up
+    const { data: signUpData, error: signUpError } = await sb.auth.signUp({ email, password });
+    if (signUpError) {
+      alert("Registration failed: " + signUpError.message);
+      return;
+    }
 
-  if (authError) {
-    alert('Registration failed: ' + authError.message);
-    return false;
+    // 2️⃣ Sign in immediately (needed for RLS)
+    const { data: signInData, error: signInError } = await sb.auth.signInWithPassword({ email, password });
+    if (signInError) {
+      alert("Sign-in failed after registration: " + signInError.message);
+      return;
+    }
+
+    // 3️⃣ Insert profile
+    const { error: profileError } = await sb
+      .from('profiles')
+      .insert([{ id: signInData.user.id, full_name: name, phone, role: 'student' }]);
+
+    if (profileError) {
+      alert('Profile creation failed: ' + profileError.message);
+      return;
+    }
+
+    alert("✅ Registration successful! You are now logged in.");
+    window.location.href = "index.html";
+
+  } catch (err) {
+    console.error(err);
+    alert("An unexpected error occurred.");
   }
-
-  const userId = authData.user.id;
-  const { error: profileError } = await sb
-    .from('profiles')
-    .insert([{ id: userId, full_name: name, role: 'student' }]);
-
-  if (profileError) {
-    alert('Profile creation failed: ' + profileError.message);
-    return false;
-  }
-
-  alert("✅ Registration successful! You can now log in.");
-  window.location.href = "login.html";
 }
 
 // =========================
@@ -90,10 +93,7 @@ async function handleLogin(e) {
   const email = document.getElementById("email")?.value.trim().toLowerCase();
   const password = document.getElementById("password")?.value;
 
-  const { data: authData, error: authError } = await sb.auth.signInWithPassword({
-    email, password
-  });
-
+  const { data: authData, error: authError } = await sb.auth.signInWithPassword({ email, password });
   if (authError) {
     alert('Login failed: ' + authError.message);
     return;
@@ -111,12 +111,7 @@ async function handleLogin(e) {
   }
 
   localStorage.setItem('loggedInUser', JSON.stringify(profile));
-
-  if (profile.role === 'admin') {
-    window.location.href = 'admin.html';
-  } else {
-    window.location.href = 'index.html';
-  }
+  window.location.href = profile.role === 'admin' ? 'admin.html' : 'index.html';
 }
 
 // =========================
