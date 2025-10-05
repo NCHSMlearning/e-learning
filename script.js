@@ -1,9 +1,11 @@
 // =========================
 // 🔗 Initialize Supabase
 // =========================
-const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';           // Replace with your project URL
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk'; // Replace with your anon key
-const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
+
+// Use a different variable name to avoid the initialization issue
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // =========================
 // 🧭 Handle User Registration
@@ -32,8 +34,7 @@ async function handleRegister(e) {
     return false;
   }
 
-  // ✅ Sign up user with Supabase Auth
-  const { data: authData, error: authError } = await supabase.auth.signUp({
+  const { data: authData, error: authError } = await sb.auth.signUp({
     email: email,
     password: password
   });
@@ -43,9 +44,8 @@ async function handleRegister(e) {
     return false;
   }
 
-  // ✅ Insert profile into 'profiles' table
   const userId = authData.user.id;
-  const { error: profileError } = await supabase
+  const { error: profileError } = await sb
     .from('profiles')
     .insert([{ id: userId, full_name: name, role: 'student' }]);
 
@@ -67,7 +67,7 @@ async function handleLogin(e) {
   const email = document.getElementById("email")?.value.trim().toLowerCase();
   const password = document.getElementById("password")?.value;
 
-  const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+  const { data: authData, error: authError } = await sb.auth.signInWithPassword({
     email, password
   });
 
@@ -76,8 +76,7 @@ async function handleLogin(e) {
     return;
   }
 
-  // ✅ Fetch profile to determine role
-  const { data: profile, error: profileError } = await supabase
+  const { data: profile, error: profileError } = await sb
     .from('profiles')
     .select('*')
     .eq('id', authData.user.id)
@@ -88,7 +87,6 @@ async function handleLogin(e) {
     return;
   }
 
-  // Save logged-in user info locally for display purposes
   localStorage.setItem('loggedInUser', JSON.stringify(profile));
 
   if (profile.role === 'admin') {
@@ -102,7 +100,7 @@ async function handleLogin(e) {
 // 🚪 Handle Logout
 // =========================
 async function logout() {
-  await supabase.auth.signOut();
+  await sb.auth.signOut();
   localStorage.removeItem("loggedInUser");
   window.location.href = "login.html";
 }
@@ -128,4 +126,3 @@ document.addEventListener("DOMContentLoaded", () => {
   if (regForm) regForm.addEventListener("submit", handleRegister);
   if (loginForm) loginForm.addEventListener("submit", handleLogin);
 });
-
