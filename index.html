@@ -3,159 +3,91 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Nakuru College of Health Sciences and Management</title>
+  <title>Student Dashboard | NCHSM</title>
   <link rel="stylesheet" href="style.css">
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/supabase.min.js"></script>
-  <script src="script.js"></script> <!-- Make sure updated script.js is used -->
 </head>
 <body>
-  <!-- SIDEBAR -->
+
+  <!-- Sidebar -->
   <div class="sidebar">
-    <div class="logo-section">
-      <img src="images/Logo_NCHSM.png" alt="NCHSM Logo" class="logo" />
-      <h2 class="college-name">NCHSM</h2>
+    <h2>NCHSM Student</h2>
+    <a href="#" class="active" data-tab="dashboard">Dashboard</a>
+    <a href="#" data-tab="attendance">Attendance</a>
+    <a href="#" data-tab="courses">Courses</a>
+    <a href="#" data-tab="cats">Exams/CATS</a>
+    <a href="#" data-tab="messages">Inbox</a>
+    <a href="#" data-tab="calendar">Calendar</a>
+    <a href="#" data-tab="resources">Resources</a>
+    <a href="#" id="logout">Logout</a>
+  </div>
+
+  <!-- Main content -->
+  <div class="main">
+    <h1>Welcome, Student!</h1>
+
+    <!-- Dashboard Cards -->
+    <div class="cards" id="dashboard-tab">
+      <div class="card" onclick="showTab('attendance')">Attendance</div>
+      <div class="card" onclick="showTab('courses')">Courses</div>
+      <div class="card" onclick="showTab('cats')">Exams/CATS</div>
+      <div class="card" onclick="showTab('messages')">Inbox</div>
+      <div class="card" onclick="showTab('calendar')">Calendar</div>
+      <div class="card" onclick="showTab('resources')">Resources</div>
     </div>
-    <nav class="nav-links">
-      <a href="#" class="active">🏠 Home</a>
-      <a href="#">📘 Courses</a>
-      <a href="#">📅 Calendar</a>
-      <a href="#">💬 Inbox</a>
-      <a href="#">📚 Library</a>
-      <a href="#">👤 Profile</a>
-      <a href="#attendanceSection">📝 Attendance</a>
-      <a href="admin.html" id="adminLink">🛠 Admin</a>
-    </nav>
-    <div class="footer-note">
-      <p>&copy; 2025 NCHSM</p>
+
+    <!-- Tabs -->
+    <div class="tab-content" id="attendance" style="display:none;">
+      <h2>Attendance</h2>
+      <div id="student-attendance"></div>
+    </div>
+
+    <div class="tab-content" id="courses" style="display:none;">
+      <h2>Courses</h2>
+      <div id="student-courses"></div>
+    </div>
+
+    <div class="tab-content" id="cats" style="display:none;">
+      <h2>Exams/CATS</h2>
+      <div id="student-cats"></div>
+    </div>
+
+    <div class="tab-content" id="messages" style="display:none;">
+      <h2>Inbox</h2>
+      <div id="student-messages"></div>
+    </div>
+
+    <div class="tab-content" id="calendar" style="display:none;">
+      <h2>Calendar</h2>
+      <div id="student-calendar"></div>
+    </div>
+
+    <div class="tab-content" id="resources" style="display:none;">
+      <h2>Resource Center</h2>
+      <div id="student-resources"></div>
     </div>
   </div>
 
-  <!-- MAIN CONTENT -->
-  <div class="main-content">
-    <header>
-      <h1>Nakuru College of Health Sciences and Management</h1>
-      <h2 class="subtitle">E-Learning Portal</h2>
-      <p>Welcome, <span id="userName"></span>!</p>
-    </header>
-
-    <!-- DASHBOARD -->
-    <section class="dashboard">
-      <div class="welcome-box">
-        <h3>Recent Activity</h3>
-        <div class="activity-card">
-          <strong>No recent messages</strong>
-          <p>You don't have any messages yet. Once you start your courses, this section will show updates, announcements, and grades.</p>
-        </div>
-      </div>
-
-      <aside class="upcoming">
-        <h3>Coming Up</h3>
-        <p>Nothing for the next week</p>
-      </aside>
-    </section>
-
-    <!-- ATTENDANCE SECTION -->
-    <section id="attendanceSection" class="attendance-section">
-      <h3>Student Attendance</h3>
-      <form id="attendanceForm">
-        <label for="studentClass">Select Class:</label>
-        <select id="studentClass" name="studentClass" required>
-          <option value="">Loading classes...</option>
-        </select>
-
-        <input type="hidden" id="latitude" name="latitude">
-        <input type="hidden" id="longitude" name="longitude">
-
-        <button type="submit">Submit Attendance</button>
-      </form>
-      <div id="attendanceMessage" class="attendance-message"></div>
-    </section>
-
-    <!-- FOOTER -->
-    <footer class="main-footer">
-      This portal content is provided by Nakuru College of Health Sciences and Management.  
-      <br>All rights reserved.
-    </footer>
-  </div>
-
-  <!-- Initialize page with Supabase -->
+  <script src="script.js"></script>
   <script>
-    document.addEventListener("DOMContentLoaded", async () => {
-      // Show student name
-      const user = JSON.parse(localStorage.getItem("loggedInUser"));
-      if (!user) {
-        window.location.href = "login.html"; // redirect if not logged in
-        return;
-      }
-      document.getElementById("userName").textContent = user.full_name;
+    const navLinks = document.querySelectorAll('.sidebar a[data-tab]');
+    const tabs = document.querySelectorAll('.tab-content, #dashboard-tab');
 
-      // Hide admin link if user is not admin
-      const adminLink = document.getElementById("adminLink");
-      if (user.role !== "admin") adminLink.style.display = "none";
+    function showTab(tabId) {
+      tabs.forEach(tab => tab.style.display = 'none');
+      document.getElementById(tabId).style.display = 'block';
 
-      // Load active classes from Supabase
-      const { data: classes, error } = await supabase
-        .from('classes')
-        .select('id, name')
-        .eq('active', true);
+      navLinks.forEach(link => link.classList.remove('active'));
+      const activeLink = [...navLinks].find(l => l.dataset.tab === tabId);
+      if(activeLink) activeLink.classList.add('active');
+    }
 
-      const studentClassSelect = document.getElementById("studentClass");
-      if (error) {
-        console.error("Error loading classes:", error);
-        studentClassSelect.innerHTML = `<option value="">Error loading classes</option>`;
-      } else {
-        studentClassSelect.innerHTML = classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-      }
+    showTab('dashboard');
 
-      // Get geolocation
-      const latitudeInput = document.getElementById("latitude");
-      const longitudeInput = document.getElementById("longitude");
-      const messageDiv = document.getElementById("attendanceMessage");
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            latitudeInput.value = position.coords.latitude;
-            longitudeInput.value = position.coords.longitude;
-          },
-          (error) => {
-            console.error("Geolocation error:", error);
-            messageDiv.textContent = "Could not get your location. Please allow location access.";
-            messageDiv.style.color = "red";
-          }
-        );
-      } else {
-        messageDiv.textContent = "Geolocation is not supported by your browser.";
-        messageDiv.style.color = "red";
-      }
-
-      // Handle attendance submission
-      const form = document.getElementById("attendanceForm");
-      form.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const selectedClassId = studentClassSelect.value;
-        if (!selectedClassId) {
-          messageDiv.textContent = "Please select a class.";
-          messageDiv.style.color = "red";
-          return;
-        }
-
-        const { data, error } = await supabase.from('attendance').insert([{
-          student_id: user.id,
-          class_id: selectedClassId,
-          latitude: latitudeInput.value,
-          longitude: longitudeInput.value
-        }]);
-
-        if (error) {
-          messageDiv.textContent = "Error submitting attendance: " + error.message;
-          messageDiv.style.color = "red";
-        } else {
-          messageDiv.textContent = "Attendance submitted successfully!";
-          messageDiv.style.color = "green";
-          form.reset();
-        }
-      });
+    document.getElementById('logout').addEventListener('click', () => {
+      localStorage.clear();
+      window.location.href = 'login.html';
     });
   </script>
 </body>
 </html>
+``
