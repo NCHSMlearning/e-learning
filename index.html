@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Nakuru College of Health Sciences and Management</title>
   <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/supabase.min.js"></script>
+  <script src="script.js"></script> <!-- Make sure updated script.js is used -->
 </head>
 <body>
   <!-- SIDEBAR -->
@@ -21,7 +23,7 @@
       <a href="#">📚 Library</a>
       <a href="#">👤 Profile</a>
       <a href="#attendanceSection">📝 Attendance</a>
-      <a href="admin.html">🛠 Admin</a>
+      <a href="admin.html" id="adminLink">🛠 Admin</a>
     </nav>
     <div class="footer-note">
       <p>&copy; 2025 NCHSM</p>
@@ -33,6 +35,7 @@
     <header>
       <h1>Nakuru College of Health Sciences and Management</h1>
       <h2 class="subtitle">E-Learning Portal</h2>
+      <p>Welcome, <span id="userName"></span>!</p>
     </header>
 
     <!-- DASHBOARD -->
@@ -55,9 +58,6 @@
     <section id="attendanceSection" class="attendance-section">
       <h3>Student Attendance</h3>
       <form id="attendanceForm">
-        <label for="studentName">Name:</label>
-        <input type="text" id="studentName" name="studentName" placeholder="Enter your full name" required>
-
         <label for="studentClass">Select Class:</label>
         <select id="studentClass" name="studentClass" required>
           <option value="">Loading classes...</option>
@@ -78,64 +78,84 @@
     </footer>
   </div>
 
-  <!-- JS: Geo-location and Attendance -->
+  <!-- Initialize page with Supabase -->
   <script>
-  document.addEventListener("DOMContentLoaded", () => {
-    const form = document.getElementById("attendanceForm");
-    const latitudeInput = document.getElementById("latitude");
-    const longitudeInput = document.getElementById("longitude");
-    const studentClassSelect = document.getElementById("studentClass");
-    const messageDiv = document.getElementById("attendanceMessage");
+    document.addEventListener("DOMContentLoaded", async () => {
+      // Show student name
+      const user = JSON.parse(localStorage.getItem("loggedInUser"));
+      if (!user) {
+        window.location.href = "login.html"; // redirect if not logged in
+        return;
+      }
+      document.getElementById("userName").textContent = user.full_name;
 
-    // Example: fetch active classes from server (replace with real API)
-    const activeClasses = ["Biology 101", "Chemistry 102", "Physics 103"];
-    studentClassSelect.innerHTML = activeClasses.map(c => `<option value="${c}">${c}</option>`).join("");
+      // Hide admin link if user is not admin
+      const adminLink = document.getElementById("adminLink");
+      if (user.role !== "admin") adminLink.style.display = "none";
 
-    // Get geolocation
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          latitudeInput.value = position.coords.latitude;
-          longitudeInput.value = position.coords.longitude;
-        },
-        (error) => {
-          console.error("Geolocation error:", error);
-          messageDiv.textContent = "Could not get your location. Please allow location access.";
+      // Load active classes from Supabase
+      const { data: classes, error } = await supabase
+        .from('classes')
+        .select('id, name')
+        .eq('active', true);
+
+      const studentClassSelect = document.getElementById("studentClass");
+      if (error) {
+        console.error("Error loading classes:", error);
+        studentClassSelect.innerHTML = `<option value="">Error loading classes</option>`;
+      } else {
+        studentClassSelect.innerHTML = classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+      }
+
+      // Get geolocation
+      const latitudeInput = document.getElementById("latitude");
+      const longitudeInput = document.getElementById("longitude");
+      const messageDiv = document.getElementById("attendanceMessage");
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            latitudeInput.value = position.coords.latitude;
+            longitudeInput.value = position.coords.longitude;
+          },
+          (error) => {
+            console.error("Geolocation error:", error);
+            messageDiv.textContent = "Could not get your location. Please allow location access.";
+            messageDiv.style.color = "red";
+          }
+        );
+      } else {
+        messageDiv.textContent = "Geolocation is not supported by your browser.";
+        messageDiv.style.color = "red";
+      }
+
+      // Handle attendance submission
+      const form = document.getElementById("attendanceForm");
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const selectedClassId = studentClassSelect.value;
+        if (!selectedClassId) {
+          messageDiv.textContent = "Please select a class.";
           messageDiv.style.color = "red";
+          return;
         }
-      );
-    } else {
-      messageDiv.textContent = "Geolocation is not supported by your browser.";
-      messageDiv.style.color = "red";
-    }
 
-    // Handle form submission
-    form.addEventListener("submit", (e) => {
-      e.preventDefault();
+        const { data, error } = await supabase.from('attendance').insert([{
+          student_id: user.id,
+          class_id: selectedClassId,
+          latitude: latitudeInput.value,
+          longitude: longitudeInput.value
+        }]);
 
-      const data = {
-        studentName: form.studentName.value,
-        studentClass: form.studentClass.value,
-        latitude: latitudeInput.value,
-        longitude: longitudeInput.value,
-        timestamp: new Date().toISOString()
-      };
-
-      // TODO: Send 'data' to your backend API
-      console.log("Attendance submitted:", data);
-
-      messageDiv.textContent = "Attendance submitted successfully!";
-      messageDiv.style.color = "green";
-      form.reset();
+        if (error) {
+          messageDiv.textContent = "Error submitting attendance: " + error.message;
+          messageDiv.style.color = "red";
+        } else {
+          messageDiv.textContent = "Attendance submitted successfully!";
+          messageDiv.style.color = "green";
+          form.reset();
+        }
+      });
     });
-
-    // Optional: hide admin link if user is not admin
-    const userRole = localStorage.getItem("userRole"); // "admin" or "student"
-    const adminLink = document.querySelector('a[href="admin.html"]');
-    if (userRole !== "admin") {
-      adminLink.style.display = "none";
-    }
-  });
   </script>
 </body>
 </html>
