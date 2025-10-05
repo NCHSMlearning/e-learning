@@ -1,7 +1,7 @@
 // =========================
 // 🔗 Initialize Supabase
 // =========================
-const SUPABASE_URL = 'https://supabase.com/dashboard/project/lwhtjozfsmbyihenfunw/settings/api-keys';           // Replace with your project URL
+const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';           // Replace with your project URL
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk'; // Replace with your anon key
 const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
