@@ -14,10 +14,9 @@ document.addEventListener("DOMContentLoaded", () => {
     window.location.href = "login.html";
     return;
   }
-const userNameEl = document.getElementById("userName");
-if (userNameEl) {
-  userNameEl.textContent = user.full_name;
-}
+
+  const userNameEl = document.getElementById("userName");
+  if (userNameEl) userNameEl.textContent = user.full_name;
 
   // Tab navigation
   const navLinks = document.querySelectorAll('.nav a');
@@ -169,7 +168,6 @@ async function loadAttendance() {
   });
 }
 
-// Classroom
 document.getElementById('classroom-form')?.addEventListener('submit', async e => {
   e.preventDefault();
   const inputs = e.target.querySelectorAll('input');
@@ -184,7 +182,6 @@ document.getElementById('classroom-form')?.addEventListener('submit', async e =>
   e.target.reset();
 });
 
-// Clinical
 document.getElementById('clinical-form')?.addEventListener('submit', async e => {
   e.preventDefault();
   const inputs = e.target.querySelectorAll('input');
@@ -298,7 +295,7 @@ document.getElementById('upload-resource-form')?.addEventListener('submit', asyn
     await sb.from('resources').insert([{ name: file.name }]);
     showNotification(`Resource "${file.name}" uploaded.`);
     loadResources();
-    e.target.value = '';
+    fileInput.value = '';
   } catch (err) {
     showNotification(err.message, true);
   } finally {
