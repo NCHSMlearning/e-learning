@@ -1,7 +1,14 @@
 // =========================
+// 🔗 Initialize Supabase
+// =========================
+const SUPABASE_URL = 'https://supabase.com/dashboard/project/lwhtjozfsmbyihenfunw/settings/api-keys';           // Replace with your project URL
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk'; // Replace with your anon key
+const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// =========================
 // 🧭 Handle User Registration
 // =========================
-function handleRegister(e) {
+async function handleRegister(e) {
   e.preventDefault();
 
   const name = document.getElementById("name")?.value.trim();
@@ -10,7 +17,6 @@ function handleRegister(e) {
   const password = document.getElementById("regPassword")?.value;
   const confirmPassword = document.getElementById("confirmPassword")?.value;
 
-  // Safety: if any element is missing, stop
   if (!name || !phone || !email || !password || !confirmPassword) {
     alert("Please fill in all fields.");
     return false;
@@ -26,44 +32,77 @@ function handleRegister(e) {
     return false;
   }
 
-  // ✅ Check if account already exists
-  if (localStorage.getItem(email)) {
-    alert("An account with this email already exists.");
+  // ✅ Sign up user with Supabase Auth
+  const { data: authData, error: authError } = await supabase.auth.signUp({
+    email: email,
+    password: password
+  });
+
+  if (authError) {
+    alert('Registration failed: ' + authError.message);
     return false;
   }
 
-  // ✅ Save user to localStorage
-  const user = { name, phone, email, password };
-  localStorage.setItem(email, JSON.stringify(user));
+  // ✅ Insert profile into 'profiles' table
+  const userId = authData.user.id;
+  const { error: profileError } = await supabase
+    .from('profiles')
+    .insert([{ id: userId, full_name: name, role: 'student' }]);
+
+  if (profileError) {
+    alert('Profile creation failed: ' + profileError.message);
+    return false;
+  }
 
   alert("✅ Registration successful! You can now log in.");
   window.location.href = "login.html";
-  return false;
 }
 
 // =========================
 // 🔐 Handle User Login
 // =========================
-function handleLogin(e) {
+async function handleLogin(e) {
   e.preventDefault();
 
   const email = document.getElementById("email")?.value.trim().toLowerCase();
   const password = document.getElementById("password")?.value;
 
-  const storedUser = JSON.parse(localStorage.getItem(email));
+  const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+    email, password
+  });
 
-  if (storedUser && storedUser.password === password) {
-    localStorage.setItem("loggedInUser", email);
-    window.location.href = "index.html";
+  if (authError) {
+    alert('Login failed: ' + authError.message);
+    return;
+  }
+
+  // ✅ Fetch profile to determine role
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', authData.user.id)
+    .single();
+
+  if (profileError) {
+    alert('Profile fetch error: ' + profileError.message);
+    return;
+  }
+
+  // Save logged-in user info locally for display purposes
+  localStorage.setItem('loggedInUser', JSON.stringify(profile));
+
+  if (profile.role === 'admin') {
+    window.location.href = 'admin.html';
   } else {
-    alert("Invalid email or password. Please try again.");
+    window.location.href = 'index.html';
   }
 }
 
 // =========================
 // 🚪 Handle Logout
 // =========================
-function logout() {
+async function logout() {
+  await supabase.auth.signOut();
   localStorage.removeItem("loggedInUser");
   window.location.href = "login.html";
 }
@@ -72,18 +111,15 @@ function logout() {
 // 🙋 Display Logged-In User Name on Dashboard
 // =========================
 window.addEventListener("DOMContentLoaded", () => {
-  const loggedEmail = localStorage.getItem("loggedInUser");
-  if (loggedEmail) {
-    const user = JSON.parse(localStorage.getItem(loggedEmail));
-    const nameEl = document.getElementById("userName");
-    if (nameEl && user) {
-      nameEl.textContent = user.name;
-    }
+  const user = JSON.parse(localStorage.getItem("loggedInUser"));
+  const nameEl = document.getElementById("userName");
+  if (nameEl && user) {
+    nameEl.textContent = user.full_name;
   }
 });
 
 // =========================
-// 🧩 Attach Event Listeners (waits for DOM)
+// 🧩 Attach Event Listeners
 // =========================
 document.addEventListener("DOMContentLoaded", () => {
   const regForm = document.getElementById("registerForm");
@@ -92,3 +128,4 @@ document.addEventListener("DOMContentLoaded", () => {
   if (regForm) regForm.addEventListener("submit", handleRegister);
   if (loginForm) loginForm.addEventListener("submit", handleLogin);
 });
+
