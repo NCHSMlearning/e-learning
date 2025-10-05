@@ -2,6 +2,7 @@
 // 🔗 Initialize Supabase
 // =========================
 let sb;
+
 document.addEventListener("DOMContentLoaded", () => {
   const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
@@ -14,28 +15,22 @@ document.addEventListener("DOMContentLoaded", () => {
     return;
   }
 
-  // Show user name
-  const nameEl = document.getElementById("userName");
-  if (nameEl) nameEl.textContent = user.full_name;
+  document.getElementById("userName")?.textContent = user.full_name;
 
-  // =========================
-  // 🔧 Tabs
-  // =========================
+  // Tab navigation
   const navLinks = document.querySelectorAll('.nav a');
-  const tabs = document.querySelectorAll('.tab-content');
   const lastTab = localStorage.getItem('activeTab') || 'dashboard';
   showTab(lastTab);
 
   navLinks.forEach(link => {
     link.addEventListener('click', e => {
       e.preventDefault();
-      const tabId = link.dataset.tab;
-      localStorage.setItem('activeTab', tabId);
-      showTab(tabId);
+      localStorage.setItem('activeTab', link.dataset.tab);
+      showTab(link.dataset.tab);
     });
   });
 
-  // Load data based on role
+  // Load initial data
   if (user.role === 'admin') {
     loadStudents();
     loadCourses();
@@ -48,20 +43,10 @@ document.addEventListener("DOMContentLoaded", () => {
     loadStudentMessages(user.id);
     loadStudentResources(user.id);
   }
-
-  // Attendance session type toggle (admin)
-  const sessionSelect = document.getElementById('session-type');
-  if (sessionSelect) {
-    sessionSelect.addEventListener('change', e => {
-      const type = e.target.value;
-      document.getElementById('classroom-form').style.display = type === 'classroom' ? 'block' : 'none';
-      document.getElementById('clinical-form').style.display = type === 'clinical' ? 'block' : 'none';
-    });
-  }
 });
 
 // =========================
-// 🔧 Utility: Tab Switching
+// 🔧 Tab Switching
 // =========================
 function showTab(tabId) {
   const navLinks = document.querySelectorAll('.nav a');
@@ -84,20 +69,7 @@ async function logout() {
 }
 
 // =========================
-// 🔔 Notifications
-// =========================
-function notify(message, type = 'info') {
-  const notif = document.getElementById('notification');
-  if (!notif) return;
-  notif.textContent = message;
-  notif.style.display = 'block';
-  notif.style.backgroundColor = type === 'error' ? '#FEE2E2' : '#FEF3C7';
-  notif.style.color = type === 'error' ? '#B91C1C' : '#92400E';
-  setTimeout(() => { notif.style.display = 'none'; }, 4000);
-}
-
-// =========================
-// 🧑‍🎓 Admin: Students
+// 🧑‍🎓 Admin: Students (with phone)
 // =========================
 async function loadStudents() {
   const { data, error } = await sb.from('profiles').select('*').eq('role', 'student');
@@ -106,31 +78,44 @@ async function loadStudents() {
   tbody.innerHTML = '';
   data.forEach(s => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${s.id}</td><td>${s.full_name}</td><td>${s.email}</td><td>${s.approved}</td>`;
+    tr.innerHTML = `<td>${s.id}</td><td>${s.full_name}</td><td>${s.email || ''}</td><td>${s.phone || ''}</td><td>${s.approved}</td>`;
     tbody.appendChild(tr);
   });
 }
 
 document.getElementById('add-student-form')?.addEventListener('submit', async e => {
   e.preventDefault();
-  const btn = e.target.querySelector('button');
-  btn.textContent = 'Processing...';
-  const name = document.getElementById('student-name').value;
-  const email = document.getElementById('student-email').value;
+  const button = e.target.querySelector('button');
+  button.textContent = 'Processing...';
+  button.disabled = true;
+
+  const name = document.getElementById('student-name').value.trim();
+  const email = document.getElementById('student-email').value.trim().toLowerCase();
+  const phone = document.getElementById('student-phone').value.trim();
   const password = document.getElementById('student-password').value;
 
-  const { data: authData, error: authError } = await sb.auth.admin.createUser({ email, password });
-  if (authError) {
-    notify(authError.message, 'error');
-    btn.textContent = 'Add Student';
-    return;
-  }
+  try {
+    const { data: authData, error: authError } = await sb.auth.admin.createUser({ email, password });
+    if (authError) throw new Error(authError.message);
 
-  await sb.from('profiles').insert([{ id: authData.user.id, full_name: name, email, role: 'student', approved: true }]);
-  loadStudents();
-  notify('Student added successfully!');
-  e.target.reset();
-  btn.textContent = 'Add Student';
+    await sb.from('profiles').insert([{
+      id: authData.user.id,
+      full_name: name,
+      email,
+      phone,
+      role: 'student',
+      approved: true
+    }]);
+
+    showNotification(`Student ${name} added successfully.`);
+    loadStudents();
+    e.target.reset();
+  } catch (err) {
+    showNotification(err.message, true);
+  } finally {
+    button.textContent = 'Add Student';
+    button.disabled = false;
+  }
 });
 
 // =========================
@@ -150,14 +135,21 @@ async function loadCourses() {
 
 document.getElementById('add-course-form')?.addEventListener('submit', async e => {
   e.preventDefault();
-  const btn = e.target.querySelector('button');
-  btn.textContent = 'Processing...';
-  const name = document.getElementById('course-name').value;
-  await sb.from('courses').insert([{ name }]);
-  loadCourses();
-  notify('Course added successfully!');
-  e.target.reset();
-  btn.textContent = 'Add Course';
+  const button = e.target.querySelector('button');
+  button.textContent = 'Processing...';
+  button.disabled = true;
+  const name = document.getElementById('course-name').value.trim();
+  try {
+    await sb.from('courses').insert([{ name }]);
+    showNotification(`Course "${name}" added successfully.`);
+    loadCourses();
+    e.target.reset();
+  } catch (err) {
+    showNotification(err.message, true);
+  } finally {
+    button.textContent = 'Add Course';
+    button.disabled = false;
+  }
 });
 
 // =========================
@@ -175,10 +167,9 @@ async function loadAttendance() {
   });
 }
 
+// Classroom
 document.getElementById('classroom-form')?.addEventListener('submit', async e => {
   e.preventDefault();
-  const btn = e.target.querySelector('button');
-  btn.textContent = 'Processing...';
   const inputs = e.target.querySelectorAll('input');
   await sb.from('attendance').insert([{
     student_id: inputs[0].value,
@@ -188,15 +179,12 @@ document.getElementById('classroom-form')?.addEventListener('submit', async e =>
     date: inputs[3].value
   }]);
   loadAttendance();
-  notify('Classroom attendance added!');
   e.target.reset();
-  btn.textContent = 'Add Classroom Attendance';
 });
 
+// Clinical
 document.getElementById('clinical-form')?.addEventListener('submit', async e => {
   e.preventDefault();
-  const btn = e.target.querySelector('button');
-  btn.textContent = 'Processing...';
   const inputs = e.target.querySelectorAll('input');
   await sb.from('attendance').insert([{
     student_id: inputs[0].value,
@@ -206,9 +194,41 @@ document.getElementById('clinical-form')?.addEventListener('submit', async e => 
     date: inputs[3].value
   }]);
   loadAttendance();
-  notify('Clinical attendance added!');
   e.target.reset();
-  btn.textContent = 'Add Clinical Attendance';
+});
+
+// =========================
+// 🧪 Admin: Exams/CATS
+// =========================
+async function loadExams() {
+  const { data } = await sb.from('exams').select('*');
+  const container = document.getElementById('exams-list');
+  if (!container) return;
+  container.innerHTML = '';
+  data.forEach(e => {
+    const div = document.createElement('div');
+    div.textContent = `${e.name} - ${e.date}`;
+    container.appendChild(div);
+  });
+}
+
+document.getElementById('add-exam-form')?.addEventListener('submit', async e => {
+  e.preventDefault();
+  const button = e.target.querySelector('button');
+  button.textContent = 'Processing...';
+  button.disabled = true;
+  const inputs = e.target.querySelectorAll('input');
+  try {
+    await sb.from('exams').insert([{ name: inputs[0].value, date: inputs[1].value }]);
+    showNotification(`Exam "${inputs[0].value}" added.`);
+    loadExams();
+    e.target.reset();
+  } catch (err) {
+    showNotification(err.message, true);
+  } finally {
+    button.textContent = 'Add Exam';
+    button.disabled = false;
+  }
 });
 
 // =========================
@@ -228,15 +248,23 @@ async function loadMessages() {
 
 document.getElementById('send-message-form')?.addEventListener('submit', async e => {
   e.preventDefault();
-  const btn = e.target.querySelector('button');
-  btn.textContent = 'Processing...';
-  const recipient = e.target.querySelector('input').value;
-  const content = e.target.querySelector('textarea').value;
-  await sb.from('messages').insert([{ recipient, content }]);
-  loadMessages();
-  notify('Message sent!');
-  e.target.reset();
-  btn.textContent = 'Send Message';
+  const button = e.target.querySelector('button');
+  button.textContent = 'Sending...';
+  button.disabled = true;
+
+  const recipient = e.target.querySelector('input').value.trim();
+  const content = e.target.querySelector('textarea').value.trim();
+  try {
+    await sb.from('messages').insert([{ recipient, content }]);
+    showNotification('Message sent successfully.');
+    loadMessages();
+    e.target.reset();
+  } catch (err) {
+    showNotification(err.message, true);
+  } finally {
+    button.textContent = 'Send Message';
+    button.disabled = false;
+  }
 });
 
 // =========================
@@ -256,16 +284,25 @@ async function loadResources() {
 
 document.getElementById('upload-resource-form')?.addEventListener('submit', async e => {
   e.preventDefault();
-  const btn = e.target.querySelector('button');
-  btn.textContent = 'Processing...';
+  const button = e.target.querySelector('button');
+  button.textContent = 'Uploading...';
+  button.disabled = true;
+
   const fileInput = e.target.querySelector('input');
   if (!fileInput.files.length) return;
+
   const file = fileInput.files[0];
-  await sb.from('resources').insert([{ name: file.name }]);
-  loadResources();
-  notify('Resource uploaded!');
-  e.target.value = '';
-  btn.textContent = 'Upload Resource';
+  try {
+    await sb.from('resources').insert([{ name: file.name }]);
+    showNotification(`Resource "${file.name}" uploaded.`);
+    loadResources();
+    e.target.value = '';
+  } catch (err) {
+    showNotification(err.message, true);
+  } finally {
+    button.textContent = 'Upload Resource';
+    button.disabled = false;
+  }
 });
 
 // =========================
@@ -305,4 +342,21 @@ async function loadStudentResources(studentId) {
     div.textContent = r.name;
     container.appendChild(div);
   });
+}
+
+// =========================
+// 🔔 Notification Bar
+// =========================
+function showNotification(message, isError = false) {
+  let notif = document.getElementById('notification');
+  if (!notif) {
+    notif = document.createElement('div');
+    notif.id = 'notification';
+    document.body.insertBefore(notif, document.body.firstChild);
+  }
+  notif.textContent = message;
+  notif.style.display = 'block';
+  notif.style.backgroundColor = isError ? '#fee2e2' : '#fef3c7';
+  notif.style.color = isError ? '#b91c1c' : '#92400e';
+  setTimeout(() => notif.style.display = 'none', 4000);
 }
