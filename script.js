@@ -14,8 +14,10 @@ document.addEventListener("DOMContentLoaded", () => {
     window.location.href = "login.html";
     return;
   }
-
-  document.getElementById("userName")?.textContent = user.full_name;
+const userNameEl = document.getElementById("userName");
+if (userNameEl) {
+  userNameEl.textContent = user.full_name;
+}
 
   // Tab navigation
   const navLinks = document.querySelectorAll('.nav a');
