@@ -2,7 +2,6 @@
 // 🔗 Initialize Supabase
 // =========================
 let sb;
-
 document.addEventListener("DOMContentLoaded", () => {
   const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
@@ -14,39 +13,29 @@ document.addEventListener("DOMContentLoaded", () => {
     window.location.href = "login.html";
     return;
   }
-  document.getElementById("userName")?.textContent = user.full_name;
+
+  // Show user name
+  const nameEl = document.getElementById("userName");
+  if (nameEl) nameEl.textContent = user.full_name;
 
   // =========================
-  // 🔧 Tabs functionality
+  // 🔧 Tabs
   // =========================
   const navLinks = document.querySelectorAll('.nav a');
   const tabs = document.querySelectorAll('.tab-content');
+  const lastTab = localStorage.getItem('activeTab') || 'dashboard';
+  showTab(lastTab);
 
-  function showTab(tabId) {
-    tabs.forEach(t => t.classList.remove("active"));
-    navLinks.forEach(l => l.classList.remove("active"));
-    const tab = document.getElementById(tabId);
-    const link = document.querySelector(`.nav a[data-tab="${tabId}"]`);
-    if (tab) tab.classList.add("active");
-    if (link) link.classList.add("active");
-    localStorage.setItem("activeTab", tabId);
-  }
-
-  // Load last active tab
-  const activeTab = localStorage.getItem("activeTab") || "dashboard";
-  showTab(activeTab);
-
-  // Click listeners
   navLinks.forEach(link => {
-    link.addEventListener("click", e => {
+    link.addEventListener('click', e => {
       e.preventDefault();
-      showTab(link.dataset.tab);
+      const tabId = link.dataset.tab;
+      localStorage.setItem('activeTab', tabId);
+      showTab(tabId);
     });
   });
 
-  // =========================
-  // 🔐 Load Data
-  // =========================
+  // Load data based on role
   if (user.role === 'admin') {
     loadStudents();
     loadCourses();
@@ -60,24 +49,30 @@ document.addEventListener("DOMContentLoaded", () => {
     loadStudentResources(user.id);
   }
 
-  // =========================
-  // 🔹 Switch Attendance Forms
-  // =========================
-  const sessionType = document.getElementById('session-type');
-  const classroomForm = document.getElementById('classroom-form');
-  const clinicalForm = document.getElementById('clinical-form');
-  if (sessionType) {
-    sessionType.addEventListener('change', () => {
-      if (sessionType.value === 'classroom') {
-        classroomForm.style.display = 'block';
-        clinicalForm.style.display = 'none';
-      } else {
-        classroomForm.style.display = 'none';
-        clinicalForm.style.display = 'block';
-      }
+  // Attendance session type toggle (admin)
+  const sessionSelect = document.getElementById('session-type');
+  if (sessionSelect) {
+    sessionSelect.addEventListener('change', e => {
+      const type = e.target.value;
+      document.getElementById('classroom-form').style.display = type === 'classroom' ? 'block' : 'none';
+      document.getElementById('clinical-form').style.display = type === 'clinical' ? 'block' : 'none';
     });
   }
 });
+
+// =========================
+// 🔧 Utility: Tab Switching
+// =========================
+function showTab(tabId) {
+  const navLinks = document.querySelectorAll('.nav a');
+  const tabs = document.querySelectorAll('.tab-content');
+  navLinks.forEach(l => l.classList.remove('active'));
+  tabs.forEach(t => t.classList.remove('active'));
+  const link = document.querySelector(`.nav a[data-tab="${tabId}"]`);
+  if (link) link.classList.add('active');
+  const tab = document.getElementById(tabId);
+  if (tab) tab.classList.add('active');
+}
 
 // =========================
 // 🚪 Logout
@@ -86,6 +81,19 @@ async function logout() {
   await sb.auth.signOut();
   localStorage.removeItem("loggedInUser");
   window.location.href = "login.html";
+}
+
+// =========================
+// 🔔 Notifications
+// =========================
+function notify(message, type = 'info') {
+  const notif = document.getElementById('notification');
+  if (!notif) return;
+  notif.textContent = message;
+  notif.style.display = 'block';
+  notif.style.backgroundColor = type === 'error' ? '#FEE2E2' : '#FEF3C7';
+  notif.style.color = type === 'error' ? '#B91C1C' : '#92400E';
+  setTimeout(() => { notif.style.display = 'none'; }, 4000);
 }
 
 // =========================
@@ -106,22 +114,23 @@ async function loadStudents() {
 document.getElementById('add-student-form')?.addEventListener('submit', async e => {
   e.preventDefault();
   const btn = e.target.querySelector('button');
-  btn.disabled = true;
-  const originalText = btn.textContent;
   btn.textContent = 'Processing...';
-
   const name = document.getElementById('student-name').value;
   const email = document.getElementById('student-email').value;
   const password = document.getElementById('student-password').value;
 
   const { data: authData, error: authError } = await sb.auth.admin.createUser({ email, password });
-  if (authError) { alert(authError.message); btn.disabled = false; btn.textContent = originalText; return; }
+  if (authError) {
+    notify(authError.message, 'error');
+    btn.textContent = 'Add Student';
+    return;
+  }
 
   await sb.from('profiles').insert([{ id: authData.user.id, full_name: name, email, role: 'student', approved: true }]);
-  await loadStudents();
+  loadStudents();
+  notify('Student added successfully!');
   e.target.reset();
-  btn.disabled = false;
-  btn.textContent = originalText;
+  btn.textContent = 'Add Student';
 });
 
 // =========================
@@ -142,16 +151,13 @@ async function loadCourses() {
 document.getElementById('add-course-form')?.addEventListener('submit', async e => {
   e.preventDefault();
   const btn = e.target.querySelector('button');
-  btn.disabled = true;
-  const originalText = btn.textContent;
   btn.textContent = 'Processing...';
-
   const name = document.getElementById('course-name').value;
   await sb.from('courses').insert([{ name }]);
-  await loadCourses();
+  loadCourses();
+  notify('Course added successfully!');
   e.target.reset();
-  btn.disabled = false;
-  btn.textContent = originalText;
+  btn.textContent = 'Add Course';
 });
 
 // =========================
@@ -172,10 +178,7 @@ async function loadAttendance() {
 document.getElementById('classroom-form')?.addEventListener('submit', async e => {
   e.preventDefault();
   const btn = e.target.querySelector('button');
-  btn.disabled = true;
-  const originalText = btn.textContent;
   btn.textContent = 'Processing...';
-
   const inputs = e.target.querySelectorAll('input');
   await sb.from('attendance').insert([{
     student_id: inputs[0].value,
@@ -184,19 +187,16 @@ document.getElementById('classroom-form')?.addEventListener('submit', async e =>
     location_or_time: inputs[2].value,
     date: inputs[3].value
   }]);
-  await loadAttendance();
+  loadAttendance();
+  notify('Classroom attendance added!');
   e.target.reset();
-  btn.disabled = false;
-  btn.textContent = originalText;
+  btn.textContent = 'Add Classroom Attendance';
 });
 
 document.getElementById('clinical-form')?.addEventListener('submit', async e => {
   e.preventDefault();
   const btn = e.target.querySelector('button');
-  btn.disabled = true;
-  const originalText = btn.textContent;
   btn.textContent = 'Processing...';
-
   const inputs = e.target.querySelectorAll('input');
   await sb.from('attendance').insert([{
     student_id: inputs[0].value,
@@ -205,40 +205,10 @@ document.getElementById('clinical-form')?.addEventListener('submit', async e => 
     location_or_time: inputs[2].value,
     date: inputs[3].value
   }]);
-  await loadAttendance();
+  loadAttendance();
+  notify('Clinical attendance added!');
   e.target.reset();
-  btn.disabled = false;
-  btn.textContent = originalText;
-});
-
-// =========================
-// 🧪 Admin: Exams/CATS
-// =========================
-async function loadExams() {
-  const { data } = await sb.from('exams').select('*');
-  const container = document.getElementById('exams-list');
-  if (!container) return;
-  container.innerHTML = '';
-  data.forEach(e => {
-    const div = document.createElement('div');
-    div.textContent = `${e.name} - ${e.date}`;
-    container.appendChild(div);
-  });
-}
-
-document.getElementById('add-exam-form')?.addEventListener('submit', async e => {
-  e.preventDefault();
-  const btn = e.target.querySelector('button');
-  btn.disabled = true;
-  const originalText = btn.textContent;
-  btn.textContent = 'Processing...';
-
-  const inputs = e.target.querySelectorAll('input');
-  await sb.from('exams').insert([{ name: inputs[0].value, date: inputs[1].value }]);
-  await loadExams();
-  e.target.reset();
-  btn.disabled = false;
-  btn.textContent = originalText;
+  btn.textContent = 'Add Clinical Attendance';
 });
 
 // =========================
@@ -259,17 +229,14 @@ async function loadMessages() {
 document.getElementById('send-message-form')?.addEventListener('submit', async e => {
   e.preventDefault();
   const btn = e.target.querySelector('button');
-  btn.disabled = true;
-  const originalText = btn.textContent;
   btn.textContent = 'Processing...';
-
   const recipient = e.target.querySelector('input').value;
   const content = e.target.querySelector('textarea').value;
   await sb.from('messages').insert([{ recipient, content }]);
-  await loadMessages();
+  loadMessages();
+  notify('Message sent!');
   e.target.reset();
-  btn.disabled = false;
-  btn.textContent = originalText;
+  btn.textContent = 'Send Message';
 });
 
 // =========================
@@ -290,18 +257,15 @@ async function loadResources() {
 document.getElementById('upload-resource-form')?.addEventListener('submit', async e => {
   e.preventDefault();
   const btn = e.target.querySelector('button');
-  btn.disabled = true;
-  const originalText = btn.textContent;
   btn.textContent = 'Processing...';
-
   const fileInput = e.target.querySelector('input');
   if (!fileInput.files.length) return;
   const file = fileInput.files[0];
   await sb.from('resources').insert([{ name: file.name }]);
-  await loadResources();
-  e.target.reset();
-  btn.disabled = false;
-  btn.textContent = originalText;
+  loadResources();
+  notify('Resource uploaded!');
+  e.target.value = '';
+  btn.textContent = 'Upload Resource';
 });
 
 // =========================
