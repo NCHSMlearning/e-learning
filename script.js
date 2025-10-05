@@ -1,7 +1,7 @@
 // =========================
 // 🔗 Initialize Supabase
 // =========================
-let sb; // Supabase client placeholder
+let sb;
 
 document.addEventListener("DOMContentLoaded", () => {
   const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
@@ -18,9 +18,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Display logged-in user name
   const user = JSON.parse(localStorage.getItem("loggedInUser"));
   const nameEl = document.getElementById("userName");
-  if (nameEl && user) {
-    nameEl.textContent = user.full_name;
-  }
+  if (nameEl && user) nameEl.textContent = user.full_name;
 });
 
 // =========================
@@ -37,46 +35,46 @@ async function handleRegister(e) {
 
   if (!name || !phone || !email || !password || !confirmPassword) {
     alert("Please fill in all fields.");
-    return false;
+    return;
   }
 
   if (password !== confirmPassword) {
     alert("Passwords do not match.");
-    return false;
+    return;
   }
 
   if (!/^[0-9]{10}$/.test(phone)) {
     alert("Please enter a valid 10-digit phone number.");
-    return false;
+    return;
   }
 
   try {
-    // 1️⃣ Sign up
+    // Sign up
     const { data: signUpData, error: signUpError } = await sb.auth.signUp({ email, password });
     if (signUpError) {
       alert("Registration failed: " + signUpError.message);
       return;
     }
 
-    // 2️⃣ Sign in immediately (needed for RLS)
+    // Sign in immediately to insert profile
     const { data: signInData, error: signInError } = await sb.auth.signInWithPassword({ email, password });
     if (signInError) {
       alert("Sign-in failed after registration: " + signInError.message);
       return;
     }
 
-    // 3️⃣ Insert profile
+    // Insert profile with approved = false
     const { error: profileError } = await sb
       .from('profiles')
-      .insert([{ id: signInData.user.id, full_name: name, phone, role: 'student' }]);
+      .insert([{ id: signInData.user.id, full_name: name, phone, role: 'student', approved: false }]);
 
     if (profileError) {
       alert('Profile creation failed: ' + profileError.message);
       return;
     }
 
-    alert("✅ Registration successful! You are now logged in.");
-    window.location.href = "index.html";
+    alert("✅ Registration successful! Your account is pending admin approval.");
+    window.location.href = "login.html";
 
   } catch (err) {
     console.error(err);
@@ -107,6 +105,11 @@ async function handleLogin(e) {
 
   if (profileError) {
     alert('Profile fetch error: ' + profileError.message);
+    return;
+  }
+
+  if (!profile.approved) {
+    alert("Your account is pending approval by an admin.");
     return;
   }
 
