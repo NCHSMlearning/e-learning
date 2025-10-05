@@ -1,1 +1,1 @@
-console.log("E-Learning Portal Frontend Loaded");
+console.log("Nakuru College of Health Sciences E-Learning Portal Loaded");
