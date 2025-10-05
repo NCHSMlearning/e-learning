@@ -1,14 +1,37 @@
 // =========================
 // 🔗 Initialize Supabase
 // =========================
-const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
+let sb; // Supabase client placeholder
 
-// Use a different variable name to avoid the initialization issue
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+document.addEventListener("DOMContentLoaded", () => {
+  const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
+  sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // =========================
+  // 🧭 Handle User Registration
+  // =========================
+  const regForm = document.getElementById("registerForm");
+  if (regForm) regForm.addEventListener("submit", handleRegister);
+
+  // =========================
+  // 🔐 Handle User Login
+  // =========================
+  const loginForm = document.getElementById("loginForm");
+  if (loginForm) loginForm.addEventListener("submit", handleLogin);
+
+  // =========================
+  // 🙋 Display Logged-In User Name on Dashboard
+  // =========================
+  const user = JSON.parse(localStorage.getItem("loggedInUser"));
+  const nameEl = document.getElementById("userName");
+  if (nameEl && user) {
+    nameEl.textContent = user.full_name;
+  }
+});
 
 // =========================
-// 🧭 Handle User Registration
+// 🧭 Registration Function
 // =========================
 async function handleRegister(e) {
   e.preventDefault();
@@ -59,7 +82,7 @@ async function handleRegister(e) {
 }
 
 // =========================
-// 🔐 Handle User Login
+// 🔐 Login Function
 // =========================
 async function handleLogin(e) {
   e.preventDefault();
@@ -97,32 +120,10 @@ async function handleLogin(e) {
 }
 
 // =========================
-// 🚪 Handle Logout
+// 🚪 Logout Function
 // =========================
 async function logout() {
   await sb.auth.signOut();
   localStorage.removeItem("loggedInUser");
   window.location.href = "login.html";
 }
-
-// =========================
-// 🙋 Display Logged-In User Name on Dashboard
-// =========================
-window.addEventListener("DOMContentLoaded", () => {
-  const user = JSON.parse(localStorage.getItem("loggedInUser"));
-  const nameEl = document.getElementById("userName");
-  if (nameEl && user) {
-    nameEl.textContent = user.full_name;
-  }
-});
-
-// =========================
-// 🧩 Attach Event Listeners
-// =========================
-document.addEventListener("DOMContentLoaded", () => {
-  const regForm = document.getElementById("registerForm");
-  const loginForm = document.getElementById("loginForm");
-
-  if (regForm) regForm.addEventListener("submit", handleRegister);
-  if (loginForm) loginForm.addEventListener("submit", handleLogin);
-});
