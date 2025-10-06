@@ -96,6 +96,34 @@
       background-color: #dc3545;
       color: white;
     }
+
+    /* Dashboard cards */
+    .stats-container {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+      margin-top: 20px;
+    }
+
+    .stat-card {
+      flex: 1;
+      min-width: 200px;
+      background-color: white;
+      border-radius: 10px;
+      padding: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .stat-card h3 {
+      margin: 0 0 10px;
+      color: #004080;
+    }
+
+    .stat-card p {
+      font-size: 1.5em;
+      margin: 0;
+      font-weight: bold;
+    }
   </style>
 </head>
 
@@ -123,6 +151,25 @@
       <div id="dashboard" class="section">
         <h2>System Overview</h2>
         <p>Manage users, courses, and system settings here.</p>
+
+        <div class="stats-container">
+          <div class="stat-card">
+            <h3>Total Users</h3>
+            <p id="total-users">0</p>
+          </div>
+          <div class="stat-card">
+            <h3>Total Admins</h3>
+            <p id="total-admins">0</p>
+          </div>
+          <div class="stat-card">
+            <h3>Total Students</h3>
+            <p id="total-students">0</p>
+          </div>
+          <div class="stat-card">
+            <h3>Pending Approvals</h3>
+            <p id="total-pending">0</p>
+          </div>
+        </div>
       </div>
 
       <!-- Manage Admins -->
@@ -195,6 +242,22 @@
       if (id === 'admins') loadAdmins();
       if (id === 'students') loadStudents();
       if (id === 'pending') loadPending();
+      if (id === 'dashboard') loadOverview();
+    }
+
+    async function loadOverview() {
+      const { data, error } = await sb.from('profiles').select('*');
+      if (error) return console.error(error.message);
+
+      const total = data.length;
+      const admins = data.filter(u => u.role === 'admin').length;
+      const students = data.filter(u => u.role === 'student').length;
+      const pending = data.filter(u => u.approved === false).length;
+
+      document.getElementById('total-users').textContent = total;
+      document.getElementById('total-admins').textContent = admins;
+      document.getElementById('total-students').textContent = students;
+      document.getElementById('total-pending').textContent = pending;
     }
 
     async function loadAdmins() {
@@ -247,6 +310,7 @@
         alert('User approved successfully');
         loadPending();
         loadStudents();
+        loadOverview();
       }
     }
 
@@ -256,6 +320,7 @@
       else {
         alert('User removed');
         loadPending();
+        loadOverview();
       }
     }
 
@@ -265,6 +330,7 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
+      loadOverview();
       loadAdmins();
       loadStudents();
       loadPending();
