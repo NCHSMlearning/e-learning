@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>NCHSM | Student Registration</title>
   <style>
     body {
@@ -37,23 +37,17 @@
 
     p {
       color: #64748b;
-      margin-bottom: 25px;
+      margin-bottom: 30px;
     }
 
     form {
       display: flex;
       flex-direction: column;
-      gap: 12px;
-      text-align: left;
-    }
-
-    label {
-      font-size: 0.9rem;
-      color: #475569;
+      gap: 15px;
     }
 
     input {
-      padding: 10px;
+      padding: 12px;
       border: 1px solid #cbd5e1;
       border-radius: 6px;
       font-size: 1rem;
@@ -73,7 +67,6 @@
       font-size: 1rem;
       cursor: pointer;
       transition: 0.2s;
-      margin-top: 10px;
     }
 
     button:hover {
@@ -83,18 +76,10 @@
     .error {
       color: #ef4444;
       margin-top: 10px;
-      text-align: center;
-    }
-
-    .success {
-      color: #22c55e;
-      margin-top: 10px;
-      text-align: center;
     }
 
     .login-link {
       margin-top: 20px;
-      text-align: center;
       font-size: 0.9rem;
     }
 
@@ -110,26 +95,17 @@
 </head>
 <body>
   <div class="register-box">
-    <img src="images/Logo_NCHSM.png" alt="Logo" />
-    <h2>Create Account</h2>
-    <p>Register to access your student portal</p>
+    <img src="images/Logo_NCHSM.png" alt="Logo">
+    <h2>Student Registration</h2>
+    <p>Create your NCHSM student account</p>
 
     <form id="register-form">
-      <label for="full-name">Full Name</label>
-      <input type="text" id="full-name" placeholder="Enter your full name" required />
-
-      <label for="email">Email</label>
-      <input type="email" id="email" placeholder="Enter your email" required />
-
-      <label for="phone">Phone</label>
-      <input type="text" id="phone" placeholder="Enter your phone number" required />
-
-      <label for="password">Password</label>
-      <input type="password" id="password" placeholder="Create a password" required />
-
+      <input type="text" id="full_name" placeholder="Full Name" required>
+      <input type="email" id="email" placeholder="Email" required>
+      <input type="password" id="password" placeholder="Password" required>
+      <input type="password" id="confirm_password" placeholder="Confirm Password" required>
       <button type="submit">Register</button>
       <p class="error" id="error-message"></p>
-      <p class="success" id="success-message"></p>
     </form>
 
     <div class="login-link">
@@ -140,64 +116,43 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
     const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk'; // replace with your actual anon key
+    const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY';
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     const form = document.getElementById('register-form');
-    const errorMsg = document.getElementById('error-message');
-    const successMsg = document.getElementById('success-message');
+    const errorMessage = document.getElementById('error-message');
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      errorMsg.textContent = '';
-      successMsg.textContent = '';
-
-      const fullName = document.getElementById('full-name').value.trim();
+      const full_name = document.getElementById('full_name').value.trim();
       const email = document.getElementById('email').value.trim();
-      const phone = document.getElementById('phone').value.trim();
-      const password = document.getElementById('password').value;
+      const password = document.getElementById('password').value.trim();
+      const confirmPassword = document.getElementById('confirm_password').value.trim();
 
-      if (!fullName || !email || !phone || !password) {
-        errorMsg.textContent = 'Please fill in all fields.';
+      errorMessage.textContent = '';
+
+      // Password match validation
+      if (password !== confirmPassword) {
+        errorMessage.textContent = 'Passwords do not match';
         return;
       }
 
-      try {
-        const { data: signUpData, error: signUpError } = await sb.auth.signUp({
-          email,
-          password,
-        });
-
-        if (signUpError) {
-          errorMsg.textContent = signUpError.message;
-          return;
+      // Create user in Supabase Auth
+      const { data, error } = await sb.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { full_name }
         }
+      });
 
-        // Add profile record
-        const { error: profileError } = await sb.from('profiles').insert([
-          {
-            id: signUpData.user.id,
-            full_name: fullName,
-            email,
-            phone,
-            role: 'student',
-            approved: true
-          },
-        ]);
-
-        if (profileError) {
-          errorMsg.textContent = 'Error creating profile: ' + profileError.message;
-          return;
-        }
-
-        successMsg.textContent = '✅ Registration successful! Redirecting to login...';
-        form.reset();
-        setTimeout(() => (window.location.href = 'login.html'), 2000);
-
-      } catch (err) {
-        console.error(err);
-        errorMsg.textContent = 'An unexpected error occurred.';
+      if (error) {
+        errorMessage.textContent = error.message;
+        return;
       }
+
+      alert('Registration successful! Please log in.');
+      window.location.href = 'login.html';
     });
   </script>
 </body>
