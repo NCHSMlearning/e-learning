@@ -4,7 +4,82 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Login | NCHSM E-Learning</title>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script type="module">
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+
+    const SUPABASE_URL = "https://lwhtjozfsmbyihenfunw.supabase.co";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk";
+    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+      auth: { persistSession: true, autoRefreshToken: true }
+    });
+
+    window.addEventListener("DOMContentLoaded", () => {
+      const form = document.getElementById("loginForm");
+      const errorMsg = document.getElementById("error");
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        errorMsg.textContent = "";
+
+        const email = document.getElementById("email").value.trim();
+        const password = document.getElementById("password").value.trim();
+
+        try {
+          // Step 1: Authenticate user
+          const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+            email,
+            password
+          });
+
+          if (authError) {
+            errorMsg.textContent = authError.message;
+            return;
+          }
+
+          const user = authData.user;
+          if (!user) {
+            errorMsg.textContent = "No user returned from Supabase.";
+            return;
+          }
+
+          // Step 2: Fetch profile info
+          const { data: profile, error: profileError } = await supabase
+            .from("profiles")
+            .select("role, approved")
+            .eq("id", user.id)
+            .single();
+
+          if (profileError) {
+            errorMsg.textContent = "Profile not found. Contact admin.";
+            return;
+          }
+
+          // Step 3: Check approval and redirect
+          if (!profile.approved) {
+            errorMsg.textContent = "Your account is pending approval.";
+            await supabase.auth.signOut();
+            return;
+          }
+
+          const role = profile.role;
+
+          if (role === "superadmin") {
+            window.location.href = "superadmin.html";
+          } else if (role === "admin") {
+            window.location.href = "admin.html";
+          } else if (role === "student") {
+            window.location.href = "index.html";
+          } else {
+            errorMsg.textContent = "Role not recognized. Contact support.";
+          }
+
+        } catch (err) {
+          console.error(err);
+          errorMsg.textContent = "Unexpected error: " + err.message;
+        }
+      });
+    });
+  </script>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -58,6 +133,7 @@
       color: red;
       font-size: 14px;
       text-align: center;
+      margin-top: 10px;
     }
   </style>
 </head>
@@ -65,8 +141,8 @@
   <div class="login-container">
     <h2>Login</h2>
     <form id="loginForm">
-      <input type="email" id="email" placeholder="Email" required>
-      <input type="password" id="password" placeholder="Password" required>
+      <input type="email" id="email" placeholder="Email" required />
+      <input type="password" id="password" placeholder="Password" required />
       <button type="submit">Login</button>
       <div id="error" class="error"></div>
     </form>
@@ -74,64 +150,5 @@
       <a href="register.html">Create an account</a>
     </div>
   </div>
-
-  <script>
-    // 🔗 Supabase setup
-    const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk'; // your full anon key
-    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: { persistSession: true, autoRefreshToken: true }
-    });
-
-    const form = document.getElementById("loginForm");
-    const errorMsg = document.getElementById("error");
-
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      errorMsg.textContent = "";
-
-      const email = document.getElementById("email").value.trim();
-      const password = document.getElementById("password").value.trim();
-
-      // 🧩 Sign in user
-      const { data, error } = await sb.auth.signInWithPassword({ email, password });
-
-      if (error) {
-        errorMsg.textContent = error.message;
-        return;
-      }
-
-      // ✅ Get user profile after login
-      const { data: profileData, error: profileError } = await sb
-        .from("profiles")
-        .select("role, approved")
-        .eq("id", data.user.id)
-        .single();
-
-      if (profileError || !profileData) {
-        errorMsg.textContent = "Profile not found. Contact admin.";
-        return;
-      }
-
-      // 🚦 Redirect based on role and approval
-      const role = profileData.role;
-      const approved = profileData.approved;
-
-      if (role === "superadmin") {
-        window.location.href = "superadmin.html";
-      } else if (role === "admin") {
-        window.location.href = "admin.html";
-      } else if (role === "student") {
-        if (!approved) {
-          errorMsg.textContent = "Your account is pending approval by admin.";
-          await sb.auth.signOut();
-          return;
-        }
-        window.location.href = "index.html";
-      } else {
-        errorMsg.textContent = "Unknown role. Contact support.";
-      }
-    });
-  </script>
 </body>
 </html>
