@@ -3,182 +3,135 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NCHSM | Student Login</title>
+  <title>Login | NCHSM E-Learning</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     body {
-      margin: 0;
-      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-      background-color: #f8fafc;
+      font-family: Arial, sans-serif;
+      background-color: #f5f6fa;
       display: flex;
       justify-content: center;
       align-items: center;
       height: 100vh;
     }
-
-    .login-box {
-      background-color: #fff;
-      padding: 40px 50px;
-      border-radius: 12px;
-      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-      width: 100%;
-      max-width: 400px;
-      text-align: center;
+    .login-container {
+      background: white;
+      padding: 40px;
+      border-radius: 10px;
+      width: 350px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
     }
-
-    .login-box img {
-      width: 70px;
-      margin-bottom: 15px;
-    }
-
     h2 {
-      margin-bottom: 10px;
-      color: #1e293b;
+      text-align: center;
+      margin-bottom: 25px;
+      color: #003366;
     }
-
-    p {
-      color: #64748b;
-      margin-bottom: 30px;
-    }
-
-    form {
-      display: flex;
-      flex-direction: column;
-      gap: 15px;
-    }
-
     input {
-      padding: 12px;
-      border: 1px solid #cbd5e1;
-      border-radius: 6px;
-      font-size: 1rem;
+      width: 100%;
+      padding: 10px;
+      margin: 10px 0;
+      border: 1px solid #ccc;
+      border-radius: 5px;
     }
-
-    input:focus {
-      outline: none;
-      border-color: #3b82f6;
-    }
-
     button {
-      background-color: #3b82f6;
-      color: #fff;
+      width: 100%;
+      background-color: #003366;
+      color: white;
+      padding: 10px;
       border: none;
-      padding: 12px;
-      border-radius: 6px;
-      font-size: 1rem;
+      border-radius: 5px;
       cursor: pointer;
-      transition: 0.2s;
     }
-
     button:hover {
-      background-color: #2563eb;
+      background-color: #0055b3;
     }
-
-    .error {
-      color: #ef4444;
-      margin-top: 10px;
+    .link {
+      text-align: center;
+      margin-top: 15px;
     }
-
-    .register-link {
-      margin-top: 20px;
-      font-size: 0.9rem;
-    }
-
-    .register-link a {
-      color: #3b82f6;
+    .link a {
+      color: #003366;
       text-decoration: none;
+      font-size: 14px;
     }
-
-    .register-link a:hover {
-      text-decoration: underline;
+    .error {
+      color: red;
+      font-size: 14px;
+      text-align: center;
     }
   </style>
 </head>
 <body>
-  <div class="login-box">
-    <img src="images/Logo_NCHSM.png" alt="Logo">
+  <div class="login-container">
     <h2>Login</h2>
-    <p>Access your account</p>
-
-    <form id="login-form">
+    <form id="loginForm">
       <input type="email" id="email" placeholder="Email" required>
       <input type="password" id="password" placeholder="Password" required>
       <button type="submit">Login</button>
-      <p class="error" id="error-message"></p>
+      <div id="error" class="error"></div>
     </form>
-
-    <div class="register-link">
-      Don’t have an account? <a href="register.html">Register here</a>
+    <div class="link">
+      <a href="register.html">Create an account</a>
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
+    // 🔗 Supabase setup
     const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
-    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk'; // your full anon key
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: { persistSession: true, autoRefreshToken: true }
+    });
 
-    const form = document.getElementById('login-form');
-    const errorMessage = document.getElementById('error-message');
+    const form = document.getElementById("loginForm");
+    const errorMsg = document.getElementById("error");
 
-    form.addEventListener('submit', async (e) => {
+    form.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const email = document.getElementById('email').value.trim();
-      const password = document.getElementById('password').value.trim();
+      errorMsg.textContent = "";
 
-      errorMessage.textContent = '';
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value.trim();
 
+      // 🧩 Sign in user
       const { data, error } = await sb.auth.signInWithPassword({ email, password });
 
       if (error) {
-        errorMessage.textContent = 'Invalid email or password';
+        errorMsg.textContent = error.message;
         return;
       }
 
-      const user = data.user;
-      if (!user) {
-        errorMessage.textContent = 'Login failed. Please try again.';
-        return;
-      }
-
-      // Fetch profile info
-      const { data: profile, error: profileError } = await sb
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
+      // ✅ Get user profile after login
+      const { data: profileData, error: profileError } = await sb
+        .from("profiles")
+        .select("role, approved")
+        .eq("id", data.user.id)
         .single();
 
-      if (profileError || !profile) {
-        errorMessage.textContent = 'No profile found for this user.';
+      if (profileError || !profileData) {
+        errorMsg.textContent = "Profile not found. Contact admin.";
         return;
       }
 
-      // Redirect based on role
-      if (profile.role === 'admin') {
-        window.location.href = 'admin-dashboard.html';
-      } else if (profile.role === 'student') {
-        window.location.href = 'index.html';
+      // 🚦 Redirect based on role and approval
+      const role = profileData.role;
+      const approved = profileData.approved;
+
+      if (role === "superadmin") {
+        window.location.href = "superadmin.html";
+      } else if (role === "admin") {
+        window.location.href = "admin.html";
+      } else if (role === "student") {
+        if (!approved) {
+          errorMsg.textContent = "Your account is pending approval by admin.";
+          await sb.auth.signOut();
+          return;
+        }
+        window.location.href = "index.html";
       } else {
-        errorMessage.textContent = 'User role not recognized.';
+        errorMsg.textContent = "Unknown role. Contact support.";
       }
     });
-
-    // Auto redirect if already logged in
-    (async () => {
-      const { data } = await sb.auth.getUser();
-      if (data.user) {
-        const { data: profile } = await sb
-          .from('profiles')
-          .select('role')
-          .eq('id', data.user.id)
-          .single();
-
-        if (profile?.role === 'admin') {
-          window.location.href = 'admin-dashboard.html';
-        } else if (profile?.role === 'student') {
-          window.location.href = 'index.html';
-        }
-      }
-    })();
   </script>
 </body>
 </html>
