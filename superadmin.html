@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Super Admin Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      display: flex;
+      height: 100vh;
+    }
+    .sidebar {
+      width: 220px;
+      background-color: #004080;
+      color: white;
+      display: flex;
+      flex-direction: column;
+      padding: 20px;
+    }
+    .sidebar h2 {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    .sidebar a {
+      color: white;
+      text-decoration: none;
+      margin: 10px 0;
+      padding: 10px;
+      border-radius: 5px;
+      display: block;
+    }
+    .sidebar a:hover {
+      background-color: #0059b3;
+    }
+    .main {
+      flex: 1;
+      background-color: #f5f5f5;
+      padding: 20px;
+      overflow-y: auto;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background-color: white;
+      padding: 15px 20px;
+      border-bottom: 1px solid #ccc;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+      background: white;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 10px;
+      text-align: left;
+    }
+    th {
+      background-color: #e6f0ff;
+    }
+    button {
+      padding: 5px 10px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="sidebar">
+    <h2>Super Admin</h2>
+    <a href="#" onclick="showSection('dashboard')">Dashboard</a>
+    <a href="#" onclick="showSection('admins')">Manage Admins</a>
+    <a href="#" onclick="showSection('students')">Manage Students</a>
+    <a href="#" onclick="showSection('pending')">Pending Approvals</a>
+    <a href="#" onclick="logout()">Logout</a>
+  </div>
+
+  <div class="main">
+    <header>
+      <h1 id="page-title">Dashboard</h1>
+      <div>Welcome, Super Admin</div>
+    </header>
+
+    <div id="dashboard" class="section">
+      <h2>Overview</h2>
+      <p>Total users and system summary will appear here.</p>
+    </div>
+
+    <div id="admins" class="section" style="display:none;">
+      <h2>Manage Admins</h2>
+      <table>
+        <thead>
+          <tr><th>Name</th><th>Email</th><th>Role</th></tr>
+        </thead>
+        <tbody id="admin-table"></tbody>
+      </table>
+    </div>
+
+    <div id="students" class="section" style="display:none;">
+      <h2>Manage Students</h2>
+      <table>
+        <thead>
+          <tr><th>Name</th><th>Email</th><th>Phone</th><th>Status</th></tr>
+        </thead>
+        <tbody id="students-table"></tbody>
+      </table>
+    </div>
+
+    <div id="pending" class="section" style="display:none;">
+      <h2>Pending Approvals</h2>
+      <table>
+        <thead>
+          <tr><th>Name</th><th>Email</th><th>Action</th></tr>
+        </thead>
+        <tbody id="pending-table"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk'; // keep your full anon key
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    function showSection(id) {
+      document.querySelectorAll('.section').forEach(s => s.style.display = 'none');
+      document.getElementById(id).style.display = 'block';
+      document.getElementById('page-title').textContent = 
+        document.querySelector(`[onclick="showSection('${id}')"]`).textContent;
+    }
+
+    async function loadAdmins() {
+      const { data, error } = await sb.from('profiles').select('*').eq('role', 'admin');
+      const table = document.getElementById('admin-table');
+      table.innerHTML = '';
+      if (error) return table.innerHTML = `<tr><td colspan="3">${error.message}</td></tr>`;
+      data.forEach(a => {
+        table.innerHTML += `<tr><td>${a.full_name}</td><td>${a.email}</td><td>${a.role}</td></tr>`;
+      });
+    }
+
+    async function loadStudents() {
+      const { data, error } = await sb.from('profiles').select('*').eq('role', 'student');
+      const table = document.getElementById('students-table');
+      table.innerHTML = '';
+      if (error) return table.innerHTML = `<tr><td colspan="4">${error.message}</td></tr>`;
+      data.forEach(s => {
+        table.innerHTML += `<tr><td>${s.full_name}</td><td>${s.email}</td><td>${s.phone}</td><td>${s.approved ? 'Approved' : 'Pending'}</td></tr>`;
+      });
+    }
+
+    async function loadPending() {
+      const { data, error } = await sb.from('profiles').select('*').eq('approved', false);
+      const table = document.getElementById('pending-table');
+      table.innerHTML = '';
+      if (error) return table.innerHTML = `<tr><td colspan="3">${error.message}</td></tr>`;
+      data.forEach(u => {
+        table.innerHTML += `
+          <tr>
+            <td>${u.full_name}</td>
+            <td>${u.email}</td>
+            <td>
+              <button onclick="approveUser('${u.id}')">Approve</button>
+              <button onclick="rejectUser('${u.id}')">Reject</button>
+            </td>
+          </tr>`;
+      });
+    }
+
+    async function approveUser(id) {
+      const { error } = await sb.from('profiles').update({ approved: true }).eq('id', id);
+      if (!error) loadPending();
+    }
+
+    async function rejectUser(id) {
+      const { error } = await sb.from('profiles').delete().eq('id', id);
+      if (!error) loadPending();
+    }
+
+    function logout() {
+      sb.auth.signOut();
+      window.location.href = 'login.html';
+    }
+
+    // load default dashboard content
+    document.addEventListener('DOMContentLoaded', () => {
+      loadAdmins();
+      loadStudents();
+      loadPending();
+    });
+  </script>
+</body>
+</html>
