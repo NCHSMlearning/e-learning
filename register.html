@@ -1,37 +1,204 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Register | NCHSM E-Learning</title>
-  <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NCHSM | Student Registration</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f8fafc;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+
+    .register-box {
+      background-color: #fff;
+      padding: 40px 50px;
+      border-radius: 12px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+      width: 100%;
+      max-width: 450px;
+      text-align: center;
+    }
+
+    .register-box img {
+      width: 70px;
+      margin-bottom: 15px;
+    }
+
+    h2 {
+      margin-bottom: 10px;
+      color: #1e293b;
+    }
+
+    p {
+      color: #64748b;
+      margin-bottom: 25px;
+    }
+
+    form {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      text-align: left;
+    }
+
+    label {
+      font-size: 0.9rem;
+      color: #475569;
+    }
+
+    input {
+      padding: 10px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      font-size: 1rem;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: #3b82f6;
+    }
+
+    button {
+      background-color: #3b82f6;
+      color: #fff;
+      border: none;
+      padding: 12px;
+      border-radius: 6px;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: 0.2s;
+      margin-top: 10px;
+    }
+
+    button:hover {
+      background-color: #2563eb;
+    }
+
+    .error {
+      color: #ef4444;
+      margin-top: 10px;
+      text-align: center;
+    }
+
+    .success {
+      color: #22c55e;
+      margin-top: 10px;
+      text-align: center;
+    }
+
+    .login-link {
+      margin-top: 20px;
+      text-align: center;
+      font-size: 0.9rem;
+    }
+
+    .login-link a {
+      color: #3b82f6;
+      text-decoration: none;
+    }
+
+    .login-link a:hover {
+      text-decoration: underline;
+    }
+  </style>
 </head>
-<body class="auth-body">
+<body>
+  <div class="register-box">
+    <img src="images/Logo_NCHSM.png" alt="Logo" />
+    <h2>Create Account</h2>
+    <p>Register to access your student portal</p>
 
-  <div class="auth-container">
-    <!-- Logo -->
-    <img src="images/Logo_NCHSM.png" alt="NCHSM Logo" class="auth-logo" />
+    <form id="register-form">
+      <label for="full-name">Full Name</label>
+      <input type="text" id="full-name" placeholder="Enter your full name" required />
 
-    <h2>Create Your Account</h2>
-    <p>Join Nakuru College of Health Sciences and Management</p>
+      <label for="email">Email</label>
+      <input type="email" id="email" placeholder="Enter your email" required />
 
-    <form id="registerForm">
-      <input type="text" id="name" placeholder="Full Name" required />
-      <input type="email" id="regEmail" placeholder="Email" required />
-      <input type="tel" id="phone" placeholder="Phone Number (e.g. 07XXXXXXXX)" pattern="^[0-9]{10}$" required />
-      <input type="password" id="regPassword" placeholder="Password" required />
-      <input type="password" id="confirmPassword" placeholder="Confirm Password" required />
+      <label for="phone">Phone</label>
+      <input type="text" id="phone" placeholder="Enter your phone number" required />
+
+      <label for="password">Password</label>
+      <input type="password" id="password" placeholder="Create a password" required />
+
       <button type="submit">Register</button>
+      <p class="error" id="error-message"></p>
+      <p class="success" id="success-message"></p>
     </form>
 
-    <p class="signup-link">
+    <div class="login-link">
       Already have an account? <a href="login.html">Login here</a>
-    </p>
-    <p id="registerMessage" class="auth-message"></p>
+    </div>
   </div>
 
-  <!-- Supabase library must load first -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="script.js"></script>
+  <script>
+    const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk'; // replace with your actual anon key
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const form = document.getElementById('register-form');
+    const errorMsg = document.getElementById('error-message');
+    const successMsg = document.getElementById('success-message');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorMsg.textContent = '';
+      successMsg.textContent = '';
+
+      const fullName = document.getElementById('full-name').value.trim();
+      const email = document.getElementById('email').value.trim();
+      const phone = document.getElementById('phone').value.trim();
+      const password = document.getElementById('password').value;
+
+      if (!fullName || !email || !phone || !password) {
+        errorMsg.textContent = 'Please fill in all fields.';
+        return;
+      }
+
+      try {
+        const { data: signUpData, error: signUpError } = await sb.auth.signUp({
+          email,
+          password,
+        });
+
+        if (signUpError) {
+          errorMsg.textContent = signUpError.message;
+          return;
+        }
+
+        // Add profile record
+        const { error: profileError } = await sb.from('profiles').insert([
+          {
+            id: signUpData.user.id,
+            full_name: fullName,
+            email,
+            phone,
+            role: 'student',
+            approved: true
+          },
+        ]);
+
+        if (profileError) {
+          errorMsg.textContent = 'Error creating profile: ' + profileError.message;
+          return;
+        }
+
+        successMsg.textContent = '✅ Registration successful! Redirecting to login...';
+        form.reset();
+        setTimeout(() => (window.location.href = 'login.html'), 2000);
+
+      } catch (err) {
+        console.error(err);
+        errorMsg.textContent = 'An unexpected error occurred.';
+      }
+    });
+  </script>
 </body>
 </html>
