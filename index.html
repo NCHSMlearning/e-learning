@@ -44,14 +44,14 @@
             display: flex;
             flex-direction: column;
             padding: 30px 20px;
-            box-shadow: var(--shadow-lg); /* Add subtle shadow to main elements */
+            box-shadow: var(--shadow-lg);
             z-index: 10;
         }
         .sidebar-header {
             text-align: center;
             margin-bottom: 40px;
             padding-bottom: 20px;
-            border-bottom: 1px solid #374151; /* Subtle separator */
+            border-bottom: 1px solid #374151;
         }
         .sidebar-header img {
             width: 70px;
@@ -78,7 +78,7 @@
             margin-bottom: 8px;
         }
         .nav a:hover { 
-            background-color: #1F2937; /* Darker background on hover */
+            background-color: #1F2937;
             color: white;
         }
         .nav a.active { 
@@ -96,7 +96,7 @@
             display: block;
             width: 100%;
             padding: 12px 20px; 
-            background-color: #EF4444; /* Danger Red */
+            background-color: #EF4444;
             color: #fff; 
             text-decoration: none; 
             border-radius: var(--border-radius); 
@@ -178,22 +178,31 @@
             font-size: 0.9rem;
         }
         th { 
-            background-color: #F3F4F6; /* Light gray header */
+            background-color: #F3F4F6;
             color: var(--color-dark);
             font-weight: 600;
             border-bottom: 2px solid #E5E7EB;
         }
         tbody tr:nth-child(even) {
-            background-color: #F9FAFB; /* Light stripe effect */
+            background-color: #F9FAFB;
         }
         tbody tr:hover { 
-            background-color: #E5E7EB; /* Hover highlight */
+            background-color: #E5E7EB;
         }
         td {
             border-bottom: 1px solid #F3F4F6;
         }
 
-        /* 5. Check-in Controls (The most crucial functional area) */
+        /* 5. Tab Content Management (Crucial Fix) */
+        .tab-content { 
+            display: none; 
+            padding-top: 10px; /* Space below h2 */
+        }
+        .tab-content.active { 
+            display: block; 
+        }
+        
+        /* 6. Check-in Controls (The most crucial functional area) */
         .check-in-controls {
             background-color: var(--color-card-bg);
             padding: 30px;
@@ -235,7 +244,7 @@
             box-shadow: 0 4px 10px rgba(5, 150, 105, 0.3);
         }
         .check-in-controls button:disabled {
-            background-color: #A7F3D0; /* Lighter shade of green when disabled */
+            background-color: #A7F3D0;
             cursor: not-allowed;
             color: #065F46;
         }
@@ -250,7 +259,7 @@
             font-size: 0.95rem;
         }
         
-        /* 6. Form Styling (Messages Tab) */
+        /* 7. Form Styling (Messages Tab) */
         #message-form {
             background-color: var(--color-card-bg);
             padding: 20px;
@@ -301,7 +310,7 @@
                 margin-top: 10px;
             }
             .nav li {
-                width: 30%; /* Three per row */
+                width: 30%;
                 margin: 5px 0;
             }
             .nav a {
@@ -449,7 +458,7 @@
         const checkInButton = document.getElementById('check-in-button');
 
         // *************************************************************************
-        // *** 2. UI AND NAVIGATION LOGIC ***
+        // *** 2. UI AND NAVIGATION LOGIC (Tab Hiding/Showing) ***
         // *************************************************************************
         const navLinks = document.querySelectorAll('.nav a');
         const tabs = document.querySelectorAll('.tab-content');
@@ -464,6 +473,7 @@
             if(activeTab) activeTab.classList.add('active');
         }
 
+        // Add listeners to enable switching
         navLinks.forEach(link => {
             link.addEventListener('click', e => {
                 e.preventDefault();
@@ -627,7 +637,6 @@
                         }
                     },
                     (geoError) => {
-                        // 1: Permission Denied, 2: Position Unavailable, 3: Timeout
                         let message = `GPS Error (${geoError.code}): ${geoError.message}`;
                         reject(new Error(message));
                     }, 
@@ -650,7 +659,7 @@
             const sessionType = document.getElementById('session-type').value;
             checkInButton.disabled = true;
             checkInButton.textContent = 'Processing...';
-            geoMessage.style.color = '#3B82F6'; // Blue for processing
+            geoMessage.style.color = '#3B82F6';
 
             try {
                 // 1. Get Location and Address
@@ -690,18 +699,23 @@
 
 
         // *************************************************************************
-        // *** 5. ROBUST INITIALIZATION SEQUENCE ***
+        // *** 5. ROBUST INITIALIZATION SEQUENCE (Fixed Tab Display) ***
         // *************************************************************************
 
         async function loadDashboardData(userId) {
             currentUserId = userId; 
 
+            // 1. Initial Load of Data
             loadProfile(currentUserId);
             loadCourses();
             loadAttendance(currentUserId);
             loadGeoAttendanceHistory(currentUserId);
             loadResources();
             
+            // 2. IMPORTANT FIX: Ensure only the Dashboard is shown on successful login
+            showTab('dashboard');
+
+            // 3. Subscribe to Realtime Updates
             subscribeToRealtimeChannels(currentUserId);
         }
 
