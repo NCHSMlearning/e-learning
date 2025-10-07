@@ -203,10 +203,18 @@
         document.addEventListener('DOMContentLoaded', () => {
             // *** CONFIGURATION: REPLACE THESE WITH YOUR ACTUAL SUPABASE KEYS ***
             const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
-            const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
+            const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY'; // **REPLACE with your actual Anon Key**
             
-            // Create the Supabase client instance
-            const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            // Create the Supabase client instance with EXPLICIT persistence to localStorage.
+            // THIS IS THE FIX for the immediate logout issue on index.html.
+            const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+                auth: {
+                    persistSession: true, 
+                    autoRefreshToken: true,
+                    detectSessionInUrl: true,
+                    storage: window.localStorage, // Force storage in localStorage
+                },
+            });
 
             const errorMsg = document.getElementById('errorMsg');
             const loginForm = document.getElementById('loginForm');
@@ -221,16 +229,13 @@
             loginForm.addEventListener('submit', async e => {
                 e.preventDefault();
                 errorMsg.innerText = '';
-                loginButton.disabled = true; // Disable button to prevent double-clicks
+                loginButton.disabled = true;
 
                 const email = document.getElementById('email').value.trim();
                 const password = document.getElementById('password').value;
-                const shouldRemember = rememberMe.checked;
 
                 try {
                     // 1. SIGN IN
-                    // Note: session persistence is configured in the initial client creation, 
-                    // the `rememberMe` checkbox is usually handled by that setting.
                     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password });
                     
                     if (authError || !authData.user) {
@@ -242,7 +247,6 @@
                     const userId = authData.user.id;
                     
                     // 2. GET ROLE from the 'profiles' table
-                    // RLS must be set to allow authenticated users to read their own profile.
                     const { data: profile, error: profileError } = await supabase
                         .from('profiles')
                         .select('role') 
@@ -250,7 +254,7 @@
                         .single();
 
                     if (profileError || !profile || !profile.role) {
-                        // Logged in but profile data is missing/inaccessible
+                        // This indicates a critical RLS or data issue.
                         errorMsg.innerText = 'Login successful, but user role is undefined. Contact system admin.';
                         console.error("Profile Error:", profileError);
                         loginButton.disabled = false;
@@ -262,16 +266,16 @@
                     
                     switch (userRole) {
                         case 'superadmin':
-                            window.location.href = 'superadmin.html'; // Redirect to Super Admin dashboard
+                            window.location.href = 'superadmin.html';
                             break;
                         case 'admin':
-                            window.location.href = 'admin.html';      // Redirect to Admin dashboard
+                            window.location.href = 'admin.html';
                             break;
                         case 'student':
-                            window.location.href = 'index.html';      // Redirect to Student/Main Portal
+                            // Successful login and role check: hard redirect to the dashboard
+                            window.location.href = 'index.html'; 
                             break;
                         default:
-                            // Fallback for any unknown role
                             console.warn('Unknown role detected:', userRole);
                             window.location.href = 'index.html'; 
                             break;
