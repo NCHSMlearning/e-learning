@@ -3,11 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NCHSM Superadmin Dashboard</title>
-
-  <!-- Embedded style -->
+  <title>NCHSM Admin Dashboard</title>
   <style>
-    /* Paste your exact style block here */
     body { margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #F8FAFC; }
     .container { display: flex; min-height: 100vh; }
 
@@ -57,12 +54,217 @@
   </style>
 </head>
 <body>
-  <!-- HTML content goes here -->
+  <div class="container">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <img src="images/Logo_NCHSM.png" alt="Logo">
+        <h2>NCHSM Admin</h2>
+      </div>
+      <ul class="nav">
+        <li><a href="#" data-tab="dashboard" class="active">Dashboard</a></li>
+        <li><a href="#" data-tab="students">Students</a></li>
+        <li><a href="#" data-tab="courses">Courses</a></li>
+        <li><a href="#" data-tab="attendance">Attendance</a></li>
+        <li><a href="#" data-tab="cats">CATS/Exams</a></li>
+        <li><a href="#" data-tab="messages">Inbox</a></li>
+        <li><a href="#" data-tab="calendar">Calendar</a></li>
+        <li><a href="#" data-tab="resources">Resources</a></li>
+      </ul>
+      <div class="logout"><a href="#" onclick="logout()">Logout</a></div>
+    </aside>
 
-  <!-- Script at the bottom -->
+    <!-- Main Content -->
+    <main class="main">
+      <header>
+        <h1>Welcome, Admin!</h1>
+        <p class="subtitle">Manage all aspects of NCHSM</p>
+      </header>
+
+      <!-- Dashboard Cards -->
+      <section id="dashboard" class="tab-content active">
+        <div class="cards">
+          <div class="card" onclick="showTab('students')"><h3>Manage Students</h3></div>
+          <div class="card" onclick="showTab('courses')"><h3>Manage Courses</h3></div>
+          <div class="card" onclick="showTab('attendance')"><h3>Attendance</h3></div>
+          <div class="card" onclick="showTab('cats')"><h3>CATS/Exams</h3></div>
+        </div>
+      </section>
+
+      <!-- Students Tab -->
+      <section id="students" class="tab-content">
+        <h2>Students</h2>
+        <form id="add-student-form">
+          <input type="text" id="student-name" placeholder="Full Name" required>
+          <input type="email" id="student-email" placeholder="Email" required>
+          <input type="text" id="student-phone" placeholder="Phone" required>
+          <input type="password" id="student-password" placeholder="Password" required>
+          <button type="submit">Add Student</button>
+        </form>
+        <table>
+          <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Phone</th></tr></thead>
+          <tbody id="students-table"></tbody>
+        </table>
+      </section>
+
+      <!-- Courses Tab -->
+      <section id="courses" class="tab-content">
+        <h2>Courses</h2>
+        <form id="add-course-form">
+          <input type="text" id="course-name" placeholder="Course Name" required>
+          <button type="submit">Add Course</button>
+        </form>
+        <table>
+          <thead><tr><th>Course Name</th></tr></thead>
+          <tbody id="courses-table"></tbody>
+        </table>
+      </section>
+
+      <!-- Attendance Tab -->
+      <section id="attendance" class="tab-content">
+        <h2>Attendance</h2>
+        <label for="session-type">Session Type:</label>
+        <select id="session-type">
+          <option value="classroom">Classroom</option>
+          <option value="clinical">Clinical</option>
+        </select>
+
+        <!-- Classroom -->
+        <form id="classroom-form">
+          <input type="text" placeholder="Student ID" required>
+          <input type="text" placeholder="Course Name" required>
+          <input type="text" placeholder="Location" required>
+          <input type="date" required>
+          <button type="submit">Mark Attendance</button>
+        </form>
+
+        <!-- Clinical -->
+        <form id="clinical-form" style="display:none;">
+          <input type="text" placeholder="Student ID" required>
+          <input type="text" placeholder="Rotation Name" required>
+          <input type="time" required>
+          <input type="date" required>
+          <button type="submit">Mark Attendance</button>
+        </form>
+
+        <div id="attendance-records">
+          <h3>Attendance Records</h3>
+          <table>
+            <thead>
+              <tr><th>Student ID</th><th>Session Type</th><th>Course/Rotation</th><th>Location/Time</th><th>Date</th></tr>
+            </thead>
+            <tbody id="attendance-table"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- CATS/Exams Tab -->
+      <section id="cats" class="tab-content">
+        <h2>CATS / Exams</h2>
+        <form id="add-exam-form">
+          <input type="text" placeholder="Exam Name" required>
+          <input type="date" required>
+          <button type="submit">Add Exam</button>
+        </form>
+        <p>Exam schedule will appear here.</p>
+      </section>
+
+      <!-- Inbox / Messages Tab -->
+      <section id="messages" class="tab-content">
+        <h2>Inbox / Messages</h2>
+        <form id="send-message-form">
+          <input type="text" placeholder="Recipient" required>
+          <textarea placeholder="Message" required></textarea>
+          <button type="submit">Send</button>
+        </form>
+        <div id="messages-list"></div>
+      </section>
+
+      <!-- Calendar Tab -->
+      <section id="calendar" class="tab-content">
+        <h2>Calendar</h2>
+        <div id="calendar"><p>Simple calendar placeholder</p></div>
+      </section>
+
+      <!-- Resource Center Tab -->
+      <section id="resources" class="tab-content">
+        <h2>Resource Center</h2>
+        <form id="upload-resource-form">
+          <input type="file" required>
+          <button type="submit">Upload</button>
+        </form>
+        <div id="resources-list"></div>
+      </section>
+    </main>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
-    // Your JavaScript logic goes here, including Supabase auth and tab navigation
+    const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
+    const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY';
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // Sidebar navigation
+    const navLinks = document.querySelectorAll('.nav a');
+    const tabs = document.querySelectorAll('.tab-content');
+    navLinks.forEach(link => {
+      link.addEventListener('click', e => {
+        e.preventDefault();
+        navLinks.forEach(l => l.classList.remove('active'));
+        link.classList.add('active');
+        tabs.forEach(tab => tab.classList.remove('active'));
+        document.getElementById(link.dataset.tab).classList.add('active');
+      });
+    });
+    function showTab(tabId) {
+      navLinks.forEach(l => l.classList.remove('active'));
+      tabs.forEach(tab => tab.classList.remove('active'));
+      document.getElementById(tabId).classList.add('active');
+    }
+
+    // Logout
+    async function logout() {
+      await sb.auth.signOut();
+      localStorage.removeItem("loggedInUser");
+      window.location.href = "login.html";
+    }
+
+    // Students tab
+    const addStudentForm = document.getElementById('add-student-form');
+    const studentsTable = document.getElementById('students-table');
+    addStudentForm.addEventListener('submit', async e => {
+      e.preventDefault();
+      const name = document.getElementById('student-name').value.trim();
+      const email = document.getElementById('student-email').value.trim();
+      const phone = document.getElementById('student-phone').value.trim();
+      const password = document.getElementById('student-password').value;
+
+      if(!name || !email || !phone || !password) return alert('Fill all fields');
+
+      try {
+        const { data: signUpData, error: signUpError } = await sb.auth.signUp({ email, password });
+        if(signUpError) return alert('Signup failed: ' + signUpError.message);
+
+        const { error: profileError } = await sb.from('profiles').insert([{
+          id: signUpData.user.id,
+          full_name: name,
+          email,
+          phone,
+          role: 'student',
+          approved: true
+        }]);
+        if(profileError) return alert('Profile creation failed: ' + profileError.message);
+
+        alert('✅ Student added successfully!');
+        addStudentForm.reset();
+        const row = document.createElement('tr');
+        row.innerHTML = <td>${signUpData.user.id}</td><td>${name}</td><td>${email}</td><td>${phone}</td>;
+        studentsTable.appendChild(row);
+      } catch(err) {
+        console.error(err);
+        alert('An unexpected error occurred.');
+      }
+    });
   </script>
 </body>
 </html>
