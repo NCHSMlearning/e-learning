@@ -1,989 +1,1111 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>NCHSM Super Admin Dashboard</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-  <style>
-    /* --- NCHSM style (kept clean & consistent) --- */
-    body { margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #F8FAFC; }
-    .container { display: flex; min-height: 100vh; }
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>NCHSM Super Admin Dashboard</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    /* --- NCHSM style (improved) --- */
+    body { margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #F8FAFC; }
+    .container { display: flex; min-height: 100vh; }
 
-    /* Sidebar */
-    .sidebar { width: 240px; background-color: #1E293B; color: #fff; display: flex; flex-direction: column; padding: 20px; }
-    .sidebar-header { text-align: center; margin-bottom: 24px; }
-    .sidebar-header img { width: 60px; margin-bottom: 10px; }
-    .nav { list-style: none; padding: 0; flex-grow: 1; }
-    .nav li { margin: 6px 0; }
-    .nav a { color: #fff; text-decoration: none; padding: 10px; border-radius: 6px; display: block; transition: 0.15s; }
-    .nav a:hover, .nav a.active { background-color: #3B82F6; }
-    .logout { margin-top: auto; text-align: center; }
-    .logout a { display: inline-block; margin-top: 10px; padding: 8px 14px; background-color: #EF4444; color: #fff; text-decoration: none; border-radius: 6px; }
+    /* Sidebar */
+    .sidebar { 
+      width: 250px; /* Slightly wider */
+      background-color: #1A202C; /* Deeper, more neutral dark tone */
+      color: #fff; 
+      display: flex; 
+      flex-direction: column; 
+      padding: 20px; 
+    }
+    .sidebar-header { text-align: center; margin-bottom: 24px; }
+    .sidebar-header img { width: 60px; margin-bottom: 10px; }
+    .nav { list-style: none; padding: 0; flex-grow: 1; }
+    .nav li { margin: 6px 0; }
+    .nav a { 
+      color: #CBD5E1; /* Lighter text */
+      text-decoration: none; 
+      padding: 12px 10px; /* More vertical padding */
+      border-radius: 8px; /* Rounder corners */
+      display: block; 
+      transition: 0.15s; 
+    }
+    .nav a:hover { 
+      background-color: #2D3748; /* Lighter background on hover */
+      color: #E2E8F0; 
+    }
+    .nav a.active { 
+      background-color: #3B82F6; 
+      font-weight: 600; /* Bold the active link */
+      color: #fff;
+    }
+    .logout { margin-top: auto; text-align: center; }
+    .logout a { 
+      display: inline-block; 
+      margin-top: 10px; 
+      padding: 10px 18px; /* Larger button */
+      background-color: #DC2626; /* Stronger red */
+      color: #fff; 
+      text-decoration: none; 
+      border-radius: 6px; 
+      transition: background-color 0.2s;
+    }
 
-    /* Main Content */
-    .main { flex: 1; padding: 20px 28px; overflow-y: auto; }
-    header { display:flex; justify-content:space-between; align-items:center; margin-bottom: 18px; }
-    header h1 { margin: 0; font-size: 1.6rem; color: #0f172a; }
-    .subtitle { color: #475569; }
+    /* Main Content */
+    .main { flex: 1; padding: 20px 28px; overflow-y: auto; }
+    header { display:flex; justify-content:space-between; align-items:center; margin-bottom: 24px; } /* Increased margin */
+    header h1 { margin: 0; font-size: 1.8rem; color: #0f172a; } /* Slightly larger title */
+    .subtitle { color: #475569; }
 
-    /* Cards */
-    .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
-    .card { background-color: #fff; padding: 16px; border-radius: 10px; box-shadow: 0 2px 8px rgba(2,6,23,0.04); text-align: center; cursor: pointer; }
-    .card h3 { margin: 4px 0 8px; font-size: 1rem; color: #0f172a; }
-    .card p { margin: 0; font-weight: 700; font-size: 1.2rem; color: #0b2447; }
+    /* Cards */
+    .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 20px; margin-bottom: 24px; } /* Increased gap */
+    .card { 
+      background-color: #fff; 
+      padding: 20px; /* More padding */
+      border-radius: 12px; /* Rounder corners */
+      border: 1px solid #E2E8F0; /* Subtle border */
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06); /* Modern shadow */
+      text-align: center; 
+      cursor: pointer; 
+      transition: transform 0.1s, box-shadow 0.1s; 
+    }
+    .card:hover {
+      transform: translateY(-2px); /* Slight lift on hover */
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    }
+    .card h3 { margin: 4px 0 8px; font-size: 1.1rem; color: #0f172a; }
+    .card p { margin: 0; font-weight: 700; font-size: 1.5rem; color: #0b2447; }
 
-    /* Layout / Tabs */
-    .section { display: none; }
-    .section.active { display: block; }
+    /* Layout / Tabs */
+    .section { display: none; }
+    .section.active { display: block; }
 
-    /* Tables and forms */
-    table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow:hidden; margin-bottom: 18px; }
-    th, td { padding: 12px; border-bottom: 1px solid #E6EEF8; text-align: left; color:#0b2447; }
-    th { background: #EAF2FF; color: #0b2447; font-weight:600; }
-    tr:hover { background: #FBFDFF; }
-    form input, form select, form button, form textarea { padding: 8px 10px; margin: 6px 6px 10px 0; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.95rem; }
-    form button { background:#3B82F6; color:#fff; border:none; padding:9px 14px; cursor:pointer; border-radius:6px; }
-    form button.alt { background:#10B981; }
+    /* Tables */
+    table { 
+      width: 100%; 
+      border-collapse: collapse; 
+      background: white; 
+      border-radius: 8px; 
+      overflow:hidden; 
+      margin-bottom: 20px; 
+      border: 1px solid #E2E8F0; /* Subtle border */
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05); /* Lighter shadow for table */
+    }
+    th, td { padding: 14px; border-bottom: 1px solid #E6EEF8; text-align: left; color:#1A202C; } /* Darker text */
+    th { 
+      background: #F1F5F9 !important; /* Lighter header background */
+      color: #1E293B !important; 
+      font-weight: 700 !important; 
+    }
+    tr:hover { background: #F8FAFC; }
 
-    /* small utility buttons */
-    .btn { padding:6px 10px; border-radius:6px; border:none; cursor:pointer; color:#fff; font-size:.9rem; }
-    .btn-approve { background:#16A34A; }
-    .btn-reject { background:#EF4444; }
-    .btn-delete { background:#F97316; }
-    .btn-edit { background:#3B82F6; }
-    .btn-attendance { background:#0D9488; } /* New color for attendance button */
-    .btn-map { background:#7C3AED; } /* New color for map button */
+    /* Forms */
+    form {
+      display: flex; 
+      flex-wrap: wrap; 
+      gap: 12px; /* Consistent spacing between elements */
+      align-items: flex-end; /* Align inputs and buttons nicely */
+    }
+    form input, form select, form button, form textarea { 
+      padding: 10px 12px; /* More padding */
+      border-radius: 8px; /* Match other components */
+      border: 1px solid #D2D6DC; 
+      font-size: 0.95rem; 
+      flex-grow: 1; /* Allow inputs to fill space */
+      min-width: 180px;
+    }
+    form textarea { 
+      flex-basis: 100%; /* Make textarea span full width */
+      resize: vertical;
+    }
+    form button { 
+      background:#3B82F6; 
+      color:#fff; 
+      border:none; 
+      padding:11px 16px; /* Larger button */
+      cursor:pointer; 
+      border-radius:8px; 
+      transition: background-color 0.2s;
+      flex-grow: 0; /* Prevent button from stretching unnecessarily */
+    }
+    form button:hover {
+      background: #2563EB;
+    }
+    form button.alt { background:#10B981; }
 
-    .muted { font-size: .9rem; color:#6B7280; }
-    .flex { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
-    .mb { margin-bottom:12px; }
-    .center { text-align:center; }
-    .file-input { display:inline-block; }
-    .notice { padding:10px; background:#FFF7ED; border-left: 4px solid #F97316; border-radius:6px; margin-bottom:12px; color:#7C2D12; }
+    /* small utility buttons */
+    .btn { padding:8px 12px; border-radius:6px; border:none; cursor:pointer; color:#fff; font-size:.9rem; }
+    .btn-approve { background:#059669; } /* Emerald Green */
+    .btn-reject { background:#DC2626; } /* Stronger Red */
+    .btn-delete { background:#F59E0B; } /* Amber Orange */
+    .btn-edit { background:#3B82F6; }
+    .btn-attendance { background:#0D9488; } 
+    .btn-map { background:#7C3AED; } 
 
-    /* Modal for Map */
-    .modal {
-      display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%;
-      overflow: auto; background-color: rgba(0,0,0,0.4); justify-content: center; align-items: center;
-    }
-    .modal-content {
-      background-color: #fefefe; padding: 20px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-      width: 90%; max-width: 800px;
-    }
-    .close { color: #aaa; float: right; font-size: 28px; font-weight: bold; }
-    .close:hover, .close:focus { color: #000; text-decoration: none; cursor: pointer; }
-    #attendanceMap { height: 400px; width: 100%; margin-top: 15px; border-radius: 6px; }
+    .muted { font-size: .9rem; color:#6B7280; }
+    .flex { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+    .mb { margin-bottom:12px; }
+    .center { text-align:center; }
+    .file-input { display:inline-block; }
+    .notice { padding:12px; background:#FFF7ED; border-left: 4px solid #F97316; border-radius:6px; margin-bottom:18px; color:#7C2D12; }
 
-    /* responsive */
-    @media (max-width:900px){
-      .sidebar{ display:none; }
-      .container{ flex-direction:column; }
-      .main{ padding:12px; }
-    }
-  </style>
+    /* Modal for Map */
+    .modal {
+      display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%;
+      overflow: auto; background-color: rgba(0,0,0,0.6); justify-content: center; align-items: center;
+    }
+    .modal-content {
+      background-color: #fefefe; padding: 30px; border-radius: 12px; 
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+      width: 90%; max-width: 800px;
+    }
+    .close { color: #aaa; float: right; font-size: 32px; font-weight: bold; line-height: 1; }
+    .close:hover, .close:focus { color: #000; text-decoration: none; cursor: pointer; }
+    #attendanceMap { height: 400px; width: 100%; margin-top: 20px; border-radius: 8px; }
+
+    /* responsive */
+    @media (max-width:900px){
+      .sidebar{ display:none; }
+      .container{ flex-direction:column; }
+      .main{ padding:12px; }
+      .cards { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+    }
+  </style>
 </head>
 <body>
-  <div class="container">
-        <aside class="sidebar">
-      <div class="sidebar-header">
-        <img src="images/Logo_NCHSM.png" alt="Logo" onerror="this.style.display='none'"/>
-        <h3>Super Admin</h3>
-      </div>
-
-      <ul class="nav" id="mainNav">
-        <li><a href="#" class="active" onclick="showSection('dashboard', this)">Dashboard</a></li>
-        <li><a href="#" onclick="showSection('users', this)">Users</a></li>
-        <li><a href="#" onclick="showSection('students', this)">Students</a></li>
-        <li><a href="#" onclick="showSection('courses', this)">Courses</a></li>
-        <li><a href="#" onclick="showSection('attendance', this)">Attendance</a></li>
-        <li><a href="#" onclick="showSection('exams', this)">Exams</a></li>
-        <li><a href="#" onclick="showSection('messages', this)">Inbox</a></li>
-        <li><a href="#" onclick="showSection('calendar', this)">Calendar</a></li>
-        <li><a href="#" onclick="showSection('resources', this)">Resources</a></li>
-        <li><a href="#" onclick="showSection('pending', this)">Pending Approvals</a></li>
-      </ul>
-
-      <div class="logout">
-        <a href="#" onclick="logout()">Logout</a>
-      </div>
-    </aside>
-
-        <main class="main">
-      <header>
-        <div>
-          <h1>Welcome, Super Admin</h1>
-          <p class="subtitle">Manage users, courses, attendance, exams, messages and resources</p>
-        </div>
-        <div class="muted" id="sessionInfo">Signed out</div>
-      </header>
-
-            <section id="dashboard" class="section active">
-        <div class="cards" id="dashboardCards">
-          <div class="card"><h3>Total Users</h3><p id="totalUsers">0</p></div>
-          <div class="card"><h3>Admins</h3><p id="totalAdmins">0</p></div>
-          <div class="card"><h3>Students</h3><p id="totalStudents">0</p></div>
-          <div class="card"><h3>Pending</h3><p id="totalPending">0</p></div>
-        </div>
-        <div class="mb">
-          <div class="notice">This dashboard reads/writes directly to your Supabase project. If you get permission errors, check RLS policies and ensure the anon key is valid.</div>
-        </div>
-      </section>
-
-            <section id="users" class="section">
-        <h2>Users — Add new user (Admin or Student)</h2>
-
-        <form id="addUserForm" class="mb">
-          <input id="new_full_name" placeholder="Full name" required />
-          <input id="new_email" placeholder="Email" type="email" required />
-          <input id="new_phone" placeholder="Phone" />
-          <input id="new_password" placeholder="Password" type="password" required />
-          <select id="new_role">
-            <option value="student">Student</option>
-            <option value="admin">Admin</option>
-          </select>
-          <button type="submit">Create user</button>
-        </form>
-
-        <h3>All users</h3>
-        <table>
-          <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Approved</th><th>Actions</th></tr></thead>
-          <tbody id="usersTable"></tbody>
-        </table>
-      </section>
-
-            <section id="students" class="section">
-        <h2>Students</h2>
-        <table>
-          <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Status</th><th>Actions</th></tr></thead>
-          <tbody id="studentsTable"></tbody>
-        </table>
-      </section>
-
-            <section id="courses" class="section">
-        <h2>Courses</h2>
-        <form id="addCourseForm" class="mb">
-          <input id="course_name" placeholder="Course name" required />
-          <input id="course_description" placeholder="Short description (optional)" />
-          <button type="submit">Add course</button>
-        </form>
-
-        <h3>Course list</h3>
-        <table>
-          <thead><tr><th>Course</th><th>Actions</th></tr></thead>
-          <tbody id="coursesTable"></tbody>
-        </table>
-      </section>
-
-            <section id="attendance" class="section">
-        <h2>Attendance</h2>
-
-                <div class="flex mb">
-          <button class="btn btn-attendance" onclick="markMyAttendance()">🧭 Mark My Attendance</button>
-          <button class="btn btn-map" onclick="showAttendanceMap()">🗺 View My Attendance Map</button>
-        </div>
-
-                <h3 class="muted">Manual Attendance Entry (Admin/Super Admin only)</h3>
-        <form id="addAttendanceForm" class="mb">
-          <select id="att_student_id"></select>
-          <select id="att_session_type"><option value="classroom">Classroom</option><option value="clinical">Clinical</option></select>
-          <select id="att_course_id"></select>
-          <input id="att_location" placeholder="Location" />
-          <input id="att_date" type="date" />
-          <input id="att_time" type="time" />
-          
-                    <input type="hidden" id="att_latitude" value="" />
-          <input type="hidden" id="att_longitude" value="" />
-          <input type="hidden" id="att_ip_address" value="" />
-          <input type="hidden" id="att_device_id" value="" />
-          <input type="hidden" id="att_marked_by" value="manual" />
-
-          <button type="submit">Mark attendance (Manual)</button>
-        </form>
-
-        <h3>Attendance records</h3>
-        <table>
-          <thead><tr><th>Student</th><th>Type</th><th>Location/Time</th><th>Date</th><th>Geo-IP</th><th>Actions</th></tr></thead>
-          <tbody id="attendanceTable"></tbody>
-        </table>
-      </section>
-
-            <section id="exams" class="section">
-        <h2>Exams / CATS</h2>
-        <form id="addExamForm" class="mb">
-          <select id="exam_course_id"></select>
-          <input id="exam_title" placeholder="Exam title" required />
-          <input id="exam_date" type="date" required />
-          <select id="exam_status"><option>Upcoming</option><option>Completed</option></select>
-          <button type="submit">Add exam</button>
-        </form>
-
-        <h3>Exams</h3>
-        <table>
-          <thead><tr><th>Course</th><th>Title</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead>
-          <tbody id="examsTable"></tbody>
-        </table>
-      </section>
-
-            <section id="messages" class="section">
-        <h2>Inbox / Send Message</h2>
-        <form id="sendMessageForm" class="mb">
-          <input id="msg_recipient" placeholder="Recipient email" required />
-          <textarea id="msg_body" placeholder="Message" rows="3" style="width:100%;"></textarea>
-          <button type="submit">Send</button>
-        </form>
-
-        <h3>Messages (recent)</h3>
-        <table>
-          <thead><tr><th>From</th><th>To</th><th>Message</th><th>Date</th></tr></thead>
-          <tbody id="messagesTable"></tbody>
-        </table>
-      </section>
-
-            <section id="calendar" class="section">
-        <h2>Calendar</h2>
-        <p class="muted">Simple calendar placeholder — we can wire to exams/attendance events later.</p>
-        <div id="calendarPlaceholder" class="mb">[Calendar grid placeholder]</div>
-      </section>
-
-            <section id="resources" class="section">
-        <h2>Resources (Uploads)</h2>
-        <div class="mb">
-          <label class="file-input">
-            <input id="resourceFile" type="file" />
-          </label>
-          <input id="resourceTitle" placeholder="Title (optional)" />
-          <button id="uploadResourceBtn">Upload to Storage</button>
-        </div>
-
-        <h3>Available resources</h3>
-        <table>
-          <thead><tr><th>File</th><th>Size</th><th>Actions</th></tr></thead>
-          <tbody id="resourcesTable"></tbody>
-        </table>
-      </section>
-
-            <section id="pending" class="section">
-        <h2>Pending Approvals</h2>
-        <table>
-          <thead><tr><th>Name</th><th>Email</th><th>Action</th></tr></thead>
-          <tbody id="pendingTable"></tbody>
-        </table>
-      </section>
-    </main>
-  </div>
-
-    <div id="mapModal" class="modal">
-    <div class="modal-content">
-      <span class="close" onclick="$('mapModal').style.display='none'">&times;</span>
-      <h3>Attendance Check-in Map</h3>
-      <p class="muted" id="mapInfo"></p>
-      <div id="attendanceMap"></div>
-    </div>
-  </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-
-  <script>
-    /*******************
-     * Configuration
-     *******************/
-    const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
-    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: { persistSession: true, autoRefreshToken: true }
-    });
-    const RESOURCES_BUCKET = 'resources';
-    const IP_API_URL = 'https://api.ipify.org?format=json';
-    const DEVICE_ID_KEY = 'nchsm_device_id';
-
-    let currentUserProfile = null;
-
-    /*******************
-     * Utilities
-     *******************/
-    function $(id){ return document.getElementById(id); }
-    function escapeHtml(s){ return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
-    
-    function generateUUID() {
-      return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
-        (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
-      );
-    }
-
-    function setActiveNav(el){
-      document.querySelectorAll('.nav a').forEach(a => a.classList.remove('active'));
-      if (el) el.classList.add('active');
-    }
-
-    function showSection(id, el){
-      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-      const sec = document.getElementById(id);
-      if (sec) sec.classList.add('active');
-      setActiveNav(el);
-      // load relevant content
-      switch(id){
-        case 'dashboard': loadDashboard(); break;
-        case 'users': loadUsers(); break;
-        case 'students': loadStudents(); break;
-        case 'courses': loadCourses(); break;
-        case 'attendance': loadAttendance(); break;
-        case 'exams': loadExams(); break;
-        case 'messages': loadMessages(); break;
-        case 'resources': loadResources(); break;
-        case 'pending': loadPending(); break;
-        default: break;
-      }
-    }
-
-    async function logout(){
-      await sb.auth.signOut();
-      window.location.href = 'login.html';
-    }
-
-    /*******************
-     * Session Info & User Profile
-     *******************/
-    async function initSessionInfo(){
-      const { data: { user } } = await sb.auth.getUser();
-      if (user) {
-        $('sessionInfo').textContent = `Signed in as ${user.email}`;
-        const { data: profile, error } = await sb.from('profiles').select('*').eq('id', user.id).single();
-        if (profile) currentUserProfile = profile;
-      } else {
-        $('sessionInfo').textContent = 'Signed out';
-      }
-    }
-
-    /*******************
-     * Dashboard
-     *******************/
-    async function loadDashboard(){
-      try {
-        const { data, error } = await sb.from('profiles').select('*');
-        if (error) { console.warn('dashboard profiles error', error); return; }
-        const total = data.length;
-        const admins = data.filter(u=>u.role==='admin').length;
-        const students = data.filter(u=>u.role==='student').length;
-        const pending = data.filter(u=>!u.approved).length;
-        $('totalUsers').textContent = total;
-        $('totalAdmins').textContent = admins;
-        $('totalStudents').textContent = students;
-        $('totalPending').textContent = pending;
-      } catch (err){
-        console.error('loadDashboard', err);
-      }
-    }
-
-    /*******************
-     * Users management
-     *******************/
-    // create user (auth + profile)
-    $('addUserForm').addEventListener('submit', async (e)=>{
-      e.preventDefault();
-      const name = $('new_full_name').value.trim();
-      const email = $('new_email').value.trim();
-      const phone = $('new_phone').value.trim();
-      const password = $('new_password').value;
-      const role = $('new_role').value;
-      if (!name || !email || !password) return alert('Name, email and password required');
-      try {
-        // create auth user
-        const { data: signupData, error: signupErr } = await sb.auth.signUp({ email, password });
-        if (signupErr) {
-          // If user exists, maybe create profile only (but careful). For now show error.
-          return alert('Signup error: ' + signupErr.message);
-        }
-        const userId = signupData.user.id;
-        // create profile
-        const { error: pErr } = await sb.from('profiles').insert([{ id: userId, full_name: name, email, phone, role, approved: true }]);
-        if (pErr) { alert('Profile insert error: ' + pErr.message); return; }
-        alert('User created');
-        $('addUserForm').reset();
-        loadUsers(); loadStudents(); loadDashboard(); loadPending();
-      } catch (err) {
-        console.error('create user err', err);
-        alert('Error creating user (see console)');
-      }
-    });
-
-    // list users
-    async function loadUsers(){
-      try {
-        const { data, error } = await sb.from('profiles').select('*').order('created_at', {ascending:false});
-        if (error) { console.warn('loadUsers', error); $('usersTable').innerHTML='<tr><td colspan="6">Error loading users</td></tr>'; return; }
-        const tbody = $('usersTable'); tbody.innerHTML = '';
-        data.forEach(u=>{
-          tbody.innerHTML += `<tr>
-            <td>${escapeHtml(u.full_name)}</td>
-            <td>${escapeHtml(u.email)}</td>
-            <td>${escapeHtml(u.phone)}</td>
-            <td>${escapeHtml(u.role)}</td>
-            <td>${u.approved ? 'Yes' : 'No'}</td>
-            <td class="flex">
-              ${u.approved ? `<button class="btn btn-delete" onclick="deactivateUser('${u.id}')">Deactivate</button>` : `<button class="btn btn-approve" onclick="approveUser('${u.id}')">Approve</button>`}
-              <button class="btn btn-delete" onclick="deleteUser('${u.id}')">Delete</button>
-            </td>
-          </tr>`;
-        });
-      } catch (err){ console.error('loadUsers', err); }
-    }
-
-    async function approveUser(id){
-      const { error } = await sb.from('profiles').update({ approved: true }).eq('id', id);
-      if (error) return alert('Approve error: ' + error.message);
-      await loadUsers(); await loadPending(); await loadDashboard(); await loadStudents();
-    }
-
-    async function deactivateUser(id){
-      const { error } = await sb.from('profiles').update({ approved: false }).eq('id', id);
-      if (error) return alert('Deactivate error: ' + error.message);
-      await loadUsers(); await loadDashboard(); await loadPending();
-    }
-
-    // delete profile row (note: auth user still exists in auth table)
-    async function deleteUser(id){
-      if (!confirm('Delete profile row? This removes the profile record. The auth user will remain in Auth.')) return;
-      const { error } = await sb.from('profiles').delete().eq('id', id);
-      if (error) return alert('Delete error: ' + error.message);
-      await loadUsers(); await loadDashboard(); await loadStudents(); await loadPending();
-    }
-
-    /*******************
-     * Students tab (filtered users)
-     *******************/
-    async function loadStudents(){
-      try {
-        const { data, error } = await sb.from('profiles').select('*').eq('role','student').order('full_name', {ascending:true});
-        if (error) { console.warn('loadStudents', error); $('studentsTable').innerHTML='<tr><td colspan="5">Error</td></tr>'; return; }
-        const tbody = $('studentsTable'); tbody.innerHTML = '';
-        data.forEach(s=>{
-          tbody.innerHTML += `<tr>
-            <td>${escapeHtml(s.full_name)}</td>
-            <td>${escapeHtml(s.email)}</td>
-            <td>${escapeHtml(s.phone)}</td>
-            <td>${s.approved ? 'Approved' : 'Pending'}</td>
-            <td class="flex">
-              ${!s.approved ? `<button class="btn btn-approve" onclick="approveUser('${s.id}')">Approve</button>` : `<button class="btn btn-delete" onclick="deactivateUser('${s.id}')">Deactivate</button>`}
-              <button class="btn btn-delete" onclick="deleteUser('${s.id}')">Delete</button>
-            </td>
-          </tr>`;
-        });
-      } catch (err){ console.error('loadStudents', err); }
-    }
-
-    /*******************
-     * Courses
-     *******************/
-    $('addCourseForm').addEventListener('submit', async (e)=>{
-      e.preventDefault();
-      const name = $('course_name').value.trim();
-      const description = $('course_description').value.trim();
-      if (!name) return alert('Course name required');
-      try {
-        const { error } = await sb.from('courses').insert([{ course_name: name, description }]);
-        if (error) return alert('Add course error: ' + error.message);
-        $('addCourseForm').reset();
-        await loadCourses(); await populateCourseSelects();
-      } catch (err){ console.error(err); }
-    });
-
-    async function loadCourses(){
-      try {
-        const { data, error } = await sb.from('courses').select('*').order('course_name', {ascending:true});
-        if (error) { console.warn('loadCourses', error); $('coursesTable').innerHTML = '<tr><td colspan="2">No courses or table missing</td></tr>'; return; }
-        const tbody = $('coursesTable'); tbody.innerHTML = '';
-        data.forEach(c=>{
-          tbody.innerHTML += `<tr>
-            <td>${escapeHtml(c.course_name)}</td>
-            <td><button class="btn btn-delete" onclick="deleteCourse(${c.id})">Delete</button></td>
-          </tr>`;
-        });
-      } catch (err){ console.error('loadCourses', err); }
-    }
-
-    async function deleteCourse(id){
-      if (!confirm('Delete course?')) return;
-      const { error } = await sb.from('courses').delete().eq('id', id);
-      if (error) return alert('Delete course error: ' + error.message);
-      await loadCourses(); await populateCourseSelects();
-    }
-
-    async function populateCourseSelects(){
-      try {
-        const { data } = await sb.from('courses').select('*').order('course_name', {ascending:true});
-        const courseSelects = document.querySelectorAll('#att_course_id, #exam_course_id');
-        courseSelects.forEach(s => s.innerHTML = '');
-        if (!data || data.length === 0) {
-          courseSelects.forEach(s => s.innerHTML = '<option value="">(no courses)</option>');
-          return;
-        }
-        data.forEach(c => {
-          const opt = `<option value="${c.id}">${escapeHtml(c.course_name)}</option>`;
-          courseSelects.forEach(s => s.insertAdjacentHTML('beforeend', opt));
-        });
-      } catch (err){ console.error('populateCourseSelects', err); }
-    }
-
-    /*******************
-     * Attendance Utilities (NEW)
-     *******************/
-    async function getPublicIP() {
-      try {
-        const response = await fetch(IP_API_URL);
-        const data = await response.json();
-        return data.ip || '0.0.0.0';
-      } catch {
-        return '0.0.0.0';
-      }
-    }
-
-    function getDeviceId() {
-      let deviceId = localStorage.getItem(DEVICE_ID_KEY);
-      if (!deviceId) {
-        deviceId = generateUUID();
-        localStorage.setItem(DEVICE_ID_KEY, deviceId);
-      }
-      return deviceId;
-    }
-
-    function getGeoLocation() {
-      return new Promise((resolve) => {
-        if (!navigator.geolocation) {
-          alert('Geolocation is not supported by your browser.');
-          return resolve({ lat: null, lng: null });
-        }
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            resolve({ lat: position.coords.latitude, lng: position.coords.longitude });
-          },
-          (error) => {
-            console.error('Geolocation Error:', error);
-            alert('Could not get location. Ensure permissions are granted.');
-            resolve({ lat: null, lng: null });
-          }
-        );
-      });
-    }
-    
-    async function hasAlreadyMarkedAttendance(studentId, ip, deviceId) {
-      const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-      
-      // Check for existing records today for this user
-      const { data, error } = await sb.from('attendance')
-        .select('id')
-        .eq('student_id', studentId)
-        .gte('created_at', today) // Simplistic date check, assumes created_at holds date
-        .limit(1);
-
-      if (error) {
-        console.error('Supabase check error:', error);
-        return true; // Fail safe
-      }
-      
-      return data.length > 0;
-    }
-    
-    /*******************
-     * Attendance Logic
-     *******************/
-    
-    // 1. Student / Self Check-in
-    async function markMyAttendance() {
-      if (!currentUserProfile || !currentUserProfile.approved || currentUserProfile.role === 'admin') {
-        return alert('Access Denied: Only approved students and super admins can use self check-in.');
-      }
-
-      const studentId = currentUserProfile.id;
-      const deviceId = getDeviceId();
-      
-      try {
-        // 1. Get Geo and IP
-        const [ipAddress, location] = await Promise.all([
-          getPublicIP(), 
-          getGeoLocation()
-        ]);
-        
-        // 2. Check for Duplicates (Students only)
-        if (currentUserProfile.role === 'student' && await hasAlreadyMarkedAttendance(studentId, ipAddress, deviceId)) {
-          return alert('Attendance already marked today via this device/IP. Try again tomorrow.');
-        }
-        
-        // 3. Insert Record
-        const { error } = await sb.from('attendance').insert([{ 
-          student_id: studentId, 
-          session_type: 'classroom', // Default for self-check
-          date: new Date().toISOString().slice(0, 10),
-          time: new Date().toTimeString().slice(0, 5),
-          latitude: location.lat,
-          longitude: location.lng,
-          ip_address: ipAddress,
-          device_id: deviceId.substring(0, 8),
-          marked_by: 'self_check',
-          location: 'Auto Check-in'
-        }]);
-        
-        if (error) {
-          return alert('Check-in failed: ' + error.message);
-        }
-
-        alert('Attendance marked successfully!');
-        loadAttendance();
-      } catch(err) {
-        console.error('markMyAttendance error:', err);
-        alert('An unexpected error occurred during check-in.');
-      }
-    }
-    
-    // 2. Admin Manual Mark Attendance (Existing functionality, slightly modified)
-    $('addAttendanceForm').addEventListener('submit', async (e)=>{
-      e.preventDefault();
-      if (currentUserProfile.role !== 'admin' && currentUserProfile.role !== 'superadmin') {
-        return alert('You do not have permission for manual attendance entry.');
-      }
-      manualMarkAttendance();
-    });
-    
-    async function manualMarkAttendance() {
-      const student_id = $('att_student_id').value;
-      const session_type = $('att_session_type').value;
-      const course_id = $('att_course_id').value || null;
-      const location = $('att_location').value.trim();
-      const date = $('att_date').value;
-      const time = $('att_time').value || null;
-      
-      // Get hidden/new fields or use nulls for manual entry
-      const latitude = parseFloat($('att_latitude').value) || null;
-      const longitude = parseFloat($('att_longitude').value) || null;
-      const ip_address = $('att_ip_address').value || null;
-      const device_id = $('att_device_id').value || null;
-      const marked_by = currentUserProfile.email || 'superadmin_manual';
-
-      if (!student_id || !date) return alert('Student and date required for manual entry.');
-      
-      const { error } = await sb.from('attendance').insert([{ 
-        student_id, session_type, course_id, location, time, date, 
-        latitude, longitude, ip_address, device_id, marked_by
-      }]);
-      
-      if (error) return alert('Add attendance error: ' + error.message);
-      $('addAttendanceForm').reset();
-      await loadAttendance();
-    }
-
-
-    // 3. Load Attendance Records
-    async function loadAttendance(){
-      try {
-        const { data, error } = await sb.from('attendance').select('*, profiles(full_name)').order('date', {ascending:false});
-        // if attendance table missing, show message
-        if (error) { console.warn('attendance load', error); $('attendanceTable').innerHTML = '<tr><td colspan="6">No attendance table or permission issue. (Did you run the ALTER TABLE script?)</td></tr>'; return; }
-        const tbody = $('attendanceTable'); tbody.innerHTML = '';
-        data.forEach(r=>{
-          const studentName = r.profiles?.full_name || r.student_id || '-';
-          const locationText = (r.location || '') + ' ' + (r.time || '');
-          const geoIpText = r.latitude ? `Lat: ${r.latitude.toFixed(2)} | IP: ${r.ip_address || 'N/A'}` : 'N/A';
-          
-          tbody.innerHTML += `<tr>
-            <td>${escapeHtml(studentName)}</td>
-            <td>${escapeHtml(r.session_type)}</td>
-            <td>${escapeHtml(locationText)}</td>
-            <td>${escapeHtml(r.date || '')}</td>
-            <td>${escapeHtml(geoIpText)}</td>
-            <td><button class="btn btn-delete" onclick="deleteAttendance(${r.id})">Delete</button></td>
-          </tr>`;
-        });
-      } catch (err){ console.error('loadAttendance', err); }
-    }
-
-    async function deleteAttendance(id){
-      if (!confirm('Delete attendance?')) return;
-      const { error } = await sb.from('attendance').delete().eq('id', id);
-      if (error) return alert('Delete attendance error: ' + error.message);
-      await loadAttendance();
-    }
-
-    // populate student select for attendance
-    async function populateStudentSelect(){
-      try {
-        const { data } = await sb.from('profiles').select('id, full_name').eq('role','student').order('full_name', {ascending:true});
-        const sel = $('att_student_id'); sel.innerHTML = '<option value="">Select student</option>';
-        data.forEach(s => sel.insertAdjacentHTML('beforeend', `<option value="${s.id}">${escapeHtml(s.full_name)}</option>`));
-      } catch (err){ console.error('populateStudentSelect', err); }
-    }
-    
-    /*******************
-     * Attendance Map (NEW)
-     *******************/
-    let mapInstance = null;
-    
-    async function loadAttendanceForMap() {
-      if (!currentUserProfile) return { data: [], error: { message: "User not logged in" } };
-      
-      const isSuperAdmin = currentUserProfile.role === 'superadmin';
-      
-      let query = sb.from('attendance')
-        .select('latitude, longitude, created_at, ip_address, device_id, profiles(full_name)')
-        .not('latitude', 'is', null)
-        .not('longitude', 'is', null)
-        .order('created_at', { ascending: false });
-      
-      // Filter data based on role
-      if (!isSuperAdmin) {
-        query = query.eq('student_id', currentUserProfile.id);
-      }
-
-      return await query;
-    }
-
-    async function showAttendanceMap() {
-      const { data, error } = await loadAttendanceForMap();
-
-      if (error) return alert('Error loading map data: ' + error.message);
-      if (!data || data.length === 0) return alert('No geo-tagged attendance records found for your account.');
-
-      $('mapModal').style.display = 'flex';
-      
-      const isSuperAdmin = currentUserProfile.role === 'superadmin';
-      $('mapInfo').textContent = isSuperAdmin ? `Displaying all ${data.length} check-in points.` : `Displaying your ${data.length} check-in points.`;
-
-      // Ensure map is initialized only once
-      if (mapInstance) {
-        mapInstance.off();
-        mapInstance.remove();
-        mapInstance = null;
-      }
-      
-      // Set up Leaflet Map
-      mapInstance = L.map('attendanceMap').setView([data[0].latitude, data[0].longitude], 13);
-      
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '© OpenStreetMap'
-      }).addTo(mapInstance);
-
-      let markerGroup = L.featureGroup();
-      
-      data.forEach(record => {
-        if (record.latitude && record.longitude) {
-          const date = new Date(record.created_at).toLocaleString();
-          const studentName = record.profiles?.full_name || 'N/A';
-          const popupContent = `
-            <strong>${studentName}</strong><br>
-            Date/Time: ${date}<br>
-            IP: ${record.ip_address}<br>
-            Device ID: ${record.device_id || 'N/A'}...
-          `;
-          
-          const marker = L.marker([record.latitude, record.longitude])
-            .bindPopup(popupContent);
-          
-          markerGroup.addLayer(marker);
-        }
-      });
-      
-      markerGroup.addTo(mapInstance);
-      mapInstance.fitBounds(markerGroup.getBounds().pad(0.5));
-      
-      // Fix map tile rendering issue when modal is shown
-      setTimeout(() => { mapInstance.invalidateSize(); }, 300);
-    }
-
-    /*******************
-     * Exams (No Changes)
-     *******************/
-    $('addExamForm').addEventListener('submit', async (e)=>{
-      e.preventDefault();
-      const course_id = $('exam_course_id').value;
-      const title = $('exam_title').value.trim();
-      const date = $('exam_date').value;
-      const status = $('exam_status').value;
-      if (!course_id || !title || !date) return alert('Course, title and date required');
-      const { error } = await sb.from('exams').insert([{ course_id, title, date, status }]);
-      if (error) return alert('Add exam error: ' + error.message);
-      $('addExamForm').reset();
-      await loadExams();
-    });
-
-    async function loadExams(){
-      try {
-        const { data, error } = await sb.from('exams').select('*, courses(course_name)').order('date', {ascending:false});
-        if (error) { console.warn('loadExams', error); $('examsTable').innerHTML = '<tr><td colspan="5">No exams or table missing</td></tr>'; return; }
-        const tbody = $('examsTable'); tbody.innerHTML = '';
-        data.forEach(e=>{
-          tbody.innerHTML += `<tr>
-            <td>${escapeHtml(e.courses?.course_name || 'N/A')}</td>
-            <td>${escapeHtml(e.title)}</td>
-            <td>${escapeHtml(e.date)}</td>
-            <td>${escapeHtml(e.status)}</td>
-            <td><button class="btn btn-delete" onclick="deleteExam(${e.id})">Delete</button></td>
-          </tr>`;
-        });
-      } catch (err){ console.error('loadExams', err); }
-    }
-
-    async function deleteExam(id){
-      if (!confirm('Delete exam?')) return;
-      const { error } = await sb.from('exams').delete().eq('id', id);
-      if (error) return alert('Delete exam error: ' + error.message);
-      await loadExams();
-    }
-
-    /*******************
-     * Messages (No Changes)
-     *******************/
-    $('sendMessageForm').addEventListener('submit', async (e)=>{
-      e.preventDefault();
-      const recipient = $('msg_recipient').value.trim();
-      const message = $('msg_body').value.trim();
-      if (!recipient || !message) return alert('Recipient and message required');
-      const sender = (await sb.auth.getUser()).data.user?.email || 'superadmin';
-      const { error } = await sb.from('messages').insert([{ sender_email: sender, recipient_email: recipient, message }]);
-      if (error) return alert('Send message error: ' + error.message);
-      $('sendMessageForm').reset();
-      await loadMessages();
-    });
-
-    async function loadMessages(){
-      try {
-        const { data, error } = await sb.from('messages').select('*').order('created_at', {ascending:false}).limit(50);
-        if (error) { console.warn('loadMessages', error); $('messagesTable').innerHTML = '<tr><td colspan="4">No messages or table missing</td></tr>'; return; }
-        const tbody = $('messagesTable'); tbody.innerHTML = '';
-        data.forEach(m=>{
-          tbody.innerHTML += `<tr>
-            <td>${escapeHtml(m.sender_email)}</td>
-            <td>${escapeHtml(m.recipient_email)}</td>
-            <td>${escapeHtml(m.message)}</td>
-            <td>${new Date(m.created_at).toLocaleString()}</td>
-          </tr>`;
-        });
-      } catch (err){ console.error('loadMessages', err); }
-    }
-
-    /*******************
-     * Resources (Storage) (No Changes)
-     *******************/
-    async function loadResources(){
-      try {
-        // list files in bucket
-        const { data, error } = await sb.storage.from(RESOURCES_BUCKET).list('', { limit: 100, offset: 0, sortBy: { column: 'name', order: 'asc' }});
-        if (error) { console.warn('loadResources', error.message); $('resourcesTable').innerHTML = '<tr><td colspan="3">Storage bucket missing or permission issue</td></tr>'; return; }
-        const tbody = $('resourcesTable'); tbody.innerHTML = '';
-        for (const f of data) {
-          const sizeKb = f.size ? (f.size / 1024).toFixed(1) + ' KB' : '';
-          tbody.innerHTML += `<tr>
-            <td><a href="${sb.storage.from(RESOURCES_BUCKET).getPublicUrl(f.name).publicUrl}" target="_blank">${escapeHtml(f.name)}</a></td>
-            <td>${sizeKb}</td>
-            <td><button class="btn btn-delete" onclick="deleteResource('${f.name}')">Delete</button></td>
-          </tr>`;
-        }
-      } catch (err){ console.error('loadResources', err); }
-    }
-
-    $('uploadResourceBtn').addEventListener('click', async ()=>{
-      const fileInput = $('resourceFile');
-      const file = fileInput.files[0];
-      const title = $('resourceTitle').value.trim();
-      if (!file) return alert('Select a file first');
-      // unique filename
-      const filename = `${Date.now()}_${file.name.replace(/\s+/g,'_')}`;
-      const { error } = await sb.storage.from(RESOURCES_BUCKET).upload(filename, file, { cacheControl: '3600', upsert: false });
-      if (error) return alert('Upload error: ' + error.message);
-      // optional: insert metadata into resources table (if exists)
-      try {
-        await sb.from('resources').insert([{ file_name: filename, title }]);
-      } catch (err) {
-        // ignore if table doesn't exist
-      }
-      fileInput.value = ''; $('resourceTitle').value = '';
-      alert('Uploaded');
-      await loadResources();
-    });
-
-    async function deleteResource(name){
-      if (!confirm('Delete resource ' + name + '?')) return;
-      const { error } = await sb.storage.from(RESOURCES_BUCKET).remove([name]);
-      if (error) return alert('Delete storage error: ' + error.message);
-      // optional: delete metadata row if exists
-      try { await sb.from('resources').delete().eq('file_name', name); } catch (err){ /* ignore */ }
-      await loadResources();
-    }
-
-    /*******************
-     * Pending approvals (No Changes)
-     *******************/
-    async function loadPending(){
-      try {
-        const { data, error } = await sb.from('profiles').select('*').eq('approved', false).order('created_at', {ascending:true});
-        if (error) { console.warn('loadPending', error); $('pendingTable').innerHTML = '<tr><td colspan="3">No pending or table error</td></tr>'; return; }
-        const tbody = $('pendingTable'); tbody.innerHTML = '';
-        data.forEach(p=>{
-          tbody.innerHTML += `<tr>
-            <td>${escapeHtml(p.full_name)}</td>
-            <td>${escapeHtml(p.email)}</td>
-            <td class="flex"><button class="btn btn-approve" onclick="approveUser('${p.id}')">Approve</button><button class="btn btn-reject" onclick="rejectUser('${p.id}')">Reject</button></td>
-          </tr>`;
-        });
-      } catch (err){ console.error('loadPending', err); }
-    }
-
-    // helper reject used in pending (actually delete profile)
-    async function rejectUser(id){
-      if (!confirm('Reject and delete profile?')) return;
-      const { error } = await sb.from('profiles').delete().eq('id', id);
-      if (error) return alert('Reject error: ' + error.message);
-      await loadPending(); await loadDashboard();
-    }
-
-    /*******************
-     * Init all
-     *******************/
-    async function init(){
-      try {
-        await initSessionInfo();
-        
-        // Hide map modal if user clicks outside
-        window.onclick = function(event) {
-          if (event.target == $('mapModal')) {
-            $('mapModal').style.display = 'none';
-          }
-        }
-
-        await loadDashboard();
-        await loadUsers();
-        await loadStudents();
-        await loadCourses();
-        await loadAttendance();
-        await loadExams();
-        await loadMessages();
-        await loadResources();
-        await loadPending();
-        await populateCourseSelects();
-        await populateStudentSelect();
-      } catch (err){ console.error('init error', err); }
-    }
-
-    // run init
-    init();
-
-    // expose functions for inline onclicks
-    window.showSection = showSection;
-    window.logout = logout;
-    window.approveUser = approveUser;
-    window.rejectUser = rejectUser;
-    window.deleteUser = deleteUser;
-    window.deleteCourse = deleteCourse;
-    window.deleteExam = deleteExam;
-    window.deleteAttendance = deleteAttendance;
-    window.deleteResource = deleteResource;
-    window.removeUser = deleteUser;
-    window.deactivateUser = deactivateUser;
-    
-    // Expose NEW functions
-    window.markMyAttendance = markMyAttendance;
-    window.showAttendanceMap = showAttendanceMap;
-  </script>
+  <div class="container">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <img src="images/Logo_NCHSM.png" alt="Logo" onerror="this.style.display='none'"/>
+        <h3>Super Admin</h3>
+      </div>
+
+      <ul class="nav" id="mainNav">
+        <li><a href="#" class="active" onclick="showSection('dashboard', this)">Dashboard</a></li>
+        <li><a href="#" onclick="showSection('users', this)">Users</a></li>
+        <li><a href="#" onclick="showSection('students', this)">Students</a></li>
+        <li><a href="#" onclick="showSection('courses', this)">Courses</a></li>
+        <li><a href="#" onclick="showSection('attendance', this)">Attendance</a></li>
+        <li><a href="#" onclick="showSection('exams', this)">Exams</a></li>
+        <li><a href="#" onclick="showSection('messages', this)">Inbox</a></li>
+        <li><a href="#" onclick="showSection('calendar', this)">Calendar</a></li>
+        <li><a href="#" onclick="showSection('resources', this)">Resources</a></li>
+        <li><a href="#" onclick="showSection('pending', this)">Pending Approvals</a></li>
+      </ul>
+
+      <div class="logout">
+        <a href="#" onclick="logout()">Logout</a>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header>
+        <div>
+          <h1>Welcome, Super Admin</h1>
+          <p class="subtitle">Manage users, courses, attendance, exams, messages and resources</p>
+        </div>
+        <div class="muted" id="sessionInfo">Signed out</div>
+      </header>
+
+      <section id="dashboard" class="section active">
+        <div class="cards" id="dashboardCards">
+          <div class="card"><h3>Total Users</h3><p id="totalUsers">0</p></div>
+          <div class="card"><h3>Admins</h3><p id="totalAdmins">0</p></div>
+          <div class="card"><h3>Students</h3><p id="totalStudents">0</p></div>
+          <div class="card"><h3>Pending</h3><p id="totalPending">0</p></div>
+        </div>
+        <div class="mb">
+          <div class="notice">This dashboard reads/writes directly to your Supabase project. If you get permission errors, check RLS policies and ensure the anon key is valid.</div>
+        </div>
+      </section>
+
+      <section id="users" class="section">
+        <h2>Users — Add new user (Admin or Student)</h2>
+
+        <form id="addUserForm" class="mb">
+          <input id="new_full_name" placeholder="Full name" required />
+          <input id="new_email" placeholder="Email" type="email" required />
+          <input id="new_phone" placeholder="Phone" />
+          <input id="new_password" placeholder="Password" type="password" required />
+          <select id="new_role">
+            <option value="student">Student</option>
+            <option value="admin">Admin</option>
+          </select>
+          <button type="submit">Create user</button>
+        </form>
+
+        <h3>All users</h3>
+        <table>
+          <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Approved</th><th>Actions</th></tr></thead>
+          <tbody id="usersTable"></tbody>
+        </table>
+      </section>
+
+      <section id="students" class="section">
+        <h2>Students</h2>
+        <table>
+          <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="studentsTable"></tbody>
+        </table>
+      </section>
+
+      <section id="courses" class="section">
+        <h2>Courses</h2>
+        <form id="addCourseForm" class="mb">
+          <input id="course_name" placeholder="Course name" required />
+          <input id="course_description" placeholder="Short description (optional)" />
+          <button type="submit">Add course</button>
+        </form>
+
+        <h3>Course list</h3>
+        <table>
+          <thead><tr><th>Course</th><th>Actions</th></tr></thead>
+          <tbody id="coursesTable"></tbody>
+        </table>
+      </section>
+
+      <section id="attendance" class="section">
+        <h2>Attendance</h2>
+
+        <div class="flex mb">
+          <button class="btn btn-attendance" onclick="markMyAttendance()">🧭 Mark My Attendance</button>
+          <button class="btn btn-map" onclick="showAttendanceMap()">🗺 View My Attendance Map</button>
+        </div>
+
+        <h3 class="muted">Manual Attendance Entry (Admin/Super Admin only)</h3>
+        <form id="addAttendanceForm" class="mb">
+          <select id="att_student_id"></select>
+          <select id="att_session_type"><option value="classroom">Classroom</option><option value="clinical">Clinical</option></select>
+          <select id="att_course_id"></select>
+          <input id="att_location" placeholder="Location" />
+          <input id="att_date" type="date" />
+          <input id="att_time" type="time" />
+          
+          <input type="hidden" id="att_latitude" value="" />
+          <input type="hidden" id="att_longitude" value="" />
+          <input type="hidden" id="att_ip_address" value="" />
+          <input type="hidden" id="att_device_id" value="" />
+          <input type="hidden" id="att_marked_by" value="manual" />
+
+          <button type="submit">Mark attendance (Manual)</button>
+        </form>
+
+        <h3>Attendance records</h3>
+        <table>
+          <thead><tr><th>Student</th><th>Type</th><th>Location/Time</th><th>Date</th><th>Geo-IP</th><th>Actions</th></tr></thead>
+          <tbody id="attendanceTable"></tbody>
+        </table>
+      </section>
+
+      <section id="exams" class="section">
+        <h2>Exams / CATS</h2>
+        <form id="addExamForm" class="mb">
+          <select id="exam_course_id"></select>
+          <input id="exam_title" placeholder="Exam title" required />
+          <input id="exam_date" type="date" required />
+          <select id="exam_status"><option>Upcoming</option><option>Completed</option></select>
+          <button type="submit">Add exam</button>
+        </form>
+
+        <h3>Exams</h3>
+        <table>
+          <thead><tr><th>Course</th><th>Title</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="examsTable"></tbody>
+        </table>
+      </section>
+
+      <section id="messages" class="section">
+        <h2>Inbox / Send Message</h2>
+        <form id="sendMessageForm" class="mb">
+          <input id="msg_recipient" placeholder="Recipient email" required />
+          <textarea id="msg_body" placeholder="Message" rows="3"></textarea>
+          <button type="submit">Send</button>
+        </form>
+
+        <h3>Messages (recent)</h3>
+        <table>
+          <thead><tr><th>From</th><th>To</th><th>Message</th><th>Date</th></tr></thead>
+          <tbody id="messagesTable"></tbody>
+        </table>
+      </section>
+
+      <section id="calendar" class="section">
+        <h2>Calendar</h2>
+        <p class="muted">Simple calendar placeholder — we can wire to exams/attendance events later.</p>
+        <div id="calendarPlaceholder" class="mb">[Calendar grid placeholder]</div>
+      </section>
+
+      <section id="resources" class="section">
+        <h2>Resources (Uploads)</h2>
+        <form class="mb">
+          <label class="file-input">
+            <input id="resourceFile" type="file" />
+          </label>
+          <input id="resourceTitle" placeholder="Title (optional)" />
+          <button id="uploadResourceBtn" type="button">Upload to Storage</button>
+        </form>
+
+        <h3>Available resources</h3>
+        <table>
+          <thead><tr><th>File</th><th>Size</th><th>Actions</th></tr></thead>
+          <tbody id="resourcesTable"></tbody>
+        </table>
+      </section>
+
+      <section id="pending" class="section">
+        <h2>Pending Approvals</h2>
+        <table>
+          <thead><tr><th>Name</th><th>Email</th><th>Action</th></tr></thead>
+          <tbody id="pendingTable"></tbody>
+        </table>
+      </section>
+    </main>
+  </div>
+
+  <div id="mapModal" class="modal">
+    <div class="modal-content">
+      <span class="close" onclick="$('mapModal').style.display='none'">&times;</span>
+      <h3>Attendance Check-in Map</h3>
+      <p class="muted" id="mapInfo"></p>
+      <div id="attendanceMap"></div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+  <script>
+    /*******************
+     * Configuration
+     *******************/
+    const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: { persistSession: true, autoRefreshToken: true }
+    });
+    const RESOURCES_BUCKET = 'resources';
+    const IP_API_URL = 'https://api.ipify.org?format=json';
+    const DEVICE_ID_KEY = 'nchsm_device_id';
+
+    let currentUserProfile = null;
+
+    /*******************
+     * Utilities
+     *******************/
+    function $(id){ return document.getElementById(id); }
+    function escapeHtml(s){ return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+    
+    function generateUUID() {
+      return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+        (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+      );
+    }
+
+    function setActiveNav(el){
+      document.querySelectorAll('.nav a').forEach(a => a.classList.remove('active'));
+      if (el) el.classList.add('active');
+    }
+
+    function showSection(id, el){
+      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+      const sec = document.getElementById(id);
+      if (sec) sec.classList.add('active');
+      setActiveNav(el);
+      // load relevant content
+      switch(id){
+        case 'dashboard': loadDashboard(); break;
+        case 'users': loadUsers(); break;
+        case 'students': loadStudents(); break;
+        case 'courses': loadCourses(); break;
+        case 'attendance': loadAttendance(); break;
+        case 'exams': loadExams(); break;
+        case 'messages': loadMessages(); break;
+        case 'resources': loadResources(); break;
+        case 'pending': loadPending(); break;
+        default: break;
+      }
+    }
+
+    async function logout(){
+      await sb.auth.signOut();
+      window.location.href = 'login.html';
+    }
+
+    /*******************
+     * Session Info & User Profile
+     *******************/
+    async function initSessionInfo(){
+      const { data: { user } } = await sb.auth.getUser();
+      if (user) {
+        $('sessionInfo').textContent = `Signed in as ${user.email}`;
+        const { data: profile, error } = await sb.from('profiles').select('*').eq('id', user.id).single();
+        if (profile) currentUserProfile = profile;
+      } else {
+        $('sessionInfo').textContent = 'Signed out';
+      }
+    }
+
+    /*******************
+     * Dashboard
+     *******************/
+    async function loadDashboard(){
+      try {
+        const { data, error } = await sb.from('profiles').select('*');
+        if (error) { console.warn('dashboard profiles error', error); return; }
+        const total = data.length;
+        const admins = data.filter(u=>u.role==='admin').length;
+        const students = data.filter(u=>u.role==='student').length;
+        const pending = data.filter(u=>!u.approved).length;
+        $('totalUsers').textContent = total;
+        $('totalAdmins').textContent = admins;
+        $('totalStudents').textContent = students;
+        $('totalPending').textContent = pending;
+      } catch (err){
+        console.error('loadDashboard', err);
+      }
+    }
+
+    /*******************
+     * Users management
+     *******************/
+    // create user (auth + profile)
+    $('addUserForm').addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      const name = $('new_full_name').value.trim();
+      const email = $('new_email').value.trim();
+      const phone = $('new_phone').value.trim();
+      const password = $('new_password').value;
+      const role = $('new_role').value;
+      if (!name || !email || !password) return alert('Name, email and password required');
+      try {
+        // create auth user
+        const { data: signupData, error: signupErr } = await sb.auth.signUp({ email, password });
+        if (signupErr) {
+          // If user exists, maybe create profile only (but careful). For now show error.
+          return alert('Signup error: ' + signupErr.message);
+        }
+        const userId = signupData.user.id;
+        // create profile
+        const { error: pErr } = await sb.from('profiles').insert([{ id: userId, full_name: name, email, phone, role, approved: true }]);
+        if (pErr) { alert('Profile insert error: ' + pErr.message); return; }
+        alert('User created');
+        $('addUserForm').reset();
+        loadUsers(); loadStudents(); loadDashboard(); loadPending();
+      } catch (err) {
+        console.error('create user err', err);
+        alert('Error creating user (see console)');
+      }
+    });
+
+    // list users
+    async function loadUsers(){
+      try {
+        const { data, error } = await sb.from('profiles').select('*').order('created_at', {ascending:false});
+        if (error) { console.warn('loadUsers', error); $('usersTable').innerHTML='<tr><td colspan="6">Error loading users</td></tr>'; return; }
+        const tbody = $('usersTable'); tbody.innerHTML = '';
+        data.forEach(u=>{
+          tbody.innerHTML += `<tr>
+            <td>${escapeHtml(u.full_name)}</td>
+            <td>${escapeHtml(u.email)}</td>
+            <td>${escapeHtml(u.phone)}</td>
+            <td>${escapeHtml(u.role)}</td>
+            <td>${u.approved ? 'Yes' : 'No'}</td>
+            <td class="flex">
+              ${u.approved ? `<button class="btn btn-delete" onclick="deactivateUser('${u.id}')">Deactivate</button>` : `<button class="btn btn-approve" onclick="approveUser('${u.id}')">Approve</button>`}
+              <button class="btn btn-delete" onclick="deleteUser('${u.id}')">Delete</button>
+            </td>
+          </tr>`;
+        });
+      } catch (err){ console.error('loadUsers', err); }
+    }
+
+    async function approveUser(id){
+      const { error } = await sb.from('profiles').update({ approved: true }).eq('id', id);
+      if (error) return alert('Approve error: ' + error.message);
+      await loadUsers(); await loadPending(); await loadDashboard(); await loadStudents();
+    }
+
+    async function deactivateUser(id){
+      const { error } = await sb.from('profiles').update({ approved: false }).eq('id', id);
+      if (error) return alert('Deactivate error: ' + error.message);
+      await loadUsers(); await loadDashboard(); await loadPending();
+    }
+
+    // delete profile row (note: auth user still exists in auth table)
+    async function deleteUser(id){
+      if (!confirm('Delete profile row? This removes the profile record. The auth user will remain in Auth.')) return;
+      const { error } = await sb.from('profiles').delete().eq('id', id);
+      if (error) return alert('Delete error: ' + error.message);
+      await loadUsers(); await loadDashboard(); await loadStudents(); await loadPending();
+    }
+
+    /*******************
+     * Students tab (filtered users)
+     *******************/
+    async function loadStudents(){
+      try {
+        const { data, error } = await sb.from('profiles').select('*').eq('role','student').order('full_name', {ascending:true});
+        if (error) { console.warn('loadStudents', error); $('studentsTable').innerHTML='<tr><td colspan="5">Error</td></tr>'; return; }
+        const tbody = $('studentsTable'); tbody.innerHTML = '';
+        data.forEach(s=>{
+          tbody.innerHTML += `<tr>
+            <td>${escapeHtml(s.full_name)}</td>
+            <td>${escapeHtml(s.email)}</td>
+            <td>${escapeHtml(s.phone)}</td>
+            <td>${s.approved ? 'Approved' : 'Pending'}</td>
+            <td class="flex">
+              ${!s.approved ? `<button class="btn btn-approve" onclick="approveUser('${s.id}')">Approve</button>` : `<button class="btn btn-delete" onclick="deactivateUser('${s.id}')">Deactivate</button>`}
+              <button class="btn btn-delete" onclick="deleteUser('${s.id}')">Delete</button>
+            </td>
+          </tr>`;
+        });
+      } catch (err){ console.error('loadStudents', err); }
+    }
+
+    /*******************
+     * Courses
+     *******************/
+    $('addCourseForm').addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      const name = $('course_name').value.trim();
+      const description = $('course_description').value.trim();
+      if (!name) return alert('Course name required');
+      try {
+        const { error } = await sb.from('courses').insert([{ course_name: name, description }]);
+        if (error) return alert('Add course error: ' + error.message);
+        $('addCourseForm').reset();
+        await loadCourses(); await populateCourseSelects();
+      } catch (err){ console.error(err); }
+    });
+
+    async function loadCourses(){
+      try {
+        const { data, error } = await sb.from('courses').select('*').order('course_name', {ascending:true});
+        if (error) { console.warn('loadCourses', error); $('coursesTable').innerHTML = '<tr><td colspan="2">No courses or table missing</td></tr>'; return; }
+        const tbody = $('coursesTable'); tbody.innerHTML = '';
+        data.forEach(c=>{
+          tbody.innerHTML += `<tr>
+            <td>${escapeHtml(c.course_name)}</td>
+            <td><button class="btn btn-delete" onclick="deleteCourse(${c.id})">Delete</button></td>
+          </tr>`;
+        });
+      } catch (err){ console.error('loadCourses', err); }
+    }
+
+    async function deleteCourse(id){
+      if (!confirm('Delete course?')) return;
+      const { error } = await sb.from('courses').delete().eq('id', id);
+      if (error) return alert('Delete course error: ' + error.message);
+      await loadCourses(); await populateCourseSelects();
+    }
+
+    async function populateCourseSelects(){
+      try {
+        const { data } = await sb.from('courses').select('*').order('course_name', {ascending:true});
+        const courseSelects = document.querySelectorAll('#att_course_id, #exam_course_id');
+        courseSelects.forEach(s => s.innerHTML = '');
+        if (!data || data.length === 0) {
+          courseSelects.forEach(s => s.innerHTML = '<option value="">(no courses)</option>');
+          return;
+        }
+        data.forEach(c => {
+          const opt = `<option value="${c.id}">${escapeHtml(c.course_name)}</option>`;
+          courseSelects.forEach(s => s.insertAdjacentHTML('beforeend', opt));
+        });
+      } catch (err){ console.error('populateCourseSelects', err); }
+    }
+
+    /*******************
+     * Attendance Utilities (NEW)
+     *******************/
+    async function getPublicIP() {
+      try {
+        const response = await fetch(IP_API_URL);
+        const data = await response.json();
+        return data.ip || '0.0.0.0';
+      } catch {
+        return '0.0.0.0';
+      }
+    }
+
+    function getDeviceId() {
+      let deviceId = localStorage.getItem(DEVICE_ID_KEY);
+      if (!deviceId) {
+        deviceId = generateUUID();
+        localStorage.setItem(DEVICE_ID_KEY, deviceId);
+      }
+      return deviceId;
+    }
+
+    function getGeoLocation() {
+      return new Promise((resolve) => {
+        if (!navigator.geolocation) {
+          alert('Geolocation is not supported by your browser.');
+          return resolve({ lat: null, lng: null });
+        }
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            resolve({ lat: position.coords.latitude, lng: position.coords.longitude });
+          },
+          (error) => {
+            console.error('Geolocation Error:', error);
+            alert('Could not get location. Ensure permissions are granted.');
+            resolve({ lat: null, lng: null });
+          }
+        );
+      });
+    }
+    
+    async function hasAlreadyMarkedAttendance(studentId, ip, deviceId) {
+      const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+      
+      // Check for existing records today for this user
+      const { data, error } = await sb.from('attendance')
+        .select('id')
+        .eq('student_id', studentId)
+        .gte('created_at', today) // Simplistic date check, assumes created_at holds date
+        .limit(1);
+
+      if (error) {
+        console.error('Supabase check error:', error);
+        return true; // Fail safe
+      }
+      
+      return data.length > 0;
+    }
+    
+    /*******************
+     * Attendance Logic
+     *******************/
+    
+    // 1. Student / Self Check-in
+    async function markMyAttendance() {
+      if (!currentUserProfile || !currentUserProfile.approved || currentUserProfile.role === 'admin') {
+        return alert('Access Denied: Only approved students and super admins can use self check-in.');
+      }
+
+      const studentId = currentUserProfile.id;
+      const deviceId = getDeviceId();
+      
+      try {
+        // 1. Get Geo and IP
+        const [ipAddress, location] = await Promise.all([
+          getPublicIP(), 
+          getGeoLocation()
+        ]);
+        
+        // 2. Check for Duplicates (Students only)
+        if (currentUserProfile.role === 'student' && await hasAlreadyMarkedAttendance(studentId, ipAddress, deviceId)) {
+          return alert('Attendance already marked today via this device/IP. Try again tomorrow.');
+        }
+        
+        // 3. Insert Record
+        const { error } = await sb.from('attendance').insert([{ 
+          student_id: studentId, 
+          session_type: 'classroom', // Default for self-check
+          date: new Date().toISOString().slice(0, 10),
+          time: new Date().toTimeString().slice(0, 5),
+          latitude: location.lat,
+          longitude: location.lng,
+          ip_address: ipAddress,
+          device_id: deviceId.substring(0, 8),
+          marked_by: 'self_check',
+          location: 'Auto Check-in'
+        }]);
+        
+        if (error) {
+          return alert('Check-in failed: ' + error.message);
+        }
+
+        alert('Attendance marked successfully!');
+        loadAttendance();
+      } catch(err) {
+        console.error('markMyAttendance error:', err);
+        alert('An unexpected error occurred during check-in.');
+      }
+    }
+    
+    // 2. Admin Manual Mark Attendance (Existing functionality, slightly modified)
+    $('addAttendanceForm').addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      if (currentUserProfile.role !== 'admin' && currentUserProfile.role !== 'superadmin') {
+        return alert('You do not have permission for manual attendance entry.');
+      }
+      manualMarkAttendance();
+    });
+    
+    async function manualMarkAttendance() {
+      const student_id = $('att_student_id').value;
+      const session_type = $('att_session_type').value;
+      const course_id = $('att_course_id').value || null;
+      const location = $('att_location').value.trim();
+      const date = $('att_date').value;
+      const time = $('att_time').value || null;
+      
+      // Get hidden/new fields or use nulls for manual entry
+      const latitude = parseFloat($('att_latitude').value) || null;
+      const longitude = parseFloat($('att_longitude').value) || null;
+      const ip_address = $('att_ip_address').value || null;
+      const device_id = $('att_device_id').value || null;
+      const marked_by = currentUserProfile.email || 'superadmin_manual';
+
+      if (!student_id || !date) return alert('Student and date required for manual entry.');
+      
+      const { error } = await sb.from('attendance').insert([{ 
+        student_id, session_type, course_id, location, time, date, 
+        latitude, longitude, ip_address, device_id, marked_by
+      }]);
+      
+      if (error) return alert('Add attendance error: ' + error.message);
+      $('addAttendanceForm').reset();
+      await loadAttendance();
+    }
+
+
+    // 3. Load Attendance Records
+    async function loadAttendance(){
+      try {
+        const { data, error } = await sb.from('attendance').select('*, profiles(full_name)').order('date', {ascending:false});
+        // if attendance table missing, show message
+        if (error) { console.warn('attendance load', error); $('attendanceTable').innerHTML = '<tr><td colspan="6">No attendance table or permission issue. (Did you run the ALTER TABLE script?)</td></tr>'; return; }
+        const tbody = $('attendanceTable'); tbody.innerHTML = '';
+        data.forEach(r=>{
+          const studentName = r.profiles?.full_name || r.student_id || '-';
+          const locationText = (r.location || '') + ' ' + (r.time || '');
+          const geoIpText = r.latitude ? `Lat: ${r.latitude.toFixed(2)} | IP: ${r.ip_address || 'N/A'}` : 'N/A';
+          
+          tbody.innerHTML += `<tr>
+            <td>${escapeHtml(studentName)}</td>
+            <td>${escapeHtml(r.session_type)}</td>
+            <td>${escapeHtml(locationText)}</td>
+            <td>${escapeHtml(r.date || '')}</td>
+            <td>${escapeHtml(geoIpText)}</td>
+            <td><button class="btn btn-delete" onclick="deleteAttendance(${r.id})">Delete</button></td>
+          </tr>`;
+        });
+      } catch (err){ console.error('loadAttendance', err); }
+    }
+
+    async function deleteAttendance(id){
+      if (!confirm('Delete attendance?')) return;
+      const { error } = await sb.from('attendance').delete().eq('id', id);
+      if (error) return alert('Delete attendance error: ' + error.message);
+      await loadAttendance();
+    }
+
+    // populate student select for attendance
+    async function populateStudentSelect(){
+      try {
+        const { data } = await sb.from('profiles').select('id, full_name').eq('role','student').order('full_name', {ascending:true});
+        const sel = $('att_student_id'); sel.innerHTML = '<option value="">Select student</option>';
+        data.forEach(s => sel.insertAdjacentHTML('beforeend', `<option value="${s.id}">${escapeHtml(s.full_name)}</option>`));
+      } catch (err){ console.error('populateStudentSelect', err); }
+    }
+    
+    /*******************
+     * Attendance Map (NEW)
+     *******************/
+    let mapInstance = null;
+    
+    async function loadAttendanceForMap() {
+      if (!currentUserProfile) return { data: [], error: { message: "User not logged in" } };
+      
+      const isSuperAdmin = currentUserProfile.role === 'superadmin';
+      
+      let query = sb.from('attendance')
+        .select('latitude, longitude, created_at, ip_address, device_id, profiles(full_name)')
+        .not('latitude', 'is', null)
+        .not('longitude', 'is', null)
+        .order('created_at', { ascending: false });
+      
+      // Filter data based on role
+      if (!isSuperAdmin) {
+        query = query.eq('student_id', currentUserProfile.id);
+      }
+
+      return await query;
+    }
+
+    async function showAttendanceMap() {
+      const { data, error } = await loadAttendanceForMap();
+
+      if (error) return alert('Error loading map data: ' + error.message);
+      if (!data || data.length === 0) return alert('No geo-tagged attendance records found for your account.');
+
+      $('mapModal').style.display = 'flex';
+      
+      const isSuperAdmin = currentUserProfile.role === 'superadmin';
+      $('mapInfo').textContent = isSuperAdmin 
+        ? `Displaying the last ${data.length} geo-tagged check-ins across all users.`
+        : `Displaying your last ${data.length} geo-tagged check-ins.`;
+
+      // Initialize map if it doesn't exist
+      if (mapInstance) {
+        mapInstance.remove();
+      }
+      
+      // Find center point (first record or average)
+      const firstRecord = data[0];
+      const mapCenter = [firstRecord.latitude, firstRecord.longitude];
+
+      mapInstance = L.map('attendanceMap').setView(mapCenter, 13); // 13 is a good zoom level for city view
+
+      // Add tile layer (OpenStreetMap)
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+      }).addTo(mapInstance);
+
+      // Add markers
+      data.forEach(record => {
+        const popupContent = `
+          <b>${record.profiles?.full_name || 'N/A'}</b><br>
+          Date: ${new Date(record.created_at).toLocaleDateString()}<br>
+          Time: ${new Date(record.created_at).toLocaleTimeString()}<br>
+          IP: ${record.ip_address}<br>
+          Device: ${record.device_id}<br>
+          Lat/Lng: ${record.latitude.toFixed(4)}, ${record.longitude.toFixed(4)}
+        `;
+        L.marker([record.latitude, record.longitude])
+          .addTo(mapInstance)
+          .bindPopup(popupContent);
+      });
+      
+      // Fix map rendering issue on modal open
+      setTimeout(() => {
+        mapInstance.invalidateSize();
+      }, 50);
+    }
+    
+    /*******************
+     * Exams
+     *******************/
+    $('addExamForm').addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      const course_id = $('exam_course_id').value;
+      const title = $('exam_title').value.trim();
+      const date = $('exam_date').value;
+      const status = $('exam_status').value;
+      if (!course_id || !title || !date) return alert('Course, title, and date required');
+      try {
+        const { error } = await sb.from('exams').insert([{ course_id, title, date, status }]);
+        if (error) return alert('Add exam error: ' + error.message);
+        $('addExamForm').reset();
+        await loadExams();
+      } catch (err){ console.error(err); }
+    });
+
+    async function loadExams(){
+      try {
+        const { data, error } = await sb.from('exams').select('*, courses(course_name)').order('date', {ascending:false});
+        if (error) { console.warn('loadExams', error); $('examsTable').innerHTML = '<tr><td colspan="5">No exams table or permission issue</td></tr>'; return; }
+        const tbody = $('examsTable'); tbody.innerHTML = '';
+        data.forEach(e=>{
+          const courseName = e.courses?.course_name || 'N/A';
+          tbody.innerHTML += `<tr>
+            <td>${escapeHtml(courseName)}</td>
+            <td>${escapeHtml(e.title)}</td>
+            <td>${escapeHtml(e.date)}</td>
+            <td>${escapeHtml(e.status)}</td>
+            <td><button class="btn btn-delete" onclick="deleteExam(${e.id})">Delete</button></td>
+          </tr>`;
+        });
+      } catch (err){ console.error('loadExams', err); }
+    }
+
+    async function deleteExam(id){
+      if (!confirm('Delete exam?')) return;
+      const { error } = await sb.from('exams').delete().eq('id', id);
+      if (error) return alert('Delete exam error: ' + error.message);
+      await loadExams();
+    }
+
+    /*******************
+     * Messages
+     *******************/
+    $('sendMessageForm').addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      const recipient = $('msg_recipient').value.trim();
+      const body = $('msg_body').value.trim();
+      const sender = currentUserProfile?.email || 'superadmin';
+      if (!recipient || !body) return alert('Recipient and message body required');
+      try {
+        const { error } = await sb.from('messages').insert([{ sender, recipient, message_body: body }]);
+        if (error) return alert('Send message error: ' + error.message);
+        $('sendMessageForm').reset();
+        await loadMessages();
+      } catch (err){ console.error(err); }
+    });
+
+    async function loadMessages(){
+      try {
+        // Load recent messages (e.g., last 20)
+        const { data, error } = await sb.from('messages').select('*').order('created_at', {ascending:false}).limit(20);
+        if (error) { console.warn('loadMessages', error); $('messagesTable').innerHTML = '<tr><td colspan="4">No messages table or permission issue</td></tr>'; return; }
+        const tbody = $('messagesTable'); tbody.innerHTML = '';
+        data.forEach(m=>{
+          const date = new Date(m.created_at).toLocaleString();
+          tbody.innerHTML += `<tr>
+            <td>${escapeHtml(m.sender)}</td>
+            <td>${escapeHtml(m.recipient)}</td>
+            <td>${escapeHtml(m.message_body.substring(0, 50))}...</td>
+            <td>${escapeHtml(date)}</td>
+          </tr>`;
+        });
+      } catch (err){ console.error('loadMessages', err); }
+    }
+
+    /*******************
+     * Resources / Uploads
+     *******************/
+    $('uploadResourceBtn').addEventListener('click', async () => {
+      const fileInput = $('resourceFile');
+      const titleInput = $('resourceTitle');
+      const file = fileInput.files[0];
+      const title = titleInput.value.trim() || file.name;
+
+      if (!file) {
+        return alert('Please select a file to upload.');
+      }
+
+      const fileExtension = file.name.split('.').pop();
+      const fileName = `${Date.now()}_${title.replace(/\s/g, '_')}.${fileExtension}`;
+      
+      try {
+        // 1. Upload to Supabase Storage
+        const { data: uploadData, error: uploadError } = await sb.storage
+          .from(RESOURCES_BUCKET)
+          .upload(fileName, file);
+
+        if (uploadError) {
+          throw new Error('Storage Upload Error: ' + uploadError.message);
+        }
+
+        // 2. Get Public URL
+        const { data: publicUrlData } = sb.storage.from(RESOURCES_BUCKET).getPublicUrl(fileName);
+        const publicUrl = publicUrlData.publicUrl;
+
+        // 3. Save link to 'resources' table
+        const { error: dbError } = await sb.from('resources').insert([{ 
+          title: title, 
+          file_name: fileName, 
+          url: publicUrl,
+          size: file.size,
+          uploaded_by: currentUserProfile?.email || 'admin'
+        }]);
+
+        if (dbError) {
+          throw new Error('Database Insert Error: ' + dbError.message);
+        }
+
+        alert(`File uploaded and recorded: ${title}`);
+        fileInput.value = '';
+        titleInput.value = '';
+        loadResources();
+
+      } catch (error) {
+        console.error('Resource Upload Failed:', error.message);
+        alert('Upload failed: ' + error.message);
+      }
+    });
+
+    async function loadResources(){
+      try {
+        const { data, error } = await sb.from('resources').select('*').order('created_at', {ascending:false});
+        if (error) { console.warn('loadResources', error); $('resourcesTable').innerHTML = '<tr><td colspan="3">No resources table or permission issue</td></tr>'; return; }
+        const tbody = $('resourcesTable'); tbody.innerHTML = '';
+        data.forEach(r=>{
+          const sizeMB = (r.size / 1024 / 1024).toFixed(2);
+          tbody.innerHTML += `<tr>
+            <td><a href="${r.url}" target="_blank">${escapeHtml(r.title)}</a></td>
+            <td>${sizeMB} MB</td>
+            <td class="flex">
+              <button class="btn btn-delete" onclick="deleteResource(${r.id}, '${r.file_name}')">Delete</button>
+            </td>
+          </tr>`;
+        });
+      } catch (err){ console.error('loadResources', err); }
+    }
+
+    async function deleteResource(id, fileName){
+      if (!confirm(`Delete resource '${fileName}'? This will delete the database record and the file from storage.`)) return;
+
+      try {
+        // 1. Delete record from database
+        const { error: dbError } = await sb.from('resources').delete().eq('id', id);
+        if (dbError) throw new Error('DB Delete Error: ' + dbError.message);
+        
+        // 2. Delete file from storage
+        const { error: storageError } = await sb.storage.from(RESOURCES_BUCKET).remove([fileName]);
+        if (storageError) console.warn('Storage Delete Warning (DB record removed):', storageError.message);
+
+        alert('Resource deleted successfully.');
+        await loadResources();
+      } catch (error) {
+        console.error('Delete Resource Failed:', error.message);
+        alert('Error deleting resource: ' + error.message);
+      }
+    }
+
+    /*******************
+     * Pending Approvals
+     *******************/
+    async function loadPending(){
+      try {
+        const { data, error } = await sb.from('profiles').select('*').eq('approved', false).order('created_at', {ascending:true});
+        if (error) { console.warn('loadPending', error); $('pendingTable').innerHTML='<tr><td colspan="3">Error loading pending users</td></tr>'; return; }
+        const tbody = $('pendingTable'); tbody.innerHTML = '';
+        if (data.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="3" class="center muted">No pending approvals.</td></tr>';
+          return;
+        }
+        data.forEach(u=>{
+          tbody.innerHTML += `<tr>
+            <td>${escapeHtml(u.full_name)}</td>
+            <td>${escapeHtml(u.email)}</td>
+            <td class="flex">
+              <button class="btn btn-approve" onclick="approveUser('${u.id}')">Approve</button>
+              <button class="btn btn-reject" onclick="deleteUser('${u.id}')">Reject & Delete</button>
+            </td>
+          </tr>`;
+        });
+      } catch (err){ console.error('loadPending', err); }
+    }
+
+    /*******************
+     * Initialization
+     *******************/
+    document.addEventListener('DOMContentLoaded', async () => {
+      // Check for user session and load profile
+      await initSessionInfo();
+      const { data: { user } } = await sb.auth.getUser();
+
+      // Redirect if not logged in or not an admin/superadmin (simple check)
+      if (!user) {
+        return window.location.href = 'login.html';
+      }
+
+      // Check if profile is loaded and authorized (Superadmin only for this page)
+      if (!currentUserProfile || (currentUserProfile.role !== 'superadmin' && currentUserProfile.role !== 'admin')) {
+          // A simple student could still technically use this page if they know the URL,
+          // but the data loading logic is protected by RLS on the Supabase side. 
+          // Keep the full admin functionality available for superadmin.
+          if (currentUserProfile?.role === 'student' && currentUserProfile.approved) {
+              // Allow student to see dashboard and mark attendance
+              document.querySelectorAll('.nav li:not(:has(a[onclick^="showSection(\'dashboard\',"])):not(:has(a[onclick^="showSection(\'attendance\',"]))').forEach(el => el.style.display = 'none');
+              document.querySelector('.sidebar-header h3').textContent = 'Student Dashboard';
+          } else if (!currentUserProfile?.approved) {
+              alert('Your account is pending approval.');
+              await sb.auth.signOut();
+              return window.location.href = 'login.html';
+          }
+      }
+
+      // Initial loads
+      showSection('dashboard', $('mainNav').querySelector('.active')); // Load Dashboard first
+      populateCourseSelects();
+      populateStudentSelect();
+    });
+  </script>
 </body>
 </html>
