@@ -9,33 +9,41 @@ function $(id){ return document.getElementById(id); }
 function escapeHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 function setActiveNav(el){ document.querySelectorAll('.nav a').forEach(a=>a.classList.remove('active')); if(el) el.classList.add('active'); }
 
-// ---------------- SHOW SECTION ----------------
-function showSection(id,el){
-    document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
-    const sec=$(id); if(sec) sec.classList.add('active');
+// ---------------- TAB SWITCH ----------------
+const navLinks = document.querySelectorAll('.nav a');
+const tabs = document.querySelectorAll('.tab-content');
+navLinks.forEach(link=>{
+    link.addEventListener('click', e=>{
+        e.preventDefault();
+        showSection(link.dataset.tab, link);
+    });
+});
+function showSection(id, el){
+    tabs.forEach(t=>t.classList.remove('active'));
+    const sec = $(id); if(sec) sec.classList.add('active');
     setActiveNav(el);
     switch(id){
-        case'dashboard': if($('#dashboard')) loadDashboard(); break;
-        case'users': if($('#users')) loadUsers(); break;
-        case'students': if($('#students')) loadStudents(); break;
-        case'courses': if($('#courses')) { loadCourses(); populateCourseSelects(); } break;
-        case'attendance': if($('#attendance')) { loadAttendance(); populateStudentSelect(); populateCourseSelects(); setAttendanceLocationByIP(); } break;
-        case'exams': if($('#exams')) { loadExams(); populateCourseSelects(); } break;
-        case'messages': if($('#messages')) loadMessages(); break;
-        case'resources': if($('#resources')) loadResources(); break;
-        case'pending': if($('#pending')) loadPending(); break;
+        case 'dashboard': loadDashboard(); break;
+        case 'users': loadUsers(); break;
+        case 'students': loadStudents(); break;
+        case 'courses': loadCourses(); populateCourseSelects(); break;
+        case 'attendance': loadAttendance(); populateStudentSelect(); populateCourseSelects(); setAttendanceLocationByIP(); break;
+        case 'exams': loadExams(); break;
+        case 'messages': loadMessages(); break;
+        case 'resources': loadResources(); break;
+        case 'pending': loadPending(); break;
     }
 }
 
 // ---------------- AUTH CHECK ----------------
-(async function checkAuth() {
+(async function checkAuth(){
     const { data: { user } } = await sb.auth.getUser();
-    if(!user){ window.location.href = '/login.html'; }
+    if(!user) window.location.href = '/login.html';
     else if($('#sessionInfo')) $('sessionInfo').innerText = `Signed in as ${user.email}`;
 })();
 
 // ---------------- LOGOUT ----------------
-async function logout() {
+async function logout(){
     const { error } = await sb.auth.signOut();
     if(error){ alert('Logout failed: '+error.message); return; }
     window.location.href = '/login.html';
@@ -46,14 +54,10 @@ async function loadDashboard(){
     if(!$('#dashboard')) return;
     const { data: users } = await sb.from('profiles').select('*');
     if(!users) return;
-    const totalUsers = users.length;
-    const totalAdmins = users.filter(u=>u.role==='admin').length;
-    const totalStudents = users.filter(u=>u.role==='student').length;
-    const totalPending = users.filter(u=>!u.approved).length;
-    if($('#totalUsers')) $('totalUsers').innerText = totalUsers;
-    if($('#totalAdmins')) $('totalAdmins').innerText = totalAdmins;
-    if($('#totalStudents')) $('totalStudents').innerText = totalStudents;
-    if($('#totalPending')) $('totalPending').innerText = totalPending;
+    if($('#totalUsers')) $('totalUsers').innerText = users.length;
+    if($('#totalAdmins')) $('totalAdmins').innerText = users.filter(u=>u.role==='admin').length;
+    if($('#totalStudents')) $('totalStudents').innerText = users.filter(u=>u.role==='student').length;
+    if($('#totalPending')) $('totalPending').innerText = users.filter(u=>!u.approved).length;
 }
 
 // ---------------- USERS ----------------
@@ -62,14 +66,17 @@ async function loadUsers(){
     const {data:users} = await sb.from('profiles').select('*').order('created_at',{ascending:false});
     table.innerHTML='';
     users?.forEach(u=>{
-        const tr=document.createElement('tr');
-        tr.innerHTML = `<td>${escapeHtml(u.full_name)}</td><td>${escapeHtml(u.email)}</td><td>${escapeHtml(u.phone)}</td>
-        <td>${escapeHtml(u.role)}</td>
-        <td>${u.approved?'Yes':'No'}</td>
-        <td class="flex">
-          ${!u.approved?`<button class="btn btn-approve" onclick="approveUser('${u.id}')">Approve</button>`:''}
-          <button class="btn btn-delete" onclick="deleteUser('${u.id}')">Delete</button>
-        </td>`;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${escapeHtml(u.full_name)}</td>
+            <td>${escapeHtml(u.email)}</td>
+            <td>${escapeHtml(u.phone)}</td>
+            <td>${escapeHtml(u.role)}</td>
+            <td>${u.approved?'Yes':'No'}</td>
+            <td class="flex">
+                ${!u.approved?`<button class="btn btn-approve" onclick="approveUser('${u.id}')">Approve</button>`:''}
+                <button class="btn btn-delete" onclick="deleteUser('${u.id}')">Delete</button>
+            </td>`;
         table.appendChild(tr);
     });
 }
@@ -78,7 +85,7 @@ async function deleteUser(id){ if(confirm('Delete this user?')){ await sb.from('
 if($('#addUserForm')) $('addUserForm').addEventListener('submit', async e=>{
     e.preventDefault();
     const full_name=$('new_full_name').value,email=$('new_email').value,phone=$('new_phone').value,password=$('new_password').value,role=$('new_role').value;
-    const {data,error}=await sb.auth.admin.createUser({email,password,phone,role,app_metadata:{role}});
+    const { data, error } = await sb.auth.admin.createUser({email,password,phone,role,app_metadata:{role}});
     if(error){ alert(error.message); return; }
     await sb.from('profiles').insert([{id:data.user.id,full_name,email,phone,role,approved:true}]);
     $('addUserForm').reset(); loadUsers(); loadDashboard();
@@ -87,7 +94,7 @@ if($('#addUserForm')) $('addUserForm').addEventListener('submit', async e=>{
 // ---------------- STUDENTS ----------------
 async function loadStudents(){
     const table=$('studentsTable'); if(!table) return;
-    const {data:students}=await sb.from('profiles').select('*').eq('role','student').order('created_at',{ascending:false});
+    const {data:students} = await sb.from('profiles').select('*').eq('role','student').order('created_at',{ascending:false});
     table.innerHTML='';
     students?.forEach(s=>{
         const tr=document.createElement('tr');
@@ -101,10 +108,10 @@ async function loadStudents(){
 // ---------------- COURSES ----------------
 async function loadCourses(){
     const table=$('coursesTable'); if(!table) return;
-    const {data:courses}=await sb.from('courses').select('*').order('created_at',{ascending:false});
+    const {data:courses} = await sb.from('courses').select('*').order('created_at',{ascending:false});
     table.innerHTML='';
     courses?.forEach(c=>{
-        const tr=document.createElement('tr');
+        const tr = document.createElement('tr');
         tr.innerHTML=`<td>${escapeHtml(c.course_name)}</td>
         <td class="flex"><button class="btn btn-edit" onclick="editCourse('${c.id}')">Edit</button>
         <button class="btn btn-delete" onclick="deleteCourse('${c.id}')">Delete</button></td>`;
@@ -119,7 +126,7 @@ if($('#addCourseForm')) $('addCourseForm').addEventListener('submit', async e=>{
     $('addCourseForm').reset(); loadCourses(); populateCourseSelects();
 });
 async function populateCourseSelects(){
-    const {data:courses}=await sb.from('courses').select('*').order('created_at',{ascending:true});
+    const {data:courses} = await sb.from('courses').select('*').order('created_at',{ascending:true});
     const selects=['att_course_id','exam_course_id'];
     selects.forEach(id=>{
         const sel=$(id); if(!sel) return; sel.innerHTML='';
@@ -130,7 +137,7 @@ async function populateCourseSelects(){
 // ---------------- ATTENDANCE ----------------
 async function loadAttendance(){
     const table=$('attendanceTable'); if(!table) return;
-    const {data:att}=await sb.from('attendance').select('*,profiles(full_name),courses(course_name)').order('created_at',{ascending:false});
+    const {data:att} = await sb.from('attendance').select('*,profiles(full_name),courses(course_name)').order('created_at',{ascending:false});
     table.innerHTML='';
     att?.forEach(a=>{
         const tr=document.createElement('tr');
@@ -154,23 +161,16 @@ if($('#addAttendanceForm')) $('addAttendanceForm').addEventListener('submit', as
     await sb.from('attendance').insert([{student_id,session_type,course_id,location,date,time}]);
     $('addAttendanceForm').reset(); loadAttendance();
 });
-
-// ---------- AUTO LOCATION BY IP ----------
 async function setAttendanceLocationByIP(){
     const input = $('att_location'); if(!input) return;
-    try{
-        const res = await fetch('https://ipapi.co/json/');
-        const data = await res.json();
-        input.value = `${data.city}, ${data.region}, ${data.country_name}`;
-    } catch(err){
-        console.warn('Could not fetch location:', err);
-    }
+    try{ const res = await fetch('https://ipapi.co/json/'); const data = await res.json(); input.value = `${data.city}, ${data.region}, ${data.country_name}`; }
+    catch(err){ console.warn('Could not fetch location:', err); }
 }
 
 // ---------------- EXAMS ----------------
 async function loadExams(){
     const table=$('examsTable'); if(!table) return;
-    const {data:exams}=await sb.from('exams').select('*,courses(course_name)').order('date',{ascending:true});
+    const {data:exams} = await sb.from('exams').select('*,courses(course_name)').order('date',{ascending:true});
     table.innerHTML='';
     exams?.forEach(e=>{
         const tr=document.createElement('tr');
@@ -188,63 +188,82 @@ if($('#addExamForm')) $('addExamForm').addEventListener('submit', async e=>{
 
 // ---------------- MESSAGES ----------------
 async function loadMessages(){
-    const table=$('messagesTable'); if(!table) return;
-    const {data:msgs}=await sb.from('messages').select('*,profiles_from:sender(*),profiles_to:recipient(*)').order('created_at',{ascending:false});
-    table.innerHTML='';
+    const table = $('messagesTable'); if(!table) return;
+    const { data: msgs } = await sb.from('messages')
+        .select('*,profiles_from:sender(*),profiles_to:recipient(*)')
+        .order('created_at',{ ascending:false });
+    table.innerHTML = '';
     msgs?.forEach(m=>{
-        const tr=document.createElement('tr');
-        tr.innerHTML=`<td>${escapeHtml(m.profiles_from?.full_name)}</td><td>${escapeHtml(m.profiles_to?.full_name)}</td>
-        <td>${escapeHtml(m.message)}</td><td>${escapeHtml(m.created_at)}</td>`;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${escapeHtml(m.profiles_from?.full_name)}</td>
+            <td>${escapeHtml(m.profiles_to?.full_name)}</td>
+            <td>${escapeHtml(m.message)}</td>
+            <td>${escapeHtml(m.created_at)}</td>`;
         table.appendChild(tr);
     });
 }
 if($('#sendMessageForm')) $('sendMessageForm').addEventListener('submit', async e=>{
     e.preventDefault();
-    const recipient_email=$('msg_recipient').value,message=$('msg_body').value;
-    const {data:recipient}=await sb.from('profiles').select('*').eq('email',recipient_email).single();
+    const recipient_email = $('msg_recipient').value;
+    const message = $('msg_body').value;
+    const { data: recipient } = await sb.from('profiles').select('*').eq('email', recipient_email).single();
     if(!recipient){ alert('Recipient not found'); return; }
-    await sb.from('messages').insert([{sender:(await sb.auth.getUser()).data.user.id,recipient:recipient.id,message}]);
+    const { data: currentUser } = await sb.auth.getUser();
+    await sb.from('messages').insert([{ sender: currentUser.user.id, recipient: recipient.id, message }]);
     $('sendMessageForm').reset(); loadMessages();
 });
 
 // ---------------- RESOURCES ----------------
 async function loadResources(){
-    const table=$('resourcesTable'); if(!table) return;
-    const {data:files,error}=await sb.storage.from(RESOURCES_BUCKET).list('',{limit:100,offset:0});
-    table.innerHTML='';
+    const table = $('resourcesTable'); if(!table) return;
+    const { data: files, error } = await sb.storage.from(RESOURCES_BUCKET).list('', { limit:100, offset:0 });
+    if(error){ console.error(error); return; }
+    table.innerHTML = '';
     files?.forEach(f=>{
-        const tr=document.createElement('tr');
-        tr.innerHTML=`<td><a href="${sb.storage.from(RESOURCES_BUCKET).getPublicUrl(f.name).data.publicUrl}" target="_blank">${escapeHtml(f.name)}</a></td>
-        <td>${(f.size/1024).toFixed(1)} KB</td>
-        <td class="flex"><button class="btn btn-delete" onclick="deleteResource('${f.name}')">Delete</button></td>`;
+        const tr = document.createElement('tr');
+        const url = sb.storage.from(RESOURCES_BUCKET).getPublicUrl(f.name).data.publicUrl;
+        tr.innerHTML = `
+            <td><a href="${url}" target="_blank">${escapeHtml(f.name)}</a></td>
+            <td>${(f.size/1024).toFixed(1)} KB</td>
+            <td class="flex"><button class="btn btn-delete" onclick="deleteResource('${f.name}')">Delete</button></td>`;
         table.appendChild(tr);
     });
 }
 if($('#uploadResourceBtn')) $('uploadResourceBtn').addEventListener('click', async ()=>{
-    const file=$('resourceFile').files[0]; if(!file){ alert('Select a file'); return; }
-    const title=$('resourceTitle').value||file.name;
-    const {data,error}=await sb.storage.from(RESOURCES_BUCKET).upload(file.name,file,{upsert:true});
+    const file = $('resourceFile').files[0]; if(!file){ alert('Select a file'); return; }
+    const { data, error } = await sb.storage.from(RESOURCES_BUCKET).upload(file.name, file, { upsert:true });
     if(error){ alert(error.message); return; }
-    $('resourceFile').value=''; $('resourceTitle').value=''; loadResources();
+    $('resourceFile').value=''; $('resourceTitle').value='';
+    loadResources();
 });
-async function deleteResource(name){ if(confirm('Delete resource?')){ await sb.storage.from(RESOURCES_BUCKET).remove([name]); loadResources(); } }
+async function deleteResource(name){
+    if(confirm('Delete resource?')){
+        await sb.storage.from(RESOURCES_BUCKET).remove([name]);
+        loadResources();
+    }
+}
 
-// ---------------- PENDING ----------------
+// ---------------- PENDING USERS ----------------
 async function loadPending(){
-    const table=$('pendingTable'); if(!table) return;
-    const {data:users}=await sb.from('profiles').select('*').eq('approved',false);
-    table.innerHTML='';
+    const table = $('pendingTable'); if(!table) return;
+    const { data: users } = await sb.from('profiles').select('*').eq('approved', false);
+    table.innerHTML = '';
     users?.forEach(u=>{
-        const tr=document.createElement('tr');
-        tr.innerHTML=`<td>${escapeHtml(u.full_name)}</td><td>${escapeHtml(u.email)}</td>
-        <td class="flex"><button class="btn btn-approve" onclick="approveUser('${u.id}')">Approve</button>
-        <button class="btn btn-delete" onclick="deleteUser('${u.id}')">Delete</button></td>`;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${escapeHtml(u.full_name)}</td>
+            <td>${escapeHtml(u.email)}</td>
+            <td class="flex">
+                <button class="btn btn-approve" onclick="approveUser('${u.id}')">Approve</button>
+                <button class="btn btn-delete" onclick="deleteUser('${u.id}')">Delete</button>
+            </td>`;
         table.appendChild(tr);
     });
 }
 
 // ---------------- INIT ----------------
-(async function init(){
+(async function initAll(){
     if($('#dashboard')) loadDashboard();
     if($('#users')) loadUsers();
     if($('#students')) loadStudents();
