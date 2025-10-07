@@ -1,401 +1,729 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>NCHSM Super Admin Dashboard — Attendance Geo + IP + Map</title>
-  <link rel="icon" href="data:;base64,iVBORw0KGgo=" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-sA+e2mYgCkJvY1LkKq0qgq0s7pY8b+7p1mXg9fM2h+M=" crossorigin=""/>
+  <title>NCHSM Super Admin Dashboard</title>
   <style>
-    :root{--bg:#F8FAFC;--panel:#fff;--muted:#6B7280;--accent:#3B82F6;--danger:#EF4444;--ok:#16A34A}
-    *{box-sizing:border-box}
-    body{margin:0;font-family:Inter,Segoe UI,Roboto,system-ui,-apple-system;background:var(--bg);color:#0f172a}
-    .app{display:flex;min-height:100vh}
-    aside{width:240px;background:#0f172a;color:#fff;padding:20px;display:flex;flex-direction:column}
-    aside h3{margin:8px 0}
-    .nav{list-style:none;padding:0;margin:12px 0;flex:1}
-    .nav a{display:block;padding:10px;border-radius:8px;color:inherit;text-decoration:none;margin-bottom:6px}
-    .nav a.active{background:var(--accent)}
-    main{flex:1;padding:20px;overflow:auto}
-    header{display:flex;justify-content:space-between;align-items:center}
-    .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:16px 0}
-    .card{background:var(--panel);padding:14px;border-radius:10px;box-shadow:0 2px 8px rgba(2,6,23,0.04);text-align:center}
-    table{width:100%;border-collapse:collapse;background:var(--panel);border-radius:8px;overflow:hidden}
-    th,td{padding:10px;border-bottom:1px solid #E6EEF8;text-align:left}
-    th{background:#EAF2FF}
-    .controls{display:flex;gap:8px;align-items:center;margin-bottom:12px}
-    form input,form select,form button,textarea{padding:8px;border:1px solid #CBD5E1;border-radius:8px}
-    .btn{padding:8px 10px;border-radius:8px;border:none;cursor:pointer}
-    .btn-primary{background:var(--accent);color:#fff}
-    .btn-ok{background:var(--ok);color:#fff}
-    .btn-danger{background:var(--danger);color:#fff}
-    .muted{color:var(--muted)}
-    .toast{position:fixed;right:20px;bottom:20px;background:#111;color:#fff;padding:10px 14px;border-radius:8px;opacity:0.95}
-    .small{font-size:0.85rem}
-    /* modal map */
-    .modal { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,0.4); z-index: 2000; }
-    .modal .panel { width: 90%; max-width: 900px; height: 80vh; background: white; border-radius: 8px; overflow: hidden; display:flex; flex-direction:column }
-    .modal .panel .heading { padding: 10px 12px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:center }
-    #map { flex:1 }
-    @media (max-width:900px){aside{display:none}.app{flex-direction:column}}
+    /* --- NCHSM style (kept clean & consistent) --- */
+    body { margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #F8FAFC; }
+    .container { display: flex; min-height: 100vh; }
+
+    /* Sidebar */
+    .sidebar { width: 240px; background-color: #1E293B; color: #fff; display: flex; flex-direction: column; padding: 20px; }
+    .sidebar-header { text-align: center; margin-bottom: 24px; }
+    .sidebar-header img { width: 60px; margin-bottom: 10px; }
+    .nav { list-style: none; padding: 0; flex-grow: 1; }
+    .nav li { margin: 6px 0; }
+    .nav a { color: #fff; text-decoration: none; padding: 10px; border-radius: 6px; display: block; transition: 0.15s; }
+    .nav a:hover, .nav a.active { background-color: #3B82F6; }
+    .logout { margin-top: auto; text-align: center; }
+    .logout a { display: inline-block; margin-top: 10px; padding: 8px 14px; background-color: #EF4444; color: #fff; text-decoration: none; border-radius: 6px; }
+
+    /* Main Content */
+    .main { flex: 1; padding: 20px 28px; overflow-y: auto; }
+    header { display:flex; justify-content:space-between; align-items:center; margin-bottom: 18px; }
+    header h1 { margin: 0; font-size: 1.6rem; color: #0f172a; }
+    .subtitle { color: #475569; }
+
+    /* Cards */
+    .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .card { background-color: #fff; padding: 16px; border-radius: 10px; box-shadow: 0 2px 8px rgba(2,6,23,0.04); text-align: center; cursor: pointer; }
+    .card h3 { margin: 4px 0 8px; font-size: 1rem; color: #0f172a; }
+    .card p { margin: 0; font-weight: 700; font-size: 1.2rem; color: #0b2447; }
+
+    /* Layout / Tabs */
+    .section { display: none; }
+    .section.active { display: block; }
+
+    /* Tables and forms */
+    table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow:hidden; margin-bottom: 18px; }
+    th, td { padding: 12px; border-bottom: 1px solid #E6EEF8; text-align: left; color:#0b2447; }
+    th { background: #EAF2FF; color: #0b2447; font-weight:600; }
+    tr:hover { background: #FBFDFF; }
+    form input, form select, form button, form textarea { padding: 8px 10px; margin: 6px 6px 10px 0; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.95rem; }
+    form button { background:#3B82F6; color:#fff; border:none; padding:9px 14px; cursor:pointer; border-radius:6px; }
+    form button.alt { background:#10B981; }
+
+    /* small utility buttons */
+    .btn { padding:6px 10px; border-radius:6px; border:none; cursor:pointer; color:#fff; font-size:.9rem; }
+    .btn-approve { background:#16A34A; }
+    .btn-reject { background:#EF4444; }
+    .btn-delete { background:#F97316; }
+    .btn-edit { background:#3B82F6; }
+
+    .muted { font-size: .9rem; color:#6B7280; }
+    .flex { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+    .mb { margin-bottom:12px; }
+    .center { text-align:center; }
+    .file-input { display:inline-block; }
+    .notice { padding:10px; background:#FFF7ED; border-left: 4px solid #F97316; border-radius:6px; margin-bottom:12px; color:#7C2D12; }
+
+    /* responsive */
+    @media (max-width:900px){
+      .sidebar{ display:none; }
+      .container{ flex-direction:column; }
+      .main{ padding:12px; }
+    }
   </style>
 </head>
 <body>
-  <div class="app">
-    <aside>
-      <div style="text-align:center">
-        <img src="images/Logo_NCHSM.png" alt="logo" style="width:64px;height:64px;object-fit:contain;margin-bottom:8px" onerror="this.style.display='none'"/>
+  <div class="container">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <img src="images/Logo_NCHSM.png" alt="Logo" onerror="this.style.display='none'"/>
         <h3>Super Admin</h3>
-        <div id="signedAs" class="small muted">Initializing...</div>
       </div>
 
       <ul class="nav" id="mainNav">
-        <li><a href="#" data-section="dashboard" class="active">Dashboard</a></li>
-        <li><a href="#" data-section="users">Users</a></li>
-        <li><a href="#" data-section="students">Students</a></li>
-        <li><a href="#" data-section="courses">Courses</a></li>
-        <li><a href="#" data-section="attendance">Attendance</a></li>
-        <li><a href="#" data-section="exams">Exams</a></li>
-        <li><a href="#" data-section="messages">Messages</a></li>
-        <li><a href="#" data-section="resources">Resources</a></li>
-        <li><a href="#" data-section="pending">Pending</a></li>
+        <li><a href="#" class="active" onclick="showSection('dashboard', this)">Dashboard</a></li>
+        <li><a href="#" onclick="showSection('users', this)">Users</a></li>
+        <li><a href="#" onclick="showSection('students', this)">Students</a></li>
+        <li><a href="#" onclick="showSection('courses', this)">Courses</a></li>
+        <li><a href="#" onclick="showSection('attendance', this)">Attendance</a></li>
+        <li><a href="#" onclick="showSection('exams', this)">Exams</a></li>
+        <li><a href="#" onclick="showSection('messages', this)">Inbox</a></li>
+        <li><a href="#" onclick="showSection('calendar', this)">Calendar</a></li>
+        <li><a href="#" onclick="showSection('resources', this)">Resources</a></li>
+        <li><a href="#" onclick="showSection('pending', this)">Pending Approvals</a></li>
       </ul>
 
-      <div style="margin-top:auto;text-align:center">
-        <button id="logoutBtn" class="btn btn-danger">Logout</button>
+      <div class="logout">
+        <a href="#" onclick="logout()">Logout</a>
       </div>
     </aside>
 
-    <main>
+    <!-- Main -->
+    <main class="main">
       <header>
         <div>
-          <h1 id="pageTitle">Dashboard</h1>
-          <div class="muted small">Manage users, courses, attendance, exams and resources</div>
+          <h1>Welcome, Super Admin</h1>
+          <p class="subtitle">Manage users, courses, attendance, exams, messages and resources</p>
         </div>
-        <div class="muted">NCHSM Admin</div>
+        <div class="muted" id="sessionInfo">Signed out</div>
       </header>
 
-      <!-- Sections -->
-      <section id="dashboard" class="section">
-        <div class="cards">
-          <div class="card"><h4>Total Users</h4><p id="totalUsers">—</p></div>
-          <div class="card"><h4>Admins</h4><p id="totalAdmins">—</p></div>
-          <div class="card"><h4>Students</h4><p id="totalStudents">—</p></div>
-          <div class="card"><h4>Pending</h4><p id="totalPending">—</p></div>
+      <!-- ===== DASHBOARD ===== -->
+      <section id="dashboard" class="section active">
+        <div class="cards" id="dashboardCards">
+          <div class="card"><h3>Total Users</h3><p id="totalUsers">0</p></div>
+          <div class="card"><h3>Admins</h3><p id="totalAdmins">0</p></div>
+          <div class="card"><h3>Students</h3><p id="totalStudents">0</p></div>
+          <div class="card"><h3>Pending</h3><p id="totalPending">0</p></div>
         </div>
-        <div id="dashboardCharts"></div>
-      </section>
-
-      <section id="users" class="section" style="display:none">
-        <div class="controls">
-          <form id="addUserForm" style="display:flex;gap:8px;align-items:center">
-            <input id="u_name" placeholder="Full name" required />
-            <input id="u_email" placeholder="Email" type="email" required />
-            <select id="u_role"><option value="student">Student</option><option value="admin">Admin</option><option value="super_admin">Super Admin</option></select>
-            <input id="u_password" placeholder="Password (temporary)" type="password" />
-            <button class="btn btn-primary" type="submit">Create</button>
-          </form>
-        </div>
-        <div>
-          <table>
-            <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Approved</th><th>Actions</th></tr></thead>
-            <tbody id="usersTable"><tr><td colspan="5" class="muted">Loading...</td></tr></tbody>
-          </table>
+        <div class="mb">
+          <div class="notice">This dashboard reads/writes directly to your Supabase project. If you get permission errors, check RLS policies and ensure the anon key is valid.</div>
         </div>
       </section>
 
-      <section id="students" class="section" style="display:none">
-        <div class="controls">
-          <form id="addStudentForm" style="display:flex;gap:8px;align-items:center">
-            <input id="s_name" placeholder="Name" required />
-            <input id="s_reg" placeholder="Reg No" />
-            <select id="s_course"></select>
-            <button class="btn btn-primary" type="submit">Add</button>
-          </form>
+      <!-- ===== USERS MANAGEMENT ===== -->
+      <section id="users" class="section">
+        <h2>Users — Add new user (Admin or Student)</h2>
+
+        <form id="addUserForm" class="mb">
+          <input id="new_full_name" placeholder="Full name" required />
+          <input id="new_email" placeholder="Email" type="email" required />
+          <input id="new_phone" placeholder="Phone" />
+          <input id="new_password" placeholder="Password" type="password" required />
+          <select id="new_role">
+            <option value="student">Student</option>
+            <option value="admin">Admin</option>
+          </select>
+          <button type="submit">Create user</button>
+        </form>
+
+        <h3>All users</h3>
+        <table>
+          <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Approved</th><th>Actions</th></tr></thead>
+          <tbody id="usersTable"></tbody>
+        </table>
+      </section>
+
+      <!-- ===== STUDENTS ===== -->
+      <section id="students" class="section">
+        <h2>Students</h2>
+        <table>
+          <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="studentsTable"></tbody>
+        </table>
+      </section>
+
+      <!-- ===== COURSES ===== -->
+      <section id="courses" class="section">
+        <h2>Courses</h2>
+        <form id="addCourseForm" class="mb">
+          <input id="course_name" placeholder="Course name" required />
+          <input id="course_description" placeholder="Short description (optional)" />
+          <button type="submit">Add course</button>
+        </form>
+
+        <h3>Course list</h3>
+        <table>
+          <thead><tr><th>Course</th><th>Actions</th></tr></thead>
+          <tbody id="coursesTable"></tbody>
+        </table>
+      </section>
+
+      <!-- ===== ATTENDANCE ===== -->
+      <section id="attendance" class="section">
+        <h2>Attendance</h2>
+        <form id="addAttendanceForm" class="mb">
+          <select id="att_student_id"></select>
+          <select id="att_session_type"><option value="classroom">Classroom</option><option value="clinical">Clinical</option></select>
+          <select id="att_course_id"></select>
+          <input id="att_location" placeholder="Location" />
+          <input id="att_date" type="date" />
+          <input id="att_time" type="time" />
+          <button type="submit">Mark attendance</button>
+        </form>
+
+        <h3>Attendance records</h3>
+        <table>
+          <thead><tr><th>Student</th><th>Type</th><th>Course</th><th>Location/Time</th><th>Date</th><th>Actions</th></tr></thead>
+          <tbody id="attendanceTable"></tbody>
+        </table>
+      </section>
+
+      <!-- ===== EXAMS ===== -->
+      <section id="exams" class="section">
+        <h2>Exams / CATS</h2>
+        <form id="addExamForm" class="mb">
+          <select id="exam_course_id"></select>
+          <input id="exam_title" placeholder="Exam title" required />
+          <input id="exam_date" type="date" required />
+          <select id="exam_status"><option>Upcoming</option><option>Completed</option></select>
+          <button type="submit">Add exam</button>
+        </form>
+
+        <h3>Exams</h3>
+        <table>
+          <thead><tr><th>Course</th><th>Title</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="examsTable"></tbody>
+        </table>
+      </section>
+
+      <!-- ===== MESSAGES ===== -->
+      <section id="messages" class="section">
+        <h2>Inbox / Send Message</h2>
+        <form id="sendMessageForm" class="mb">
+          <input id="msg_recipient" placeholder="Recipient email" required />
+          <textarea id="msg_body" placeholder="Message" rows="3" style="width:100%;"></textarea>
+          <button type="submit">Send</button>
+        </form>
+
+        <h3>Messages (recent)</h3>
+        <table>
+          <thead><tr><th>From</th><th>To</th><th>Message</th><th>Date</th></tr></thead>
+          <tbody id="messagesTable"></tbody>
+        </table>
+      </section>
+
+      <!-- ===== CALENDAR ===== -->
+      <section id="calendar" class="section">
+        <h2>Calendar</h2>
+        <p class="muted">Simple calendar placeholder — we can wire to exams/attendance events later.</p>
+        <div id="calendarPlaceholder" class="mb">[Calendar grid placeholder]</div>
+      </section>
+
+      <!-- ===== RESOURCES ===== -->
+      <section id="resources" class="section">
+        <h2>Resources (Uploads)</h2>
+        <div class="mb">
+          <label class="file-input">
+            <input id="resourceFile" type="file" />
+          </label>
+          <input id="resourceTitle" placeholder="Title (optional)" />
+          <button id="uploadResourceBtn">Upload to Storage</button>
         </div>
-        <table><thead><tr><th>Name</th><th>Reg</th><th>Course</th><th>Actions</th></tr></thead>
-        <tbody id="studentsTable"><tr><td colspan="4" class="muted">Loading...</td></tr></tbody></table>
+
+        <h3>Available resources</h3>
+        <table>
+          <thead><tr><th>File</th><th>Size</th><th>Actions</th></tr></thead>
+          <tbody id="resourcesTable"></tbody>
+        </table>
       </section>
 
-      <section id="courses" class="section" style="display:none">
-        <div class="controls">
-          <form id="addCourseForm" style="display:flex;gap:8px;align-items:center">
-            <input id="c_title" placeholder="Course title" required />
-            <input id="c_code" placeholder="Code" />
-            <button class="btn btn-primary" type="submit">Add</button>
-          </form>
-        </div>
-        <table><thead><tr><th>Course</th><th>Code</th><th>Actions</th></tr></thead>
-        <tbody id="coursesTable"><tr><td colspan="3" class="muted">Loading...</td></tr></tbody></table>
+      <!-- ===== PENDING ===== -->
+      <section id="pending" class="section">
+        <h2>Pending Approvals</h2>
+        <table>
+          <thead><tr><th>Name</th><th>Email</th><th>Action</th></tr></thead>
+          <tbody id="pendingTable"></tbody>
+        </table>
       </section>
-
-      <section id="attendance" class="section" style="display:none">
-        <div class="controls">
-          <form id="addAttendanceForm" style="display:flex;gap:8px;align-items:center">
-            <select id="att_student"></select>
-            <select id="att_course"></select>
-            <input id="att_date" type="date" />
-            <select id="att_status"><option value="present">present</option><option value="absent">absent</option></select>
-            <button class="btn btn-primary" type="submit">Mark (manual)</button>
-            <button id="geoMarkBtn" class="btn btn-ok" type="button">Mark My Attendance (GPS)</button>
-            <button id="viewMapBtn" class="btn" type="button">🗺 View My Attendance Map</button>
-          </form>
-        </div>
-        <table><thead><tr><th>Student</th><th>Course</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead>
-        <tbody id="attendanceTable"><tr><td colspan="5" class="muted">Loading...</td></tr></tbody></table>
-      </section>
-
-      <section id="exams" class="section" style="display:none">
-        <div class="controls">
-          <form id="addExamForm" style="display:flex;gap:8px;align-items:center">
-            <select id="exam_student"></select>
-            <select id="exam_course"></select>
-            <input id="exam_score" placeholder="Score" type="number" />
-            <button class="btn btn-primary" type="submit">Add</button>
-          </form>
-        </div>
-        <table><thead><tr><th>Student</th><th>Course</th><th>Score</th><th>Actions</th></tr></thead>
-        <tbody id="examsTable"><tr><td colspan="4" class="muted">Loading...</td></tr></tbody></table>
-      </section>
-
-      <section id="messages" class="section" style="display:none">
-        <div class="controls">
-          <form id="sendMessageForm" style="display:flex;gap:8px;align-items:center;width:100%">
-            <input id="msg_to" placeholder="Recipient email" />
-            <input id="msg_body" placeholder="Message" style="flex:1" />
-            <button class="btn btn-primary" type="submit">Send</button>
-          </form>
-        </div>
-        <table><thead><tr><th>From</th><th>To</th><th>Message</th><th>Date</th></tr></thead>
-        <tbody id="messagesTable"><tr><td colspan="4" class="muted">Loading...</td></tr></tbody></table>
-      </section>
-
-      <section id="resources" class="section" style="display:none">
-        <div class="controls">
-          <input id="resourceFile" type="file" />
-          <input id="resourceTitle" placeholder="Title" />
-          <button id="uploadResourceBtn" class="btn btn-primary">Upload</button>
-        </div>
-        <table><thead><tr><th>File</th><th>Size</th><th>Actions</th></tr></thead>
-        <tbody id="resourcesTable"><tr><td colspan="3" class="muted">Loading...</td></tr></tbody></table>
-      </section>
-
-      <section id="pending" class="section" style="display:none">
-        <h3>Pending approvals</h3>
-        <table><thead><tr><th>Name</th><th>Email</th><th>Action</th></tr></thead>
-        <tbody id="pendingTable"><tr><td colspan="3" class="muted">Loading...</td></tr></tbody></table>
-      </section>
-
     </main>
   </div>
 
-  <div id="toast" class="toast" style="display:none"></div>
-
-  <!-- Map modal -->
-  <div id="mapModal" class="modal"><div class="panel"><div class="heading"><div id="mapTitle">Attendance Map</div><div><label style="margin-right:8px"><input id="viewAllToggle" type="checkbox"> View all</label><button id="closeMap" class="btn btn-danger">Close</button></div></div><div id="map"></div></div></div>
-
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-o9N1j7kG8Vbq3x5m3wGk97kJk3s0v1p6b6b7f0b4JAc=" crossorigin=""></script>
   <script>
-    // ---------- CONFIG (replace the ANON key with your anon key) ----------
-    const SUPABASE_URL = 'https://hzvlgwujzbrzuwyprsjr.supabase.co'; // confirmed
-    const SUPABASE_ANON_KEY = 'REPLACE_WITH_YOUR_ANON_KEY';
-    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
+    /*******************
+     * Configuration
+     *******************/
+    const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: { persistSession: true, autoRefreshToken: true }
+    });
+
+    // storage bucket name used for resources
     const RESOURCES_BUCKET = 'resources';
 
-    // ---------- State/cache ----------
-    window._studentMap = {}; // id -> name
-    window._courseMap = {};  // id -> course_name
-    let CURRENT_USER = null; // supabase user object
-    let CURRENT_ROLE = null; // 'super_admin' | 'admin' | 'student' | null
+    /*******************
+     * Utilities
+     *******************/
+    function $(id){ return document.getElementById(id); }
+    function escapeHtml(s){ return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
-    // ---------- UI Helpers ----------
-    function toast(msg, t=3500){ const el = document.getElementById('toast'); el.textContent = msg; el.style.display='block'; clearTimeout(el._t); el._t=setTimeout(()=>el.style.display='none', t); }
-    function $(id){return document.getElementById(id)}
-    function escapeHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
-
-    // ---------- Navigation ----------
-    document.querySelectorAll('#mainNav a').forEach(a=>a.addEventListener('click', (e)=>{ e.preventDefault(); const sec=a.dataset.section; showSection(sec,a); }));
-    function showSection(id, el){ document.querySelectorAll('main .section').forEach(s=>s.style.display='none'); const sec=document.getElementById(id); if(sec) sec.style.display='block'; document.querySelectorAll('#mainNav a').forEach(x=>x.classList.remove('active')); if(el) el.classList.add('active'); $('pageTitle').textContent = id.charAt(0).toUpperCase()+id.slice(1); }
-
-    // ---------- Auth & Session ----------
-    async function getSessionUser(){ try{ const { data } = await sb.auth.getUser(); return data.user; }catch(e){console.warn('getUser',e); return null} }
-
-    // ---------- Role-based UI ----------
-    const ROLE_SUPER = 'super_admin';
-    const ROLE_ADMIN = 'admin';
-    const ROLE_STUDENT = 'student';
-
-    function applyRoleUI(role){
-      const allSections = ['dashboard','users','students','courses','attendance','exams','messages','resources','pending'];
-      const adminAllowed = new Set(['dashboard','students','courses','attendance','exams','messages','resources']);
-      const studentAllowed = new Set(['dashboard','students','courses','messages']);
-      allSections.forEach(id => { const el = document.getElementById(id); if(!el) return; if(role === ROLE_SUPER) el.style.display = 'block'; else if(role === ROLE_ADMIN) el.style.display = adminAllowed.has(id) ? 'block' : 'none'; else if(role === ROLE_STUDENT) el.style.display = studentAllowed.has(id) ? 'block' : 'none'; else el.style.display = 'none'; });
-      document.querySelectorAll('#mainNav a').forEach(a => { const s = a.dataset.section; if(role === ROLE_SUPER) a.style.display = ''; else if(role === ROLE_ADMIN) a.style.display = adminAllowed.has(s) ? '' : 'none'; else if(role === ROLE_STUDENT) a.style.display = studentAllowed.has(s) ? '' : 'none'; else a.style.display = 'none'; });
-      const createBtn = document.querySelector('#addUserForm .btn-primary'); if(createBtn) createBtn.disabled = !(role === ROLE_SUPER || role === ROLE_ADMIN);
+    function setActiveNav(el){
+      document.querySelectorAll('.nav a').forEach(a => a.classList.remove('active'));
+      if (el) el.classList.add('active');
     }
 
-    // ---------- Helpers for device/ip/geo ----------
-    function getDeviceId(){ let id = localStorage.getItem('nchsm_device_id'); if(!id){ id = 'dev_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8); localStorage.setItem('nchsm_device_id', id); } return id; }
-    async function getPublicIP(){ try{ const r = await fetch('https://api.ipify.org?format=json'); if(!r.ok) throw new Error('ip fetch failed'); const j = await r.json(); return j.ip; }catch(e){ console.warn('getPublicIP', e); return null; } }
-    function getGeoLocation(timeout=10000){ return new Promise((resolve, reject)=>{ if(!navigator.geolocation) return reject(new Error('No geolocation')); const opts = { enableHighAccuracy: true, maximumAge: 0, timeout }; navigator.geolocation.getCurrentPosition(pos=>{ resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude, accuracy: pos.coords.accuracy }); }, err=>{ reject(err); }, opts); }); }
-
-    // ---------- Data loaders & helpers ----------
-    async function populateSelects(){ try{
-        const [studRes, courseRes] = await Promise.all([
-          sb.from('students').select('id,name').order('name',{ascending:true}),
-          sb.from('courses').select('id,course_name').order('course_name',{ascending:true})
-        ]);
-        const students = studRes.data || [];
-        const courses = courseRes.data || [];
-        window._studentMap = {};
-        (students || []).forEach(s => { if(s && s.id!=null) window._studentMap[String(s.id)] = s.name || (s.full_name || ''); });
-        window._courseMap = {};
-        (courses || []).forEach(c => { if(c && c.id!=null) window._courseMap[String(c.id)] = c.course_name || c.title || ''; });
-        const studentSelElems = [$('att_student'), $('exam_student')];
-        studentSelElems.forEach(sel=>{ if(sel){ sel.innerHTML = '<option value="">-- Select student --</option>'; students.forEach(s => sel.insertAdjacentHTML('beforeend', `<option value="${s.id}">${escapeHtml(s.name)}</option>`)); }});
-        const courseSelElems = [$('att_course'), $('exam_course'), $('s_course')];
-        courseSelElems.forEach(sel=>{ if(sel){ sel.innerHTML = '<option value="">-- Select course --</option>'; courses.forEach(c => sel.insertAdjacentHTML('beforeend', `<option value="${c.id}">${escapeHtml(c.course_name)}</option>`)); }});
-      }catch(err){ console.error('populateSelects', err); }
+    function showSection(id, el){
+      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+      const sec = document.getElementById(id);
+      if (sec) sec.classList.add('active');
+      setActiveNav(el);
+      // load relevant content
+      switch(id){
+        case 'dashboard': loadDashboard(); break;
+        case 'users': loadUsers(); break;
+        case 'students': loadStudents(); break;
+        case 'courses': loadCourses(); break;
+        case 'attendance': loadAttendance(); break;
+        case 'exams': loadExams(); break;
+        case 'messages': loadMessages(); break;
+        case 'resources': loadResources(); break;
+        case 'pending': loadPending(); break;
+        default: break;
+      }
     }
 
-    async function refreshAll(){ await populateSelects(); await Promise.all([loadDashboard(), loadUsers(), loadStudents(), loadCourses(), loadAttendance(), loadExams(), loadMessages(), loadResources(), loadPending()]); }
-
-    // Dashboard / users / students / courses / attendance / exams / messages / resources / pending
-    async function loadDashboard(){ try{ const { data: profiles, error } = await sb.from('profiles').select('*'); if(error) throw error; const list = profiles || []; $('totalUsers').textContent = list.length; $('totalAdmins').textContent = list.filter(p=>p.role==='admin' || p.role==='super_admin').length; $('totalStudents').textContent = list.filter(p=>p.role==='student').length; $('totalPending').textContent = list.filter(p=>!p.approved).length; }catch(err){console.error('loadDashboard',err); toast('Dashboard load failed');}}
-    async function loadUsers(){ try{ const { data, error } = await sb.from('profiles').select('*').order('created_at',{ascending:false}); if(error) throw error; const tbody = $('usersTable'); tbody.innerHTML = ''; if(!data || data.length===0){ tbody.innerHTML = '<tr><td colspan="5" class="muted">No users</td></tr>'; return; } data.forEach(u=>{ const id = u.id || ''; const row = document.createElement('tr'); row.innerHTML = `<td>${escapeHtml(u.full_name||u.name||'')}</td><td>${escapeHtml(u.email||'')}</td><td>${escapeHtml(u.role||'')}</td><td>${u.approved? 'Yes':'No'}</td><td class="small"></td>`; const actions = row.querySelector('td:last-child'); if(!u.approved) actions.insertAdjacentHTML('beforeend', `<button class='btn btn-ok' onclick="approveUser('${id}')">Approve</button>`); actions.insertAdjacentHTML('beforeend', ` <button class='btn btn-danger' onclick="deleteUser('${id}')">Delete</button>`); tbody.appendChild(row); }); }catch(err){console.error('loadUsers',err); $('usersTable').innerHTML='<tr><td colspan="5">Error</td></tr>'; toast('Failed loading users');}}
-    document.getElementById('addUserForm').addEventListener('submit', async (e)=>{ e.preventDefault(); const name = $('u_name').value.trim(); const email = $('u_email').value.trim(); const role = $('u_role').value; const password = $('u_password').value || Math.random().toString(36).slice(2,10); if(!name||!email) return toast('Name and email required'); try{ const { data: signupData, error: signupErr } = await sb.auth.signUp({ email, password }); if(signupErr && signupErr.message && !signupErr.message.toLowerCase().includes('already')) throw signupErr; const userId = signupData?.user?.id || null; const profile = { id: userId || undefined, full_name: name, email, role, approved: true }; const { error: pErr } = await sb.from('profiles').upsert(profile); if(pErr) throw pErr; toast('User created'); $('addUserForm').reset(); await loadUsers(); await loadDashboard(); }catch(err){console.error('create user',err); toast('Create user failed');} });
-    window.approveUser = async function(id){ if(!confirm('Approve user?')) return; try{ const { error } = await sb.from('profiles').update({ approved:true }).eq('id', id); if(error) throw error; toast('Approved'); await loadUsers(); await loadPending(); await loadDashboard(); }catch(e){ console.error('approveUser', e); toast('Approve failed'); }}
-    window.deleteUser = async function(id){ if(!confirm('Delete profile? This will remove profile but may leave auth user.')) return; try{ const { error } = await sb.from('profiles').delete().eq('id', id); if(error) throw error; toast('Deleted'); await loadUsers(); await loadDashboard(); await loadPending(); }catch(e){ console.error('deleteUser', e); toast('Delete failed'); }}
-
-    async function loadStudents(){ try{ const { data, error } = await sb.from('students').select('*').order('id',{ascending:false}); if(error) throw error; const tbody=$('studentsTable'); tbody.innerHTML=''; if(!data||data.length===0){ tbody.innerHTML='<tr><td colspan="4" class="muted">No students</td></tr>'; return; } data.forEach(s=>{ const row=document.createElement('tr'); const courseName = window._courseMap[String(s.course_id)] || ''; row.innerHTML=`<td>${escapeHtml(s.name||'')}</td><td>${escapeHtml(s.reg_no||'')}</td><td>${escapeHtml(courseName)}</td><td></td>`; row.querySelector('td:last-child').innerHTML=`<button class='btn btn-danger' onclick="deleteStudent('${s.id}')">Delete</button>`; tbody.appendChild(row); }); }catch(err){console.error('loadStudents',err); $('studentsTable').innerHTML='<tr><td colspan="4">Error</td></tr>'; toast('Failed loading students');}}
-    document.getElementById('addStudentForm').addEventListener('submit', async (e)=>{ e.preventDefault(); const name=$('s_name').value.trim(); const reg=$('s_reg').value.trim(); const courseId=$('s_course').value||null; if(!name) return toast('Name required'); try{ const { error } = await sb.from('students').insert([{ name, reg_no:reg, course_id: courseId }]); if(error) throw error; toast('Student added'); $('addStudentForm').reset(); await populateSelects(); await loadStudents(); }catch(e){ console.error('addStudent', e); toast('Add student failed'); } });
-    window.deleteStudent = async function(id){ if(!confirm('Delete student?')) return; try{ const { error } = await sb.from('students').delete().eq('id', id); if(error) throw error; toast('Deleted'); await loadStudents(); }catch(e){ console.error('deleteStudent', e); toast('Delete failed'); }}
-
-    async function loadCourses(){ try{ const { data, error } = await sb.from('courses').select('*').order('course_name',{ascending:true}); if(error) throw error; const tbody=$('coursesTable'); tbody.innerHTML=''; if(!data||data.length===0){ tbody.innerHTML='<tr><td colspan="3" class="muted">No courses</td></tr>'; return; } data.forEach(c=>{ const row=document.createElement('tr'); row.innerHTML=`<td>${escapeHtml(c.course_name||c.title||'')}</td><td>${escapeHtml(c.code||c.course_code||'')}</td><td></td>`; row.querySelector('td:last-child').innerHTML=`<button class='btn btn-danger' onclick="deleteCourse('${c.id}')">Delete</button>`; tbody.appendChild(row); }); }catch(err){console.error('loadCourses',err); $('coursesTable').innerHTML='<tr><td colspan="3">Error</td></tr>'; toast('Failed loading courses');}}
-    document.getElementById('addCourseForm').addEventListener('submit', async e=>{ e.preventDefault(); const title=$('c_title').value.trim(); const code=$('c_code').value.trim(); if(!title) return toast('Title required'); try{ const { error } = await sb.from('courses').insert([{ course_name: title, code }]); if(error) throw error; toast('Course added'); $('addCourseForm').reset(); await populateSelects(); await loadCourses(); }catch(e){ console.error('addCourse', e); toast('Add course failed'); }});
-    window.deleteCourse = async function(id){ if(!confirm('Delete course?')) return; try{ const { error } = await sb.from('courses').delete().eq('id', id); if(error) throw error; toast('Deleted'); await populateSelects(); await loadCourses(); }catch(e){ console.error('deleteCourse', e); toast('Delete failed'); }}
-
-    async function loadAttendance(){ try{ const { data, error } = await sb.from('attendance').select('*').order('date',{ascending:false}); if(error) throw error; const tbody=$('attendanceTable'); tbody.innerHTML=''; if(!data||data.length===0){ tbody.innerHTML='<tr><td colspan="5" class="muted">No records</td></tr>'; return; } data.forEach(r=>{ const row=document.createElement('tr'); const studentName = window._studentMap[String(r.student_id)] || r.student_id || ''; const courseName = window._courseMap[String(r.course_id)] || r.course_id || ''; row.innerHTML=`<td>${escapeHtml(studentName)}</td><td>${escapeHtml(courseName)}</td><td>${escapeHtml(r.date||r.created_at||'')}</td><td>${escapeHtml(r.status||'')}</td><td></td>`; row.querySelector('td:last-child').innerHTML=`<button class='btn btn-danger' onclick="deleteAttendance('${r.id}')">Delete</button>`; tbody.appendChild(row); }); }catch(err){console.error('loadAttendance',err); $('attendanceTable').innerHTML='<tr><td colspan="5">Error</td></tr>'; toast('Failed loading attendance');}}
-    document.getElementById('addAttendanceForm').addEventListener('submit', async e=>{ e.preventDefault(); const student=$('att_student').value; const course=$('att_course').value; const date=$('att_date').value; const status=$('att_status').value; if(!student||!date) return toast('Student and date required'); try{ const { error } = await sb.from('attendance').insert([{ student_id: student, course_id: course, date, status }]); if(error) throw error; toast('Marked'); $('addAttendanceForm').reset(); await loadAttendance(); }catch(e){ console.error('addAttendance', e); toast('Add attendance failed'); }});
-    window.deleteAttendance = async function(id){ if(!confirm('Delete attendance?')) return; try{ const { error } = await sb.from('attendance').delete().eq('id', id); if(error) throw error; toast('Deleted'); await loadAttendance(); }catch(e){ console.error('deleteAttendance', e); toast('Delete failed'); }}
-
-    // EXAMS
-    async function loadExams(){ try{ const { data, error } = await sb.from('exams').select('*').order('id',{ascending:false}); if(error) throw error; const tbody = $('examsTable'); tbody.innerHTML = ''; if(!data || data.length === 0){ tbody.innerHTML = '<tr><td colspan="4" class="muted">No exams</td></tr>'; return; } data.forEach(x => { const studentName = window._studentMap[String(x.student_id)] || x.student_name || x.student_id || ''; const courseName = window._courseMap[String(x.course_id)] || x.course_name || x.course_id || ''; const score = (x.score != null) ? x.score : (x.mark != null ? x.mark : ''); const id = x.id; const row = document.createElement('tr'); row.innerHTML = `<td>${escapeHtml(studentName)}</td><td>${escapeHtml(courseName)}</td><td>${escapeHtml(score)}</td><td></td>`; row.querySelector('td:last-child').innerHTML = `<button class='btn btn-danger' onclick="deleteExam('${id}')">Delete</button>`; tbody.appendChild(row); }); }catch(err){ console.error('loadExams', err); $('examsTable').innerHTML = '<tr><td colspan="4">Error</td></tr>'; toast('Failed loading exams'); }}
-    document.getElementById('addExamForm').addEventListener('submit', async e=>{ e.preventDefault(); const student=$('exam_student').value; const course=$('exam_course').value; const scoreVal=$('exam_score').value; const score = scoreVal !== '' ? Number(scoreVal) : null; if(!student||!course) return toast('Student and course required'); try{ const { error } = await sb.from('exams').insert([{ student_id: student, course_id: course, score }]); if(error) throw error; toast('Exam added'); $('addExamForm').reset(); await loadExams(); }catch(e){ console.error('addExam', e); toast('Add exam failed'); }});
-    window.deleteExam = async function(id){ if(!confirm('Delete exam?')) return; try{ const { error } = await sb.from('exams').delete().eq('id', id); if(error) throw error; toast('Deleted'); await loadExams(); }catch(e){ console.error('deleteExam', e); toast('Delete failed'); }}
-
-    // MESSAGES
-    async function loadMessages(){ try{ const { data, error } = await sb.from('messages').select('*').order('created_at',{ascending:false}).limit(100); if(error) throw error; const tbody=$('messagesTable'); tbody.innerHTML=''; if(!data||data.length===0){ tbody.innerHTML='<tr><td colspan="4" class="muted">No messages</td></tr>'; return; } data.forEach(m=>{ const row=document.createElement('tr'); row.innerHTML=`<td>${escapeHtml(m.sender_email||m.sender||'')}</td><td>${escapeHtml(m.recipient_email||m.recipient||'')}</td><td>${escapeHtml(m.message||m.content||'')}</td><td>${new Date(m.created_at||m.timestamp||Date.now()).toLocaleString()}</td>`; tbody.appendChild(row); }); }catch(err){console.error('loadMessages',err); $('messagesTable').innerHTML='<tr><td colspan="4">Error</td></tr>'; toast('Failed loading messages');}}
-    document.getElementById('sendMessageForm').addEventListener('submit', async e=>{ e.preventDefault(); const to=$('msg_to').value.trim(); const body=$('msg_body').value.trim(); if(!to||!body) return toast('Recipient and message required'); try{ const sender=(await getSessionUser())?.email||'superadmin'; const { error } = await sb.from('messages').insert([{ sender_email: sender, recipient_email: to, message: body }]); if(error) throw error; toast('Sent'); $('sendMessageForm').reset(); await loadMessages(); }catch(e){ console.error('sendMessage', e); toast('Send failed'); }});
-
-    // RESOURCES (storage)
-    async function loadResources(){ try{ const { data, error } = await sb.storage.from(RESOURCES_BUCKET).list('', { limit: 100 }); if(error) throw error; const tbody=$('resourcesTable'); tbody.innerHTML=''; if(!data||data.length===0){ tbody.innerHTML='<tr><td colspan="3" class="muted">No files</td></tr>'; return; } for(const f of data){ const size = f.size ? (f.size/1024).toFixed(1)+' KB' : ''; const url = sb.storage.from(RESOURCES_BUCKET).getPublicUrl(f.name).publicUrl; const row=document.createElement('tr'); row.innerHTML=`<td><a href='${url}' target='_blank'>${escapeHtml(f.name)}</a></td><td>${size}</td><td></td>`; row.querySelector('td:last-child').innerHTML=`<button class='btn btn-danger' onclick="deleteResource('${f.name}')">Delete</button>`; tbody.appendChild(row); }
-    }catch(err){console.error('loadResources',err); $('resourcesTable').innerHTML='<tr><td colspan="3">Error</td></tr>'; toast('Failed loading resources');}}
-    document.getElementById('uploadResourceBtn').addEventListener('click', async ()=>{ const file = $('resourceFile').files[0]; const title = $('resourceTitle').value.trim(); if(!file) return toast('Select a file'); const filename = `${Date.now()}_${file.name.replace(/\s+/g,'_')}`; try{ const { data, error } = await sb.storage.from(RESOURCES_BUCKET).upload(filename, file, { cacheControl:'3600', upsert:false }); if(error) throw error; try{ await sb.from('resources').insert([{ file_name: filename, title }]); }catch(e){/* ignore */} toast('Uploaded'); $('resourceFile').value=''; $('resourceTitle').value=''; await loadResources(); }catch(e){ console.error('uploadResource', e); toast('Upload failed'); }});
-    window.deleteResource = async function(name){ if(!confirm('Delete file?')) return; try{ const { error } = await sb.storage.from(RESOURCES_BUCKET).remove([name]); if(error) throw error; toast('Deleted'); await loadResources(); }catch(e){ console.error('deleteResource', e); toast('Delete failed'); }}
-
-    // PENDING
-    async function loadPending(){ try{ const { data, error } = await sb.from('profiles').select('*').eq('approved', false).order('created_at',{ascending:true}); if(error) throw error; const tbody=$('pendingTable'); tbody.innerHTML=''; if(!data||data.length===0){ tbody.innerHTML='<tr><td colspan="3" class="muted">No pending</td></tr>'; return; } data.forEach(p=>{ const row=document.createElement('tr'); row.innerHTML=`<td>${escapeHtml(p.full_name)}</td><td>${escapeHtml(p.email)}</td><td></td>`; row.querySelector('td:last-child').innerHTML=`<button class='btn btn-ok' onclick="approveUser('${p.id}')">Approve</button> <button class='btn btn-danger' onclick="deleteUser('${p.id}')">Reject</button>`; tbody.appendChild(row); }); }catch(err){console.error('loadPending',err); $('pendingTable').innerHTML='<tr><td colspan="3">Error</td></tr>'; toast('Failed loading pending'); }}
-
-    // ---------- Attendance: geo + ip + device ----------
-    async function hasAlreadyMarkedAttendance({ studentId, ip, deviceId }){
-      try{
-        const start = new Date(); start.setHours(0,0,0,0);
-        const end = new Date(start); end.setDate(start.getDate()+1);
-        // build or filter string for Supabase .or
-        const orStr = `ip_address.eq.${ip},device_id.eq.${deviceId}`;
-        const { data, error } = await sb.from('attendance').select('*').eq('student_id', studentId).gte('created_at', start.toISOString()).lt('created_at', end.toISOString()).or(orStr);
-        if(error) { console.warn('hasAlreadyMarkedAttendance error', error); return false; }
-        return (data && data.length > 0);
-      }catch(e){ console.error('hasAlreadyMarkedAttendance', e); return false; }
+    async function logout(){
+      await sb.auth.signOut();
+      window.location.href = 'login.html';
     }
 
-    async function markAttendanceWithGeo(){
-      try{
-        // determine who is marking
-        const isSuper = (CURRENT_ROLE === ROLE_SUPER);
-        const studentSel = $('att_student');
-        let studentId = studentSel.value;
-        // For student role, enforce their id
-        if(CURRENT_ROLE === ROLE_STUDENT){ studentId = await getProfileStudentIdForUser(CURRENT_USER?.id); if(!studentId) return toast('Student profile not linked'); }
-        if(!studentId) return toast('Select student');
-
-        const deviceId = getDeviceId();
-        const ip = await getPublicIP();
-        // get geolocation
-        let geo = null;
-        try{ geo = await getGeoLocation(15000); }catch(e){ console.warn('geo fail', e); return toast('Enable location and try again'); }
-
-        // check duplicates (only for students, super_admin bypasses)
-        if(!isSuper){ const already = await hasAlreadyMarkedAttendance({ studentId, ip, deviceId }); if(already) return toast('You have already marked attendance today from this device/IP.'); }
-
-        // insert record
-        const record = {
-          student_id: studentId,
-          course_id: $('att_course').value || null,
-          date: new Date().toISOString().slice(0,10),
-          status: $('att_status').value || 'present',
-          latitude: geo.lat,
-          longitude: geo.lon,
-          ip_address: ip,
-          device_id: deviceId,
-          marked_by: CURRENT_ROLE || 'unknown'
-        };
-        const { error } = await sb.from('attendance').insert([record]); if(error) throw error;
-        toast('Attendance recorded'); await loadAttendance();
-      }catch(e){ console.error('markAttendanceWithGeo', e); toast('Failed to mark attendance'); }
+    /*******************
+     * Session Info
+     *******************/
+    async function initSessionInfo(){
+      const { data: { user } } = await sb.auth.getUser();
+      if (user) $('sessionInfo').textContent = `Signed in as ${user.email}`;
+      else $('sessionInfo').textContent = 'Signed out';
     }
 
-    // helper to find student record by auth user id (assumes profiles->students link)
-    async function getProfileStudentIdForUser(userId){ try{ if(!userId) return null; const { data: profile, error } = await sb.from('profiles').select('id,full_name,email').eq('id', userId).maybeSingle(); if(error || !profile) return null; // try students table to find by email or name
-        const { data: student, error: sErr } = await sb.from('students').select('id').or(`email.eq.${profile.email},name.eq.${profile.full_name}`).maybeSingle(); if(sErr) return null; return student?.id || null; }catch(e){ console.error('getProfileStudentIdForUser', e); return null; } }
-
-    // wire the geo mark button
-    document.getElementById('geoMarkBtn').addEventListener('click', async ()=>{ await markAttendanceWithGeo(); });
-
-    // ---------- Attendance map (Leaflet) ----------
-    let mapInstance = null; let mapMarkers = [];
-    async function showAttendanceMap({ studentId=null, viewAll=false }){
-      try{
-        // open modal
-        $('mapModal').style.display = 'flex';
-        $('viewAllToggle').checked = !!viewAll;
-        // fetch records
-        let query = sb.from('attendance').select('*').order('created_at',{ascending:false}).limit(100);
-        if(!viewAll && studentId) query = query.eq('student_id', studentId);
-        const { data, error } = await query;
-        if(error) throw error;
-        const points = (data || []).filter(r => r.latitude != null && r.longitude != null);
-        // init map
-        if(!mapInstance){ mapInstance = L.map('map'); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors' }).addTo(mapInstance); }
-        // clear markers
-        mapMarkers.forEach(m => mapInstance.removeLayer(m)); mapMarkers = [];
-        if(points.length === 0){ mapInstance.setView([0,0],2); toast('No geo points to display'); return; }
-        const bounds = [];
-        points.forEach(p => { const m = L.marker([p.latitude, p.longitude]); const when = new Date(p.created_at || p.date).toLocaleString(); const popup = `<b>${escapeHtml((window._studentMap[String(p.student_id)]||p.student_id||''))}</b><br/>${when}<br/>IP: ${escapeHtml(p.ip_address||'')}<br/>Device: ${escapeHtml((p.device_id||'').slice(0,10))}`; m.bindPopup(popup); m.addTo(mapInstance); mapMarkers.push(m); bounds.push([p.latitude, p.longitude]); });
-        mapInstance.fitBounds(bounds, { padding: [40,40] });
-      }catch(e){ console.error('showAttendanceMap', e); toast('Failed to load map'); }
+    /*******************
+     * Dashboard
+     *******************/
+    async function loadDashboard(){
+      try {
+        const { data, error } = await sb.from('profiles').select('*');
+        if (error) { console.warn('dashboard profiles error', error); return; }
+        const total = data.length;
+        const admins = data.filter(u=>u.role==='admin').length;
+        const students = data.filter(u=>u.role==='student').length;
+        const pending = data.filter(u=>!u.approved).length;
+        $('totalUsers').textContent = total;
+        $('totalAdmins').textContent = admins;
+        $('totalStudents').textContent = students;
+        $('totalPending').textContent = pending;
+      } catch (err){
+        console.error('loadDashboard', err);
+      }
     }
-    // modal controls
-    $('closeMap').addEventListener('click', ()=>{ $('mapModal').style.display='none'; });
-    $('viewAllToggle').addEventListener('change', async ()=>{ const all = $('viewAllToggle').checked; if(all && CURRENT_ROLE !== ROLE_SUPER){ toast('Only Super Admin can view all'); $('viewAllToggle').checked = false; return; } const studentId = (CURRENT_ROLE===ROLE_STUDENT) ? await getProfileStudentIdForUser(CURRENT_USER?.id) : $('att_student').value; await showAttendanceMap({ studentId: all ? null : studentId, viewAll: all }); });
-    $('viewMapBtn').addEventListener('click', async ()=>{ const studentId = (CURRENT_ROLE===ROLE_STUDENT) ? await getProfileStudentIdForUser(CURRENT_USER?.id) : $('att_student').value; await showAttendanceMap({ studentId, viewAll: false }); });
 
-    // ---------- Init ----------
-    document.getElementById('logoutBtn').addEventListener('click', async ()=>{ try{ await sb.auth.signOut(); localStorage.clear(); window.location.reload(); }catch(e){console.warn(e); window.location.reload(); }});
+    /*******************
+     * Users management
+     *******************/
+    // create user (auth + profile)
+    $('addUserForm').addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      const name = $('new_full_name').value.trim();
+      const email = $('new_email').value.trim();
+      const phone = $('new_phone').value.trim();
+      const password = $('new_password').value;
+      const role = $('new_role').value;
+      if (!name || !email || !password) return alert('Name, email and password required');
+      try {
+        // create auth user
+        const { data: signupData, error: signupErr } = await sb.auth.signUp({ email, password });
+        if (signupErr) {
+          // If user exists, maybe create profile only (but careful). For now show error.
+          return alert('Signup error: ' + signupErr.message);
+        }
+        const userId = signupData.user.id;
+        // create profile
+        const { error: pErr } = await sb.from('profiles').insert([{ id: userId, full_name: name, email, phone, role, approved: true }]);
+        if (pErr) { alert('Profile insert error: ' + pErr.message); return; }
+        alert('User created');
+        $('addUserForm').reset();
+        loadUsers(); loadStudents(); loadDashboard(); loadPending();
+      } catch (err) {
+        console.error('create user err', err);
+        alert('Error creating user (see console)');
+      }
+    });
 
-    async function init(){ try{ CURRENT_USER = await getSessionUser(); if(!CURRENT_USER){ $('signedAs').textContent = 'Not signed in — client anon key in use'; } else { $('signedAs').textContent = `Signed in as ${CURRENT_USER.email}`; try{ const { data: profile } = await sb.from('profiles').select('role').eq('id', CURRENT_USER.id).maybeSingle(); CURRENT_ROLE = profile?.role || null; }catch(e){ console.warn('fetch role', e); } }
-        applyRoleUI(CURRENT_ROLE);
-        await refreshAll();
-        // if student, lock att_student select to their student id (if linked)
-        if(CURRENT_ROLE === ROLE_STUDENT){ const sid = await getProfileStudentIdForUser(CURRENT_USER?.id); if(sid && $('att_student')){ $('att_student').value = sid; $('att_student').disabled = true; } }
-      }catch(err){console.error('init',err); toast('Init error');} }
+    // list users
+    async function loadUsers(){
+      try {
+        const { data, error } = await sb.from('profiles').select('*').order('created_at', {ascending:false});
+        if (error) { console.warn('loadUsers', error); $('usersTable').innerHTML='<tr><td colspan="6">Error loading users</td></tr>'; return; }
+        const tbody = $('usersTable'); tbody.innerHTML = '';
+        data.forEach(u=>{
+          tbody.innerHTML += `<tr>
+            <td>${escapeHtml(u.full_name)}</td>
+            <td>${escapeHtml(u.email)}</td>
+            <td>${escapeHtml(u.phone)}</td>
+            <td>${escapeHtml(u.role)}</td>
+            <td>${u.approved ? 'Yes' : 'No'}</td>
+            <td class="flex">
+              ${u.approved ? `<button class="btn btn-delete" onclick="deactivateUser('${u.id}')">Deactivate</button>` : `<button class="btn btn-approve" onclick="approveUser('${u.id}')">Approve</button>`}
+              <button class="btn btn-delete" onclick="deleteUser('${u.id}')">Delete</button>
+            </td>
+          </tr>`;
+        });
+      } catch (err){ console.error('loadUsers', err); }
+    }
+
+    async function approveUser(id){
+      const { error } = await sb.from('profiles').update({ approved: true }).eq('id', id);
+      if (error) return alert('Approve error: ' + error.message);
+      await loadUsers(); await loadPending(); await loadDashboard(); await loadStudents();
+    }
+
+    async function deactivateUser(id){
+      const { error } = await sb.from('profiles').update({ approved: false }).eq('id', id);
+      if (error) return alert('Deactivate error: ' + error.message);
+      await loadUsers(); await loadDashboard(); await loadPending();
+    }
+
+    // delete profile row (note: auth user still exists in auth table)
+    async function deleteUser(id){
+      if (!confirm('Delete profile row? This removes the profile record. The auth user will remain in Auth.')) return;
+      const { error } = await sb.from('profiles').delete().eq('id', id);
+      if (error) return alert('Delete error: ' + error.message);
+      await loadUsers(); await loadDashboard(); await loadStudents(); await loadPending();
+    }
+
+    /*******************
+     * Students tab (filtered users)
+     *******************/
+    async function loadStudents(){
+      try {
+        const { data, error } = await sb.from('profiles').select('*').eq('role','student').order('full_name', {ascending:true});
+        if (error) { console.warn('loadStudents', error); $('studentsTable').innerHTML='<tr><td colspan="5">Error</td></tr>'; return; }
+        const tbody = $('studentsTable'); tbody.innerHTML = '';
+        data.forEach(s=>{
+          tbody.innerHTML += `<tr>
+            <td>${escapeHtml(s.full_name)}</td>
+            <td>${escapeHtml(s.email)}</td>
+            <td>${escapeHtml(s.phone)}</td>
+            <td>${s.approved ? 'Approved' : 'Pending'}</td>
+            <td class="flex">
+              ${!s.approved ? `<button class="btn btn-approve" onclick="approveUser('${s.id}')">Approve</button>` : `<button class="btn btn-delete" onclick="deactivateUser('${s.id}')">Deactivate</button>`}
+              <button class="btn btn-delete" onclick="deleteUser('${s.id}')">Delete</button>
+            </td>
+          </tr>`;
+        });
+      } catch (err){ console.error('loadStudents', err); }
+    }
+
+    /*******************
+     * Courses
+     *******************/
+    $('addCourseForm').addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      const name = $('course_name').value.trim();
+      const description = $('course_description').value.trim();
+      if (!name) return alert('Course name required');
+      try {
+        const { error } = await sb.from('courses').insert([{ course_name: name, description }]);
+        if (error) return alert('Add course error: ' + error.message);
+        $('addCourseForm').reset();
+        await loadCourses(); await populateCourseSelects();
+      } catch (err){ console.error(err); }
+    });
+
+    async function loadCourses(){
+      try {
+        const { data, error } = await sb.from('courses').select('*').order('course_name', {ascending:true});
+        if (error) { console.warn('loadCourses', error); $('coursesTable').innerHTML = '<tr><td colspan="2">No courses or table missing</td></tr>'; return; }
+        const tbody = $('coursesTable'); tbody.innerHTML = '';
+        data.forEach(c=>{
+          tbody.innerHTML += `<tr>
+            <td>${escapeHtml(c.course_name)}</td>
+            <td><button class="btn btn-delete" onclick="deleteCourse(${c.id})">Delete</button></td>
+          </tr>`;
+        });
+      } catch (err){ console.error('loadCourses', err); }
+    }
+
+    async function deleteCourse(id){
+      if (!confirm('Delete course?')) return;
+      const { error } = await sb.from('courses').delete().eq('id', id);
+      if (error) return alert('Delete course error: ' + error.message);
+      await loadCourses(); await populateCourseSelects();
+    }
+
+    async function populateCourseSelects(){
+      try {
+        const { data } = await sb.from('courses').select('*').order('course_name', {ascending:true});
+        const courseSelects = document.querySelectorAll('#att_course_id, #exam_course_id');
+        courseSelects.forEach(s => s.innerHTML = '');
+        if (!data || data.length === 0) {
+          courseSelects.forEach(s => s.innerHTML = '<option value="">(no courses)</option>');
+          return;
+        }
+        data.forEach(c => {
+          const opt = `<option value="${c.id}">${escapeHtml(c.course_name)}</option>`;
+          courseSelects.forEach(s => s.insertAdjacentHTML('beforeend', opt));
+        });
+      } catch (err){ console.error('populateCourseSelects', err); }
+    }
+
+    /*******************
+     * Attendance
+     *******************/
+    async function loadAttendance(){
+      try {
+        const { data, error } = await sb.from('attendance').select('*, profiles(full_name)').order('date', {ascending:false});
+        // if attendance table missing, show message
+        if (error) { console.warn('attendance load', error); $('attendanceTable').innerHTML = '<tr><td colspan="6">No attendance table or permission issue.</td></tr>'; return; }
+        const tbody = $('attendanceTable'); tbody.innerHTML = '';
+        data.forEach(r=>{
+          const studentName = r.profiles?.full_name || r.student_id || '-';
+          const courseText = r.course_id ? ('Course ID: ' + r.course_id) : '-';
+          tbody.innerHTML += `<tr>
+            <td>${escapeHtml(studentName)}</td>
+            <td>${escapeHtml(r.session_type)}</td>
+            <td>${escapeHtml(courseText)}</td>
+            <td>${escapeHtml(r.location || '')} ${escapeHtml(r.time || '')}</td>
+            <td>${escapeHtml(r.date || '')}</td>
+            <td><button class="btn btn-delete" onclick="deleteAttendance(${r.id})">Delete</button></td>
+          </tr>`;
+        });
+      } catch (err){ console.error('loadAttendance', err); }
+    }
+
+    // populate student select for attendance
+    async function populateStudentSelect(){
+      try {
+        const { data } = await sb.from('profiles').select('id, full_name').eq('role','student').order('full_name', {ascending:true});
+        const sel = $('att_student_id'); sel.innerHTML = '<option value="">Select student</option>';
+        data.forEach(s => sel.insertAdjacentHTML('beforeend', `<option value="${s.id}">${escapeHtml(s.full_name)}</option>`));
+      } catch (err){ console.error('populateStudentSelect', err); }
+    }
+
+    // handle add attendance
+    $('addAttendanceForm').addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      const student_id = $('att_student_id').value;
+      const session_type = $('att_session_type').value;
+      const course_id = $('att_course_id').value || null;
+      const location = $('att_location').value.trim();
+      const date = $('att_date').value;
+      const time = $('att_time').value || null;
+      if (!student_id || !date) return alert('Student and date required');
+      const { error } = await sb.from('attendance').insert([{ student_id, session_type, course_id, location, time, date }]);
+      if (error) return alert('Add attendance error: ' + error.message);
+      $('addAttendanceForm').reset();
+      await loadAttendance();
+    });
+
+    async function deleteAttendance(id){
+      if (!confirm('Delete attendance?')) return;
+      const { error } = await sb.from('attendance').delete().eq('id', id);
+      if (error) return alert('Delete attendance error: ' + error.message);
+      await loadAttendance();
+    }
+
+    /*******************
+     * Exams
+     *******************/
+    $('addExamForm').addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      const course_id = $('exam_course_id').value;
+      const title = $('exam_title').value.trim();
+      const date = $('exam_date').value;
+      const status = $('exam_status').value;
+      if (!course_id || !title || !date) return alert('Course, title and date required');
+      const { error } = await sb.from('exams').insert([{ course_id, title, date, status }]);
+      if (error) return alert('Add exam error: ' + error.message);
+      $('addExamForm').reset();
+      await loadExams();
+    });
+
+    async function loadExams(){
+      try {
+        const { data, error } = await sb.from('exams').select('*, courses(course_name)').order('date', {ascending:false});
+        if (error) { console.warn('loadExams', error); $('examsTable').innerHTML = '<tr><td colspan="5">No exams or table missing</td></tr>'; return; }
+        const tbody = $('examsTable'); tbody.innerHTML = '';
+        data.forEach(e=>{
+          tbody.innerHTML += `<tr>
+            <td>${escapeHtml(e.courses?.course_name || 'N/A')}</td>
+            <td>${escapeHtml(e.title)}</td>
+            <td>${escapeHtml(e.date)}</td>
+            <td>${escapeHtml(e.status)}</td>
+            <td><button class="btn btn-delete" onclick="deleteExam(${e.id})">Delete</button></td>
+          </tr>`;
+        });
+      } catch (err){ console.error('loadExams', err); }
+    }
+
+    async function deleteExam(id){
+      if (!confirm('Delete exam?')) return;
+      const { error } = await sb.from('exams').delete().eq('id', id);
+      if (error) return alert('Delete exam error: ' + error.message);
+      await loadExams();
+    }
+
+    /*******************
+     * Messages
+     *******************/
+    $('sendMessageForm').addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      const recipient = $('msg_recipient').value.trim();
+      const message = $('msg_body').value.trim();
+      if (!recipient || !message) return alert('Recipient and message required');
+      const sender = (await sb.auth.getUser()).data.user?.email || 'superadmin';
+      const { error } = await sb.from('messages').insert([{ sender_email: sender, recipient_email: recipient, message }]);
+      if (error) return alert('Send message error: ' + error.message);
+      $('sendMessageForm').reset();
+      await loadMessages();
+    });
+
+    async function loadMessages(){
+      try {
+        const { data, error } = await sb.from('messages').select('*').order('created_at', {ascending:false}).limit(50);
+        if (error) { console.warn('loadMessages', error); $('messagesTable').innerHTML = '<tr><td colspan="4">No messages or table missing</td></tr>'; return; }
+        const tbody = $('messagesTable'); tbody.innerHTML = '';
+        data.forEach(m=>{
+          tbody.innerHTML += `<tr>
+            <td>${escapeHtml(m.sender_email)}</td>
+            <td>${escapeHtml(m.recipient_email)}</td>
+            <td>${escapeHtml(m.message)}</td>
+            <td>${new Date(m.created_at).toLocaleString()}</td>
+          </tr>`;
+        });
+      } catch (err){ console.error('loadMessages', err); }
+    }
+
+    /*******************
+     * Resources (Storage)
+     *******************/
+    async function loadResources(){
+      try {
+        // list files in bucket
+        const { data, error } = await sb.storage.from(RESOURCES_BUCKET).list('', { limit: 100, offset: 0, sortBy: { column: 'name', order: 'asc' }});
+        if (error) { console.warn('loadResources', error.message); $('resourcesTable').innerHTML = '<tr><td colspan="3">Storage bucket missing or permission issue</td></tr>'; return; }
+        const tbody = $('resourcesTable'); tbody.innerHTML = '';
+        for (const f of data) {
+          const sizeKb = f.size ? (f.size / 1024).toFixed(1) + ' KB' : '';
+          tbody.innerHTML += `<tr>
+            <td><a href="${sb.storage.from(RESOURCES_BUCKET).getPublicUrl(f.name).publicUrl}" target="_blank">${escapeHtml(f.name)}</a></td>
+            <td>${sizeKb}</td>
+            <td><button class="btn btn-delete" onclick="deleteResource('${f.name}')">Delete</button></td>
+          </tr>`;
+        }
+      } catch (err){ console.error('loadResources', err); }
+    }
+
+    $('uploadResourceBtn').addEventListener('click', async ()=>{
+      const fileInput = $('resourceFile');
+      const file = fileInput.files[0];
+      const title = $('resourceTitle').value.trim();
+      if (!file) return alert('Select a file first');
+      // unique filename
+      const filename = `${Date.now()}_${file.name.replace(/\s+/g,'_')}`;
+      const { error } = await sb.storage.from(RESOURCES_BUCKET).upload(filename, file, { cacheControl: '3600', upsert: false });
+      if (error) return alert('Upload error: ' + error.message);
+      // optional: insert metadata into resources table (if exists)
+      try {
+        await sb.from('resources').insert([{ file_name: filename, title }]);
+      } catch (err) {
+        // ignore if table doesn't exist
+      }
+      fileInput.value = ''; $('resourceTitle').value = '';
+      alert('Uploaded');
+      await loadResources();
+    });
+
+    async function deleteResource(name){
+      if (!confirm('Delete resource ' + name + '?')) return;
+      const { error } = await sb.storage.from(RESOURCES_BUCKET).remove([name]);
+      if (error) return alert('Delete storage error: ' + error.message);
+      // optional: delete metadata row if exists
+      try { await sb.from('resources').delete().eq('file_name', name); } catch (err){ /* ignore */ }
+      await loadResources();
+    }
+
+    /*******************
+     * Pending approvals
+     *******************/
+    async function loadPending(){
+      try {
+        const { data, error } = await sb.from('profiles').select('*').eq('approved', false).order('created_at', {ascending:true});
+        if (error) { console.warn('loadPending', error); $('pendingTable').innerHTML = '<tr><td colspan="3">No pending or table error</td></tr>'; return; }
+        const tbody = $('pendingTable'); tbody.innerHTML = '';
+        data.forEach(p=>{
+          tbody.innerHTML += `<tr>
+            <td>${escapeHtml(p.full_name)}</td>
+            <td>${escapeHtml(p.email)}</td>
+            <td class="flex"><button class="btn btn-approve" onclick="approveUser('${p.id}')">Approve</button><button class="btn btn-reject" onclick="rejectUser('${p.id}')">Reject</button></td>
+          </tr>`;
+        });
+      } catch (err){ console.error('loadPending', err); }
+    }
+
+    // helper reject used in pending (actually delete profile)
+    async function rejectUser(id){
+      if (!confirm('Reject and delete profile?')) return;
+      const { error } = await sb.from('profiles').delete().eq('id', id);
+      if (error) return alert('Reject error: ' + error.message);
+      await loadPending(); await loadDashboard();
+    }
+
+    /*******************
+     * Init all
+     *******************/
+    async function init(){
+      try {
+        await initSessionInfo();
+        await loadDashboard();
+        await loadUsers();
+        await loadStudents();
+        await loadCourses();
+        await loadAttendance();
+        await loadExams();
+        await loadMessages();
+        await loadResources();
+        await loadPending();
+        await populateCourseSelects();
+        await populateStudentSelect();
+      } catch (err){ console.error('init error', err); }
+    }
+
+    // run init
+    init();
 
     // expose some functions for inline onclicks
-    window.loadUsers = loadUsers; window.loadStudents = loadStudents; window.loadCourses = loadCourses; window.loadAttendance = loadAttendance; window.loadExams = loadExams; window.loadMessages = loadMessages; window.loadResources = loadResources; window.loadPending = loadPending;
-
-    init();
+    window.showSection = showSection;
+    window.logout = logout;
+    window.approveUser = approveUser;
+    window.rejectUser = rejectUser;
+    window.deleteUser = deleteUser;
+    window.deleteCourse = deleteCourse;
+    window.deleteExam = deleteExam;
+    window.deleteAttendance = deleteAttendance;
+    window.deleteResource = deleteResource;
+    window.removeUser = deleteUser;
+    window.deactivateUser = deactivateUser;
+    window.deleteCourse = deleteCourse;
+    window.populateCourseSelects = populateCourseSelects;
+    window.populateStudentSelect = populateStudentSelect;
   </script>
 </body>
 </html>
