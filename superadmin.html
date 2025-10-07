@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NCHSM Admin Dashboard</title>
+  <title>NCHSM Super Admin Dashboard</title>
   <style>
     body { margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #F8FAFC; }
     .container { display: flex; min-height: 100vh; }
@@ -59,7 +59,7 @@
     <aside class="sidebar">
       <div class="sidebar-header">
         <img src="images/Logo_NCHSM.png" alt="Logo">
-        <h2>NCHSM Admin</h2>
+        <h2>Super Admin</h2>
       </div>
       <ul class="nav">
         <li><a href="#" data-tab="dashboard" class="active">Dashboard</a></li>
@@ -70,6 +70,7 @@
         <li><a href="#" data-tab="messages">Inbox</a></li>
         <li><a href="#" data-tab="calendar">Calendar</a></li>
         <li><a href="#" data-tab="resources">Resources</a></li>
+        <li><a href="#" data-tab="admins">Manage Admins</a></li>
       </ul>
       <div class="logout"><a href="#" onclick="logout()">Logout</a></div>
     </aside>
@@ -77,8 +78,8 @@
     <!-- Main Content -->
     <main class="main">
       <header>
-        <h1>Welcome, Admin!</h1>
-        <p class="subtitle">Manage all aspects of NCHSM</p>
+        <h1>Welcome, Super Admin!</h1>
+        <p class="subtitle">Full control over NCHSM system</p>
       </header>
 
       <!-- Dashboard Cards -->
@@ -88,6 +89,10 @@
           <div class="card" onclick="showTab('courses')"><h3>Manage Courses</h3></div>
           <div class="card" onclick="showTab('attendance')"><h3>Attendance</h3></div>
           <div class="card" onclick="showTab('cats')"><h3>CATS/Exams</h3></div>
+          <div class="card" onclick="showTab('messages')"><h3>Inbox</h3></div>
+          <div class="card" onclick="showTab('calendar')"><h3>Calendar</h3></div>
+          <div class="card" onclick="showTab('resources')"><h3>Resources</h3></div>
+          <div class="card" onclick="showTab('admins')"><h3>Manage Admins</h3></div>
         </div>
       </section>
 
@@ -128,8 +133,6 @@
           <option value="classroom">Classroom</option>
           <option value="clinical">Clinical</option>
         </select>
-
-        <!-- Classroom -->
         <form id="classroom-form">
           <input type="text" placeholder="Student ID" required>
           <input type="text" placeholder="Course Name" required>
@@ -137,8 +140,6 @@
           <input type="date" required>
           <button type="submit">Mark Attendance</button>
         </form>
-
-        <!-- Clinical -->
         <form id="clinical-form" style="display:none;">
           <input type="text" placeholder="Student ID" required>
           <input type="text" placeholder="Rotation Name" required>
@@ -146,7 +147,6 @@
           <input type="date" required>
           <button type="submit">Mark Attendance</button>
         </form>
-
         <div id="attendance-records">
           <h3>Attendance Records</h3>
           <table>
@@ -169,7 +169,7 @@
         <p>Exam schedule will appear here.</p>
       </section>
 
-      <!-- Inbox / Messages Tab -->
+      <!-- Inbox Tab -->
       <section id="messages" class="tab-content">
         <h2>Inbox / Messages</h2>
         <form id="send-message-form">
@@ -186,7 +186,7 @@
         <div id="calendar"><p>Simple calendar placeholder</p></div>
       </section>
 
-      <!-- Resource Center Tab -->
+      <!-- Resources Tab -->
       <section id="resources" class="tab-content">
         <h2>Resource Center</h2>
         <form id="upload-resource-form">
@@ -195,76 +195,23 @@
         </form>
         <div id="resources-list"></div>
       </section>
+
+      <!-- Admin Management Tab -->
+      <section id="admins" class="tab-content">
+        <h2>Admins</h2>
+        <form id="add-admin-form">
+          <input type="text" id="admin-name" placeholder="Full Name" required>
+          <input type="email" id="admin-email" placeholder="Email" required>
+          <input type="password" id="admin-password" placeholder="Password" required>
+          <button type="submit">Add Admin</button>
+        </form>
+        <table>
+          <thead><tr><th>ID</th><th>Name</th><th>Email</th></tr></thead>
+          <tbody id="admins-table"></tbody>
+        </table>
+      </section>
     </main>
   </div>
-
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script>
-    const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
-    const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY';
-    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-    // Sidebar navigation
-    const navLinks = document.querySelectorAll('.nav a');
-    const tabs = document.querySelectorAll('.tab-content');
-    navLinks.forEach(link => {
-      link.addEventListener('click', e => {
-        e.preventDefault();
-        navLinks.forEach(l => l.classList.remove('active'));
-        link.classList.add('active');
-        tabs.forEach(tab => tab.classList.remove('active'));
-        document.getElementById(link.dataset.tab).classList.add('active');
-      });
-    });
-    function showTab(tabId) {
-      navLinks.forEach(l => l.classList.remove('active'));
-      tabs.forEach(tab => tab.classList.remove('active'));
-      document.getElementById(tabId).classList.add('active');
-    }
-
-    // Logout
-    async function logout() {
-      await sb.auth.signOut();
-      localStorage.removeItem("loggedInUser");
-      window.location.href = "login.html";
-    }
-
-    // Students tab
-    const addStudentForm = document.getElementById('add-student-form');
-    const studentsTable = document.getElementById('students-table');
-    addStudentForm.addEventListener('submit', async e => {
-      e.preventDefault();
-      const name = document.getElementById('student-name').value.trim();
-      const email = document.getElementById('student-email').value.trim();
-      const phone = document.getElementById('student-phone').value.trim();
-      const password = document.getElementById('student-password').value;
-
-      if(!name || !email || !phone || !password) return alert('Fill all fields');
-
-      try {
-        const { data: signUpData, error: signUpError } = await sb.auth.signUp({ email, password });
-        if(signUpError) return alert('Signup failed: ' + signUpError.message);
-
-        const { error: profileError } = await sb.from('profiles').insert([{
-          id: signUpData.user.id,
-          full_name: name,
-          email,
-          phone,
-          role: 'student',
-          approved: true
-        }]);
-        if(profileError) return alert('Profile creation failed: ' + profileError.message);
-
-        alert('✅ Student added successfully!');
-        addStudentForm.reset();
-        const row = document.createElement('tr');
-        row.innerHTML = <td>${signUpData.user.id}</td><td>${name}</td><td>${email}</td><td>${phone}</td>;
-        studentsTable.appendChild(row);
-      } catch(err) {
-        console.error(err);
-        alert('An unexpected error occurred.');
-      }
-    });
-  </script>
+   <script src="script.js"></script>
 </body>
 </html>
