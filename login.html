@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -92,28 +91,38 @@
 
       try {
         const { data, error } = await sb.auth.signInWithPassword({ email, password });
+        console.log('SignIn Response:', data, error);
+
         if (error || !data.user) {
           errorMsg.innerText = error?.message || 'Login failed';
           return;
         }
 
-        // Get user profile
-        const { data: profile, error: profileError } = await sb.from('profiles').select('*').eq('id', data.user.id).single();
+        const userId = data.user.id;
+        console.log('User ID:', userId);
+
+        // Fetch user profile
+        const { data: profile, error: profileError } = await sb.from('profiles').select('*').eq('id', userId).single();
+        console.log('Profile Fetch:', profile, profileError);
+
         if (profileError || !profile) {
           errorMsg.innerText = 'Profile not found. Contact admin.';
           return;
         }
 
         // Redirect based on role
-        if (profile.role === 'superadmin') {
-          window.location.href = 'superadmin.html';
-        } else if (profile.role === 'admin') {
-          window.location.href = 'admin.html';
-        } else {
-          window.location.href = 'index.html';
+        switch (profile.role) {
+          case 'superadmin':
+            window.location.href = 'superadmin.html';
+            break;
+          case 'admin':
+            window.location.href = 'admin.html';
+            break;
+          default:
+            window.location.href = 'index.html';
         }
       } catch (err) {
-        console.error(err);
+        console.error('Unexpected Error:', err);
         errorMsg.innerText = 'An unexpected error occurred.';
       }
     });
