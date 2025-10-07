@@ -139,6 +139,7 @@
             transition: background 0.3s;
         }
         button:hover { background: var(--nchsm-green-hover); }
+        button:disabled { background: #ccc; cursor: not-allowed; }
 
         /* --- Footer and Error Styling --- */
         .error { color: #EF4444; font-size: 0.9rem; margin-bottom: 15px; text-align: center; font-weight: 500; }
@@ -185,7 +186,7 @@
                 <a href="forgot-password.html" class="forgot-password">Forgot Password?</a>
             </div>
 
-            <button type="submit">Log In</button>
+            <button type="submit" id="loginButton">Log In</button>
         </form>
         
         <div class="footer">
@@ -200,13 +201,17 @@
     
     <script>
         document.addEventListener('DOMContentLoaded', () => {
+            // *** CONFIGURATION: REPLACE THESE WITH YOUR ACTUAL SUPABASE KEYS ***
             const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
             const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
             
-            const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
+            // Create the Supabase client instance
+            const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
             const errorMsg = document.getElementById('errorMsg');
             const loginForm = document.getElementById('loginForm');
+            const loginButton = document.getElementById('loginButton');
+            const rememberMe = document.getElementById('rememberMe');
 
             if (!loginForm) {
                 console.error("Login form element not found!");
@@ -216,57 +221,66 @@
             loginForm.addEventListener('submit', async e => {
                 e.preventDefault();
                 errorMsg.innerText = '';
+                loginButton.disabled = true; // Disable button to prevent double-clicks
 
                 const email = document.getElementById('email').value.trim();
                 const password = document.getElementById('password').value;
+                const shouldRemember = rememberMe.checked;
 
                 try {
                     // 1. SIGN IN
-                    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+                    // Note: session persistence is configured in the initial client creation, 
+                    // the `rememberMe` checkbox is usually handled by that setting.
+                    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password });
                     
-                    if (error || !data.user) {
-                        errorMsg.innerText = error?.message || 'Login failed: Check credentials.';
+                    if (authError || !authData.user) {
+                        errorMsg.innerText = authError?.message || 'Login failed: Check your username and password.';
+                        loginButton.disabled = false;
                         return;
                     }
 
-                    const userId = data.user.id;
+                    const userId = authData.user.id;
                     
-                    // 2. GET ROLE
-                    const { data: profile, error: profileError } = await sb
+                    // 2. GET ROLE from the 'profiles' table
+                    // RLS must be set to allow authenticated users to read their own profile.
+                    const { data: profile, error: profileError } = await supabase
                         .from('profiles')
                         .select('role') 
                         .eq('id', userId)
                         .single();
 
                     if (profileError || !profile || !profile.role) {
-                        errorMsg.innerText = 'Profile or role data missing. Contact support.';
+                        // Logged in but profile data is missing/inaccessible
+                        errorMsg.innerText = 'Login successful, but user role is undefined. Contact system admin.';
                         console.error("Profile Error:", profileError);
-                        return;
+                        loginButton.disabled = false;
+                        return; 
                     }
 
-                    // 3. REDIRECT: USING THE REQUESTED FILES
-                    switch (profile.role) {
+                    // 3. REDIRECT based on the specific roles
+                    const userRole = profile.role.toLowerCase(); 
+                    
+                    switch (userRole) {
                         case 'superadmin':
-                            // Redirect Super Admin to the main admin file
-                            window.location.href = 'admin.html';
+                            window.location.href = 'superadmin.html'; // Redirect to Super Admin dashboard
                             break;
                         case 'admin':
-                            // Redirect Admin to the main admin file
-                            window.location.href = 'admin.html';
+                            window.location.href = 'admin.html';      // Redirect to Admin dashboard
                             break;
                         case 'student':
-                            // Redirect Student to the main index file
-                            window.location.href = 'index.html';
+                            window.location.href = 'index.html';      // Redirect to Student/Main Portal
                             break;
                         default:
-                            // Fallback for any undefined role
+                            // Fallback for any unknown role
+                            console.warn('Unknown role detected:', userRole);
                             window.location.href = 'index.html'; 
                             break;
                     }
 
                 } catch (err) {
-                    console.error('Unexpected Error during login:', err);
-                    errorMsg.innerText = 'An unexpected error occurred during the process.';
+                    console.error('Unexpected System Error:', err);
+                    errorMsg.innerText = 'A critical system error occurred. Please try again later.';
+                    loginButton.disabled = false;
                 }
             });
         });
