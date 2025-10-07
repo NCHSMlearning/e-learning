@@ -3,9 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Super Admin Login - NCHSM</title>
-    <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <title>E-Learning Portal Login - NCHSM</title>
+    
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap"></noscript>
+    
     <style>
         /* --- NCHSM Branding Colors --- */
         :root {
@@ -19,7 +21,7 @@
         body {
             margin: 0;
             font-family: 'Poppins', sans-serif;
-            background: var(--nchsm-light-bg); /* Use light green background */
+            background: var(--nchsm-light-bg);
             display: flex;
             justify-content: center;
             align-items: center;
@@ -38,7 +40,7 @@
 
         /* --- Header & Logo Styling --- */
         .logo {
-            /* Placeholder for a small, professional logo image */
+            /* Placeholder for a small, professional logo image (Replace "NC" with your <img> tag) */
             width: 70px;
             height: 70px;
             background-color: var(--nchsm-green);
@@ -67,6 +69,19 @@
             margin-bottom: 25px;
             text-transform: uppercase;
         }
+        
+        .portal-label {
+            display: block;
+            background: var(--nchsm-blue);
+            color: white;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            margin-bottom: 15px;
+            width: fit-content;
+            margin-left: 0;
+        }
 
         .welcome-msg {
             text-align: left;
@@ -86,10 +101,7 @@
         /* --- Form Styling --- */
         form { display: flex; flex-direction: column; }
         
-        .input-group {
-            position: relative;
-            margin-bottom: 15px;
-        }
+        .input-group { position: relative; margin-bottom: 15px; }
 
         input {
             width: 100%;
@@ -123,9 +135,7 @@
             text-decoration: none;
             font-weight: 600;
         }
-        .forgot-password:hover {
-            text-decoration: underline;
-        }
+        .forgot-password:hover { text-decoration: underline; }
 
         button {
             background: var(--nchsm-green);
@@ -160,26 +170,17 @@
             font-weight: 600;
             text-decoration: none;
         }
-        .footer a:hover {
-            text-decoration: underline;
+        .footer a:hover { text-decoration: underline; }
+        .footer-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
         }
-        .copyright {
-            display: block;
-            margin-top: 15px;
+        .copyright-line {
+            margin-top: 10px;
             color: #64748B;
-            font-size: 0.8rem;
-        }
-        .admin-label {
-            display: block;
-            background: var(--nchsm-blue);
-            color: white;
-            padding: 4px 10px;
-            border-radius: 6px;
-            font-size: 0.8rem;
-            font-weight: 500;
-            margin-bottom: 15px;
-            width: fit-content;
-            margin-left: 0;
+            font-size: 0.85rem;
         }
 
     </style>
@@ -192,7 +193,7 @@
         <div class="college-title">NAKURU COLLEGE OF HEALTH SCIENCES AND MANAGEMENT</div>
         <div class="tagline">Centre of Nursing & Health Sciences Excellence</div>
         
-        <span class="admin-label">SUPER ADMIN PORTAL</span>
+        <span class="portal-label">E-LEARNING PORTAL</span>
 
         <div class="welcome-msg">Hi, welcome back</div>
         <div class="sub-msg">Please fill in your details to log in</div>
@@ -218,12 +219,14 @@
         </form>
         
         <div class="footer">
-            <p>Don’t have an account ? <a href="register.html">Sign Up</a></p>
-            <span class="copyright">Copyright &copy; 2025 - ABNO Softwares International</span>
+            <div class="footer-content">
+                <p>Don’t have an account ? <a href="register.html">Sign Up</a></p>
+                <span class="copyright-line">Copyright &copy; 2025 - Nakuru College of Health Sciences and Management</span>
+            </div>
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
     <script>
         const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
@@ -239,43 +242,51 @@
             const password = document.getElementById('password').value;
 
             try {
+                // 1. SIGN IN: Authenticate the user
                 const { data, error } = await sb.auth.signInWithPassword({ email, password });
-                console.log('SignIn Response:', data, error);
-
+                
                 if (error || !data.user) {
-                    errorMsg.innerText = error?.message || 'Login failed';
+                    errorMsg.innerText = error?.message || 'Login failed: Check credentials.';
                     return;
                 }
 
                 const userId = data.user.id;
-                console.log('User ID:', userId);
+                
+                // 2. GET ROLE: Fetch the associated profile and role
+                const { data: profile, error: profileError } = await sb
+                    .from('profiles')
+                    .select('role') // Fetch only the 'role' column
+                    .eq('id', userId)
+                    .single();
 
-                // Fetch user profile
-                const { data: profile, error: profileError } = await sb.from('profiles').select('*').eq('id', userId).single();
-                console.log('Profile Fetch:', profile, profileError);
-
-                if (profileError || !profile) {
-                    errorMsg.innerText = 'Profile not found. Contact admin.';
+                if (profileError || !profile || !profile.role) {
+                    errorMsg.innerText = 'Profile or role data missing. Contact support.';
+                    console.error("Profile Error:", profileError);
                     return;
                 }
 
-                // Redirect based on role
+                // 3. REDIRECT: Use a switch statement to direct the user based on their role
                 switch (profile.role) {
                     case 'superadmin':
-                        window.location.href = 'superadmin.html';
+                        window.location.href = 'superadmin-dashboard.html';
                         break;
                     case 'admin':
-                        window.location.href = 'admin.html';
+                        window.location.href = 'admin-dashboard.html';
+                        break;
+                    case 'student':
+                        window.location.href = 'student-portal.html';
                         break;
                     default:
-                        window.location.href = 'index.html';
+                        // Fallback for any undefined role
+                        window.location.href = 'index.html'; 
+                        break;
                 }
+
             } catch (err) {
-                console.error('Unexpected Error:', err);
-                errorMsg.innerText = 'An unexpected error occurred.';
+                console.error('Unexpected Error during login:', err);
+                errorMsg.innerText = 'An unexpected error occurred during the process.';
             }
         });
     </script>
 </body>
 </html>
-```
