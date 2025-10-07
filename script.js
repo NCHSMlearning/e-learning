@@ -1,65 +1,62 @@
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script>
+// ---------------- SUPABASE INIT ----------------
 const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
-const sb = supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
 const RESOURCES_BUCKET = 'resources';
 
-function $(id){return document.getElementById(id);}
-function escapeHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
-function setActiveNav(el){document.querySelectorAll('.nav a').forEach(a=>a.classList.remove('active')); if(el) el.classList.add('active');}
+// ---------------- HELPERS ----------------
+function $(id){ return document.getElementById(id); }
+function escapeHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function setActiveNav(el){ document.querySelectorAll('.nav a').forEach(a=>a.classList.remove('active')); if(el) el.classList.add('active'); }
+
+// ---------------- SHOW SECTION ----------------
 function showSection(id,el){
     document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
-    const sec=$(id); if(sec) sec.classList.add('active'); 
+    const sec=$(id); if(sec) sec.classList.add('active');
     setActiveNav(el);
     switch(id){
-        case'dashboard':if($('#dashboard')) loadDashboard(); break;
-        case'users':if($('#users')) loadUsers(); break;
-        case'students':if($('#students')) loadStudents(); break;
-        case'courses':if($('#courses')) {loadCourses(); populateCourseSelects();} break;
-        case'attendance':if($('#attendance')) {loadAttendance(); populateStudentSelect(); populateCourseSelects();} break;
-        case'exams':if($('#exams')) {loadExams(); populateCourseSelects();} break;
-        case'messages':if($('#messages')) loadMessages(); break;
-        case'resources':if($('#resources')) loadResources(); break;
-        case'pending':if($('#pending')) loadPending(); break;
+        case'dashboard': if($('#dashboard')) loadDashboard(); break;
+        case'users': if($('#users')) loadUsers(); break;
+        case'students': if($('#students')) loadStudents(); break;
+        case'courses': if($('#courses')) { loadCourses(); populateCourseSelects(); } break;
+        case'attendance': if($('#attendance')) { loadAttendance(); populateStudentSelect(); populateCourseSelects(); setAttendanceLocationByIP(); } break;
+        case'exams': if($('#exams')) { loadExams(); populateCourseSelects(); } break;
+        case'messages': if($('#messages')) loadMessages(); break;
+        case'resources': if($('#resources')) loadResources(); break;
+        case'pending': if($('#pending')) loadPending(); break;
     }
 }
 
-// ---------- AUTH CHECK ----------
+// ---------------- AUTH CHECK ----------------
 (async function checkAuth() {
     const { data: { user } } = await sb.auth.getUser();
-    if (!user) {
-        window.location.href = '/login.html';
-    } else if($('#sessionInfo')) {
-        $('sessionInfo').innerText = `Signed in as ${user.email}`;
-    }
+    if(!user){ window.location.href = '/login.html'; }
+    else if($('#sessionInfo')) $('sessionInfo').innerText = `Signed in as ${user.email}`;
 })();
 
-// ---------- LOGOUT ----------
+// ---------------- LOGOUT ----------------
 async function logout() {
     const { error } = await sb.auth.signOut();
-    if (error) {
-        alert('Logout failed: ' + error.message);
-        return;
-    }
+    if(error){ alert('Logout failed: '+error.message); return; }
     window.location.href = '/login.html';
 }
 
-// ---------- DASHBOARD ----------
+// ---------------- DASHBOARD ----------------
 async function loadDashboard(){
     if(!$('#dashboard')) return;
-    const {data:users} = await sb.from('profiles').select('*');
-    const totalUsers = users?.length||0;
-    const totalAdmins = users?.filter(u=>u.role==='admin').length||0;
-    const totalStudents = users?.filter(u=>u.role==='student').length||0;
-    const totalPending = users?.filter(u=>!u.approved).length||0;
+    const { data: users } = await sb.from('profiles').select('*');
+    if(!users) return;
+    const totalUsers = users.length;
+    const totalAdmins = users.filter(u=>u.role==='admin').length;
+    const totalStudents = users.filter(u=>u.role==='student').length;
+    const totalPending = users.filter(u=>!u.approved).length;
     if($('#totalUsers')) $('totalUsers').innerText = totalUsers;
     if($('#totalAdmins')) $('totalAdmins').innerText = totalAdmins;
     if($('#totalStudents')) $('totalStudents').innerText = totalStudents;
     if($('#totalPending')) $('totalPending').innerText = totalPending;
 }
 
-// ---------- USERS ----------
+// ---------------- USERS ----------------
 async function loadUsers(){
     const table=$('usersTable'); if(!table) return;
     const {data:users} = await sb.from('profiles').select('*').order('created_at',{ascending:false});
@@ -76,19 +73,18 @@ async function loadUsers(){
         table.appendChild(tr);
     });
 }
-
 async function approveUser(id){ await sb.from('profiles').update({approved:true}).eq('id',id); loadUsers(); loadDashboard(); }
-async function deleteUser(id){ if(confirm('Delete this user?')){await sb.from('profiles').delete().eq('id',id); loadUsers(); loadDashboard();} }
+async function deleteUser(id){ if(confirm('Delete this user?')){ await sb.from('profiles').delete().eq('id',id); loadUsers(); loadDashboard(); } }
 if($('#addUserForm')) $('addUserForm').addEventListener('submit', async e=>{
     e.preventDefault();
     const full_name=$('new_full_name').value,email=$('new_email').value,phone=$('new_phone').value,password=$('new_password').value,role=$('new_role').value;
     const {data,error}=await sb.auth.admin.createUser({email,password,phone,role,app_metadata:{role}});
-    if(error){alert(error.message);return;}
+    if(error){ alert(error.message); return; }
     await sb.from('profiles').insert([{id:data.user.id,full_name,email,phone,role,approved:true}]);
     $('addUserForm').reset(); loadUsers(); loadDashboard();
 });
 
-// ---------- STUDENTS ----------
+// ---------------- STUDENTS ----------------
 async function loadStudents(){
     const table=$('studentsTable'); if(!table) return;
     const {data:students}=await sb.from('profiles').select('*').eq('role','student').order('created_at',{ascending:false});
@@ -102,7 +98,7 @@ async function loadStudents(){
     });
 }
 
-// ---------- COURSES ----------
+// ---------------- COURSES ----------------
 async function loadCourses(){
     const table=$('coursesTable'); if(!table) return;
     const {data:courses}=await sb.from('courses').select('*').order('created_at',{ascending:false});
@@ -115,24 +111,23 @@ async function loadCourses(){
         table.appendChild(tr);
     });
 }
-async function deleteCourse(id){if(confirm('Delete course?')){await sb.from('courses').delete().eq('id',id);loadCourses();}}
+async function deleteCourse(id){ if(confirm('Delete course?')){ await sb.from('courses').delete().eq('id',id); loadCourses(); } }
 if($('#addCourseForm')) $('addCourseForm').addEventListener('submit', async e=>{
     e.preventDefault();
     const course_name=$('course_name').value,course_description=$('course_description').value;
     await sb.from('courses').insert([{course_name,description:course_description}]);
-    $('addCourseForm').reset();loadCourses();populateCourseSelects();
+    $('addCourseForm').reset(); loadCourses(); populateCourseSelects();
 });
-
 async function populateCourseSelects(){
     const {data:courses}=await sb.from('courses').select('*').order('created_at',{ascending:true});
     const selects=['att_course_id','exam_course_id'];
     selects.forEach(id=>{
         const sel=$(id); if(!sel) return; sel.innerHTML='';
-        courses?.forEach(c=>{const opt=document.createElement('option');opt.value=c.id;opt.innerText=c.course_name;sel.appendChild(opt);});
+        courses?.forEach(c=>{ const opt=document.createElement('option'); opt.value=c.id; opt.innerText=c.course_name; sel.appendChild(opt); });
     });
 }
 
-// ---------- ATTENDANCE ----------
+// ---------------- ATTENDANCE ----------------
 async function loadAttendance(){
     const table=$('attendanceTable'); if(!table) return;
     const {data:att}=await sb.from('attendance').select('*,profiles(full_name),courses(course_name)').order('created_at',{ascending:false});
@@ -145,22 +140,34 @@ async function loadAttendance(){
         table.appendChild(tr);
     });
 }
-async function deleteAttendance(id){if(confirm('Delete attendance?')){await sb.from('attendance').delete().eq('id',id);loadAttendance();}}
+async function deleteAttendance(id){ if(confirm('Delete attendance?')){ await sb.from('attendance').delete().eq('id',id); loadAttendance(); } }
 async function populateStudentSelect(){
     const sel=$('att_student_id'); if(!sel) return;
     const {data:students}=await sb.from('profiles').select('*').eq('role','student');
     sel.innerHTML='';
-    students?.forEach(s=>{const opt=document.createElement('option');opt.value=s.id;opt.innerText=s.full_name;sel.appendChild(opt);});
+    students?.forEach(s=>{ const opt=document.createElement('option'); opt.value=s.id; opt.innerText=s.full_name; sel.appendChild(opt); });
 }
-if($('#addAttendanceForm')) $('addAttendanceForm').addEventListener('submit',async e=>{
+if($('#addAttendanceForm')) $('addAttendanceForm').addEventListener('submit', async e=>{
     e.preventDefault();
     const student_id=$('att_student_id').value,session_type=$('att_session_type').value,course_id=$('att_course_id').value,
-        location=$('att_location').value,date=$('att_date').value,time=$('att_time').value;
+          location=$('att_location').value,date=$('att_date').value,time=$('att_time').value;
     await sb.from('attendance').insert([{student_id,session_type,course_id,location,date,time}]);
-    $('addAttendanceForm').reset();loadAttendance();
+    $('addAttendanceForm').reset(); loadAttendance();
 });
 
-// ---------- EXAMS ----------
+// ---------- AUTO LOCATION BY IP ----------
+async function setAttendanceLocationByIP(){
+    const input = $('att_location'); if(!input) return;
+    try{
+        const res = await fetch('https://ipapi.co/json/');
+        const data = await res.json();
+        input.value = `${data.city}, ${data.region}, ${data.country_name}`;
+    } catch(err){
+        console.warn('Could not fetch location:', err);
+    }
+}
+
+// ---------------- EXAMS ----------------
 async function loadExams(){
     const table=$('examsTable'); if(!table) return;
     const {data:exams}=await sb.from('exams').select('*,courses(course_name)').order('date',{ascending:true});
@@ -172,14 +179,14 @@ async function loadExams(){
         table.appendChild(tr);
     });
 }
-async function deleteExam(id){if(confirm('Delete exam?')){await sb.from('exams').delete().eq('id',id);loadExams();}}
-if($('#addExamForm')) $('addExamForm').addEventListener('submit',async e=>{
+async function deleteExam(id){ if(confirm('Delete exam?')){ await sb.from('exams').delete().eq('id',id); loadExams(); } }
+if($('#addExamForm')) $('addExamForm').addEventListener('submit', async e=>{
     e.preventDefault();
     const course_id=$('exam_course_id').value,title=$('exam_title').value,date=$('exam_date').value,status=$('exam_status').value;
-    await sb.from('exams').insert([{course_id,title,date,status}]);$('addExamForm').reset();loadExams();
+    await sb.from('exams').insert([{course_id,title,date,status}]); $('addExamForm').reset(); loadExams();
 });
 
-// ---------- MESSAGES ----------
+// ---------------- MESSAGES ----------------
 async function loadMessages(){
     const table=$('messagesTable'); if(!table) return;
     const {data:msgs}=await sb.from('messages').select('*,profiles_from:sender(*),profiles_to:recipient(*)').order('created_at',{ascending:false});
@@ -191,16 +198,16 @@ async function loadMessages(){
         table.appendChild(tr);
     });
 }
-if($('#sendMessageForm')) $('sendMessageForm').addEventListener('submit',async e=>{
+if($('#sendMessageForm')) $('sendMessageForm').addEventListener('submit', async e=>{
     e.preventDefault();
     const recipient_email=$('msg_recipient').value,message=$('msg_body').value;
     const {data:recipient}=await sb.from('profiles').select('*').eq('email',recipient_email).single();
-    if(!recipient){alert('Recipient not found');return;}
+    if(!recipient){ alert('Recipient not found'); return; }
     await sb.from('messages').insert([{sender:(await sb.auth.getUser()).data.user.id,recipient:recipient.id,message}]);
-    $('sendMessageForm').reset();loadMessages();
+    $('sendMessageForm').reset(); loadMessages();
 });
 
-// ---------- RESOURCES ----------
+// ---------------- RESOURCES ----------------
 async function loadResources(){
     const table=$('resourcesTable'); if(!table) return;
     const {data:files,error}=await sb.storage.from(RESOURCES_BUCKET).list('',{limit:100,offset:0});
@@ -213,16 +220,16 @@ async function loadResources(){
         table.appendChild(tr);
     });
 }
-if($('#uploadResourceBtn')) $('uploadResourceBtn').addEventListener('click',async ()=>{
-    const file=$('resourceFile').files[0]; if(!file){alert('Select a file'); return;}
+if($('#uploadResourceBtn')) $('uploadResourceBtn').addEventListener('click', async ()=>{
+    const file=$('resourceFile').files[0]; if(!file){ alert('Select a file'); return; }
     const title=$('resourceTitle').value||file.name;
     const {data,error}=await sb.storage.from(RESOURCES_BUCKET).upload(file.name,file,{upsert:true});
-    if(error){alert(error.message);return;}
-    $('resourceFile').value='';$('resourceTitle').value='';loadResources();
+    if(error){ alert(error.message); return; }
+    $('resourceFile').value=''; $('resourceTitle').value=''; loadResources();
 });
-async function deleteResource(name){if(confirm('Delete resource?')){await sb.storage.from(RESOURCES_BUCKET).remove([name]);loadResources();}}
+async function deleteResource(name){ if(confirm('Delete resource?')){ await sb.storage.from(RESOURCES_BUCKET).remove([name]); loadResources(); } }
 
-// ---------- PENDING ----------
+// ---------------- PENDING ----------------
 async function loadPending(){
     const table=$('pendingTable'); if(!table) return;
     const {data:users}=await sb.from('profiles').select('*').eq('approved',false);
@@ -236,16 +243,15 @@ async function loadPending(){
     });
 }
 
-// ---------- INIT ----------
-(async function init(){ 
+// ---------------- INIT ----------------
+(async function init(){
     if($('#dashboard')) loadDashboard();
     if($('#users')) loadUsers();
     if($('#students')) loadStudents();
-    if($('#courses')) {loadCourses(); populateCourseSelects();}
-    if($('#attendance')) {loadAttendance(); populateStudentSelect(); populateCourseSelects();}
+    if($('#courses')) { loadCourses(); populateCourseSelects(); }
+    if($('#attendance')) { loadAttendance(); populateStudentSelect(); populateCourseSelects(); setAttendanceLocationByIP(); }
     if($('#exams')) loadExams();
     if($('#messages')) loadMessages();
     if($('#resources')) loadResources();
     if($('#pending')) loadPending();
 })();
-</script>
