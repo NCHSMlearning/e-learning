@@ -13,51 +13,53 @@
       justify-content: center;
       align-items: center;
       height: 100vh;
+      margin: 0;
     }
     .login-container {
       background: white;
       padding: 40px;
       border-radius: 10px;
-      width: 350px;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+      width: 360px;
+      box-shadow: 0 6px 15px rgba(0,0,0,0.1);
+      text-align: center;
     }
     h2 {
-      text-align: center;
       margin-bottom: 25px;
       color: #003366;
     }
     input {
       width: 100%;
-      padding: 10px;
+      padding: 12px;
       margin: 10px 0;
       border: 1px solid #ccc;
-      border-radius: 5px;
+      border-radius: 6px;
+      font-size: 14px;
     }
     button {
       width: 100%;
       background-color: #003366;
       color: white;
-      padding: 10px;
+      padding: 12px;
       border: none;
-      border-radius: 5px;
+      border-radius: 6px;
       cursor: pointer;
+      font-size: 16px;
     }
     button:hover {
       background-color: #0055b3;
     }
     .link {
-      text-align: center;
       margin-top: 15px;
+      font-size: 14px;
     }
     .link a {
       color: #003366;
       text-decoration: none;
-      font-size: 14px;
     }
     .error {
       color: red;
       font-size: 14px;
-      text-align: center;
+      margin-top: 10px;
     }
   </style>
 </head>
@@ -76,12 +78,9 @@
   </div>
 
   <script>
-    // 🔗 Supabase setup
     const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
-    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: { persistSession: true, autoRefreshToken: true }
-    });
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     const form = document.getElementById("loginForm");
     const errorMsg = document.getElementById("error");
@@ -94,31 +93,25 @@
       const password = document.getElementById("password").value.trim();
 
       try {
-        // 🧩 Sign in user
-        const { data: signInData, error: signInError } = await sb.auth.signInWithPassword({ email, password });
-        if (signInError) throw signInError;
+        const { data: authData, error: authError } = await sb.auth.signInWithPassword({ email, password });
+        if (authError) throw authError;
 
-        if (!signInData.session) {
-          throw new Error("No session returned. Check credentials.");
-        }
-
-        // ✅ Set the session
-        await sb.auth.setSession(signInData.session);
-
-        // Fetch user profile
+        // Fetch profile safely, including superadmin
         const { data: profileData, error: profileError } = await sb
           .from("profiles")
           .select("role, approved")
-          .eq("id", signInData.user.id)
-          .single();
+          .eq("id", authData.user.id)
+          .maybeSingle();  // returns null instead of failing
 
         if (profileError || !profileData) {
-          throw new Error("Profile not found. Contact admin.");
+          errorMsg.textContent = "Profile not found. Contact admin.";
+          return;
         }
 
-        const { role, approved } = profileData;
+        const role = profileData.role;
+        const approved = profileData.approved;
 
-        // 🚦 Redirect based on role and approval
+        // Redirect based on role
         if (role === "superadmin") {
           window.location.href = "superadmin.html";
         } else if (role === "admin") {
@@ -134,8 +127,8 @@
           errorMsg.textContent = "Unknown role. Contact support.";
         }
       } catch (err) {
-        errorMsg.textContent = err.message || "Login failed. Try again.";
         console.error(err);
+        errorMsg.textContent = err.message || "Login failed. Check credentials.";
       }
     });
   </script>
