@@ -3,7 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>NCHSM Super Admin Dashboard — Refactored (fixed)</title>
+  <title>NCHSM Super Admin Dashboard — Attendance Geo + IP + Map</title>
+  <link rel="icon" href="data:;base64,iVBORw0KGgo=" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-sA+e2mYgCkJvY1LkKq0qgq0s7pY8b+7p1mXg9fM2h+M=" crossorigin=""/>
   <style>
     :root{--bg:#F8FAFC;--panel:#fff;--muted:#6B7280;--accent:#3B82F6;--danger:#EF4444;--ok:#16A34A}
     *{box-sizing:border-box}
@@ -30,6 +32,11 @@
     .muted{color:var(--muted)}
     .toast{position:fixed;right:20px;bottom:20px;background:#111;color:#fff;padding:10px 14px;border-radius:8px;opacity:0.95}
     .small{font-size:0.85rem}
+    /* modal map */
+    .modal { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,0.4); z-index: 2000; }
+    .modal .panel { width: 90%; max-width: 900px; height: 80vh; background: white; border-radius: 8px; overflow: hidden; display:flex; flex-direction:column }
+    .modal .panel .heading { padding: 10px 12px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:center }
+    #map { flex:1 }
     @media (max-width:900px){aside{display:none}.app{flex-direction:column}}
   </style>
 </head>
@@ -129,7 +136,9 @@
             <select id="att_course"></select>
             <input id="att_date" type="date" />
             <select id="att_status"><option value="present">present</option><option value="absent">absent</option></select>
-            <button class="btn btn-primary" type="submit">Mark</button>
+            <button class="btn btn-primary" type="submit">Mark (manual)</button>
+            <button id="geoMarkBtn" class="btn btn-ok" type="button">Mark My Attendance (GPS)</button>
+            <button id="viewMapBtn" class="btn" type="button">🗺 View My Attendance Map</button>
           </form>
         </div>
         <table><thead><tr><th>Student</th><th>Course</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead>
@@ -182,20 +191,26 @@
 
   <div id="toast" class="toast" style="display:none"></div>
 
+  <!-- Map modal -->
+  <div id="mapModal" class="modal"><div class="panel"><div class="heading"><div id="mapTitle">Attendance Map</div><div><label style="margin-right:8px"><input id="viewAllToggle" type="checkbox"> View all</label><button id="closeMap" class="btn btn-danger">Close</button></div></div><div id="map"></div></div></div>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-o9N1j7kG8Vbq3x5m3wGk97kJk3s0v1p6b6b7f0b4JAc=" crossorigin=""></script>
   <script>
     // ---------- CONFIG (replace the ANON key with your anon key) ----------
     const SUPABASE_URL = 'https://hzvlgwujzbrzuwyprsjr.supabase.co'; // confirmed
-    const SUPABASE_ANON_KEY = 'REPLACE_WITH_YOUR_ANON_KEY';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
     const RESOURCES_BUCKET = 'resources';
 
     // ---------- State/cache ----------
     window._studentMap = {}; // id -> name
     window._courseMap = {};  // id -> course_name
+    let CURRENT_USER = null; // supabase user object
+    let CURRENT_ROLE = null; // 'super_admin' | 'admin' | 'student' | null
 
     // ---------- UI Helpers ----------
-    function toast(msg, t=3000){ const el = document.getElementById('toast'); el.textContent = msg; el.style.display='block'; clearTimeout(el._t); el._t=setTimeout(()=>el.style.display='none', t); }
+    function toast(msg, t=3500){ const el = document.getElementById('toast'); el.textContent = msg; el.style.display='block'; clearTimeout(el._t); el._t=setTimeout(()=>el.style.display='none', t); }
     function $(id){return document.getElementById(id)}
     function escapeHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 
@@ -212,166 +227,61 @@
     const ROLE_STUDENT = 'student';
 
     function applyRoleUI(role){
-      // define allowed sections per role
       const allSections = ['dashboard','users','students','courses','attendance','exams','messages','resources','pending'];
       const adminAllowed = new Set(['dashboard','students','courses','attendance','exams','messages','resources']);
       const studentAllowed = new Set(['dashboard','students','courses','messages']);
-
-      allSections.forEach(id => {
-        const el = document.getElementById(id);
-        if(!el) return;
-        if(role === ROLE_SUPER) el.style.display = 'block';
-        else if(role === ROLE_ADMIN) el.style.display = adminAllowed.has(id) ? 'block' : 'none';
-        else if(role === ROLE_STUDENT) el.style.display = studentAllowed.has(id) ? 'block' : 'none';
-        else el.style.display = 'none';
-      });
-
-      // nav links
-      document.querySelectorAll('#mainNav a').forEach(a => {
-        const s = a.dataset.section;
-        if(role === ROLE_SUPER) a.style.display = '';
-        else if(role === ROLE_ADMIN) a.style.display = adminAllowed.has(s) ? '' : 'none';
-        else if(role === ROLE_STUDENT) a.style.display = studentAllowed.has(s) ? '' : 'none';
-        else a.style.display = 'none';
-      });
-
-      // restrict create user button: only super_admin or admin
-      const createBtn = document.querySelector('#addUserForm .btn-primary');
-      if(createBtn) createBtn.disabled = !(role === ROLE_SUPER || role === ROLE_ADMIN);
+      allSections.forEach(id => { const el = document.getElementById(id); if(!el) return; if(role === ROLE_SUPER) el.style.display = 'block'; else if(role === ROLE_ADMIN) el.style.display = adminAllowed.has(id) ? 'block' : 'none'; else if(role === ROLE_STUDENT) el.style.display = studentAllowed.has(id) ? 'block' : 'none'; else el.style.display = 'none'; });
+      document.querySelectorAll('#mainNav a').forEach(a => { const s = a.dataset.section; if(role === ROLE_SUPER) a.style.display = ''; else if(role === ROLE_ADMIN) a.style.display = adminAllowed.has(s) ? '' : 'none'; else if(role === ROLE_STUDENT) a.style.display = studentAllowed.has(s) ? '' : 'none'; else a.style.display = 'none'; });
+      const createBtn = document.querySelector('#addUserForm .btn-primary'); if(createBtn) createBtn.disabled = !(role === ROLE_SUPER || role === ROLE_ADMIN);
     }
 
+    // ---------- Helpers for device/ip/geo ----------
+    function getDeviceId(){ let id = localStorage.getItem('nchsm_device_id'); if(!id){ id = 'dev_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8); localStorage.setItem('nchsm_device_id', id); } return id; }
+    async function getPublicIP(){ try{ const r = await fetch('https://api.ipify.org?format=json'); if(!r.ok) throw new Error('ip fetch failed'); const j = await r.json(); return j.ip; }catch(e){ console.warn('getPublicIP', e); return null; } }
+    function getGeoLocation(timeout=10000){ return new Promise((resolve, reject)=>{ if(!navigator.geolocation) return reject(new Error('No geolocation')); const opts = { enableHighAccuracy: true, maximumAge: 0, timeout }; navigator.geolocation.getCurrentPosition(pos=>{ resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude, accuracy: pos.coords.accuracy }); }, err=>{ reject(err); }, opts); }); }
+
     // ---------- Data loaders & helpers ----------
-    async function populateSelects(){
-      // load students and courses and build maps
-      try{
+    async function populateSelects(){ try{
         const [studRes, courseRes] = await Promise.all([
           sb.from('students').select('id,name').order('name',{ascending:true}),
           sb.from('courses').select('id,course_name').order('course_name',{ascending:true})
         ]);
         const students = studRes.data || [];
         const courses = courseRes.data || [];
-
-        // update maps
         window._studentMap = {};
         (students || []).forEach(s => { if(s && s.id!=null) window._studentMap[String(s.id)] = s.name || (s.full_name || ''); });
         window._courseMap = {};
         (courses || []).forEach(c => { if(c && c.id!=null) window._courseMap[String(c.id)] = c.course_name || c.title || ''; });
-
-        // populate select elements
         const studentSelElems = [$('att_student'), $('exam_student')];
         studentSelElems.forEach(sel=>{ if(sel){ sel.innerHTML = '<option value="">-- Select student --</option>'; students.forEach(s => sel.insertAdjacentHTML('beforeend', `<option value="${s.id}">${escapeHtml(s.name)}</option>`)); }});
-
         const courseSelElems = [$('att_course'), $('exam_course'), $('s_course')];
         courseSelElems.forEach(sel=>{ if(sel){ sel.innerHTML = '<option value="">-- Select course --</option>'; courses.forEach(c => sel.insertAdjacentHTML('beforeend', `<option value="${c.id}">${escapeHtml(c.course_name)}</option>`)); }});
-
       }catch(err){ console.error('populateSelects', err); }
     }
 
-    async function refreshAll(){
-      // ensure selects/maps ready first
-      await populateSelects();
-      await Promise.all([loadDashboard(), loadUsers(), loadStudents(), loadCourses(), loadAttendance(), loadExams(), loadMessages(), loadResources(), loadPending()]);
-    }
+    async function refreshAll(){ await populateSelects(); await Promise.all([loadDashboard(), loadUsers(), loadStudents(), loadCourses(), loadAttendance(), loadExams(), loadMessages(), loadResources(), loadPending()]); }
 
-    // Dashboard
-    async function loadDashboard(){ try{
-      const { data: profiles, error } = await sb.from('profiles').select('*'); if(error) throw error;
-      const list = profiles || [];
-      $('totalUsers').textContent = list.length;
-      $('totalAdmins').textContent = list.filter(p=>p.role==='admin' || p.role==='super_admin').length;
-      $('totalStudents').textContent = list.filter(p=>p.role==='student').length;
-      $('totalPending').textContent = list.filter(p=>!p.approved).length;
-    }catch(err){console.error('loadDashboard',err); toast('Dashboard load failed');}}
-
-    // USERS
-    async function loadUsers(){ try{
-      const { data, error } = await sb.from('profiles').select('*').order('created_at',{ascending:false}); if(error) throw error;
-      const tbody = $('usersTable'); tbody.innerHTML = '';
-      if(!data || data.length===0){ tbody.innerHTML = '<tr><td colspan="5" class="muted">No users</td></tr>'; return; }
-      data.forEach(u=>{
-        const id = u.id || '';
-        const row = document.createElement('tr');
-        row.innerHTML = `
-          <td>${escapeHtml(u.full_name||u.name||'')}</td>
-          <td>${escapeHtml(u.email||'')}</td>
-          <td>${escapeHtml(u.role||'')}</td>
-          <td>${u.approved? 'Yes':'No'}</td>
-          <td class="small"></td>`;
-        const actions = row.querySelector('td:last-child');
-        if(!u.approved) actions.insertAdjacentHTML('beforeend', `<button class='btn btn-ok' onclick="approveUser('${id}')">Approve</button>`);
-        actions.insertAdjacentHTML('beforeend', ` <button class='btn btn-danger' onclick="deleteUser('${id}')">Delete</button>`);
-        tbody.appendChild(row);
-      });
-    }catch(err){console.error('loadUsers',err); $('usersTable').innerHTML='<tr><td colspan="5">Error</td></tr>'; toast('Failed loading users');}}
-
-    document.getElementById('addUserForm').addEventListener('submit', async (e)=>{
-      e.preventDefault();
-      const name = $('u_name').value.trim(); const email = $('u_email').value.trim(); const role = $('u_role').value; const password = $('u_password').value || Math.random().toString(36).slice(2,10);
-      if(!name||!email) return toast('Name and email required');
-      try{
-        const { data: signupData, error: signupErr } = await sb.auth.signUp({ email, password });
-        if(signupErr && signupErr.message && !signupErr.message.toLowerCase().includes('already')) throw signupErr;
-        const userId = signupData?.user?.id || null;
-        const profile = { id: userId || undefined, full_name: name, email, role, approved: true };
-        const { error: pErr } = await sb.from('profiles').upsert(profile);
-        if(pErr) throw pErr;
-        toast('User created'); $('addUserForm').reset(); await loadUsers(); await loadDashboard();
-      }catch(err){console.error('create user',err); toast('Create user failed');}
-    });
-
+    // Dashboard / users / students / courses / attendance / exams / messages / resources / pending
+    async function loadDashboard(){ try{ const { data: profiles, error } = await sb.from('profiles').select('*'); if(error) throw error; const list = profiles || []; $('totalUsers').textContent = list.length; $('totalAdmins').textContent = list.filter(p=>p.role==='admin' || p.role==='super_admin').length; $('totalStudents').textContent = list.filter(p=>p.role==='student').length; $('totalPending').textContent = list.filter(p=>!p.approved).length; }catch(err){console.error('loadDashboard',err); toast('Dashboard load failed');}}
+    async function loadUsers(){ try{ const { data, error } = await sb.from('profiles').select('*').order('created_at',{ascending:false}); if(error) throw error; const tbody = $('usersTable'); tbody.innerHTML = ''; if(!data || data.length===0){ tbody.innerHTML = '<tr><td colspan="5" class="muted">No users</td></tr>'; return; } data.forEach(u=>{ const id = u.id || ''; const row = document.createElement('tr'); row.innerHTML = `<td>${escapeHtml(u.full_name||u.name||'')}</td><td>${escapeHtml(u.email||'')}</td><td>${escapeHtml(u.role||'')}</td><td>${u.approved? 'Yes':'No'}</td><td class="small"></td>`; const actions = row.querySelector('td:last-child'); if(!u.approved) actions.insertAdjacentHTML('beforeend', `<button class='btn btn-ok' onclick="approveUser('${id}')">Approve</button>`); actions.insertAdjacentHTML('beforeend', ` <button class='btn btn-danger' onclick="deleteUser('${id}')">Delete</button>`); tbody.appendChild(row); }); }catch(err){console.error('loadUsers',err); $('usersTable').innerHTML='<tr><td colspan="5">Error</td></tr>'; toast('Failed loading users');}}
+    document.getElementById('addUserForm').addEventListener('submit', async (e)=>{ e.preventDefault(); const name = $('u_name').value.trim(); const email = $('u_email').value.trim(); const role = $('u_role').value; const password = $('u_password').value || Math.random().toString(36).slice(2,10); if(!name||!email) return toast('Name and email required'); try{ const { data: signupData, error: signupErr } = await sb.auth.signUp({ email, password }); if(signupErr && signupErr.message && !signupErr.message.toLowerCase().includes('already')) throw signupErr; const userId = signupData?.user?.id || null; const profile = { id: userId || undefined, full_name: name, email, role, approved: true }; const { error: pErr } = await sb.from('profiles').upsert(profile); if(pErr) throw pErr; toast('User created'); $('addUserForm').reset(); await loadUsers(); await loadDashboard(); }catch(err){console.error('create user',err); toast('Create user failed');} });
     window.approveUser = async function(id){ if(!confirm('Approve user?')) return; try{ const { error } = await sb.from('profiles').update({ approved:true }).eq('id', id); if(error) throw error; toast('Approved'); await loadUsers(); await loadPending(); await loadDashboard(); }catch(e){ console.error('approveUser', e); toast('Approve failed'); }}
     window.deleteUser = async function(id){ if(!confirm('Delete profile? This will remove profile but may leave auth user.')) return; try{ const { error } = await sb.from('profiles').delete().eq('id', id); if(error) throw error; toast('Deleted'); await loadUsers(); await loadDashboard(); await loadPending(); }catch(e){ console.error('deleteUser', e); toast('Delete failed'); }}
 
-    // STUDENTS
-    async function loadStudents(){ try{
-      const { data, error } = await sb.from('students').select('*').order('id',{ascending:false}); if(error) throw error;
-      const tbody=$('studentsTable'); tbody.innerHTML=''; if(!data||data.length===0){ tbody.innerHTML='<tr><td colspan="4" class="muted">No students</td></tr>'; return; }
-      data.forEach(s=>{
-        const row=document.createElement('tr');
-        const courseName = window._courseMap[String(s.course_id)] || '';
-        row.innerHTML=`<td>${escapeHtml(s.name||'')}</td><td>${escapeHtml(s.reg_no||'')}</td><td>${escapeHtml(courseName)}</td><td></td>`;
-        row.querySelector('td:last-child').innerHTML=`<button class='btn btn-danger' onclick="deleteStudent('${s.id}')">Delete</button>`;
-        tbody.appendChild(row);
-      });
-    }catch(err){console.error('loadStudents',err); $('studentsTable').innerHTML='<tr><td colspan="4">Error</td></tr>'; toast('Failed loading students');}}
-
+    async function loadStudents(){ try{ const { data, error } = await sb.from('students').select('*').order('id',{ascending:false}); if(error) throw error; const tbody=$('studentsTable'); tbody.innerHTML=''; if(!data||data.length===0){ tbody.innerHTML='<tr><td colspan="4" class="muted">No students</td></tr>'; return; } data.forEach(s=>{ const row=document.createElement('tr'); const courseName = window._courseMap[String(s.course_id)] || ''; row.innerHTML=`<td>${escapeHtml(s.name||'')}</td><td>${escapeHtml(s.reg_no||'')}</td><td>${escapeHtml(courseName)}</td><td></td>`; row.querySelector('td:last-child').innerHTML=`<button class='btn btn-danger' onclick="deleteStudent('${s.id}')">Delete</button>`; tbody.appendChild(row); }); }catch(err){console.error('loadStudents',err); $('studentsTable').innerHTML='<tr><td colspan="4">Error</td></tr>'; toast('Failed loading students');}}
     document.getElementById('addStudentForm').addEventListener('submit', async (e)=>{ e.preventDefault(); const name=$('s_name').value.trim(); const reg=$('s_reg').value.trim(); const courseId=$('s_course').value||null; if(!name) return toast('Name required'); try{ const { error } = await sb.from('students').insert([{ name, reg_no:reg, course_id: courseId }]); if(error) throw error; toast('Student added'); $('addStudentForm').reset(); await populateSelects(); await loadStudents(); }catch(e){ console.error('addStudent', e); toast('Add student failed'); } });
     window.deleteStudent = async function(id){ if(!confirm('Delete student?')) return; try{ const { error } = await sb.from('students').delete().eq('id', id); if(error) throw error; toast('Deleted'); await loadStudents(); }catch(e){ console.error('deleteStudent', e); toast('Delete failed'); }}
 
-    // COURSES
     async function loadCourses(){ try{ const { data, error } = await sb.from('courses').select('*').order('course_name',{ascending:true}); if(error) throw error; const tbody=$('coursesTable'); tbody.innerHTML=''; if(!data||data.length===0){ tbody.innerHTML='<tr><td colspan="3" class="muted">No courses</td></tr>'; return; } data.forEach(c=>{ const row=document.createElement('tr'); row.innerHTML=`<td>${escapeHtml(c.course_name||c.title||'')}</td><td>${escapeHtml(c.code||c.course_code||'')}</td><td></td>`; row.querySelector('td:last-child').innerHTML=`<button class='btn btn-danger' onclick="deleteCourse('${c.id}')">Delete</button>`; tbody.appendChild(row); }); }catch(err){console.error('loadCourses',err); $('coursesTable').innerHTML='<tr><td colspan="3">Error</td></tr>'; toast('Failed loading courses');}}
     document.getElementById('addCourseForm').addEventListener('submit', async e=>{ e.preventDefault(); const title=$('c_title').value.trim(); const code=$('c_code').value.trim(); if(!title) return toast('Title required'); try{ const { error } = await sb.from('courses').insert([{ course_name: title, code }]); if(error) throw error; toast('Course added'); $('addCourseForm').reset(); await populateSelects(); await loadCourses(); }catch(e){ console.error('addCourse', e); toast('Add course failed'); }});
     window.deleteCourse = async function(id){ if(!confirm('Delete course?')) return; try{ const { error } = await sb.from('courses').delete().eq('id', id); if(error) throw error; toast('Deleted'); await populateSelects(); await loadCourses(); }catch(e){ console.error('deleteCourse', e); toast('Delete failed'); }}
 
-    // ATTENDANCE
-    async function loadAttendance(){ try{ const { data, error } = await sb.from('attendance').select('*').order('date',{ascending:false}); if(error) throw error; const tbody=$('attendanceTable'); tbody.innerHTML=''; if(!data||data.length===0){ tbody.innerHTML='<tr><td colspan="5" class="muted">No records</td></tr>'; return; } data.forEach(r=>{ const row=document.createElement('tr'); const studentName = window._studentMap[String(r.student_id)] || r.student_id || ''; const courseName = window._courseMap[String(r.course_id)] || r.course_id || ''; row.innerHTML=`<td>${escapeHtml(studentName)}</td><td>${escapeHtml(courseName)}</td><td>${escapeHtml(r.date||'')}</td><td>${escapeHtml(r.status||'')}</td><td></td>`; row.querySelector('td:last-child').innerHTML=`<button class='btn btn-danger' onclick="deleteAttendance('${r.id}')">Delete</button>`; tbody.appendChild(row); }); }catch(err){console.error('loadAttendance',err); $('attendanceTable').innerHTML='<tr><td colspan="5">Error</td></tr>'; toast('Failed loading attendance');}}
+    async function loadAttendance(){ try{ const { data, error } = await sb.from('attendance').select('*').order('date',{ascending:false}); if(error) throw error; const tbody=$('attendanceTable'); tbody.innerHTML=''; if(!data||data.length===0){ tbody.innerHTML='<tr><td colspan="5" class="muted">No records</td></tr>'; return; } data.forEach(r=>{ const row=document.createElement('tr'); const studentName = window._studentMap[String(r.student_id)] || r.student_id || ''; const courseName = window._courseMap[String(r.course_id)] || r.course_id || ''; row.innerHTML=`<td>${escapeHtml(studentName)}</td><td>${escapeHtml(courseName)}</td><td>${escapeHtml(r.date||r.created_at||'')}</td><td>${escapeHtml(r.status||'')}</td><td></td>`; row.querySelector('td:last-child').innerHTML=`<button class='btn btn-danger' onclick="deleteAttendance('${r.id}')">Delete</button>`; tbody.appendChild(row); }); }catch(err){console.error('loadAttendance',err); $('attendanceTable').innerHTML='<tr><td colspan="5">Error</td></tr>'; toast('Failed loading attendance');}}
     document.getElementById('addAttendanceForm').addEventListener('submit', async e=>{ e.preventDefault(); const student=$('att_student').value; const course=$('att_course').value; const date=$('att_date').value; const status=$('att_status').value; if(!student||!date) return toast('Student and date required'); try{ const { error } = await sb.from('attendance').insert([{ student_id: student, course_id: course, date, status }]); if(error) throw error; toast('Marked'); $('addAttendanceForm').reset(); await loadAttendance(); }catch(e){ console.error('addAttendance', e); toast('Add attendance failed'); }});
-    window.deleteAttendance = async function(id){ if(!confirm('Delete?')) return; try{ const { error } = await sb.from('attendance').delete().eq('id', id); if(error) throw error; toast('Deleted'); await loadAttendance(); }catch(e){ console.error('deleteAttendance', e); toast('Delete failed'); }}
+    window.deleteAttendance = async function(id){ if(!confirm('Delete attendance?')) return; try{ const { error } = await sb.from('attendance').delete().eq('id', id); if(error) throw error; toast('Deleted'); await loadAttendance(); }catch(e){ console.error('deleteAttendance', e); toast('Delete failed'); }}
 
-    // EXAMS (fixed: avoid relying on DB relationship naming; use maps populated earlier)
-    async function loadExams(){
-      try{
-        const { data, error } = await sb.from('exams').select('*').order('id',{ascending:false});
-        if(error) throw error;
-        const tbody = $('examsTable'); tbody.innerHTML = '';
-        if(!data || data.length === 0){ tbody.innerHTML = '<tr><td colspan="4" class="muted">No exams</td></tr>'; return; }
-        data.forEach(x => {
-          const studentName = window._studentMap[String(x.student_id)] || x.student_name || x.student_id || '';
-          const courseName = window._courseMap[String(x.course_id)] || x.course_name || x.course_id || '';
-          const score = (x.score != null) ? x.score : (x.mark != null ? x.mark : '');
-          const id = x.id;
-          const row = document.createElement('tr');
-          row.innerHTML = `
-            <td>${escapeHtml(studentName)}</td>
-            <td>${escapeHtml(courseName)}</td>
-            <td>${escapeHtml(score)}</td>
-            <td></td>`;
-          row.querySelector('td:last-child').innerHTML = `<button class='btn btn-danger' onclick="deleteExam('${id}')">Delete</button>`;
-          tbody.appendChild(row);
-        });
-      }catch(err){ console.error('loadExams', err); $('examsTable').innerHTML = '<tr><td colspan="4">Error</td></tr>'; toast('Failed loading exams'); }
-    }
-
+    // EXAMS
+    async function loadExams(){ try{ const { data, error } = await sb.from('exams').select('*').order('id',{ascending:false}); if(error) throw error; const tbody = $('examsTable'); tbody.innerHTML = ''; if(!data || data.length === 0){ tbody.innerHTML = '<tr><td colspan="4" class="muted">No exams</td></tr>'; return; } data.forEach(x => { const studentName = window._studentMap[String(x.student_id)] || x.student_name || x.student_id || ''; const courseName = window._courseMap[String(x.course_id)] || x.course_name || x.course_id || ''; const score = (x.score != null) ? x.score : (x.mark != null ? x.mark : ''); const id = x.id; const row = document.createElement('tr'); row.innerHTML = `<td>${escapeHtml(studentName)}</td><td>${escapeHtml(courseName)}</td><td>${escapeHtml(score)}</td><td></td>`; row.querySelector('td:last-child').innerHTML = `<button class='btn btn-danger' onclick="deleteExam('${id}')">Delete</button>`; tbody.appendChild(row); }); }catch(err){ console.error('loadExams', err); $('examsTable').innerHTML = '<tr><td colspan="4">Error</td></tr>'; toast('Failed loading exams'); }}
     document.getElementById('addExamForm').addEventListener('submit', async e=>{ e.preventDefault(); const student=$('exam_student').value; const course=$('exam_course').value; const scoreVal=$('exam_score').value; const score = scoreVal !== '' ? Number(scoreVal) : null; if(!student||!course) return toast('Student and course required'); try{ const { error } = await sb.from('exams').insert([{ student_id: student, course_id: course, score }]); if(error) throw error; toast('Exam added'); $('addExamForm').reset(); await loadExams(); }catch(e){ console.error('addExam', e); toast('Add exam failed'); }});
     window.deleteExam = async function(id){ if(!confirm('Delete exam?')) return; try{ const { error } = await sb.from('exams').delete().eq('id', id); if(error) throw error; toast('Deleted'); await loadExams(); }catch(e){ console.error('deleteExam', e); toast('Delete failed'); }}
 
@@ -388,32 +298,103 @@
     // PENDING
     async function loadPending(){ try{ const { data, error } = await sb.from('profiles').select('*').eq('approved', false).order('created_at',{ascending:true}); if(error) throw error; const tbody=$('pendingTable'); tbody.innerHTML=''; if(!data||data.length===0){ tbody.innerHTML='<tr><td colspan="3" class="muted">No pending</td></tr>'; return; } data.forEach(p=>{ const row=document.createElement('tr'); row.innerHTML=`<td>${escapeHtml(p.full_name)}</td><td>${escapeHtml(p.email)}</td><td></td>`; row.querySelector('td:last-child').innerHTML=`<button class='btn btn-ok' onclick="approveUser('${p.id}')">Approve</button> <button class='btn btn-danger' onclick="deleteUser('${p.id}')">Reject</button>`; tbody.appendChild(row); }); }catch(err){console.error('loadPending',err); $('pendingTable').innerHTML='<tr><td colspan="3">Error</td></tr>'; toast('Failed loading pending'); }}
 
-    // ---------- INIT ----------
-    document.getElementById('logoutBtn').addEventListener('click', async ()=>{ try{ await sb.auth.signOut(); localStorage.clear(); window.location.reload(); }catch(e){console.warn(e); window.location.reload(); }});
-
-    async function init(){
+    // ---------- Attendance: geo + ip + device ----------
+    async function hasAlreadyMarkedAttendance({ studentId, ip, deviceId }){
       try{
-        const user = await getSessionUser();
-        let currentRole = null;
-        if(!user){
-          $('signedAs').textContent = 'Not signed in — client anon key in use';
-        } else {
-          $('signedAs').textContent = `Signed in as ${user.email}`;
-          try{
-            const { data: profile, error } = await sb.from('profiles').select('role').eq('id', user.id).maybeSingle();
-            if(!error && profile) currentRole = profile.role || null;
-          }catch(e){ console.warn('fetch profile role', e); }
-        }
-
-        applyRoleUI(currentRole);
-        await refreshAll();
-      }catch(err){console.error('init',err); toast('Init error');}
+        const start = new Date(); start.setHours(0,0,0,0);
+        const end = new Date(start); end.setDate(start.getDate()+1);
+        // build or filter string for Supabase .or
+        const orStr = `ip_address.eq.${ip},device_id.eq.${deviceId}`;
+        const { data, error } = await sb.from('attendance').select('*').eq('student_id', studentId).gte('created_at', start.toISOString()).lt('created_at', end.toISOString()).or(orStr);
+        if(error) { console.warn('hasAlreadyMarkedAttendance error', error); return false; }
+        return (data && data.length > 0);
+      }catch(e){ console.error('hasAlreadyMarkedAttendance', e); return false; }
     }
 
-    // Expose functions used inline
+    async function markAttendanceWithGeo(){
+      try{
+        // determine who is marking
+        const isSuper = (CURRENT_ROLE === ROLE_SUPER);
+        const studentSel = $('att_student');
+        let studentId = studentSel.value;
+        // For student role, enforce their id
+        if(CURRENT_ROLE === ROLE_STUDENT){ studentId = await getProfileStudentIdForUser(CURRENT_USER?.id); if(!studentId) return toast('Student profile not linked'); }
+        if(!studentId) return toast('Select student');
+
+        const deviceId = getDeviceId();
+        const ip = await getPublicIP();
+        // get geolocation
+        let geo = null;
+        try{ geo = await getGeoLocation(15000); }catch(e){ console.warn('geo fail', e); return toast('Enable location and try again'); }
+
+        // check duplicates (only for students, super_admin bypasses)
+        if(!isSuper){ const already = await hasAlreadyMarkedAttendance({ studentId, ip, deviceId }); if(already) return toast('You have already marked attendance today from this device/IP.'); }
+
+        // insert record
+        const record = {
+          student_id: studentId,
+          course_id: $('att_course').value || null,
+          date: new Date().toISOString().slice(0,10),
+          status: $('att_status').value || 'present',
+          latitude: geo.lat,
+          longitude: geo.lon,
+          ip_address: ip,
+          device_id: deviceId,
+          marked_by: CURRENT_ROLE || 'unknown'
+        };
+        const { error } = await sb.from('attendance').insert([record]); if(error) throw error;
+        toast('Attendance recorded'); await loadAttendance();
+      }catch(e){ console.error('markAttendanceWithGeo', e); toast('Failed to mark attendance'); }
+    }
+
+    // helper to find student record by auth user id (assumes profiles->students link)
+    async function getProfileStudentIdForUser(userId){ try{ if(!userId) return null; const { data: profile, error } = await sb.from('profiles').select('id,full_name,email').eq('id', userId).maybeSingle(); if(error || !profile) return null; // try students table to find by email or name
+        const { data: student, error: sErr } = await sb.from('students').select('id').or(`email.eq.${profile.email},name.eq.${profile.full_name}`).maybeSingle(); if(sErr) return null; return student?.id || null; }catch(e){ console.error('getProfileStudentIdForUser', e); return null; } }
+
+    // wire the geo mark button
+    document.getElementById('geoMarkBtn').addEventListener('click', async ()=>{ await markAttendanceWithGeo(); });
+
+    // ---------- Attendance map (Leaflet) ----------
+    let mapInstance = null; let mapMarkers = [];
+    async function showAttendanceMap({ studentId=null, viewAll=false }){
+      try{
+        // open modal
+        $('mapModal').style.display = 'flex';
+        $('viewAllToggle').checked = !!viewAll;
+        // fetch records
+        let query = sb.from('attendance').select('*').order('created_at',{ascending:false}).limit(100);
+        if(!viewAll && studentId) query = query.eq('student_id', studentId);
+        const { data, error } = await query;
+        if(error) throw error;
+        const points = (data || []).filter(r => r.latitude != null && r.longitude != null);
+        // init map
+        if(!mapInstance){ mapInstance = L.map('map'); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors' }).addTo(mapInstance); }
+        // clear markers
+        mapMarkers.forEach(m => mapInstance.removeLayer(m)); mapMarkers = [];
+        if(points.length === 0){ mapInstance.setView([0,0],2); toast('No geo points to display'); return; }
+        const bounds = [];
+        points.forEach(p => { const m = L.marker([p.latitude, p.longitude]); const when = new Date(p.created_at || p.date).toLocaleString(); const popup = `<b>${escapeHtml((window._studentMap[String(p.student_id)]||p.student_id||''))}</b><br/>${when}<br/>IP: ${escapeHtml(p.ip_address||'')}<br/>Device: ${escapeHtml((p.device_id||'').slice(0,10))}`; m.bindPopup(popup); m.addTo(mapInstance); mapMarkers.push(m); bounds.push([p.latitude, p.longitude]); });
+        mapInstance.fitBounds(bounds, { padding: [40,40] });
+      }catch(e){ console.error('showAttendanceMap', e); toast('Failed to load map'); }
+    }
+    // modal controls
+    $('closeMap').addEventListener('click', ()=>{ $('mapModal').style.display='none'; });
+    $('viewAllToggle').addEventListener('change', async ()=>{ const all = $('viewAllToggle').checked; if(all && CURRENT_ROLE !== ROLE_SUPER){ toast('Only Super Admin can view all'); $('viewAllToggle').checked = false; return; } const studentId = (CURRENT_ROLE===ROLE_STUDENT) ? await getProfileStudentIdForUser(CURRENT_USER?.id) : $('att_student').value; await showAttendanceMap({ studentId: all ? null : studentId, viewAll: all }); });
+    $('viewMapBtn').addEventListener('click', async ()=>{ const studentId = (CURRENT_ROLE===ROLE_STUDENT) ? await getProfileStudentIdForUser(CURRENT_USER?.id) : $('att_student').value; await showAttendanceMap({ studentId, viewAll: false }); });
+
+    // ---------- Init ----------
+    document.getElementById('logoutBtn').addEventListener('click', async ()=>{ try{ await sb.auth.signOut(); localStorage.clear(); window.location.reload(); }catch(e){console.warn(e); window.location.reload(); }});
+
+    async function init(){ try{ CURRENT_USER = await getSessionUser(); if(!CURRENT_USER){ $('signedAs').textContent = 'Not signed in — client anon key in use'; } else { $('signedAs').textContent = `Signed in as ${CURRENT_USER.email}`; try{ const { data: profile } = await sb.from('profiles').select('role').eq('id', CURRENT_USER.id).maybeSingle(); CURRENT_ROLE = profile?.role || null; }catch(e){ console.warn('fetch role', e); } }
+        applyRoleUI(CURRENT_ROLE);
+        await refreshAll();
+        // if student, lock att_student select to their student id (if linked)
+        if(CURRENT_ROLE === ROLE_STUDENT){ const sid = await getProfileStudentIdForUser(CURRENT_USER?.id); if(sid && $('att_student')){ $('att_student').value = sid; $('att_student').disabled = true; } }
+      }catch(err){console.error('init',err); toast('Init error');} }
+
+    // expose some functions for inline onclicks
     window.loadUsers = loadUsers; window.loadStudents = loadStudents; window.loadCourses = loadCourses; window.loadAttendance = loadAttendance; window.loadExams = loadExams; window.loadMessages = loadMessages; window.loadResources = loadResources; window.loadPending = loadPending;
 
-    // boot
     init();
   </script>
 </body>
