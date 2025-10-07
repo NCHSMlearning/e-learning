@@ -8,7 +8,7 @@
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap"></noscript>
     
     <style>
-        /* CSS styles remain the same as provided, adding new elements */
+        /* CSS styles */
         body { margin: 0; font-family: 'Poppins', sans-serif; background-color: #F8FAFC; }
         .container { display: flex; min-height: 100vh; }
 
@@ -50,9 +50,12 @@
             border-radius: 12px;
             margin-bottom: 20px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
         }
         .check-in-controls label {
-            margin-right: 15px;
             font-weight: 600;
         }
         .check-in-controls select,
@@ -76,6 +79,7 @@
             margin-top: 15px;
             font-style: italic;
             color: #1E293B;
+            width: 100%; /* Take up full width below controls */
         }
     </style>
 </head>
@@ -105,13 +109,32 @@
             </header>
 
             <section id="dashboard" class="tab-content active">
-                </section>
+                <div class="cards">
+                    <div class="card" onclick="showTab('profile')"><h3>My Profile</h3></div>
+                    <div class="card" onclick="showTab('courses')"><h3>My Courses</h3></div>
+                    <div class="card" onclick="showTab('attendance')"><h3>Attendance</h3></div>
+                    <div class="card" onclick="showTab('cats')"><h3>CATS/Exams</h3></div>
+                </div>
+            </section>
 
             <section id="profile" class="tab-content">
-                </section>
+                <h2>My Profile</h2>
+                <div id="profile-info">
+                    <p><strong>Name:</strong> <span id="student-name">...loading...</span></p>
+                    <p><strong>Email:</strong> <span id="student-email">...loading...</span></p>
+                    <p><strong>Phone:</strong> <span id="student-phone">...loading...</span></p>
+                </div>
+            </section>
 
             <section id="courses" class="tab-content">
-                </section>
+                <h2>My Courses (Real-Time)</h2>
+                <table>
+                    <thead><tr><th>Course Name</th><th>Status</th></tr></thead>
+                    <tbody id="courses-table">
+                        <tr><td colspan="2">Loading courses...</td></tr>
+                    </tbody>
+                </table>
+            </section>
 
             <section id="attendance" class="tab-content">
                 <h2>Daily Attendance Check-in</h2>
@@ -128,7 +151,7 @@
                     <p id="geo-message">Click "Check In Now" to submit your attendance and location.</p>
                 </div>
 
-                <h2>Attendance Records (Real-Time)</h2>
+                <h2>Past Attendance Records (Old Table)</h2>
                 <table>
                     <thead><tr><th>Course/Rotation</th><th>Type</th><th>Date</th><th>Status</th></tr></thead>
                     <tbody id="attendance-table">
@@ -136,7 +159,7 @@
                     </tbody>
                 </table>
 
-                <h3>Geo Attendance History</h3>
+                <h3>Geo Attendance History (Check-in Logs)</h3>
                 <table>
                     <thead><tr><th>Time</th><th>Session Type</th><th>Location (Lat, Long)</th><th>Accuracy (m)</th><th>Verified by Admin</th></tr></thead>
                     <tbody id="geo-attendance-history">
@@ -146,13 +169,28 @@
             </section>
 
             <section id="cats" class="tab-content">
-                </section>
+                <h2>CATS / Exams</h2>
+                <table>
+                    <thead><tr><th>Exam Name</th><th>Date</th><th>Score</th></tr></thead>
+                    <tbody id="exams-table">
+                        <tr><td colspan="3">Loading exam results...</td></tr>
+                    </tbody>
+                </table>
+            </section>
 
             <section id="resources" class="tab-content">
-                </section>
+                <h2>Learning Resources (Real-Time)</h2>
+                <div id="resources-list">Loading resources...</div>
+            </section>
 
             <section id="messages" class="tab-content">
-                </section>
+                <h2>Message Admin / Instructor</h2>
+                <form id="message-form">
+                    <textarea placeholder="Write your message..." required></textarea>
+                    <button type="submit">Send</button>
+                </form>
+                <div id="messages-list"></div>
+            </section>
         </main>
     </div>
 
@@ -168,42 +206,185 @@
         let currentUserId = null; 
         const geoMessage = document.getElementById('geo-message');
         const checkInButton = document.getElementById('check-in-button');
+        
+        // =========================================================================
+        // 2. UI AND NAVIGATION LOGIC
+        // =========================================================================
+        const navLinks = document.querySelectorAll('.nav a');
+        const tabs = document.querySelectorAll('.tab-content');
 
-        // [ ... UI and Navigation Logic (showTab, logout) remains the same ... ]
+        function showTab(tabId) {
+            navLinks.forEach(l => l.classList.remove('active'));
+            const activeLink = document.querySelector(`.nav a[data-tab="${tabId}"]`);
+            if(activeLink) activeLink.classList.add('active');
+
+            tabs.forEach(tab => tab.classList.remove('active'));
+            const activeTab = document.getElementById(tabId);
+            if(activeTab) activeTab.classList.add('active');
+        }
+
+        navLinks.forEach(link => {
+            link.addEventListener('click', e => {
+                e.preventDefault();
+                showTab(link.dataset.tab);
+            });
+        });
+
+        async function logout() {
+            sb.realtime.channels.forEach(channel => sb.removeChannel(channel));
+            await sb.auth.signOut();
+            window.location.href = "login.html"; 
+        }
 
         // =========================================================================
-        // 2. GEOLOCATION AND CHECK-IN LOGIC (NEW)
+        // 3. REALTIME HANDLERS
+        // =========================================================================
+        
+        function handleCoursesUpdate(payload) { loadCourses(); }
+        function handleResourcesUpdate(payload) { loadResources(); }
+        function handleAttendanceUpdate(payload) { if (currentUserId) { loadAttendance(currentUserId); } }
+        function handleGeoHistoryUpdate(payload) { if (currentUserId) { loadGeoAttendanceHistory(currentUserId); } }
+
+        async function subscribeToRealtimeChannels(userId) {
+            // Unsubscribe existing channels first (to prevent duplicate listeners)
+            sb.realtime.channels.forEach(channel => sb.removeChannel(channel));
+            
+            // 1. Courses Subscription
+            sb.channel('public:courses')
+              .on('postgres_changes', { event: '*', schema: 'public', table: 'courses' }, handleCoursesUpdate)
+              .subscribe();
+
+            // 2. Resources Subscription
+            sb.channel('public:resources')
+              .on('postgres_changes', { event: '*', schema: 'public', table: 'resources' }, handleResourcesUpdate)
+              .subscribe();
+
+            // 3. Attendance Subscription (Old Table)
+            sb.channel(`attendance:user:${userId}`)
+              .on('postgres_changes', 
+                  { event: '*', schema: 'public', table: 'attendance', filter: `student_id=eq.${userId}` }, 
+                  handleAttendanceUpdate
+              )
+              .subscribe();
+            
+            // 4. Geo Attendance History Subscription (New Table)
+            sb.channel(`geo_attendance:user:${userId}`)
+              .on('postgres_changes', 
+                  { event: '*', schema: 'public', table: 'geo_attendance_logs', filter: `student_id=eq.${userId}` }, 
+                  handleGeoHistoryUpdate
+              )
+              .subscribe();
+        }
+        
+        // =========================================================================
+        // 4. DATA FETCHING
         // =========================================================================
 
-        // The main function to handle the geolocation check-in process
+        async function loadProfile(userId) {
+            const { data: profile, error: profileError } = await sb
+                .from('profiles')
+                .select('full_name, email, phone')
+                .eq('id', userId)
+                .single();
+
+            if (profileError) {
+                console.error("Profile Fetch Error:", profileError);
+                document.getElementById('student-name').textContent = 'Error: Profile Blocked';
+                return;
+            }
+
+            const firstName = profile.full_name ? profile.full_name.split(' ')[0] : 'Student';
+            document.querySelector('header h1').textContent = `Welcome, ${firstName}!`;
+            document.getElementById('student-name').textContent = profile.full_name || 'N/A';
+            document.getElementById('student-email').textContent = profile.email || 'N/A';
+            document.getElementById('student-phone').textContent = profile.phone || 'N/A';
+        }
+
+        async function loadCourses() {
+            const { data, error } = await sb.from('courses').select('course_name, status');
+            const table = document.getElementById('courses-table');
+            if (error) {
+                table.innerHTML = `<tr><td colspan="2" style="color: red;">Error loading courses: Access Denied.</td></tr>`;
+                return;
+            }
+            table.innerHTML = (data || []).map(c => `<tr><td>${c.course_name}</td><td>Active</td></tr>`).join('');
+        }
+
+        async function loadAttendance(userId) {
+            const { data, error } = await sb.from('attendance').select('course_or_rotation, session_type, date, status').eq('student_id', userId);
+            const table = document.getElementById('attendance-table');
+            if (error) {
+                table.innerHTML = `<tr><td colspan="4" style="color: red;">Error loading attendance: Access Denied.</td></tr>`;
+                return;
+            }
+            table.innerHTML = (data || []).map(a => `
+                <tr>
+                    <td>${a.course_or_rotation}</td>
+                    <td>${a.session_type}</td>
+                    <td>${a.date}</td>
+                    <td>${a.status || 'Present'}</td>
+                </tr>`).join('');
+        }
+
+        async function loadResources() {
+            const { data, error } = await sb.from('resources').select('file_url, file_name');
+            const list = document.getElementById('resources-list');
+            if (error) {
+                list.innerHTML = `<p style="color: red;">Error loading resources: Access Denied.</p>`;
+                return;
+            }
+            list.innerHTML = (data || []).map(r => `<p><a href="${r.file_url}" target="_blank">${r.file_name}</a></p>`).join('');
+        }
+        
+        async function loadGeoAttendanceHistory(userId) {
+            const { data, error } = await sb
+                .from('geo_attendance_logs')
+                .select('check_in_time, session_type, latitude, longitude, accuracy_meters, is_verified')
+                .eq('student_id', userId)
+                .order('check_in_time', { ascending: false });
+
+            const table = document.getElementById('geo-attendance-history');
+            
+            if (error) {
+                table.innerHTML = `<tr><td colspan="5" style="color: red;">Error loading Geo History: Access Denied.</td></tr>`;
+                return;
+            }
+
+            table.innerHTML = (data || []).map(a => `
+                <tr>
+                    <td>${new Date(a.check_in_time).toLocaleString()}</td>
+                    <td>${a.session_type}</td>
+                    <td>${a.latitude.toFixed(6)}, ${a.longitude.toFixed(6)}</td>
+                    <td>${a.accuracy_meters.toFixed(2)}</td>
+                    <td>${a.is_verified ? 'Yes (Verified)' : 'No (Pending)'}</td>
+                </tr>`).join('');
+        }
+        
+        // =========================================================================
+        // 5. GEOLOCATION AND CHECK-IN LOGIC
+        // =========================================================================
+
         function geoCheckIn() {
-            if (!currentUserId) {
-                geoMessage.textContent = "Error: User not logged in.";
-                return;
+            if (!currentUserId) { 
+                geoMessage.textContent = "Error: User not logged in."; 
+                return; 
             }
-
-            if (!navigator.geolocation) {
-                geoMessage.textContent = "Error: Geolocation is not supported by your browser.";
-                return;
+            if (!navigator.geolocation) { 
+                geoMessage.textContent = "Error: Geolocation is not supported by your browser."; 
+                return; 
             }
-
+            
             const sessionType = document.getElementById('session-type').value;
             checkInButton.disabled = true;
             geoMessage.textContent = `Requesting location for ${sessionType}... Please allow permission.`;
 
-            // Request high accuracy location from the browser/device
             navigator.geolocation.getCurrentPosition(
                 (position) => {
-                    // SUCCESS CALLBACK: Location obtained
                     const { latitude, longitude, accuracy } = position.coords;
-                    
                     geoMessage.textContent = `Location acquired. Accuracy: ${accuracy.toFixed(2)} meters. Submitting...`;
-
-                    // Send the data to Supabase
                     submitGeoAttendance(sessionType, latitude, longitude, accuracy);
                 },
                 (error) => {
-                    // ERROR CALLBACK: Failed to get location
                     checkInButton.disabled = false;
                     switch (error.code) {
                         case error.PERMISSION_DENIED:
@@ -223,13 +404,12 @@
                 },
                 {
                     enableHighAccuracy: true,
-                    timeout: 10000, // 10 seconds
-                    maximumAge: 0 // Do not use cached position
+                    timeout: 10000,
+                    maximumAge: 0
                 }
             );
         }
 
-        // Supabase submission function
         async function submitGeoAttendance(sessionType, lat, long, accuracy) {
             const { error } = await sb
                 .from('geo_attendance_logs')
@@ -248,91 +428,45 @@
                 console.error("Supabase Geo-Check-in Error:", error);
             } else {
                 geoMessage.textContent = `Check-in successful! Session: ${sessionType} at ${new Date().toLocaleTimeString()}. Location sent to Admin.`;
-                // Refresh the history table to show the new entry
-                loadGeoAttendanceHistory(currentUserId);
-            }
-        }
-        
-        // =========================================================================
-        // 3. NEW DATA FETCHING: GEO ATTENDANCE HISTORY
-        // =========================================================================
-
-        async function loadGeoAttendanceHistory(userId) {
-            const { data, error } = await sb
-                .from('geo_attendance_logs')
-                .select('check_in_time, session_type, latitude, longitude, accuracy_meters, is_verified')
-                .eq('student_id', userId)
-                .order('check_in_time', { ascending: false });
-
-            const table = document.getElementById('geo-attendance-history');
-            
-            if (error) {
-                console.error("Geo History RLS Error:", error);
-                table.innerHTML = `<tr><td colspan="5" style="color: red;">Error loading Geo History: Access Denied.</td></tr>`;
-                return;
-            }
-
-            table.innerHTML = (data || []).map(a => `
-                <tr>
-                    <td>${new Date(a.check_in_time).toLocaleString()}</td>
-                    <td>${a.session_type}</td>
-                    <td>${a.latitude.toFixed(6)}, ${a.longitude.toFixed(6)}</td>
-                    <td>${a.accuracy_meters.toFixed(2)}</td>
-                    <td>${a.is_verified ? 'Yes (Verified)' : 'No (Pending)'}</td>
-                </tr>`).join('');
-        }
-        
-        // =========================================================================
-        // 4. REALTIME HANDLERS AND INITIALIZATION (UPDATED)
-        // =========================================================================
-
-        // [ ... Existing handleCoursesUpdate, handleResourcesUpdate ... ]
-
-        // New Handler for Geo History changes
-        function handleGeoHistoryUpdate(payload) {
-            console.log('Realtime Geo Attendance Update:', payload.eventType);
-            if (currentUserId) {
-                // If RLS is set correctly, this only refreshes the current user's history
                 loadGeoAttendanceHistory(currentUserId);
             }
         }
 
-        async function subscribeToRealtimeChannels(userId) {
-            // [ ... Existing Subscriptions for Courses, Resources, Attendance (The old table) ... ]
-            
-            // New: Geo Attendance History Subscription
-            sb.channel(`geo_attendance:user:${userId}`)
-              .on('postgres_changes', 
-                  { event: '*', schema: 'public', table: 'geo_attendance_logs', filter: `student_id=eq.${userId}` }, 
-                  handleGeoHistoryUpdate
-              )
-              .subscribe();
-        }
+        // =========================================================================
+        // 6. ROBUST INITIALIZATION SEQUENCE (SESSION FIX)
+        // =========================================================================
 
-        async function initializeDashboard() {
-            // 1. Check Session 
-            const { data: { user }, error: userError } = await sb.auth.getUser();
+        async function loadDashboardData(userId) {
+            // Set global variable
+            currentUserId = userId; 
 
-            if (userError || !user) {
-                console.warn("No active session found. Redirecting to login.");
-                return window.location.href = "login.html";
-            }
-            
-            currentUserId = user.id; 
-
-            // 2. Load initial data
+            // 1. Load initial data
             loadProfile(currentUserId);
             loadCourses();
-            loadAttendance(currentUserId); // Old attendance table
-            loadGeoAttendanceHistory(currentUserId); // NEW Geo table history
+            loadAttendance(currentUserId);
+            loadGeoAttendanceHistory(currentUserId);
             loadResources();
             
-            // 3. Start Realtime subscriptions
+            // 2. Start Realtime subscriptions
             subscribeToRealtimeChannels(currentUserId);
         }
 
-        // Init
-        document.addEventListener('DOMContentLoaded', initializeDashboard);
+        // The robust session listener
+        sb.auth.onAuthStateChange((event, session) => {
+            if (event === 'SIGNED_IN' && session) {
+                // User is successfully signed in.
+                loadDashboardData(session.user.id);
+            } else if (event === 'SIGNED_OUT') {
+                // User explicitly signed out.
+                window.location.href = "login.html";
+            } else if (event === 'INITIAL_SESSION' && session) {
+                // Page loaded and a valid session was found in local storage.
+                 loadDashboardData(session.user.id);
+            } else if (event === 'INITIAL_SESSION' && !session) {
+                // Page loaded and NO valid session was found. Redirect.
+                window.location.href = "login.html";
+            }
+        });
     </script>
 </body>
 </html>
