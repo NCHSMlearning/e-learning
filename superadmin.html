@@ -118,7 +118,9 @@
                 <h2>Super Admin</h2> </div>
             <ul class="nav" id="mainNav">
                 <li><a href="#" data-tab="dashboard" class="active">Dashboard</a></li>
-                <li><a href="#" data-tab="users">Manage Users</a></li> <li><a href="#" data-tab="pending">Pending Approvals</a></li> <li><a href="#" data-tab="students">Students</a></li>
+                <li><a href="#" data-tab="users">Manage Users</a></li> 
+                <li><a href="#" data-tab="pending">Pending Approvals</a></li> 
+                <li><a href="#" data-tab="students">Students</a></li>
                 <li><a href="#" data-tab="courses">Courses</a></li>
                 <li><a href="#" data-tab="attendance">Attendance</a></li>
                 <li><a href="#" data-tab="cats">CATS/Exams</a></li>
@@ -291,6 +293,7 @@
          ***********************************/
 
         // !!! IMPORTANT: CHECK YOUR KEYS AND URL !!!
+        // NOTE: If you are getting errors, ensure these keys are up-to-date and correct.
         const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
         const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -509,6 +512,7 @@
                 return;
             }
             
+            // This is the correct Supabase Client UPDATE syntax
             const { error } = await sb.from('profiles').update({ role: newRole }).eq('id', id);
             if (error) return alert('Error updating role: ' + error.message);
             alert('Role updated successfully.');
@@ -564,7 +568,7 @@
         /*******************
          * Students Tab
          *******************/
-        // Add Student Form (unchanged from Admin logic)
+        // Add Student Form
         $('add-student-form').addEventListener('submit', async e => {
             e.preventDefault();
             const name = $('student-name').value.trim();
@@ -600,7 +604,7 @@
             }
         });
 
-        // Load Students List (filtered to only show students)
+        // Load Students List
         async function loadStudents() {
             const tbody = $('students-table');
             tbody.innerHTML = '<tr><td colspan="6">Loading students...</td></tr>';
@@ -690,7 +694,7 @@
          * Attendance Tab
          *******************/
 
-        // Function to Mark Attendance (Geo Check-in) - FIX APPLIED HERE
+        // Function to Mark Attendance (Geo Check-in)
         async function markMyAttendance() {
             if (!currentUserProfile) {
                 alert('User not authenticated. Please log in again.');
@@ -707,7 +711,7 @@
                 userLng = coords.longitude.toFixed(8);
                 accuracy = coords.accuracy;
 
-                // 2. Get Location Name via Reverse Geocoding (AWAIT THIS)
+                // 2. Get Location Name via Reverse Geocoding
                 locationName = await reverseGeocode(userLat, userLng);
 
             } catch (error) {
@@ -715,12 +719,9 @@
                 alert('Geolocation failed: ' + error + '. Attendance will be logged with limited location data.');
             }
             
-            // 3. Get IP Address (AWAIT THIS)
+            // 3. Get IP Address
             ipAddress = await getIPAddress();
             
-            // Log for debugging
-            console.log(`Check-in attempt: Lat=${userLat}, Lng=${userLng}, Location=${locationName}, IP=${ipAddress}, Device=${deviceId}`);
-
             // 4. Construct Payload and Insert
             const attendanceData = {
                 student_id: student_id,
@@ -748,30 +749,36 @@
             }
         }
 
-        // Load Attendance Records - FIX APPLIED HERE
+        // Load Attendance Records (FIXED with the correct foreign key name)
         async function loadAttendance() {
             const tbody = $('attendance-table');
             tbody.innerHTML = '<tr><td colspan="6">Loading attendance records...</td></tr>';
 
-            // FIX: Using the correct foreign key path and ordering
+            // FINAL FIX: Using the verified Foreign Key name 'fk_student_profile'
+            const FOREIGN_KEY_NAME = 'fk_student_profile';
+            
             const { data, error } = await sb
                 .from('geo_attendance_logs')
                 .select(`
-                    *,
-                    profiles!geo_attendance_logs_student_id_fkey(full_name, email)
+                    id, session_type, check_in_time, location_name, address_snapshot,
+                    is_verified, latitude, longitude, accuracy_meters,
+                    // The correct join syntax using the explicit foreign key name
+                    student:profiles!${FOREIGN_KEY_NAME}(full_name, email) 
                 `)
                 .order('check_in_time', { ascending: false })
                 .limit(50); 
 
             if (error) {
-                tbody.innerHTML = `<tr><td colspan="6" style="color:red;">Error loading attendance: ${error.message} (Check RLS/Foreign Key name)</td></tr>`;
-                console.error(error);
+                // If error occurs here, check RLS SELECT policy on 'profiles' table
+                tbody.innerHTML = `<tr><td colspan="6" style="color:red;">Error loading attendance: ${error.message} (Check RLS on 'profiles')</td></tr>`;
+                console.error("Supabase Query Error:", error);
                 return;
             }
             
             tbody.innerHTML = '';
             data.forEach(log => {
-                const studentName = log.profiles ? escapeHtml(log.profiles.full_name) : 'N/A';
+                // NOTE: Accessing the joined data via 'log.student'
+                const studentName = log.student ? escapeHtml(log.student.full_name) : 'N/A';
                 const checkTime = new Date(log.check_in_time).toLocaleTimeString('en-US');
                 const checkDate = new Date(log.check_in_time).toLocaleDateString('en-US');
 
@@ -779,7 +786,7 @@
                 const locationDisplay = escapeHtml(log.location_name || log.address_snapshot || 'Manual/No Geo Log');
                 
                 // Geo Button
-                const hasGeo = log.latitude && log.longitude;
+                const hasGeo = log.latitude && log.longitude && (log.latitude != 0 || log.longitude != 0);
                 const geoButton = hasGeo ? `<button class="btn btn-map" onclick="showMap('${log.latitude}', '${log.longitude}', '${locationDisplay}', '${log.accuracy_meters}')">View Map</button>` : 'N/A';
 
                 tbody.innerHTML += `<tr>
@@ -835,7 +842,7 @@
             loadDashboardData();
         }
 
-        // Handle Manual Attendance Form Submission (Not geo-related, but completed here)
+        // Handle Manual Attendance Form Submission
         $('manual-attendance-form').addEventListener('submit', async e => {
             e.preventDefault();
             
@@ -921,10 +928,10 @@
         /*******************
          * CATS, Messages, Resources (Placeholders)
          *******************/
-        // These functions are placeholders and need implementation, but are included for completeness
-        async function loadExams() { /* load exams implementation */ }
-        async function loadMessages() { /* load messages implementation */ }
-        async function loadResources() { /* load resources implementation */ }
+        // These need implementation!
+        async function loadExams() { /* Implement exam loading */ }
+        async function loadMessages() { /* Implement message loading */ }
+        async function loadResources() { /* Implement resource loading from storage */ }
         async function uploadResource() { alert('Resource upload logic not yet implemented.'); }
 
         
