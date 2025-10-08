@@ -240,12 +240,7 @@
                     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password });
                     
                     if (authError || !authData.user) {
-                        // Display specific error for Invalid Key if applicable, otherwise display Auth error
-                        if (authError && authError.message && authError.message.includes('Invalid API Key')) {
-                             errorMsg.innerText = 'Login failed: Critical API key error. Please contact the administrator.';
-                        } else {
-                            errorMsg.innerText = authError?.message || 'Login failed: Check your username and password.';
-                        }
+                        errorMsg.innerText = authError?.message || 'Login failed: Check your username and password.';
                         loginButton.disabled = false;
                         return;
                     }
@@ -255,25 +250,34 @@
                     // 2. GET ROLE AND CRITICAL APPROVAL STATUS
                     const { data: profile, error: profileError } = await supabase
                         .from('profiles')
-                        .select('role, approved') // Fetching 'approved' status
+                        .select('role, approved') 
                         .eq('id', userId)
                         .single();
 
-                    if (profileError || !profile || !profile.role) {
-                        errorMsg.innerText = 'Login successful, but user profile data is incomplete. Contact system admin.';
-                        console.error("Profile Error:", profileError);
+                    if (profileError) {
+                        errorMsg.innerText = 'Login failed: Profile access denied. Check database RLS.';
+                        console.error("Profile Retrieval Error:", profileError);
+                        await supabase.auth.signOut();
                         loginButton.disabled = false;
-                        // Sign out the user, as the session is valid but profile is broken
-                        await supabase.auth.signOut(); 
                         return;
                     }
-
-                    // --- CRITICAL SECURITY CHECK: BLOCK UNAPPROVED USER ---
-                    if (profile.approved === false) {
+                    
+                    if (!profile) {
+                        errorMsg.innerText = 'Login failed: User profile missing. Please contact system admin.';
+                        await supabase.auth.signOut();
+                        loginButton.disabled = false;
+                        return;
+                    }
+                    
+                    // --- CRITICAL SECURITY CHECK: HARDENED ---
+                    // Blocks if 'approved' is false, null, undefined, or anything other than explicitly true.
+                    if (profile.approved !== true) {
+                        console.warn("[SECURITY BLOCKED] Unapproved user attempted login. Status:", profile.approved);
+                        
                         // 1. Block access message
                         errorMsg.innerText = 'Login failed: Your account is pending approval from an administrator.';
                         
-                        // 2. Destroy the active session so they can't access any other pages
+                        // 2. Destroy the active session 
                         await supabase.auth.signOut(); 
                         
                         loginButton.disabled = false;
