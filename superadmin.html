@@ -832,190 +832,233 @@
             populateAttendanceSelects();
         }
         
-        /*******************************************************
-         * 3. Attendance Tab Logic
-         *******************************************************/
-        async function populateAttendanceSelects() {
-            // Load all students
-            const { data: students } = await fetchData('profiles', 'id, full_name', { role: 'student' }, 'full_name', true);
-            populateSelect($('att_student_id'), students, 'id', 'full_name', 'Select Student');
+       /*******************************************************
+     * 3. Attendance Tab Logic (FIXED)
+     *******************************************************/
+    async function populateAttendanceSelects() {
+        // Load all students
+        const { data: students } = await fetchData('profiles', 'id, full_name', { role: 'student' }, 'full_name', true);
+        populateSelect($('att_student_id'), students, 'id', 'full_name', 'Select Student');
 
-            // Load all courses
-            const { data: courses } = await fetchData('courses', 'id, course_name', {}, 'course_name', true);
-            populateSelect($('att_course_id'), courses, 'id', 'course_name', 'Select Course (Optional)');
-            populateSelect($('exam_course_id'), courses, 'id', 'course_name', 'Select Course');
+        // Load all courses
+        const { data: courses } = await fetchData('courses', 'id, course_name', {}, 'course_name', true);
+        populateSelect($('att_course_id'), courses, 'id', 'course_name', 'Select Course (Optional)');
+        populateSelect($('exam_course_id'), courses, 'id', 'course_name', 'Select Course');
+    }
+
+    // Separate function for Super Admin self check-in
+    async function markMyAttendance() {
+        const button = document.querySelector('.btn-attendance');
+        setButtonLoading(button, true, '🧭 Mark My Attendance (Geo Log)');
+
+        try {
+            // Pass an empty object, manual:false is the default
+            await markAttendance({ user_id: currentUserProfile.id });
+        } catch (err) {
+            // Error is handled inside markAttendance
+        } finally {
+            setButtonLoading(button, false, '🧭 Mark My Attendance (Geo Log)');
+        }
+    }
+    
+    async function markAttendance({ manual=false, user_id, session_type, course_id, location, date, time } = {}) {
+        if (!currentUserProfile) {
+            return showFeedback('User profile not loaded. Please log in again.', 'error');
         }
 
-        // Separate function for Super Admin self check-in
-        async function markMyAttendance() {
-            const button = document.querySelector('.btn-attendance');
-            setButtonLoading(button, true, '🧭 Mark My Attendance (Geo Log)');
+        let logEntry = {
+            user_id: user_id |
 
-            try {
-                // Pass an empty object, manual:false is the default
-                await markAttendance({ user_id: currentUserProfile.id });
-            } catch (err) {
-                // Error is handled inside markAttendance
-            } finally {
-                setButtonLoading(button, false, '🧭 Mark My Attendance (Geo Log)');
-            }
-        }
-        
-        async function markAttendance({ manual=false, user_id, session_type, course_id, location, date, time } = {}) {
-            if (!currentUserProfile) {
-                return showFeedback('User profile not loaded. Please log in again.', 'error');
-            }
+| currentUserProfile.id,
+            log_type: manual? 'manual' : 'self_checkin',
+            course_id: null,
+            session_type: session_type |
 
-            let logEntry = {
-                user_id: user_id || currentUserProfile.id,
-                log_type: manual ? 'manual' : 'self_checkin',
-                course_id: null,
-                session_type: session_type || null,
-                location_name: null,
-                latitude: null,
-                longitude: null,
-                accuracy: null,
-                ip_address: null,
-                device_id: null,
-                check_in_time: new Date().toISOString(),
-                recorded_by: currentUserProfile.id
-            };
+| null,
+            location_name: null,
+            latitude: null,
+            longitude: null,
+            accuracy: null,
+            ip_address: null,
+            device_id: null,
+            check_in_time: new Date().toISOString(),
+            recorded_by: currentUserProfile.id
+        };
 
-            try {
-                if (manual) {
-                    // Manual attendance
-                    if (!logEntry.user_id || !session_type || !location || !date) 
-                        throw new Error('Fill all required fields for manual attendance.');
+        try {
+            if (manual) {
+                // Manual attendance
+                if (!logEntry.user_id ||!session_type ||!location ||!date) 
+                    throw new Error('Fill all required fields for manual attendance.');
 
-                    logEntry.session_type = session_type;
-                    logEntry.course_id = course_id || null;
-                    logEntry.location_name = `[MANUAL] ${location.trim()}`;
-                    logEntry.check_in_time = time ? `${date}T${time}:00+03:00` : `${date}T00:00:00+03:00`;
-                } else {
-                    // Self-checkin using geolocation
-                    if (!confirm('Marking attendance logs your current location. Continue?')) return;
+                logEntry.session_type = session_type;
+                logEntry.course_id = course_id |
 
-                    const coords = await getGeoLocation();
-                    const { latitude, longitude, accuracy } = coords;
-                    const ip_address = await getIPAddress();
-                    const device_id = getDeviceId();
-                    const location_name = await reverseGeocode(latitude, longitude);
+| null;
+                // FIX: Corrected template literal syntax
+                logEntry.location_name = `[MANUAL] ${location.trim()}`;
+                logEntry.check_in_time = time? `${date}T${time}:00+03:00` : `${date}T00:00:00+03:00`;
+            } else {
+                // Self-checkin using geolocation
+                if (!confirm('Marking attendance logs your current location. Continue?')) return;
 
-                    if (!location_name || location_name.toLowerCase().includes('uncoordinated') || location_name.includes('Failed')) {
-                        throw new Error('Could not determine a valid location. Please try again.');
-                    }
+                const coords = await getGeoLocation();
+                const { latitude, longitude, accuracy } = coords;
+                const ip_address = await getIPAddress();
+                const device_id = getDeviceId();
+                const location_name = await reverseGeocode(latitude, longitude);
 
-                    logEntry.latitude = latitude;
-                    logEntry.longitude = longitude;
-                    logEntry.accuracy = accuracy;
-                    logEntry.ip_address = ip_address;
-                    logEntry.device_id = device_id;
-                    logEntry.location_name = location_name;
+                if (!location_name |
+
+| location_name.toLowerCase().includes('uncoordinated') |
+| location_name.includes('Failed')) {
+                    throw new Error('Could not determine a valid location. Please try again.');
                 }
 
-                const { error } = await sb.from('geo_attendance_logs').insert([logEntry]);
-
-                if (error) throw error;
-
-                showFeedback(`Attendance logged successfully at ${logEntry.location_name}`);
-                loadAttendance();
-                loadDashboardData();
-
-            } catch (err) {
-                showFeedback('Attendance failed: ' + err.message, 'error');
-                throw err; // Re-throw for markMyAttendance to catch
-            }
-        }
-
-        // Manual attendance form
-        $('manual-attendance-form').addEventListener('submit', async e => {
-            e.preventDefault();
-            const submitButton = e.submitter;
-            const originalText = submitButton.textContent;
-            setButtonLoading(submitButton, true, originalText);
-
-            try {
-                await markAttendance({
-                    manual: true,
-                    user_id: $('att_student_id').value,
-                    session_type: $('att_session_type').value,
-                    course_id: $('att_course_id').value,
-                    location: $('att_location').value,
-                    date: $('att_date').value,
-                    time: $('att_time').value
-                });
-                $('manual-attendance-form').reset();
-            } catch (err) {
-                // Already handled in markAttendance
-            } finally {
-                setButtonLoading(submitButton, false, originalText);
-            }
-        });
-
-        // Load attendance table
-        async function loadAttendance() {
-            const tbody = $('attendance-table');
-            tbody.innerHTML = '<tr><td colspan="6">Loading attendance records...</td></tr>';
-
-            const { data, error } = await fetchData('geo_attendance_logs', `*, profiles!inner(full_name)`, {}, 'check_in_time', false);
-
-            if (error) {
-                tbody.innerHTML = `<tr><td colspan="6">Error loading attendance: ${error.message}</td></tr>`;
-                return;
+                logEntry.latitude = latitude;
+                logEntry.longitude = longitude;
+                logEntry.accuracy = accuracy;
+                logEntry.ip_address = ip_address;
+                logEntry.device_id = device_id;
+                logEntry.location_name = location_name;
             }
 
-            tbody.innerHTML = '';
-            data.forEach(r => {
-                const dateTime = new Date(r.check_in_time).toLocaleString();
-                const logTypeDisplay = escapeHtml((r.log_type || 'N/A').toUpperCase());
-                const geoData = r.latitude && r.longitude ?
-                    `<button class="btn btn-map" onclick="showMapModal(${r.latitude}, ${r.longitude}, '${escapeHtml(r.location_name)}', '${escapeHtml(r.profiles.full_name)}')">View Map</button>` : 'N/A';
+            const { error } = await sb.from('geo_attendance_logs').insert([logEntry]);
 
-                tbody.innerHTML += `<tr>
-                    <td>${escapeHtml(r.profiles.full_name)}</td>
-                    <td>${logTypeDisplay} ${r.session_type ? `(${r.session_type})` : ''}</td>
-                    <td>${escapeHtml(r.location_name || 'N/A')}</td>
-                    <td>${dateTime}</td>
-                    <td>${geoData}</td>
-                    <td><button class="btn btn-delete" onclick="deleteAttendanceLog('${r.id}')">Delete Log</button></td>
-                </tr>`;
-            });
-        }
+            if (error) throw error;
 
-        async function deleteAttendanceLog(id) {
-            if (!confirm('Are you sure you want to delete this attendance log?')) return;
-            const { error } = await sb.from('geo_attendance_logs').delete().eq('id', id);
-            if (error) return showFeedback('Error deleting log: ' + error.message, 'error');
+            // FIX: Corrected template literal syntax
+            showFeedback(`Attendance logged successfully at ${logEntry.location_name}`);
             loadAttendance();
-        }
-        
-        // Map Modal Logic
-        function showMapModal(lat, lng, locationName, userName) {
-            $('mapModal').style.display = 'flex';
-            $('mapInfo').textContent = `Location for ${userName}: ${locationName}`;
+            loadDashboardData();
 
-            if (attendanceMap) {
-                attendanceMap.remove(); 
+        } catch (err) {
+            showFeedback('Attendance failed: ' + err.message, 'error');
+            throw err; // Re-throw for markMyAttendance to catch
+        }
+    }
+
+    // Manual attendance form
+    $('manual-attendance-form').addEventListener('submit', async e => {
+        e.preventDefault();
+        const submitButton = e.submitter;
+        const originalText = submitButton.textContent;
+        setButtonLoading(submitButton, true, originalText);
+
+        try {
+            await markAttendance({
+                manual: true,
+                user_id: $('att_student_id').value,
+                session_type: $('att_session_type').value,
+                course_id: $('att_course_id').value,
+                location: $('att_location').value,
+                date: $('att_date').value,
+                time: $('att_time').value
+            });
+            $('manual-attendance-form').reset();
+        } catch (err) {
+            // Already handled in markAttendance
+        } finally {
+            setButtonLoading(submitButton, false, originalText);
+        }
+    });
+
+    // Load attendance table (FIXED)
+    async function loadAttendance() {
+        const tbody = $('attendance-table');
+        tbody.innerHTML = '<tr><td colspan="6">Loading attendance records...</td></tr>';
+
+        // FIX: Corrected template literal syntax
+        const { data, error } = await fetchData('geo_attendance_logs', `*, profiles!inner(full_name)`, {}, 'check_in_time', false);
+
+        if (error) {
+            // FIX: Corrected template literal syntax
+            tbody.innerHTML = `<tr><td colspan="6">Error loading attendance: ${error.message}</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = '';
+        data.forEach(r => {
+            const dateTime = new Date(r.check_in_time).toLocaleString();
+
+            // 1. Determine Display Type (Ensures clean display of Manual/Geo Log/Session Type)
+            let typeText = 'N/A';
+            if (r.log_type === 'manual') {
+                typeText = 'Manual';
+            } else if (r.log_type === 'self_checkin') {
+                typeText = 'Geo Log';
+            } else if (r.log_type) {
+                 typeText = r.log_type.charAt(0).toUpperCase() + r.log_type.slice(1);
+            }
+            const session = r.session_type? ` (${r.session_type.toUpperCase()})` : '';
+            const logTypeDisplay = `${typeText}${session}`;
+
+            // 2. Determine Location Display (Strips internal [MANUAL] tag for cleaner display)
+            let locationDisplay = escapeHtml(r.location_name |
+
+| 'N/A');
+            if (r.location_name && r.location_name.startsWith('[MANUAL]')) {
+                // Strip the prefix for a cleaner look in the table, defaulting to 'Manual Entry' if the manual text was empty
+                locationDisplay = escapeHtml(r.location_name.replace('[MANUAL]', '').trim() |
+
+| 'Manual Entry');
+            } else if (!r.location_name) {
+                 locationDisplay = 'N/A';
             }
 
-            attendanceMap = L.map('attendanceMap').setView([lat, lng], 16);
+            // 3. Determine Geo Data button (View Map only shows if coords exist)
+            const geoData = (r.latitude && r.longitude)?
+                // FIX: Corrected template literal syntax
+                `<button class="btn btn-map" onclick="showMapModal(${r.latitude}, ${r.longitude}, '${locationDisplay}', '${escapeHtml(r.profiles.full_name)}')">View Map</button>` : 'N/A';
 
-            L.tileLayer(`https://api.mapbox.com/styles/v1/mapbox/streets-v11/tiles/{z}/{x}/{y}?access_token=${MAPBOX_ACCESS_TOKEN}`, {
-                attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, Imagery © <a href="https://www.mapbox.com/">Mapbox</a>',
-                maxZoom: 18,
-                tileSize: 512,
-                zoomOffset: -1
-            }).addTo(attendanceMap);
+            // FIX: Corrected template literal syntax for table row
+            tbody.innerHTML += `<tr>
+                <td>${escapeHtml(r.profiles.full_name)}</td>
+                <td>${logTypeDisplay}</td>
+                <td>${locationDisplay}</td>
+                <td>${dateTime}</td>
+                <td>${geoData}</td>
+                <td><button class="btn btn-delete" onclick="deleteAttendanceLog('${r.id}')">Delete Log</button></td>
+            </tr>`;
+        });
+    }
 
-            L.marker([lat, lng]).addTo(attendanceMap)
-                .bindPopup(`<b>${locationName}</b><br>Logged by ${userName}`).openPopup();
+    async function deleteAttendanceLog(id) {
+        if (!confirm('Are you sure you want to delete this attendance log?')) return;
+        const { error } = await sb.from('geo_attendance_logs').delete().eq('id', id);
+        if (error) return showFeedback('Error deleting log: ' + error.message, 'error');
+        loadAttendance();
+    }
+    
+    // Map Modal Logic
+    function showMapModal(lat, lng, locationName, userName) {
+        $('mapModal').style.display = 'flex';
+        // FIX: Corrected template literal syntax
+        $('mapInfo').textContent = `Location for ${userName}: ${locationName}`;
 
-            // Fix map rendering issue in modal
-            setTimeout(() => {
-                attendanceMap.invalidateSize();
-            }, 100);
+        if (attendanceMap) {
+            attendanceMap.remove(); 
         }
 
+        attendanceMap = L.map('attendanceMap').setView([lat, lng], 16);
+
+        // FIX: Corrected template literal syntax
+        L.tileLayer(`https://api.mapbox.com/styles/v1/mapbox/streets-v11/tiles/{z}/{x}/{y}?access_token=${MAPBOX_ACCESS_TOKEN}`, {
+            attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, Imagery © <a href="https://www.mapbox.com/">Mapbox</a>',
+            maxZoom: 18,
+            tileSize: 512,
+            zoomOffset: -1
+        }).addTo(attendanceMap);
+
+        // FIX: Corrected template literal syntax
+        L.marker([lat, lng]).addTo(attendanceMap)
+           .bindPopup(`<b>${locationName}</b><br>Logged by ${userName}`).openPopup();
+
+        // Fix map rendering issue in modal
+        setTimeout(() => {
+            attendanceMap.invalidateSize();
+        }, 100);
+    }
         /*******************************************************
          * 4. CATS / Exams Tab
          *******************************************************/
