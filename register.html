@@ -8,7 +8,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     
     <style>
-        /* Base Reset and Global Styles */
+        /* Base Reset and Global Styles (From previous stylish version) */
         :root {
             --primary-color: #0d6efd; /* Blue */
             --secondary-color: #6c757d; /* Gray */
@@ -22,24 +22,23 @@
 
         body {
             margin: 0;
-            font-family: 'Inter', sans-serif; /* Using a modern font */
+            font-family: 'Inter', sans-serif; 
             background-color: var(--background-color);
             display: flex;
             justify-content: center;
             align-items: center;
-            min-height: 100vh; /* Use min-height for better mobile responsiveness */
+            min-height: 100vh; 
             padding: 20px;
             box-sizing: border-box;
         }
 
-        /* Registration Box Styling (Card) */
         .register-box {
             background-color: var(--card-background);
             padding: 40px;
             border-radius: 12px;
             box-shadow: var(--shadow-light);
             width: 100%;
-            max-width: 480px; /* Slightly wider for better form spacing */
+            max-width: 480px;
             text-align: center;
         }
 
@@ -50,7 +49,7 @@
 
         h2 {
             margin-bottom: 5px;
-            color: #212529; /* Darker heading */
+            color: #212529; 
             font-weight: 700;
         }
 
@@ -60,7 +59,6 @@
             font-size: 1rem;
         }
 
-        /* Form Layout and Input Styling */
         form {
             display: flex;
             flex-direction: column;
@@ -70,38 +68,37 @@
         input, select {
             padding: 12px 15px;
             border: 1px solid var(--border-color);
-            border-radius: 8px; /* Slightly more modern rounded corners */
+            border-radius: 8px; 
             font-size: 1rem;
             width: 100%;
-            box-sizing: border-box; /* Crucial for padding/border calculation */
+            box-sizing: border-box; 
             transition: border-color 0.2s, box-shadow 0.2s;
         }
 
         input:focus, select:focus {
             outline: none;
             border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.25); /* Focus Ring */
+            box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.25); 
         }
 
-        /* Button Styling */
         button {
             background-color: var(--primary-color);
             color: var(--card-background);
             border: none;
             padding: 14px;
             border-radius: 8px;
-            font-size: 1.1rem; /* Slightly larger text for emphasis */
+            font-size: 1.1rem; 
             font-weight: 600;
             cursor: pointer;
             transition: background-color 0.2s, transform 0.1s;
         }
 
         button:hover {
-            background-color: #0a58ca; /* Darker blue on hover */
+            background-color: #0a58ca;
         }
 
         button:active {
-            transform: scale(0.99); /* Subtle click effect */
+            transform: scale(0.99); 
         }
 
         button:disabled {
@@ -109,7 +106,6 @@
             cursor: not-allowed;
         }
 
-        /* Message Styling */
         .error {
             color: var(--error-color);
             margin-top: 10px;
@@ -122,7 +118,6 @@
             font-weight: 600;
         }
 
-        /* Link Styling */
         .login-link {
             margin-top: 25px;
             font-size: 0.95rem;
@@ -174,7 +169,96 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script>
-        // ... (Your JavaScript logic here)
+        // Supabase Keys (Ensure these are your current and correct keys)
+        const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
+        const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        const form = document.getElementById('register-form');
+        const registerBtn = document.getElementById('register-btn');
+        const errorMessage = document.getElementById('error-message');
+        const successMessage = document.getElementById('success-message');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            // Reset messages
+            errorMessage.textContent = '';
+            successMessage.textContent = '';
+            registerBtn.disabled = true;
+            registerBtn.textContent = 'Registering...';
+
+            // Get form values
+            const full_name = document.getElementById('full_name').value.trim();
+            const email = document.getElementById('email').value.trim();
+            const student_id_number = document.getElementById('student_id_number').value.trim();
+            const phone = document.getElementById('phone').value.trim();
+            const program_type = document.getElementById('program_type').value; 
+            const password = document.getElementById('password').value.trim();
+            const confirmPassword = document.getElementById('confirm_password').value.trim();
+
+            // --- 1. Client-Side Validation ---
+            if (password !== confirmPassword) {
+                errorMessage.textContent = 'Passwords do not match.';
+                registerBtn.disabled = false;
+                registerBtn.textContent = 'Register';
+                return;
+            }
+            if (!program_type) {
+                errorMessage.textContent = 'Please select your program/course.';
+                registerBtn.disabled = false;
+                registerBtn.textContent = 'Register';
+                return;
+            }
+
+            // --- 2. Supabase Authentication Sign-Up ---
+            const { data, error } = await sb.auth.signUp({
+                email,
+                password,
+                // We intentionally do NOT include redirectTo here to keep the user on the page
+                options: {
+                    data: { full_name, program_type } // Store basic data
+                }
+            });
+
+            if (error) {
+                errorMessage.textContent = error.message;
+                registerBtn.disabled = false;
+                registerBtn.textContent = 'Register';
+                return;
+            }
+
+            // --- 3. Insert Profile Data with Admin Approval Flag ---
+            if (data.user) {
+                const { error: profileError } = await sb.from('profiles').insert([
+                    { 
+                        id: data.user.id, 
+                        full_name, 
+                        email, 
+                        phone, 
+                        student_id_number,  // NOW included after DB fix
+                        program_type,       // CRITICAL for RLS
+                        role: 'student',
+                        approved: false     // CRITICAL: Pending Admin Approval
+                    }
+                ]);
+                
+                if (profileError) {
+                    console.error('Profile insertion failed:', profileError);
+                    errorMessage.textContent = 'Registration completed, but profile data failed to save. Please contact administration.';
+                    registerBtn.disabled = false;
+                    registerBtn.textContent = 'Register';
+                    // NOTE: The user account is still created in auth.users, but their profile is missing.
+                    return;
+                }
+            }
+
+            // --- 4. Final Success Message ---
+            successMessage.textContent = 'Registration successful! Your account is pending Super Admin approval. You will not be able to log in until approved.';
+            registerBtn.textContent = 'Registered!';
+            form.reset();
+
+        });
     </script>
 </body>
 </html>
