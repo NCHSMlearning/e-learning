@@ -1059,105 +1059,121 @@ async function loadAttendance() {
         }
         
         /*******************
-         * Resources Tab (Storage & DB)
-         *******************/
-        async function uploadResource() {
-            const program_type = $('resource_program').value;
-            const fileInput = $('resourceFile');
-            const resourceTitle = $('resourceTitle').value.trim();
+ * Resources Tab (Storage & DB)
+ *******************/
+async function uploadResource() {
+    const program_type = $('resource_program').value;
+    const fileInput = $('resourceFile');
+    const resourceTitle = $('resourceTitle').value.trim();
 
-            if(!program_type || !resourceTitle || !fileInput.files.length) return alert('Please select a program, enter a title, and select a file.');
-            
-            const file = fileInput.files[0];
-            const fileExt = file.name.split('.').pop();
-            const filePath = `${program_type}/${crypto.randomUUID()}.${fileExt}`;
+    if (!program_type || !resourceTitle || !fileInput.files.length) {
+        return alert('Please select a program, enter a title, and select a file.');
+    }
 
-            // 1. Upload file to Supabase Storage
-            const { error: uploadError } = await sb.storage
-                .from(RESOURCES_BUCKET)
-                .upload(filePath, file, {
-                    cacheControl: '3600',
-                    upsert: false
-                });
+    const file = fileInput.files[0];
+    const fileExt = file.name.split('.').pop();
+    const filePath = `${program_type}/${crypto.randomUUID()}.${fileExt}`;
 
-            if (uploadError) {
-                console.error('Upload Error:', uploadError);
-                return alert('Error uploading file: ' + uploadError.message);
-            }
+    // 1. Upload file to Supabase Storage
+    const { error: uploadError } = await sb.storage
+        .from(RESOURCES_BUCKET)
+        .upload(filePath, file, {
+            cacheControl: '3600',
+            upsert: false
+        });
 
-            // 2. Insert record into database table
-            const { error: dbError } = await sb.from('resources').insert([{
-                program_type,
-                file_name: file.name,
-                file_path: filePath,
-                title: resourceTitle,
-                uploaded_by: currentUserProfile.id
-            }]);
+    if (uploadError) {
+        console.error('Upload Error:', uploadError);
+        return alert('Error uploading file: ' + uploadError.message);
+    }
 
-            if (dbError) {
-                // If DB insert fails, try to delete the uploaded file
-                await sb.storage.from(RESOURCES_BUCKET).remove([filePath]);
-                console.error('DB Insert Error:', dbError);
-                return alert('Error saving file details to database: ' + dbError.message);
-            }
+    // 2. Insert record into database table
+    const { error: dbError } = await sb.from('resources').insert([{
+        program_type,
+        file_name: file.name,
+        file_path: filePath,
+        title: resourceTitle,
+        uploaded_by: currentUserProfile?.id || null
+    }]);
 
-            alert('✅ Resource uploaded successfully!');
-            $('upload-resource-form').reset();
-            loadResources();
-        }
+    if (dbError) {
+        // If DB insert fails, try to delete the uploaded file
+        await sb.storage.from(RESOURCES_BUCKET).remove([filePath]);
+        console.error('DB Insert Error:', dbError);
+        return alert('Error saving file details to database: ' + dbError.message);
+    }
 
-        async function loadResources() {
-            const tbody = $('resources-list');
-            tbody.innerHTML = '<tr><td colspan="5">Loading resources...</td></tr>';
+    alert('✅ Resource uploaded successfully!');
+    $('upload-resource-form').reset();
+    loadResources();
+}
 
-            const { data, error } = await sb.from('resources')
-                .select(`
-                    *,
-                    profiles(full_name)
-                `)
-                .order('created_at', { ascending: false });
+async function loadResources() {
+    const tbody = $('resources-list');
+    tbody.innerHTML = '<tr><td colspan="5">Loading resources...</td></tr>';
 
-            if (error) {
-                tbody.innerHTML = `<tr><td colspan="5">Error loading resources: ${error.message}</td></tr>`;
-                return;
-            }
+    const { data, error } = await sb
+        .from('resources')
+        .select(`
+            id,
+            title,
+            file_name,
+            file_path,
+            program_type,
+            created_at,
+            profiles:uploaded_by ( full_name )
+        `)
+        .order('created_at', { ascending: false });
 
-            tbody.innerHTML = '';
-            data.forEach(r => {
-                const date = new Date(r.created_at).toDateString();
-                // Construct the public download URL for the file in the storage bucket
-                const downloadUrl = `${SUPABASE_URL}/storage/v1/object/public/${RESOURCES_BUCKET}/${r.file_path}`; 
-                
-                tbody.innerHTML += `<tr>
-                    <td>${escapeHtml(r.program_type)}</td>
-                    <td><a href="${downloadUrl}" target="_blank">${escapeHtml(r.title)} (${escapeHtml(r.file_name)})</a></td>
-                    <td>${escapeHtml(r.profiles.full_name)}</td>
-                    <td>${date}</td>
-                    <td>
-                        <button class="btn btn-delete" onclick="deleteResource('${r.id}', '${r.file_path}')">Delete</button>
-                    </td>
-                </tr>`;
-            });
-        }
-        
-        async function deleteResource(id, filePath) {
-            if (!confirm('Are you sure you want to delete this resource? This will remove the file permanently.')) return;
-            
-            const { error: dbError } = await sb.from('resources').delete().eq('id', id);
-            const { error: storageError } = await sb.storage.from(RESOURCES_BUCKET).remove([filePath]);
+    if (error) {
+        console.error('Load Resources Error:', error);
+        tbody.innerHTML = `<tr><td colspan="5">Error loading resources: ${error.message}</td></tr>`;
+        return;
+    }
 
-            if (dbError || storageError) {
-                console.error('Delete Resource DB Error:', dbError);
-                console.error('Delete Resource Storage Error:', storageError);
-                return alert('Error deleting resource: ' + (dbError?.message || storageError?.message));
-            }
-            
-            alert('Resource deleted successfully.');
-            loadResources();
-        }
+    tbody.innerHTML = '';
 
-        // Initialize the application
-        initSession();
-    </script>
+    if (!data || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5">No resources available.</td></tr>';
+        return;
+    }
+
+    data.forEach(r => {
+        const date = new Date(r.created_at).toDateString();
+        const downloadUrl = `${SUPABASE_URL}/storage/v1/object/public/${RESOURCES_BUCKET}/${r.file_path}`;
+        const uploader = r.profiles?.full_name || 'Unknown';
+
+        tbody.innerHTML += `
+        <tr>
+            <td>${escapeHtml(r.program_type)}</td>
+            <td><a href="${downloadUrl}" target="_blank">${escapeHtml(r.title)} (${escapeHtml(r.file_name)})</a></td>
+            <td>${escapeHtml(uploader)}</td>
+            <td>${date}</td>
+            <td>
+                <button class="btn btn-delete" onclick="deleteResource('${r.id}', '${r.file_path}')">Delete</button>
+            </td>
+        </tr>`;
+    });
+}
+
+async function deleteResource(id, filePath) {
+    if (!confirm('Are you sure you want to delete this resource? This will remove the file permanently.')) return;
+    
+    const { error: dbError } = await sb.from('resources').delete().eq('id', id);
+    const { error: storageError } = await sb.storage.from(RESOURCES_BUCKET).remove([filePath]);
+
+    if (dbError || storageError) {
+        console.error('Delete Resource DB Error:', dbError);
+        console.error('Delete Resource Storage Error:', storageError);
+        return alert('Error deleting resource: ' + (dbError?.message || storageError?.message));
+    }
+    
+    alert('Resource deleted successfully.');
+    loadResources();
+}
+
+// Initialize session
+initSession();
+</script>
 </body>
 </html>
