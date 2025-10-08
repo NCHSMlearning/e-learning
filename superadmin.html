@@ -897,76 +897,112 @@ async function deleteAttendanceLog(id) {
     loadAttendance();
 }
 
-/*******************
+/******/*******************
  * CATS / Exams Tab
  *******************/
 $('add-exam-form').addEventListener('submit', async e => {
     e.preventDefault();
-    const program_type = $('exam_program').value;
-    const course_id = $('exam_course_id').value;
+
+    const program_type = $('exam_program').value.trim();
+    const course_id = $('exam_course_id').value || null; // allow null if not selected
     const title = $('exam_title').value.trim();
     const exam_date = $('exam_date').value;
-    const status = $('exam_status').value;
+    const status = $('exam_status').value || 'Scheduled';
 
-    if(!program_type || !course_id || !title || !exam_date) 
-        return alert('Fill all required fields.');
-
-    const { error } = await sb.from('cats_exams').insert([{
-        program_type,
-        course_id,
-        title,
-        exam_date,
-        status,
-        created_by: currentUserProfile.id
-    }]);
-
-    if (error) {
-        console.error('Add Exam Error:', error);
-        return alert('Error adding exam: ' + error.message);
+    if (!program_type || !title || !exam_date) {
+        return alert('Please fill all required fields (Program, Title, Exam Date).');
     }
 
-    alert('✅ Exam/CAT scheduled successfully!');
-    $('add-exam-form').reset();
-    loadExams();
+    try {
+        const { error } = await sb.from('cats_exams').insert([{
+            program_type,
+            course_id,
+            title,
+            exam_date,
+            status,
+            created_by: currentUserProfile?.id || null
+        }]);
+
+        if (error) throw error;
+
+        alert('✅ Exam/CAT scheduled successfully!');
+        $('add-exam-form').reset();
+        loadExams();
+
+    } catch (err) {
+        console.error('Add Exam Error:', err);
+        alert('Error adding exam: ' + err.message);
+    }
 });
 
 async function loadExams() {
     const tbody = $('exams-table');
     tbody.innerHTML = '<tr><td colspan="6">Loading exams...</td></tr>';
 
-    const { data, error } = await sb.from('cats_exams')
-        .select(`
-            *,
-            courses(course_name)
-        `)
-        .order('exam_date', { ascending: false });
+    try {
+        const { data, error } = await sb.from('cats_exams')
+            .select(`
+                *,
+                courses(course_name)
+            `)
+            .order('exam_date', { ascending: false });
 
-    if (error) {
-        tbody.innerHTML = `<tr><td colspan="6">Error loading exams: ${error.message}</td></tr>`;
-        return;
+        if (error) throw error;
+
+        tbody.innerHTML = '';
+
+        if (!data || data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6">No exams found.</td></tr>';
+            return;
+        }
+
+        data.forEach(e => {
+            const dateStr = e.exam_date ? new Date(e.exam_date).toDateString() : 'N/A';
+            const courseName = e.courses ? e.courses.course_name : 'N/A';
+            const status = e.status || 'Scheduled';
+
+            tbody.innerHTML += `<tr>
+                <td>${escapeHtml(e.program_type || 'N/A')}</td>
+                <td>${escapeHtml(courseName)}</td>
+                <td>${escapeHtml(e.title || 'N/A')}</td>
+                <td>${dateStr}</td>
+                <td>${escapeHtml(status)}</td>
+                <td>
+                    <button class="btn btn-delete" onclick="deleteExam('${e.id}')">Delete</button>
+                </td>
+            </tr>`;
+        });
+
+    } catch (err) {
+        console.error('Load Exams Error:', err);
+        tbody.innerHTML = `<tr><td colspan="6">Error loading exams: ${escapeHtml(err.message)}</td></tr>`;
     }
-    
-    tbody.innerHTML = '';
-    data.forEach(e => {
-        const date = new Date(e.exam_date).toDateString();
-        tbody.innerHTML += `<tr>
-            <td>${escapeHtml(e.program_type)}</td>
-            <td>${escapeHtml(e.courses.course_name)}</td>
-            <td>${escapeHtml(e.title)}</td>
-            <td>${date}</td>
-            <td>${escapeHtml(e.status)}</td>
-            <td>
-                <button class="btn btn-delete" onclick="deleteExam('${e.id}')">Delete</button>
-            </td>
-        </tr>`;
-    });
 }
 
 async function deleteExam(id) {
     if (!confirm('Are you sure you want to delete this Exam/CAT?')) return;
-    const { error } = await sb.from('cats_exams').delete().eq('id', id);
-    if (error) return alert('Error deleting exam: ' + error.message);
-    loadExams();
+
+    try {
+        const { error } = await sb.from('cats_exams').delete().eq('id', id);
+        if (error) throw error;
+
+        alert('✅ Exam deleted successfully!');
+        loadExams();
+    } catch (err) {
+        console.error('Delete Exam Error:', err);
+        alert('Error deleting exam: ' + err.message);
+    }
+}
+
+// Simple escapeHtml function to prevent XSS
+function escapeHtml(text) {
+    if (!text) return '';
+    return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
 }
 
         /*******************
