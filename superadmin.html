@@ -315,729 +315,647 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
-    <script>
-        /***********************************
-         * JavaScript Functionality
-         ***********************************/
+   // ... (The provided HTML and CSS above) ...
 
-        // !!! IMPORTANT: CHECK YOUR KEYS AND URL !!!
-        const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
-        const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        const RESOURCES_BUCKET = 'resources';
-        const IP_API_URL = 'https://api.ipify.org?format=json';
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
-        // NOTE: Verify this token is correct and allows geocoding.
-        const MAPBOX_ACCESS_TOKEN = 'pk.cbe61eae35ecbe1d1d682c347d81381c'; 
-        const DEVICE_ID_KEY = 'nchsm_device_id';
+    <script>
+        /***********************************
+         * JavaScript Functionality
+         ***********************************/
 
-        let currentUserProfile = null;
-        let attendanceMap = null;
+        // !!! IMPORTANT: CHECK YOUR KEYS AND URL !!!
+        const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
+        const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const RESOURCES_BUCKET = 'resources';
+        const IP_API_URL = 'https://api.ipify.org?format=json';
 
-        /*******************
-         * Utilities
-         *******************/
-        function $(id){ return document.getElementById(id); }
-        function escapeHtml(s){ return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
-        
-        function generateUUID() {
-            return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
-                (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
-            );
-        }
+        // NOTE: Verify this token is correct and allows geocoding.
+        const MAPBOX_ACCESS_TOKEN = 'pk.cbe61eae35ecbe1d1d682c347d81381c'; 
+        const DEVICE_ID_KEY = 'nchsm_device_id';
 
-        function getDeviceId() {
-            let deviceId = localStorage.getItem(DEVICE_ID_KEY);
-            if (!deviceId) {
-                deviceId = generateUUID();
-                localStorage.setItem(DEVICE_ID_KEY, deviceId);
-            }
-            return deviceId;
-        }
+        let currentUserProfile = null;
+        let attendanceMap = null;
+        let allStudents = [];
+        let allCourses = [];
 
-        async function getIPAddress() {
-            try {
-                const response = await fetch(IP_API_URL);
-                const data = await response.json();
-                return data.ip;
-            } catch (error) {
-                console.error('IP fetch failed:', error);
-                return null;
-            }
-        }
+        /*******************
+         * Utilities
+         *******************/
+        function $(id){ return document.getElementById(id); }
+        function escapeHtml(s){ return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+        
+        function generateUUID() {
+            return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+                (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+            );
+        }
 
-        async function reverseGeocode(lat, lng) {
-            const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${MAPBOX_ACCESS_TOKEN}&limit=1`;
-            try {
-                const response = await fetch(url);
-                const data = await response.json();
-                if (data.features && data.features.length > 0) {
-                    return data.features[0].place_name; 
-                }
-                return 'Reverse Geocoding Failed';
-            } catch (error) {
-                console.error('Reverse Geocoding Error:', error);
-                return 'Geocoding API Network Error';
-            }
-        }
-        
-        function getGeoLocation() {
-            return new Promise((resolve, reject) => {
-                if (!navigator.geolocation) {
-                    reject('Geolocation is not supported by your browser.');
-                    return;
-                }
-                navigator.geolocation.getCurrentPosition(
-                    (position) => resolve(position.coords),
-                    (error) => reject(error.message),
-                    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-                );
-            });
-        }
-        
-        // Tab switching logic
-        const navLinks = document.querySelectorAll('.nav a');
-        const tabs = document.querySelectorAll('.tab-content');
-        navLinks.forEach(link => {
-            link.addEventListener('click', e => {
-                e.preventDefault();
-                navLinks.forEach(l => l.classList.remove('active'));
-                link.classList.add('active');
-                tabs.forEach(tab => tab.classList.remove('active'));
-                const tabId = link.dataset.tab;
-                document.getElementById(tabId).classList.add('active');
-                loadSectionData(tabId);
-            });
-        });
+        function getDeviceId() {
+            let deviceId = localStorage.getItem(DEVICE_ID_KEY);
+            if (!deviceId) {
+                deviceId = generateUUID();
+                localStorage.setItem(DEVICE_ID_KEY, deviceId);
+            }
+            return deviceId;
+        }
 
-        function showTab(tabId) {
-            navLinks.forEach(l => l.classList.remove('active'));
-            const activeLink = document.querySelector(`.nav a[data-tab="${tabId}"]`);
-            if (activeLink) activeLink.classList.add('active');
-            tabs.forEach(tab => tab.classList.remove('active'));
-            document.getElementById(tabId).classList.add('active');
-            loadSectionData(tabId);
-        }
+        async function getIPAddress() {
+            try {
+                const response = await fetch(IP_API_URL);
+                const data = await response.json();
+                return data.ip;
+            } catch (error) {
+                console.error('IP fetch failed:', error);
+                return null;
+            }
+        }
 
-        async function loadSectionData(tabId) {
-            switch(tabId) {
-                case 'dashboard': loadDashboardData(); break;
-                case 'users': loadAllUsers(); break;
-                case 'pending': loadPendingApprovals(); break;
-                case 'students': loadStudents(); break;
-                case 'courses': loadCourses(); break;
-                case 'attendance': loadAttendance(); populateAttendanceSelects(); break;
-                case 'cats': loadExams(); populateAttendanceSelects(); break;
-                case 'messages': loadMessages(); break;
-                case 'calendar': $('calendar').innerHTML = '<p>Simple calendar placeholder - Exam and Clinical dates will show here. (Integration coming soon)</p>'; break;
-                case 'resources': loadResources(); break;
-            }
-        }
-        
-        // --- Session / Init ---
-        async function initSession() {
-            const { data: { user } } = await sb.auth.getUser();
-            if (!user) {
-                window.location.href = "login.html";
-                return;
-            }
+        async function reverseGeocode(lat, lng) {
+            const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${MAPBOX_ACCESS_TOKEN}&limit=1`;
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+                if (data.features && data.features.length > 0) {
+                    return data.features[0].place_name; 
+                }
+                return 'Reverse Geocoding Failed';
+            } catch (error) {
+                console.error('Reverse Geocoding Error:', error);
+                return 'Geocoding API Network Error';
+            }
+        }
+        
+        function getGeoLocation() {
+            return new Promise((resolve, reject) => {
+                if (!navigator.geolocation) {
+                    reject('Geolocation is not supported by your browser.');
+                    return;
+                }
+                navigator.geolocation.getCurrentPosition(
+                    (position) => resolve(position.coords),
+                    (error) => reject(error.message),
+                    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+                );
+            });
+        }
+        
+        // Tab switching logic
+        const navLinks = document.querySelectorAll('.nav a');
+        const tabs = document.querySelectorAll('.tab-content');
+        navLinks.forEach(link => {
+            link.addEventListener('click', e => {
+                e.preventDefault();
+                navLinks.forEach(l => l.classList.remove('active'));
+                link.classList.add('active');
+                tabs.forEach(tab => tab.classList.remove('active'));
+                const tabId = link.dataset.tab;
+                document.getElementById(tabId).classList.add('active');
+                loadSectionData(tabId);
+            });
+        });
 
-            const { data: profile } = await sb.from('profiles').select('*').eq('id', user.id).single();
-            if (profile) {
-                currentUserProfile = profile;
-                if (currentUserProfile.role !== 'superadmin') {
-                    // Redirect non-superadmins
-                    window.location.href = "admin.html"; 
-                    return;
-                }
-                // Update header with name if available
-                document.querySelector('header h1').textContent = `Welcome, ${profile.full_name || 'Super Admin'}!`;
-            } else {
-                window.location.href = "login.html";
-                return;
-            }
-            
-            loadSectionData('dashboard');
-            populateAttendanceSelects();
-        }
+        function showTab(tabId) {
+            navLinks.forEach(l => l.classList.remove('active'));
+            const activeLink = document.querySelector(`.nav a[data-tab="${tabId}"]`);
+            if (activeLink) activeLink.classList.add('active');
+            tabs.forEach(tab => tab.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+            loadSectionData(tabId);
+        }
 
-        // Logout
-        async function logout() {
-            await sb.auth.signOut();
-            localStorage.removeItem("loggedInUser");
-            window.location.href = "login.html";
-        }
+        async function loadSectionData(tabId) {
+            switch(tabId) {
+                case 'dashboard': loadDashboardData(); break;
+                case 'users': loadAllUsers(); break;
+                case 'pending': loadPendingApprovals(); break;
+                case 'students': loadStudents(); break;
+                case 'courses': loadCourses(); break;
+                case 'attendance': loadAttendance(); populateAttendanceSelects(); break;
+                case 'cats': loadExams(); populateAttendanceSelects(); break;
+                case 'messages': loadMessages(); break;
+                case 'calendar': $('calendar').innerHTML = '<p>Simple calendar placeholder - Exam and Clinical dates will show here. (Integration coming soon)</p>'; break;
+                case 'resources': loadResources(); break;
+            }
+        }
+        
+        // --- Session / Init ---
+        async function initSession() {
+            const { data: { user } } = await sb.auth.getUser();
+            if (!user) {
+                window.location.href = "login.html";
+                return;
+            }
 
-        /*******************
-         * Dashboard Data
-         *******************/
-        async function loadDashboardData() {
-            const { count: allUsersCount } = await sb.from('profiles').select('id', { count: 'exact' });
-            $('totalUsers').textContent = allUsersCount || 0;
-            const { count: pendingCount } = await sb.from('profiles').select('id', { count: 'exact' }).eq('approved', false);
-            $('pendingApprovals').textContent = pendingCount || 0;
-            const { count: studentsCount } = await sb.from('profiles').select('id', { count: 'exact' }).eq('role', 'student');
-            $('totalStudents').textContent = studentsCount || 0;
-            const today = new Date().toISOString().slice(0, 10);
-            const { data: checkinData } = await sb.from('geo_attendance_logs').select('id').gte('check_in_time', today);
-            $('todayCheckins').textContent = checkinData?.length || 0;
-        }
+            const { data: profile } = await sb.from('profiles').select('*').eq('id', user.id).single();
+            if (profile) {
+                currentUserProfile = profile;
+                if (currentUserProfile.role !== 'superadmin') {
+                    // Redirect non-superadmins
+                    window.location.href = "admin.html"; 
+                    return;
+                }
+                // Update header with name if available
+                document.querySelector('header h1').textContent = `Welcome, ${profile.full_name || 'Super Admin'}!`;
+            } else {
+                window.location.href = "login.html";
+                return;
+            }
+            
+            loadSectionData('dashboard');
+            populateAttendanceSelects();
+        }
 
-        /*******************
-         * Users/Students Tab (Approvals Logic)
-         *******************/
-        async function loadAllUsers() {
-            const tbody = $('users-table');
-            tbody.innerHTML = '<tr><td colspan="7">Loading all users...</td></tr>';
-            const { data, error } = await sb.from('profiles').select('*').order('full_name');
+        // Logout
+        async function logout() {
+            await sb.auth.signOut();
+            localStorage.removeItem("loggedInUser");
+            window.location.href = "login.html";
+        }
 
-            if (error) {
-                tbody.innerHTML = `<tr><td colspan="7">Error loading users: ${error.message}</td></tr>`;
-                return;
-            }
-            
-            tbody.innerHTML = '';
-            data.forEach(u => {
-                const roleOptions = ['student', 'admin', 'superadmin']
-                    .map(role => `<option value="${role}" ${u.role === role ? 'selected' : ''}>${role}</option>`).join('');
-                
-                const statusText = u.approved ? 'Approved' : 'Pending';
+        /*******************
+         * Dashboard Data
+         *******************/
+        async function loadDashboardData() {
+            const { count: allUsersCount } = await sb.from('profiles').select('id', { count: 'exact' });
+            $('totalUsers').textContent = allUsersCount || 0;
+            const { count: pendingCount } = await sb.from('profiles').select('id', { count: 'exact' }).eq('approved', false);
+            $('pendingApprovals').textContent = pendingCount || 0;
+            const { count: studentsCount } = await sb.from('profiles').select('id', { count: 'exact' }).eq('role', 'student');
+            $('totalStudents').textContent = studentsCount || 0;
+            const today = new Date().toISOString().slice(0, 10);
+            const { data: checkinData } = await sb.from('geo_attendance_logs').select('id').gte('check_in_time', today);
+            $('todayCheckins').textContent = checkinData?.length || 0;
+        }
 
-                tbody.innerHTML += `<tr>
-                    <td>${escapeHtml(u.id.substring(0, 8))}...</td>
-                    <td>${escapeHtml(u.full_name)}</td>
-                    <td>${escapeHtml(u.email)}</td>
-                    <td>
-                        <select class="btn" onchange="updateUserRole('${u.id}', this.value)" ${u.role === 'superadmin' ? 'disabled' : ''}>
-                            ${roleOptions}
-                        </select>
-                    </td>
-                    <td>${escapeHtml(u.program_type || 'N/A')}</td>
-                    <td>${statusText}</td>
-                    <td>
-                        ${!u.approved ? `<button class="btn btn-approve" onclick="approveUser('${u.id}')">Approve</button>` : ''}
-                        <button class="btn btn-delete" onclick="deleteProfile('${u.id}')">Delete</button>
-                    </td>
-                </tr>`;
-            });
-        }
-        
-        async function loadPendingApprovals() {
-            const tbody = $('pending-table');
-            tbody.innerHTML = '<tr><td colspan="6">Loading pending users...</td></tr>';
-            const { data, error } = await sb.from('profiles').select('*').eq('approved', false).order('created_at');
+        /*******************
+         * Users/Students Tab (Approvals Logic)
+         *******************/
+        async function loadAllUsers() {
+            const tbody = $('users-table');
+            tbody.innerHTML = '<tr><td colspan="7">Loading all users...</td></tr>';
+            const { data, error } = await sb.from('profiles').select('*').order('full_name');
 
-            if (error) {
-                tbody.innerHTML = `<tr><td colspan="6">Error loading pending list: ${error.message}</td></tr>`;
-                return;
-            }
-            
-            tbody.innerHTML = '';
-            if (data.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="6">No pending approvals!</td></tr>`;
-                return;
-            }
-            
-            data.forEach(p => {
-                const registeredDate = new Date(p.created_at).toLocaleDateString();
-                tbody.innerHTML += `<tr>
-                    <td>${escapeHtml(p.full_name)}</td>
-                    <td>${escapeHtml(p.email)}</td>
-                    <td>${escapeHtml(p.role)}</td>
-                    <td>${escapeHtml(p.program_type || 'N/A')}</td>
-                    <td>${registeredDate}</td>
-                    <td>
-                        <button class="btn btn-approve" onclick="approveUser('${p.id}')">Approve</button>
-                        <button class="btn btn-reject" onclick="deleteProfile('${p.id}')">Reject & Delete</button>
-                    </td>
-                </tr>`;
-            });
-        }
-        
-        async function loadStudents() {
-            const tbody = $('students-table');
-            tbody.innerHTML = '<tr><td colspan="7">Loading students...</td></tr>';
-            const { data, error } = await sb.from('profiles').select('*').eq('role', 'student').order('full_name');
+            if (error) {
+                tbody.innerHTML = `<tr><td colspan="7">Error loading users: ${error.message}</td></tr>`;
+                return;
+            }
+            
+            tbody.innerHTML = '';
+            data.forEach(u => {
+                const roleOptions = ['student', 'admin', 'superadmin']
+                    .map(role => `<option value="${role}" ${u.role === role ? 'selected' : ''}>${role}</option>`).join('');
+                
+                const statusText = u.approved ? 'Approved' : 'Pending';
 
-            if (error) {
-                tbody.innerHTML = `<tr><td colspan="7">Error loading students: ${error.message}</td></tr>`;
-                return;
-            }
-            
-            tbody.innerHTML = '';
-            data.forEach(s => {
-                tbody.innerHTML += `<tr>
-                    <td>${escapeHtml(s.id.substring(0, 8))}...</td>
-                    <td>${escapeHtml(s.full_name)}</td>
-                    <td>${escapeHtml(s.email)}</td>
-                    <td>${escapeHtml(s.program_type || 'N/A')}</td>
-                    <td>${escapeHtml(s.phone)}</td>
-                    <td>${s.approved ? 'Approved' : 'Pending'}</td>
-                    <td><button class="btn btn-delete" onclick="deleteProfile('${s.id}')">Delete</button></td>
-                </tr>`;
-            });
-        }
+                tbody.innerHTML += `<tr>
+                    <td>${escapeHtml(u.id.substring(0, 8))}...</td>
+                    <td>${escapeHtml(u.full_name)}</td>
+                    <td>${escapeHtml(u.email)}</td>
+                    <td>
+                        <select class="btn" onchange="updateUserRole('${u.id}', this.value)" ${u.role === 'superadmin' ? 'disabled' : ''}>
+                            ${roleOptions}
+                        </select>
+                    </td>
+                    <td>${escapeHtml(u.program_type || 'N/A')}</td>
+                    <td>${statusText}</td>
+                    <td>
+                        ${!u.approved ? `<button class="btn btn-approve" onclick="approveUser('${u.id}')">Approve</button>` : ''}
+                        <button class="btn btn-delete" onclick="deleteProfile('${u.id}')">Delete</button>
+                    </td>
+                </tr>`;
+            });
+        }
+        
+        async function loadPendingApprovals() {
+            const tbody = $('pending-table');
+            tbody.innerHTML = '<tr><td colspan="6">Loading pending users...</td></tr>';
+            const { data, error } = await sb.from('profiles').select('*').eq('approved', false).order('created_at');
 
-        $('add-student-form').addEventListener('submit', async e => {
-            e.preventDefault();
-            const name = $('student-name').value.trim();
-            const email = $('student-email').value.trim();
-            const phone = $('student-phone').value.trim();
-            const password = $('student-password').value;
-            const program_type = $('student-program').value;
+            if (error) {
+                tbody.innerHTML = `<tr><td colspan="6">Error loading pending list: ${error.message}</td></tr>`;
+                return;
+            }
+            
+            tbody.innerHTML = '';
+            if (data.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6">No pending approvals!</td></tr>`;
+                return;
+            }
+            
+            data.forEach(p => {
+                const registeredDate = new Date(p.created_at).toLocaleDateString();
+                tbody.innerHTML += `<tr>
+                    <td>${escapeHtml(p.full_name)}</td>
+                    <td>${escapeHtml(p.email)}</td>
+                    <td>${escapeHtml(p.role)}</td>
+                    <td>${escapeHtml(p.program_type || 'N/A')}</td>
+                    <td>${registeredDate}</td>
+                    <td>
+                        <button class="btn btn-approve" onclick="approveUser('${p.id}')">Approve</button>
+                        <button class="btn btn-reject" onclick="deleteProfile('${p.id}')">Reject & Delete</button>
+                    </td>
+                </tr>`;
+            });
+        }
+        
+        async function loadStudents() {
+            const tbody = $('students-table');
+            tbody.innerHTML = '<tr><td colspan="7">Loading students...</td></tr>';
+            const { data, error } = await sb.from('profiles').select('*').eq('role', 'student').order('full_name');
 
-            if(!name || !email || !phone || !password || !program_type) return alert('Fill all fields and select a program.');
+            if (error) {
+                tbody.innerHTML = `<tr><td colspan="7">Error loading students: ${error.message}</td></tr>`;
+                return;
+            }
 
-            try {
-                // 1. Sign up the user (creates auth entry)
-                const { data: signUpData, error: signUpError } = await sb.auth.signUp({ email, password });
-                if(signUpError) return alert('Signup failed: ' + signUpError.message);
-                
-                // 2. Create the profile, immediately set to approved
-                const { error: profileError } = await sb.from('profiles').insert([{
-                    id: signUpData.user.id,
-                    full_name: name,
-                    email,
-                    phone,
-                    role: 'student',
-                    program_type: program_type,
-                    approved: true 
-                }]);
-                if(profileError) return alert('Profile creation failed: ' + profileError.message);
+            allStudents = data; // Cache students for attendance select
+            
+            tbody.innerHTML = '';
+            data.forEach(s => {
+                tbody.innerHTML += `<tr>
+                    <td>${escapeHtml(s.id.substring(0, 8))}...</td>
+                    <td>${escapeHtml(s.full_name)}</td>
+                    <td>${escapeHtml(s.email)}</td>
+                    <td>${escapeHtml(s.program_type || 'N/A')}</td>
+                    <td>${escapeHtml(s.phone)}</td>
+                    <td>${s.approved ? 'Approved' : 'Pending'}</td>
+                    <td><button class="btn btn-delete" onclick="deleteProfile('${s.id}')">Delete</button></td>
+                </tr>`;
+            });
+        }
 
-                alert('✅ Student added and approved successfully!');
-                $('add-student-form').reset();
-                loadStudents();
-                loadDashboardData();
-            } catch(err) {
-                console.error(err);
-                alert('An unexpected error occurred during student creation. Check console for details.');
-            }
-        });
+        $('add-student-form').addEventListener('submit', async e => {
+            e.preventDefault();
+            const name = $('student-name').value.trim();
+            const email = $('student-email').value.trim();
+            const phone = $('student-phone').value.trim();
+            const password = $('student-password').value;
+            const program_type = $('student-program').value;
 
-        async function updateUserRole(id, newRole) {
-            if (!confirm(`Are you sure you want to change this user's role to ${newRole}?`)) {
-                loadAllUsers(); 
-                return;
-            }
-            const { error } = await sb.from('profiles').update({ role: newRole }).eq('id', id);
-            if (error) return alert('Error updating role: ' + error.message);
-            alert('Role updated successfully.');
-            loadAllUsers();
-        }
-        
-        async function approveUser(id) {
-            if (!confirm('Approve this user? They will gain access immediately.')) return;
-            // The key update is setting 'approved' to true
-            const { error } = await sb.from('profiles').update({ approved: true }).eq('id', id);
-            if (error) return alert('Error approving user: ' + error.message);
-            alert('User approved successfully!');
-            loadPendingApprovals(); // Reload the pending list
-            loadAllUsers(); // Reload all users list
-            loadDashboardData(); // Update card count
-        }
+            if(!name || !email || !phone || !password || !program_type) return alert('Fill all fields and select a program.');
 
-        async function deleteProfile(id) {
-            if (!confirm('Are you sure you want to delete this user profile? This action is permanent and only removes the profile data.')) return;
-            // Note: For security/permissions reasons, we only delete the public profile table entry.
-            // The user's auth entry must be manually deleted in the Supabase Auth dashboard or via a high-privilege function.
-            const { error } = await sb.from('profiles').delete().eq('id', id);
-            if (error) return alert('Error deleting profile: ' + error.message);
-            alert('Profile data deleted.');
-            loadAllUsers();
-            loadStudents();
-            loadPendingApprovals();
-            loadDashboardData();
-        }
+            try {
+                // 1. Sign up the user (creates auth entry)
+                const { data: signUpData, error: signUpError } = await sb.auth.signUp({ email, password });
+                if(signUpError) return alert('Signup failed: ' + signUpError.message);
+                
+                // 2. Create the profile, immediately set to approved
+                const { error: profileError } = await sb.from('profiles').insert([{
+                    id: signUpData.user.id,
+                    full_name: name,
+                    email,
+                    phone,
+                    role: 'student',
+                    program_type: program_type,
+                    approved: true 
+                }]);
+                if(profileError) return alert('Profile creation failed: ' + profileError.message);
+
+                alert('✅ Student added and approved successfully!');
+                $('add-student-form').reset();
+                loadStudents();
+                loadDashboardData();
+            } catch(err) {
+                console.error(err);
+                alert('An unexpected error occurred during student creation. Check console for details.');
+            }
+        });
+
+        async function updateUserRole(id, newRole) {
+            if (!confirm(`Are you sure you want to change this user's role to ${newRole}?`)) {
+                loadAllUsers(); 
+                return;
+            }
+            const { error } = await sb.from('profiles').update({ role: newRole }).eq('id', id);
+            if (error) return alert('Error updating role: ' + error.message);
+            alert('Role updated successfully.');
+            loadAllUsers();
+        }
+        
+        async function approveUser(id) {
+            if (!confirm('Approve this user? They will gain access immediately.')) return;
+            // The key update is setting 'approved' to true
+            const { error } = await sb.from('profiles').update({ approved: true }).eq('id', id);
+            if (error) return alert('Error approving user: ' + error.message);
+            alert('User approved successfully!');
+            loadPendingApprovals(); // Reload the pending list
+            loadAllUsers(); // Reload all users list
+            loadDashboardData(); // Update card count
+        }
+
+        async function deleteProfile(id) {
+            if (!confirm('Are you sure you want to delete this user profile? This action is permanent and only removes the profile data. The Auth entry must be deleted manually in Supabase.')) return;
+            // Deleting the profile record is necessary for the dashboard's view
+            const { error } = await sb.from('profiles').delete().eq('id', id);
+            if (error) return alert('Error deleting profile: ' + error.message);
+            alert('Profile deleted successfully! Remember to delete the corresponding Auth user manually in the Supabase console.');
+            loadAllUsers();
+            loadPendingApprovals();
+            loadStudents();
+            loadDashboardData();
+        }
+
+        /*******************
+         * Courses Tab
+         *******************/
+        async function loadCourses() {
+            const tbody = $('courses-table');
+            tbody.innerHTML = '<tr><td colspan="3">Loading courses...</td></tr>';
+            const { data, error } = await sb.from('courses').select('*').order('course_name');
+
+            if (error) {
+                tbody.innerHTML = `<tr><td colspan="3">Error loading courses: ${error.message}</td></tr>`;
+                return;
+            }
+
+            allCourses = data; // Cache courses for other selects
+
+            tbody.innerHTML = '';
+            data.forEach(c => {
+                tbody.innerHTML += `<tr>
+                    <td>${escapeHtml(c.course_name)}</td>
+                    <td>${escapeHtml(c.description || 'N/A')}</td>
+                    <td><button class="btn btn-delete" onclick="deleteCourse('${c.id}')">Delete</button></td>
+                </tr>`;
+            });
+        }
+
+        $('add-course-form').addEventListener('submit', async e => {
+            e.preventDefault();
+            const name = $('course-name').value.trim();
+            const description = $('course-description').value.trim();
+
+            const { error } = await sb.from('courses').insert([{ course_name: name, description }]);
+            if (error) return alert('Error adding course: ' + error.message);
+
+            alert('✅ Course added successfully!');
+            $('add-course-form').reset();
+            loadCourses();
+        });
+
+        async function deleteCourse(id) {
+            if (!confirm('Are you sure you want to delete this course?')) return;
+            const { error } = await sb.from('courses').delete().eq('id', id);
+            if (error) return alert('Error deleting course: ' + error.message);
+            alert('Course deleted successfully.');
+            loadCourses();
+        }
 
 
-        /*******************
-         * Courses Tab (CRUD Logic)
-         *******************/
-        $('add-course-form').addEventListener('submit', async e => {
-            e.preventDefault();
-            const name = $('course-name').value.trim();
-            const description = $('course-description').value.trim();
-
-            if (!name) return alert('Course Name is required.');
-
-            const { error } = await sb.from('courses').insert([{
-                course_name: name,
-                description: description || null
-            }]);
-
-            if (error) {
-                console.error('Add course error:', error);
-                return alert('Error adding course: ' + error.message);
-            }
-
-            alert('✅ Course added successfully!');
-            $('add-course-form').reset();
-            loadCourses();
-            populateAttendanceSelects();
-        });
-
-        async function loadCourses() {
-            const tbody = $('courses-table');
-            tbody.innerHTML = '<tr><td colspan="3">Loading courses...</td></tr>';
-            const { data, error } = await sb.from('courses').select('*').order('course_name');
-
-            if (error) {
-                tbody.innerHTML = `<tr><td colspan="3">Error loading courses: ${error.message}</td></tr>`;
-                return;
-            }
-
-            tbody.innerHTML = '';
-            data.forEach(c => {
-                // Pass values for pre-filling the prompt
-                const escapedName = encodeURIComponent(c.course_name);
-                const escapedDesc = encodeURIComponent(c.description || '');
-
-                tbody.innerHTML += `<tr>
-                    <td>${escapeHtml(c.course_name)}</td>
-                    <td>${escapeHtml(c.description || '-')}</td>
-                    <td>
-                        <button class="btn btn-action" onclick="editCourse('${c.id}', '${escapedName}', '${escapedDesc}')">Edit</button>
-                        <button class="btn btn-delete" onclick="deleteCourse('${c.id}')">Delete</button>
-                    </td>
-                </tr>`;
-            });
-        }
-
-        async function editCourse(id, currentNameEncoded, currentDescriptionEncoded) {
-            const currentName = decodeURIComponent(currentNameEncoded);
-            const currentDescription = decodeURIComponent(currentDescriptionEncoded);
-
-            const newName = prompt('Enter new course name:', currentName);
-            if (newName === null || newName.trim() === '') return;
-
-            const newDescription = prompt('Enter new description (optional):', currentDescription);
-            
-            const { error } = await sb.from('courses')
-                .update({ 
-                    course_name: newName.trim(), 
-                    description: newDescription ? newDescription.trim() : null 
-                })
-                .eq('id', id);
-
-            if (error) {
-                return alert('Error updating course: ' + error.message);
-            }
-            alert('Course updated successfully!');
-            loadCourses();
-        }
-
-        async function deleteCourse(id) {
-            if (!confirm('Are you sure you want to delete this course? This action is permanent and will affect all related CATS/EXAMS and ATTENDANCE records.')) return;
-
-            const { error } = await sb.from('courses').delete().eq('id', id);
-
-            if (error) {
-                return alert('Error deleting course: ' + error.message);
-            }
-            alert('Course deleted successfully.');
-            loadCourses();
-            populateAttendanceSelects();
-        }
-        
-        /*******************
-         * Attendance / Utility Selects
-         *******************/
+        /*******************
+         * Attendance Tab (Geo-Location & Manual)
+         *******************/
         async function populateAttendanceSelects() {
-            // Load all students
-            const { data: students } = await sb.from('profiles').select('id, full_name').eq('role', 'student').order('full_name');
+            // Populate Student Selects
+            if (allStudents.length === 0) await loadStudents();
             const studentSelects = [$('att_student_id')];
-
+            
             studentSelects.forEach(select => {
                 select.innerHTML = '<option value="">-- Select Student --</option>';
-                students?.forEach(s => {
-                    select.innerHTML += `<option value="${s.id}">${escapeHtml(s.full_name)}</option>`;
+                allStudents.forEach(s => {
+                    select.innerHTML += `<option value="${s.id}">${escapeHtml(s.full_name)} (${escapeHtml(s.program_type)})</option>`;
                 });
             });
 
-            // Load all courses
-            const { data: courses } = await sb.from('courses').select('id, course_name').order('course_name');
+            // Populate Course Selects
+            if (allCourses.length === 0) await loadCourses();
             const courseSelects = [$('att_course_id'), $('exam_course_id')];
 
             courseSelects.forEach(select => {
-                const isOptional = select.id === 'att_course_id';
-                select.innerHTML = `<option value="">-- Select Course ${isOptional ? '(Optional)' : ''} --</option>`;
-                courses?.forEach(c => {
+                select.innerHTML = '<option value="">-- Select Course (Optional) --</option>';
+                allCourses.forEach(c => {
                     select.innerHTML += `<option value="${c.id}">${escapeHtml(c.course_name)}</option>`;
                 });
             });
         }
 
-        /*******************
- * Unified Attendance Tab
- *******************/
-async function markAttendance({ manual=false, manualData={} } = {}) {
-    if (!currentUserProfile) {
-        return alert('User profile not loaded. Please log in again.');
-    }
+        async function markMyAttendance() {
+            alert('Getting your precise location...');
+            try {
+                const coords = await getGeoLocation();
+                const locationName = await reverseGeocode(coords.latitude, coords.longitude);
+                const ipAddress = await getIPAddress();
+                const deviceId = getDeviceId();
+                const now = new Date().toISOString();
 
-    let logEntry = {
-        user_id: currentUserProfile.id,
-        log_type: manual ? 'manual' : 'self_checkin',
-        course_id: null,
-        session_type: null,
-        location_name: null,
-        latitude: null,
-        longitude: null,
-        accuracy: null,
-        ip_address: null,
-        device_id: null,
-        check_in_time: new Date().toISOString(),
-        recorded_by: currentUserProfile.id
-    };
+                const logData = {
+                    user_id: currentUserProfile.id,
+                    location_name: locationName,
+                    latitude: coords.latitude,
+                    longitude: coords.longitude,
+                    ip_address: ipAddress,
+                    device_id: deviceId,
+                    check_in_time: now,
+                    session_type: 'office', // Default type for admin check-in
+                    is_manual: false
+                };
 
-    try {
-        if (manual) {
-            // Manual attendance
-            const { user_id, session_type, course_id, location, date, time } = manualData;
-            if (!user_id || !session_type || !location || !date) 
-                return alert('Fill all required fields for manual attendance.');
+                const { error } = await sb.from('geo_attendance_logs').insert([logData]);
 
-            logEntry.user_id = user_id;
-            logEntry.session_type = session_type;
-            logEntry.course_id = course_id || null;
-            logEntry.location_name = `[MANUAL] ${location.trim()}`;
-            logEntry.check_in_time = time ? `${date}T${time}:00+03:00` : `${date}T00:00:00+03:00`;
-        } else {
-            // Self-checkin using geolocation
-            if (!confirm('Marking attendance logs your current location. Continue?')) return;
+                if (error) {
+                    throw new Error(error.message);
+                }
 
-            const coords = await getGeoLocation();
-            const { latitude, longitude, accuracy } = coords;
-            const ip_address = await getIPAddress();
-            const device_id = getDeviceId();
-            const location_name = await reverseGeocode(latitude, longitude);
+                alert(`✅ Geo-Attendance Marked! Location: ${locationName}`);
+                loadAttendance();
 
-            if (!location_name || location_name.toLowerCase().includes('uncoordinated')) {
-                return alert('Could not determine a valid location. Please try again.');
+            } catch (err) {
+                console.error("Attendance Error:", err);
+                alert(`❌ Failed to mark attendance: ${err}`);
             }
-
-            logEntry.latitude = latitude;
-            logEntry.longitude = longitude;
-            logEntry.accuracy = accuracy;
-            logEntry.ip_address = ip_address;
-            logEntry.device_id = device_id;
-            logEntry.location_name = location_name;
         }
+        
+        $('manual-attendance-form').addEventListener('submit', async e => {
+            e.preventDefault();
+            const student_id = $('att_student_id').value;
+            const session_type = $('att_session_type').value;
+            const course_id = $('att_course_id').value || null;
+            const location = $('att_location').value.trim() || 'Manual Entry';
+            const date = $('att_date').value;
+            const time = $('att_time').value || '08:00';
 
-        const { error } = await sb.from('geo_attendance_logs').insert([logEntry]);
+            if (!student_id || !date) return alert('Select a student and date.');
 
-        if (error) {
-            console.error('Attendance Error:', error);
-            return alert('Failed to log attendance: ' + error.message);
-        }
+            const check_in_time = new Date(`${date}T${time}`).toISOString();
+            
+            const logData = {
+                user_id: student_id,
+                location_name: location,
+                latitude: 0, // Default to 0 for manual entries
+                longitude: 0, // Default to 0 for manual entries
+                ip_address: 'MANUAL_ENTRY',
+                device_id: 'MANUAL_ENTRY',
+                check_in_time: check_in_time,
+                session_type: session_type,
+                is_manual: true,
+                course_id: course_id
+            };
 
-        alert(`✅ Attendance logged successfully at ${logEntry.location_name}`);
-        loadAttendance();
-        loadDashboardData();
+            const { error } = await sb.from('geo_attendance_logs').insert([logData]);
 
-    } catch (err) {
-        alert('Attendance failed: ' + err.message);
-    }
-}
+            if (error) return alert('Error marking manual attendance: ' + error.message);
 
-// Manual attendance form
-$('manual-attendance-form').addEventListener('submit', e => {
-    e.preventDefault();
-    markAttendance({
-        manual: true,
-        manualData: {
-            user_id: $('att_student_id').value,
-            session_type: $('att_session_type').value,
-            course_id: $('att_course_id').value,
-            location: $('att_location').value,
-            date: $('att_date').value,
-            time: $('att_time').value
-        }
-    });
-});
-
-// Load attendance table
-async function loadAttendance() {
-    const tbody = $('attendance-table');
-    tbody.innerHTML = '<tr><td colspan="6">Loading attendance records...</td></tr>';
-
-    const { data, error } = await sb.from('geo_attendance_logs')
-        .select(`*, profiles(full_name)`)
-        .order('check_in_time', { ascending: false })
-        .limit(50);
-
-    if (error) {
-        tbody.innerHTML = `<tr><td colspan="6">Error loading attendance: ${error.message}</td></tr>`;
-        return;
-    }
-
-    tbody.innerHTML = '';
-    data.forEach(r => {
-        const dateTime = new Date(r.check_in_time).toLocaleString();
-        const logTypeDisplay = escapeHtml((r.log_type || 'N/A').toUpperCase());
-        const geoData = r.latitude && r.longitude ?
-            `<button class="btn btn-map" onclick="showMapModal(${r.latitude}, ${r.longitude}, '${escapeHtml(r.location_name)}', '${escapeHtml(r.profiles.full_name)}')">View Map</button>` : 'N/A';
-
-        tbody.innerHTML += `<tr>
-            <td>${escapeHtml(r.profiles.full_name)}</td>
-            <td>${logTypeDisplay} ${r.session_type ? `(${r.session_type})` : ''}</td>
-            <td>${escapeHtml(r.location_name || 'N/A')}</td>
-            <td>${dateTime}</td>
-            <td>${geoData}</td>
-            <td><button class="btn btn-delete" onclick="deleteAttendanceLog('${r.id}')">Delete Log</button></td>
-        </tr>`;
-    });
-}
-
-async function deleteAttendanceLog(id) {
-    if (!confirm('Are you sure you want to delete this attendance log?')) return;
-    const { error } = await sb.from('geo_attendance_logs').delete().eq('id', id);
-    if (error) return alert('Error deleting log: ' + error.message);
-    loadAttendance();
-}
-
-/*******************
- * CATS / Exams Tab
- *******************/
-$('add-exam-form').addEventListener('submit', async e => {
-    e.preventDefault();
-
-    const program_type = $('exam_program').value.trim();
-    const course_id = $('exam_course_id').value || null; // allow null if not selected
-    const title = $('exam_title').value.trim();
-    const exam_date = $('exam_date').value;
-    const status = $('exam_status').value || 'Scheduled';
-
-    if (!program_type || !title || !exam_date) {
-        return alert('Please fill all required fields (Program, Title, Exam Date).');
-    }
-
-    try {
-        const { error } = await sb.from('cats_exams').insert([{
-            program_type,
-            course_id,
-            title,
-            exam_date,
-            status,
-            created_by: currentUserProfile?.id || null
-        }]);
-
-        if (error) throw error;
-
-        alert('✅ Exam/CAT scheduled successfully!');
-        $('add-exam-form').reset();
-        loadExams();
-
-    } catch (err) {
-        console.error('Add Exam Error:', err);
-        alert('Error adding exam: ' + err.message);
-    }
-});
-
-async function loadExams() {
-    const tbody = $('exams-table');
-    tbody.innerHTML = '<tr><td colspan="6">Loading exams...</td></tr>';
-
-    try {
-        const { data, error } = await sb.from('cats_exams')
-            .select(`
-                *,
-                courses(course_name)
-            `)
-            .order('exam_date', { ascending: false });
-
-        if (error) throw error;
-
-        tbody.innerHTML = '';
-
-        if (!data || data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6">No exams found.</td></tr>';
-            return;
-        }
-
-        data.forEach(e => {
-            const dateStr = e.exam_date ? new Date(e.exam_date).toDateString() : 'N/A';
-            const courseName = e.courses ? e.courses.course_name : 'N/A';
-            const status = e.status || 'Scheduled';
-
-            tbody.innerHTML += `<tr>
-                <td>${escapeHtml(e.program_type || 'N/A')}</td>
-                <td>${escapeHtml(courseName)}</td>
-                <td>${escapeHtml(e.title || 'N/A')}</td>
-                <td>${dateStr}</td>
-                <td>${escapeHtml(status)}</td>
-                <td>
-                    <button class="btn btn-delete" onclick="deleteExam('${e.id}')">Delete</button>
-                </td>
-            </tr>`;
+            alert('✅ Manual attendance marked successfully!');
+            $('manual-attendance-form').reset();
+            loadAttendance();
         });
 
-    } catch (err) {
-        console.error('Load Exams Error:', err);
-        tbody.innerHTML = `<tr><td colspan="6">Error loading exams: ${escapeHtml(err.message)}</td></tr>`;
-    }
-}
 
-async function deleteExam(id) {
-    if (!confirm('Are you sure you want to delete this Exam/CAT?')) return;
-
-    try {
-        const { error } = await sb.from('cats_exams').delete().eq('id', id);
-        if (error) throw error;
-
-        alert('✅ Exam deleted successfully!');
-        loadExams();
-    } catch (err) {
-        console.error('Delete Exam Error:', err);
-        alert('Error deleting exam: ' + err.message);
-    }
-}
-
-// Simple escapeHtml function to prevent XSS
-function escapeHtml(text) {
-    if (!text) return '';
-    return text
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-}
-
-        /*******************
-         * Messages Tab
-         *******************/
-        $('send-message-form').addEventListener('submit', async e => {
-            e.preventDefault();
-            const program_type = $('msg_program').value;
-            const msg_body = $('msg_body').value.trim();
-
-            if(!program_type || !msg_body) return alert('Fill all fields.');
-
-            const { error } = await sb.from('messages').insert([{
-                program_type,
-                message_body: msg_body,
-                sender_id: currentUserProfile.id
-            }]);
+        async function loadAttendance() {
+            const tbody = $('attendance-table');
+            tbody.innerHTML = '<tr><td colspan="6">Loading attendance records...</td></tr>';
+            
+            const { data, error } = await sb.from('geo_attendance_logs')
+                .select(`*, user:profiles(full_name), course:courses(course_name)`)
+                .order('check_in_time', { ascending: false })
+                .limit(50); // Limit to last 50 for performance
 
             if (error) {
-                console.error('Send Message Error:', error);
-                return alert('Error sending message: ' + error.message);
+                tbody.innerHTML = `<tr><td colspan="6">Error loading attendance: ${error.message}</td></tr>`;
+                return;
             }
 
-            alert(`✅ Message sent to ${program_type === 'ALL' ? 'ALL' : program_type} students!`);
-            $('send-message-form').reset();
-            loadMessages();
+            tbody.innerHTML = '';
+            data.forEach(log => {
+                const isGeo = !log.is_manual;
+                const time = new Date(log.check_in_time).toLocaleTimeString();
+                const date = new Date(log.check_in_time).toLocaleDateString();
+                const geoData = isGeo 
+                    ? `<button class="btn btn-map" onclick="showMapModal(${log.latitude}, ${log.longitude}, '${escapeHtml(log.user.full_name)}', '${date} ${time}')">View Map</button>`
+                    : 'N/A';
+                
+                const locationDisplay = isGeo ? `${escapeHtml(log.location_name || 'Geo-Location')}<br><small>(${log.latitude.toFixed(4)}, ${log.longitude.toFixed(4)})</small>` : escapeHtml(log.location_name);
+                
+                tbody.innerHTML += `<tr>
+                    <td>${escapeHtml(log.user?.full_name || 'Deleted User')}</td>
+                    <td>${escapeHtml(log.session_type)} (${escapeHtml(log.course?.course_name || 'N/A')})</td>
+                    <td>${locationDisplay}</td>
+                    <td>${date} ${time}</td>
+                    <td>${geoData}</td>
+                    <td><button class="btn btn-delete" onclick="deleteAttendanceLog('${log.id}')">Delete</button></td>
+                </tr>`;
+            });
+        }
+        
+        function filterAttendanceTable() {
+            const filter = $('attendance-search').value.toUpperCase();
+            const table = $('attendance-table');
+            const rows = table.getElementsByTagName('tr');
+            for (let i = 0; i < rows.length; i++) {
+                const studentCell = rows[i].getElementsByTagName('td')[0]; // The student name column
+                if (studentCell) {
+                    const txtValue = studentCell.textContent || studentCell.innerText;
+                    rows[i].style.display = txtValue.toUpperCase().indexOf(filter) > -1 ? '' : 'none';
+                }
+            }
+        }
+
+
+        function showMapModal(lat, lng, name, time) {
+            $('mapModal').style.display = 'flex';
+            $('mapInfo').textContent = `Check-in for ${name} at ${time}`;
+
+            if (attendanceMap) {
+                attendanceMap.remove();
+            }
+
+            attendanceMap = L.map('attendanceMap').setView([lat, lng], 16);
+            
+            L.tileLayer('https://api.mapbox.com/styles/v1/mapbox/streets-v11/tiles/{z}/{x}/{y}?access_token={accessToken}', {
+                attribution: 'Map data &copy; <a href="https://www.mapbox.com/">Mapbox</a> contributors',
+                maxZoom: 18,
+                id: 'mapbox/streets-v11',
+                tileSize: 512,
+                zoomOffset: -1,
+                accessToken: MAPBOX_ACCESS_TOKEN
+            }).addTo(attendanceMap);
+
+            L.marker([lat, lng]).addTo(attendanceMap)
+                .bindPopup(`<b>${name}</b><br>Checked in here.`)
+                .openPopup();
+        }
+
+        async function deleteAttendanceLog(id) {
+            if (!confirm('Are you sure you want to delete this attendance log?')) return;
+            const { error } = await sb.from('geo_attendance_logs').delete().eq('id', id);
+            if (error) return alert('Error deleting log: ' + error.message);
+            alert('Log deleted successfully.');
+            loadAttendance();
+        }
+
+
+        /*******************
+         * CATS/Exams Tab
+         *******************/
+        async function loadExams() {
+            const tbody = $('exams-table');
+            tbody.innerHTML = '<tr><td colspan="6">Loading exams...</td></tr>';
+            
+            const { data, error } = await sb.from('exams')
+                .select(`*, course:courses(course_name)`)
+                .order('exam_date', { ascending: false });
+
+            if (error) {
+                tbody.innerHTML = `<tr><td colspan="6">Error loading exams: ${error.message}</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = '';
+            data.forEach(e => {
+                const date = new Date(e.exam_date).toLocaleDateString();
+                const statusColor = e.status === 'Upcoming' ? '#4F46E5' : '#10B981';
+                
+                tbody.innerHTML += `<tr>
+                    <td>${escapeHtml(e.program_type)}</td>
+                    <td>${escapeHtml(e.course?.course_name || 'N/A')}</td>
+                    <td>${escapeHtml(e.title)}</td>
+                    <td>${date}</td>
+                    <td><span style="color:${statusColor}; font-weight:bold;">${escapeHtml(e.status)}</span></td>
+                    <td><button class="btn btn-delete" onclick="deleteExam('${e.id}')">Delete</button></td>
+                </tr>`;
+            });
+        }
+
+        $('add-exam-form').addEventListener('submit', async e => {
+            e.preventDefault();
+            const program_type = $('exam_program').value;
+            const course_id = $('exam_course_id').value;
+            const title = $('exam_title').value.trim();
+            const date = $('exam_date').value;
+            const status = $('exam_status').value;
+
+            if (!program_type || !course_id || !title || !date) return alert('Fill all required fields.');
+
+            const { error } = await sb.from('exams').insert([{ program_type, course_id, title, exam_date: date, status }]);
+            if (error) return alert('Error adding exam: ' + error.message);
+
+            alert('✅ Exam/CAT added successfully!');
+            $('add-exam-form').reset();
+            loadExams();
         });
 
+        async function deleteExam(id) {
+            if (!confirm('Are you sure you want to delete this exam/CAT record?')) return;
+            const { error } = await sb.from('exams').delete().eq('id', id);
+            if (error) return alert('Error deleting exam: ' + error.message);
+            alert('Exam/CAT deleted successfully.');
+            loadExams();
+        }
+
+        /*******************
+         * Messages Tab
+         *******************/
         async function loadMessages() {
             const tbody = $('messages-table');
-            tbody.innerHTML = '<tr><td colspan="3">Loading messages...</td></tr>';
-
+            tbody.innerHTML = '<tr><td colspan="3">Loading recent messages...</td></tr>';
+            
             const { data, error } = await sb.from('messages')
                 .select('*')
-                .order('created_at', { ascending: false });
+                .order('created_at', { ascending: false })
+                .limit(20);
 
             if (error) {
                 tbody.innerHTML = `<tr><td colspan="3">Error loading messages: ${error.message}</td></tr>`;
@@ -1048,129 +966,125 @@ function escapeHtml(text) {
             data.forEach(m => {
                 const date = new Date(m.created_at).toLocaleString();
                 tbody.innerHTML += `<tr>
-                    <td>${escapeHtml(m.program_type)}</td>
-                    <td>${escapeHtml(m.message_body.substring(0, 100))}...</td>
+                    <td>${escapeHtml(m.target_program)}</td>
+                    <td>${escapeHtml(m.body.substring(0, 70))}...</td>
                     <td>${date}</td>
                 </tr>`;
             });
         }
-        
-        /*******************
- * Resources Tab (Storage & DB)
- *******************/
-async function uploadResource() {
-    const program_type = $('resource_program').value;
-    const fileInput = $('resourceFile');
-    const resourceTitle = $('resourceTitle').value.trim();
 
-    if (!program_type || !resourceTitle || !fileInput.files.length) {
-        return alert('Please select a program, enter a title, and select a file.');
-    }
+        $('send-message-form').addEventListener('submit', async e => {
+            e.preventDefault();
+            const target_program = $('msg_program').value;
+            const body = $('msg_body').value.trim();
 
-    const file = fileInput.files[0];
-    const fileExt = file.name.split('.').pop();
-    const filePath = `${program_type}/${crypto.randomUUID()}.${fileExt}`;
+            if (!target_program || !body) return alert('Select a program and enter a message body.');
 
-    // 1. Upload file to Supabase Storage
-    const { error: uploadError } = await sb.storage
-        .from(RESOURCES_BUCKET)
-        .upload(filePath, file, {
-            cacheControl: '3600',
-            upsert: false
+            // In a real application, you would use a database trigger or a Supabase Edge Function to send this message to all users in the target_program
+            // For this frontend-only dashboard, we just log the message.
+
+            const { error } = await sb.from('messages').insert([{ target_program, body, sender_id: currentUserProfile.id }]);
+            if (error) return alert('Error sending message: ' + error.message);
+
+            alert(`✅ Message sent to ${target_program} successfully (Logged in DB).`);
+            $('send-message-form').reset();
+            loadMessages();
         });
 
-    if (uploadError) {
-        console.error('Upload Error:', uploadError);
-        return alert('Error uploading file: ' + uploadError.message);
-    }
+        /*******************
+         * Resources Tab
+         *******************/
+        async function uploadResource() {
+            const program_type = $('resource_program').value;
+            const fileInput = $('resourceFile');
+            const title = $('resourceTitle').value.trim();
+            const file = fileInput.files[0];
 
-    // 2. Insert record into database table
-    const { error: dbError } = await sb.from('resources').insert([{
-        program_type,
-        file_name: file.name,
-        file_path: filePath,
-        title: resourceTitle,
-        uploaded_by: currentUserProfile?.id || null
-    }]);
+            if (!program_type || !file || !title) return alert('Select a program, file, and title.');
 
-    if (dbError) {
-        // If DB insert fails, try to delete the uploaded file
-        await sb.storage.from(RESOURCES_BUCKET).remove([filePath]);
-        console.error('DB Insert Error:', dbError);
-        return alert('Error saving file details to database: ' + dbError.message);
-    }
+            // 1. Upload file to Supabase Storage
+            const fileExtension = file.name.split('.').pop();
+            const fileName = `${program_type}/${new Date().getTime()}-${Math.random().toString(36).substring(2, 9)}.${fileExtension}`;
 
-    alert('✅ Resource uploaded successfully!');
-    $('upload-resource-form').reset();
-    loadResources();
-}
+            const { data: uploadData, error: uploadError } = await sb.storage.from(RESOURCES_BUCKET).upload(fileName, file);
+            
+            if (uploadError) {
+                console.error(uploadError);
+                return alert('Error uploading file: ' + uploadError.message);
+            }
 
-async function loadResources() {
-    const tbody = $('resources-list');
-    tbody.innerHTML = '<tr><td colspan="5">Loading resources...</td></tr>';
+            // 2. Get public URL and insert record into database
+            const { data: urlData } = sb.storage.from(RESOURCES_BUCKET).getPublicUrl(fileName);
 
-    const { data, error } = await sb
-        .from('resources')
-        .select(`
-            id,
-            title,
-            file_name,
-            file_path,
-            program_type,
-            created_at,
-            profiles:uploaded_by ( full_name )
-        `)
-        .order('created_at', { ascending: false });
+            const { error: dbError } = await sb.from('resources').insert([{
+                program_type,
+                file_url: urlData.publicUrl,
+                file_path: fileName,
+                title,
+                uploaded_by: currentUserProfile.full_name
+            }]);
 
-    if (error) {
-        console.error('Load Resources Error:', error);
-        tbody.innerHTML = `<tr><td colspan="5">Error loading resources: ${error.message}</td></tr>`;
-        return;
-    }
+            if (dbError) {
+                // IMPORTANT: If DB insert fails, consider deleting the uploaded file from storage
+                console.error("DB Error. File uploaded to storage:", uploadData.path, "Need manual deletion.");
+                return alert('File uploaded, but failed to save resource link to database: ' + dbError.message);
+            }
 
-    tbody.innerHTML = '';
+            alert('✅ Resource uploaded successfully!');
+            $('upload-resource-form').reset();
+            loadResources();
+        }
 
-    if (!data || data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5">No resources available.</td></tr>';
-        return;
-    }
+        async function loadResources() {
+            const tbody = $('resources-list');
+            tbody.innerHTML = '<tr><td colspan="5">Loading resources...</td></tr>';
+            
+            const { data, error } = await sb.from('resources')
+                .select('*')
+                .order('created_at', { ascending: false });
 
-    data.forEach(r => {
-        const date = new Date(r.created_at).toDateString();
-        const downloadUrl = `${SUPABASE_URL}/storage/v1/object/public/${RESOURCES_BUCKET}/${r.file_path}`;
-        const uploader = r.profiles?.full_name || 'Unknown';
+            if (error) {
+                tbody.innerHTML = `<tr><td colspan="5">Error loading resources: ${error.message}</td></tr>`;
+                return;
+            }
 
-        tbody.innerHTML += `
-        <tr>
-            <td>${escapeHtml(r.program_type)}</td>
-            <td><a href="${downloadUrl}" target="_blank">${escapeHtml(r.title)} (${escapeHtml(r.file_name)})</a></td>
-            <td>${escapeHtml(uploader)}</td>
-            <td>${date}</td>
-            <td>
-                <button class="btn btn-delete" onclick="deleteResource('${r.id}', '${r.file_path}')">Delete</button>
-            </td>
-        </tr>`;
-    });
-}
+            tbody.innerHTML = '';
+            data.forEach(r => {
+                const date = new Date(r.created_at).toLocaleDateString();
+                const fileName = r.file_path.split('/').pop();
+                tbody.innerHTML += `<tr>
+                    <td>${escapeHtml(r.program_type)}</td>
+                    <td><a href="${r.file_url}" target="_blank">${escapeHtml(r.title)} <small>(${fileName})</small></a></td>
+                    <td>${escapeHtml(r.uploaded_by)}</td>
+                    <td>${date}</td>
+                    <td><button class="btn btn-delete" onclick="deleteResource('${r.id}', '${r.file_path}')">Delete</button></td>
+                </tr>`;
+            });
+        }
+        
+        async function deleteResource(id, filePath) {
+            if (!confirm('Are you sure you want to delete this resource and its file from storage? This is permanent.')) return;
 
-async function deleteResource(id, filePath) {
-    if (!confirm('Are you sure you want to delete this resource? This will remove the file permanently.')) return;
-    
-    const { error: dbError } = await sb.from('resources').delete().eq('id', id);
-    const { error: storageError } = await sb.storage.from(RESOURCES_BUCKET).remove([filePath]);
+            // 1. Delete the file from storage
+            const { error: storageError } = await sb.storage.from(RESOURCES_BUCKET).remove([filePath]);
+            
+            if (storageError) {
+                console.warn('Storage deletion failed, continuing with DB record deletion:', storageError.message);
+            }
 
-    if (dbError || storageError) {
-        console.error('Delete Resource DB Error:', dbError);
-        console.error('Delete Resource Storage Error:', storageError);
-        return alert('Error deleting resource: ' + (dbError?.message || storageError?.message));
-    }
-    
-    alert('Resource deleted successfully.');
-    loadResources();
-}
+            // 2. Delete the record from the database
+            const { error: dbError } = await sb.from('resources').delete().eq('id', id);
 
-// Initialize session
-initSession();
-</script>
+            if (dbError) return alert('Error deleting resource record: ' + dbError.message);
+
+            alert('Resource and file deleted successfully.');
+            loadResources();
+        }
+
+
+        // Initialize the session when the page loads
+        initSession();
+
+    </script>
 </body>
 </html>
