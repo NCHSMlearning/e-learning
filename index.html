@@ -265,10 +265,11 @@
             padding: 20px;
             border-radius: var(--border-radius);
             box-shadow: var(--shadow-md);
+            margin-bottom: 30px;
         }
         #message-form textarea {
             width: 100%;
-            min-height: 150px;
+            min-height: 100px; /* Reduced height for better UX */
             padding: 15px;
             border: 1px solid #D1D5DB;
             border-radius: 6px;
@@ -290,6 +291,10 @@
         }
         #message-form button:hover {
             background-color: #2563EB;
+        }
+        #message-status {
+            margin-top: 10px;
+            font-weight: 500;
         }
         
         /* Responsive adjustments */
@@ -367,6 +372,7 @@
                     <p><strong>Name:</strong> <span id="student-name">...loading...</span></p>
                     <p><strong>Email:</strong> <span id="student-email">...loading...</span></p>
                     <p><strong>Phone:</strong> <span id="student-phone">...loading...</span></p>
+                    <p><strong>Program:</strong> <span id="student-program">...loading...</span></p>
                 </div>
             </section>
 
@@ -413,27 +419,30 @@
             </section>
 
             <section id="cats" class="tab-content">
-                <h2>CATS / Exams</h2>
+                <h2>CATS / Exams Schedule</h2>
                 <table>
-                    <thead><tr><th>Exam Name</th><th>Date</th><th>Score</th></tr></thead>
+                    <thead><tr><th>Exam Name</th><th>Date</th><th>Status</th></tr></thead>
                     <tbody id="exams-table">
-                        <tr><td colspan="3">Loading exam results...</td></tr>
+                        <tr><td colspan="3">Loading exam schedule...</td></tr>
                     </tbody>
                 </table>
             </section>
 
             <section id="resources" class="tab-content">
-                <h2>Learning Resources (Real-Time)</h2>
+                <h2>Learning Resources (Filtered by Program)</h2>
                 <div id="resources-list">Loading resources...</div>
             </section>
 
             <section id="messages" class="tab-content">
                 <h2>Message Admin / Instructor</h2>
                 <form id="message-form">
-                    <textarea placeholder="Write your message..." required></textarea>
-                    <button type="submit">Send</button>
+                    <textarea id="student-message-body" placeholder="Write your message to the administration..." required></textarea>
+                    <button type="submit">Send Message</button>
+                    <p id="message-status"></p>
                 </form>
-                <div id="messages-list"></div>
+                
+                <div id="messages-list">
+                     </div>
             </section>
         </main>
     </div>
@@ -449,13 +458,15 @@
         const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         // ** LOCATIONIQ CONFIGURATION (Geocoding API) **
-        // REPLACE with your actual LocationIQ Public Key!
         const LOCATIONIQ_API_KEY = 'pk.cbe61eae35ecbe1d1d682c347d81381c'; 
         const LOCATIONIQ_API_URL = 'https://us1.locationiq.com/v1/reverse.php';
 
         let currentUserId = null;
+        let currentUserProfile = null; // Stores the full profile including program_type
+
         const geoMessage = document.getElementById('geo-message');
         const checkInButton = document.getElementById('check-in-button');
+        const messageForm = document.getElementById('message-form');
 
         // *************************************************************************
         // *** 2. UI AND NAVIGATION LOGIC (Tab Hiding/Showing) ***
@@ -471,6 +482,11 @@
             tabs.forEach(tab => tab.classList.remove('active'));
             const activeTab = document.getElementById(tabId);
             if(activeTab) activeTab.classList.add('active');
+            
+            // Load data specific to the tab being activated (important for real-time updates)
+            if (tabId === 'cats' && currentUserId) loadExams();
+            if (tabId === 'resources' && currentUserId) loadResources();
+            if (tabId === 'messages' && currentUserId) loadStudentMessages();
         }
 
         // Add listeners to enable switching
@@ -488,20 +504,25 @@
         }
 
         // *************************************************************************
-        // *** 3. REALTIME AND DATA FETCHING LOGIC ***
+        // *** 3. REALTIME SUBSCRIPTIONS AND DATA FETCHING LOGIC ***
         // *************************************************************************
         
         function handleCoursesUpdate(payload) { loadCourses(); }
-        function handleResourcesUpdate(payload) { loadResources(); }
         function handleAttendanceUpdate(payload) { if (currentUserId) { loadAttendance(currentUserId); } }
         function handleGeoHistoryUpdate(payload) { if (currentUserId) { loadGeoAttendanceHistory(currentUserId); } }
+        // Handlers for filtered tables
+        function handleResourcesUpdate(payload) { loadResources(); }
+        function handleExamsUpdate(payload) { loadExams(); }
+        function handleMessagesUpdate(payload) { loadStudentMessages(); } // Messages filtered client-side
 
         async function subscribeToRealtimeChannels(userId) {
             sb.realtime.channels.forEach(channel => sb.removeChannel(channel));
             
+            // General Channels
             sb.channel('public:courses').on('postgres_changes', { event: '*', schema: 'public', table: 'courses' }, handleCoursesUpdate).subscribe();
-            sb.channel('public:resources').on('postgres_changes', { event: '*', schema: 'public', table: 'resources' }, handleResourcesUpdate).subscribe();
-
+            sb.channel('public:messages').on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, handleMessagesUpdate).subscribe();
+            
+            // User-specific Channels
             sb.channel(`attendance:user:${userId}`)
               .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance', filter: `student_id=eq.${userId}` }, handleAttendanceUpdate)
               .subscribe();
@@ -509,12 +530,16 @@
             sb.channel(`geo_attendance:user:${userId}`)
               .on('postgres_changes', { event: '*', schema: 'public', table: 'geo_attendance_logs', filter: `student_id=eq.${userId}` }, handleGeoHistoryUpdate)
               .subscribe();
+
+            // Program-specific Channels (Filtered by program_type, listen for ANY change and reload)
+            sb.channel('public:resources').on('postgres_changes', { event: '*', schema: 'public', table: 'resources' }, handleResourcesUpdate).subscribe();
+            sb.channel('public:cats_exams').on('postgres_changes', { event: '*', schema: 'public', table: 'cats_exams' }, handleExamsUpdate).subscribe();
         }
 
         async function loadProfile(userId) {
             const { data: profile, error: profileError } = await sb
                 .from('profiles')
-                .select('full_name, email, phone')
+                .select('full_name, email, phone, program_type') 
                 .eq('id', userId)
                 .single();
 
@@ -523,11 +548,14 @@
                 return;
             }
 
+            currentUserProfile = profile; 
+
             const firstName = profile.full_name ? profile.full_name.split(' ')[0] : 'Student';
             document.querySelector('header h1').textContent = `Welcome, ${firstName}!`;
             document.getElementById('student-name').textContent = profile.full_name || 'N/A';
             document.getElementById('student-email').textContent = profile.email || 'N/A';
             document.getElementById('student-phone').textContent = profile.phone || 'N/A';
+            document.getElementById('student-program').textContent = profile.program_type || 'N/A';
         }
 
         async function loadCourses() {
@@ -539,7 +567,157 @@
             }
             table.innerHTML = (data || []).map(c => `<tr><td>${c.course_name}</td><td>Active</td></tr>`).join('');
         }
+        
+        async function loadExams() {
+            const table = document.getElementById('exams-table');
+            table.innerHTML = '<tr><td colspan="3">Loading exam schedule...</td></tr>';
+            
+            if (!currentUserProfile) {
+                table.innerHTML = '<tr><td colspan="3">Error: Profile not loaded.</td></tr>';
+                return;
+            }
 
+            const studentProgram = currentUserProfile.program_type;
+            
+            const { data: exams, error } = await sb
+                .from('cats_exams')
+                .select('title, exam_date, status') 
+                .eq('program_type', studentProgram)
+                .order('exam_date', { ascending: true });
+                
+            if (error) {
+                table.innerHTML = `<tr><td colspan="3" style="color: red;">Error loading exams: ${error.message}</td></tr>`;
+                return;
+            }
+
+            table.innerHTML = (exams || []).map(e => {
+                const date = new Date(e.exam_date).toLocaleDateString();
+                return `
+                    <tr>
+                        <td>${e.title}</td>
+                        <td>${date}</td>
+                        <td>${e.status || 'Scheduled'}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        async function loadResources() {
+            const list = document.getElementById('resources-list');
+            list.innerHTML = 'Loading resources...';
+            
+            if (!currentUserProfile) {
+                list.innerHTML = '<p style="color: red;">Error: Profile not loaded.</p>';
+                return;
+            }
+            
+            const studentProgram = currentUserProfile.program_type;
+
+            const { data: resources, error } = await sb
+                .from('resources')
+                .select('title, file_path')
+                .or(`program_type.eq.${studentProgram},program_type.eq.ALL`)
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                list.innerHTML = `<p style="color: red;">Error loading resources: ${error.message}</p>`;
+                return;
+            }
+
+            list.innerHTML = (resources || []).map(r => `
+                <p><a href="${SUPABASE_URL}/storage/v1/object/public/resources/${r.file_path}" target="_blank" style="color: var(--color-primary); text-decoration: none; font-weight: 500;">
+                    <span style="font-size: 1.2em; margin-right: 5px;">&#x1F4C4;</span> ${r.title}
+                </a></p>
+            `).join('');
+        }
+
+        async function loadStudentMessages() {
+            const inboxContainer = document.getElementById('messages-list'); 
+            inboxContainer.innerHTML = '<p>Loading messages...</p>';
+            
+            if (!currentUserProfile) {
+                inboxContainer.innerHTML = '<p style="color: red;">Error: Student profile not found.</p>';
+                return;
+            }
+
+            const studentProgram = currentUserProfile.program_type;
+
+            const { data: messages, error } = await sb
+                .from('messages')
+                .select('body, created_at')
+                // Filter messages: where program_type matches student's OR is 'ALL'
+                .or(`program_type.eq.${studentProgram},program_type.eq.ALL`)
+                .order('created_at', { ascending: false })
+                .limit(20);
+
+            if (error) {
+                console.error('Error loading messages:', error);
+                inboxContainer.innerHTML = `<p style="color:red;">Error loading messages: ${error.message}</p>`;
+                return;
+            }
+
+            let html = '';
+            if (messages.length === 0) {
+                 html += '<p>No new messages from the administration.</p>';
+            } else {
+                messages.forEach(msg => {
+                    const date = new Date(msg.created_at).toLocaleString();
+                    html += `
+                        <div style="border: 1px solid #E5E7EB; padding: 15px; margin-bottom: 10px; border-radius: var(--border-radius); background-color: #F9FAFB;">
+                            <p style="margin: 0 0 10px 0; font-weight: 600; color: var(--color-dark);">
+                                <span style="color: var(--color-primary); margin-right: 10px;">&#9993;</span>Admin Announcement
+                            </p>
+                            <p style="margin: 0 0 5px 0;">${msg.body}</p>
+                            <p style="margin: 0; font-size: 0.8rem; color: #6B7280;">Sent: ${date}</p>
+                        </div>
+                    `;
+                });
+            }
+            inboxContainer.innerHTML = html;
+        }
+
+        // --- NEW: Student sends message to Admin ---
+        messageForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const messageBody = document.getElementById('student-message-body').value.trim();
+            const statusElement = document.getElementById('message-status');
+
+            if (!currentUserId) {
+                statusElement.textContent = 'Error: User not authenticated.';
+                statusElement.style.color = '#EF4444';
+                return;
+            }
+
+            statusElement.textContent = 'Sending...';
+            statusElement.style.color = '#3B82F6';
+            
+            // Insert the message into the same 'messages' table, but with a different program_type
+            // We use a reserved value like 'TO_ADMIN' to differentiate it from broadcast messages
+            const { error } = await sb
+                .from('messages')
+                .insert({
+                    sender_id: currentUserId,
+                    body: messageBody,
+                    program_type: 'TO_ADMIN' // Use a distinct identifier for messages sent *to* the admin
+                });
+
+            if (error) {
+                console.error('Error sending message:', error);
+                statusElement.textContent = `Error sending message: ${error.message}`;
+                statusElement.style.color = '#EF4444';
+            } else {
+                statusElement.textContent = 'Message sent successfully to the administration!';
+                statusElement.style.color = '#059669';
+                document.getElementById('student-message-body').value = ''; // Clear textarea
+                setTimeout(() => { statusElement.textContent = ''; }, 5000);
+            }
+        });
+
+
+        // *************************************************************************
+        // *** 4. EXISTING FUNCTIONS (Attendance and Geo-Location) ***
+        // *************************************************************************
+        
         async function loadAttendance(userId) {
             const { data, error } = await sb.from('attendance').select('course_or_rotation, session_type, date, status').eq('student_id', userId);
             const table = document.getElementById('attendance-table');
@@ -550,20 +728,10 @@
             table.innerHTML = (data || []).map(a => `
                 <tr>
                     <td>${a.course_or_rotation}</td>
-                    <td>${a.session_type}</td>
+                    <td><td>${a.session_type}</td>
                     <td>${a.date}</td>
                     <td>${a.status || 'Present'}</td>
                 </tr>`).join('');
-        }
-
-        async function loadResources() {
-            const { data, error } = await sb.from('resources').select('file_url, file_name');
-            const list = document.getElementById('resources-list');
-            if (error) {
-                list.innerHTML = `<p style="color: red;">Error loading resources.</p>`;
-                return;
-            }
-            list.innerHTML = (data || []).map(r => `<p><a href="${r.file_url}" target="_blank">${r.file_name}</a></p>`).join('');
         }
         
         async function loadGeoAttendanceHistory(userId) {
@@ -590,14 +758,6 @@
                 </tr>`).join('');
         }
         
-        // *************************************************************************
-        // *** 4. GEOLOCATION AND CHECK-IN LOGIC ***
-        // *************************************************************************
-
-        /**
-         * Helper to get GPS and reverse geocode the location using LocationIQ.
-         * @returns {Promise<{lat: number, long: number, accuracy: number, address: string}>}
-         */
         async function getLocationAndAddress() {
             geoMessage.textContent = 'Acquiring GPS location...';
 
@@ -649,7 +809,6 @@
             });
         }
 
-
         async function geoCheckIn() {
             if (!currentUserId) { 
                 geoMessage.textContent = "Error: User not logged in."; 
@@ -662,12 +821,10 @@
             geoMessage.style.color = '#3B82F6';
 
             try {
-                // 1. Get Location and Address
                 const locationData = await getLocationAndAddress();
                 
                 geoMessage.textContent = `Location confirmed: ${locationData.address}. Submitting attendance...`;
                 
-                // 2. Call Supabase RPC for Check-In/Geofencing
                 const { data, error } = await sb.rpc('record_daily_attendance', {
                     _student_id: currentUserId,
                     _session_type: sessionType,
@@ -681,17 +838,15 @@
                     throw new Error(error.message || 'Attendance record failed due to a database error.');
                 }
                 
-                // 3. Success
-                geoMessage.style.color = '#059669'; // Success Green
+                geoMessage.style.color = '#059669'; 
                 geoMessage.textContent = `Check-in successful! Session: ${sessionType}. Location: ${locationData.address}`;
                 loadGeoAttendanceHistory(currentUserId);
 
             } catch (e) {
                 console.error("Attendance Failed:", e);
-                geoMessage.style.color = '#EF4444'; // Danger Red
+                geoMessage.style.color = '#EF4444'; 
                 geoMessage.textContent = `Check-in Failed: ${e.message}.`;
             } finally {
-                // 4. Re-enable button
                 checkInButton.textContent = 'Check In Now';
                 checkInButton.disabled = false;
             }
@@ -699,23 +854,28 @@
 
 
         // *************************************************************************
-        // *** 5. ROBUST INITIALIZATION SEQUENCE (Fixed Tab Display) ***
+        // *** 5. ROBUST INITIALIZATION SEQUENCE ***
         // *************************************************************************
 
         async function loadDashboardData(userId) {
             currentUserId = userId; 
 
-            // 1. Initial Load of Data
-            loadProfile(currentUserId);
+            // 1. Load Profile FIRST to get the program_type
+            await loadProfile(currentUserId);
+            if (!currentUserProfile) return; 
+
+            // 2. Load Data for ALL Tabs (now filtered by program_type)
             loadCourses();
             loadAttendance(currentUserId);
             loadGeoAttendanceHistory(currentUserId);
-            loadResources();
+            loadExams(); 
+            loadResources(); 
+            loadStudentMessages(); 
             
-            // 2. IMPORTANT FIX: Ensure only the Dashboard is shown on successful login
+            // 3. Show Dashboard
             showTab('dashboard');
 
-            // 3. Subscribe to Realtime Updates
+            // 4. Subscribe to Realtime Updates
             subscribeToRealtimeChannels(currentUserId);
         }
 
