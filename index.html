@@ -448,445 +448,477 @@
     </div>
 
     <script>
-        // *************************************************************************
-        // *** 1. CONFIGURATION: UPDATE THESE VALUES ***
-        // *************************************************************************
+    // *************************************************************************
+    // *** 1. CONFIGURATION: UPDATE THESE VALUES ***
+    // *************************************************************************
+    
+    // ** SUPABASE CONFIGURATION **
+    const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // ** LOCATIONIQ CONFIGURATION (Geocoding API) **
+    const LOCATIONIQ_API_KEY = 'pk.cbe61eae35ecbe1d1d682c347d81381c';
+    const LOCATIONIQ_API_URL = 'https://us1.locationiq.com/v1/reverse.php';
+
+    let currentUserId = null;
+    let currentUserProfile = null; // Stores the full profile including program_type
+
+    const geoMessage = document.getElementById('geo-message');
+    const checkInButton = document.getElementById('check-in-button');
+    const messageForm = document.getElementById('message-form');
+
+    // *************************************************************************
+    // *** 2. UI AND NAVIGATION LOGIC (Tab Hiding/Showing) ***
+    // *************************************************************************
+    const navLinks = document.querySelectorAll('.nav a');
+    const tabs = document.querySelectorAll('.tab-content');
+
+    function showTab(tabId) {
+        navLinks.forEach(l => l.classList.remove('active'));
+        const activeLink = document.querySelector(`.nav a[data-tab="${tabId}"]`);
+        if(activeLink) activeLink.classList.add('active');
+
+        tabs.forEach(tab => tab.classList.remove('active'));
+        const activeTab = document.getElementById(tabId);
+        if(activeTab) activeTab.classList.add('active');
         
-        // ** SUPABASE CONFIGURATION **
-        const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk'; 
-        const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-        // ** LOCATIONIQ CONFIGURATION (Geocoding API) **
-        const LOCATIONIQ_API_KEY = 'pk.cbe61eae35ecbe1d1d682c347d81381c'; 
-        const LOCATIONIQ_API_URL = 'https://us1.locationiq.com/v1/reverse.php';
-
-        let currentUserId = null;
-        let currentUserProfile = null; // Stores the full profile including program_type
-
-        const geoMessage = document.getElementById('geo-message');
-        const checkInButton = document.getElementById('check-in-button');
-        const messageForm = document.getElementById('message-form');
-
-        // *************************************************************************
-        // *** 2. UI AND NAVIGATION LOGIC (Tab Hiding/Showing) ***
-        // *************************************************************************
-        const navLinks = document.querySelectorAll('.nav a');
-        const tabs = document.querySelectorAll('.tab-content');
-
-        function showTab(tabId) {
-            navLinks.forEach(l => l.classList.remove('active'));
-            const activeLink = document.querySelector(`.nav a[data-tab="${tabId}"]`);
-            if(activeLink) activeLink.classList.add('active');
-
-            tabs.forEach(tab => tab.classList.remove('active'));
-            const activeTab = document.getElementById(tabId);
-            if(activeTab) activeTab.classList.add('active');
-            
-            // Load data specific to the tab being activated (important for real-time updates)
-            if (tabId === 'cats' && currentUserId) loadExams();
-            if (tabId === 'resources' && currentUserId) loadResources();
-            if (tabId === 'messages' && currentUserId) loadStudentMessages();
-        }
-
-        // Add listeners to enable switching
-        navLinks.forEach(link => {
-            link.addEventListener('click', e => {
-                e.preventDefault();
-                showTab(link.dataset.tab);
-            });
-        });
-
-        async function logout() {
-            sb.realtime.channels.forEach(channel => sb.removeChannel(channel));
-            await sb.auth.signOut();
-            window.location.href = "login.html"; 
-        }
-
-        // *************************************************************************
-        // *** 3. REALTIME SUBSCRIPTIONS AND DATA FETCHING LOGIC ***
-        // *************************************************************************
-        
-        function handleCoursesUpdate(payload) { loadCourses(); }
-        function handleAttendanceUpdate(payload) { if (currentUserId) { loadAttendance(currentUserId); } }
-        function handleGeoHistoryUpdate(payload) { if (currentUserId) { loadGeoAttendanceHistory(currentUserId); } }
-        // Handlers for filtered tables
-        function handleResourcesUpdate(payload) { loadResources(); }
-        function handleExamsUpdate(payload) { loadExams(); }
-        function handleMessagesUpdate(payload) { loadStudentMessages(); } // Messages filtered client-side
-
-        async function subscribeToRealtimeChannels(userId) {
-            sb.realtime.channels.forEach(channel => sb.removeChannel(channel));
-            
-            // General Channels
-            sb.channel('public:courses').on('postgres_changes', { event: '*', schema: 'public', table: 'courses' }, handleCoursesUpdate).subscribe();
-            sb.channel('public:messages').on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, handleMessagesUpdate).subscribe();
-            
-            // User-specific Channels
-            sb.channel(`attendance:user:${userId}`)
-              .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance', filter: `student_id=eq.${userId}` }, handleAttendanceUpdate)
-              .subscribe();
-              
-            sb.channel(`geo_attendance:user:${userId}`)
-              .on('postgres_changes', { event: '*', schema: 'public', table: 'geo_attendance_logs', filter: `student_id=eq.${userId}` }, handleGeoHistoryUpdate)
-              .subscribe();
-
-            // Program-specific Channels (Filtered by program_type, listen for ANY change and reload)
-            sb.channel('public:resources').on('postgres_changes', { event: '*', schema: 'public', table: 'resources' }, handleResourcesUpdate).subscribe();
-            sb.channel('public:cats_exams').on('postgres_changes', { event: '*', schema: 'public', table: 'cats_exams' }, handleExamsUpdate).subscribe();
-        }
-
-        async function loadProfile(userId) {
-            const { data: profile, error: profileError } = await sb
-                .from('profiles')
-                .select('full_name, email, phone, program_type') 
-                .eq('id', userId)
-                .single();
-
-            if (profileError) {
-                console.error("Profile Fetch Error:", profileError);
-                return;
-            }
-
-            currentUserProfile = profile; 
-
-            const firstName = profile.full_name ? profile.full_name.split(' ')[0] : 'Student';
-            document.querySelector('header h1').textContent = `Welcome, ${firstName}!`;
-            document.getElementById('student-name').textContent = profile.full_name || 'N/A';
-            document.getElementById('student-email').textContent = profile.email || 'N/A';
-            document.getElementById('student-phone').textContent = profile.phone || 'N/A';
-            document.getElementById('student-program').textContent = profile.program_type || 'N/A';
-        }
-
-        async function loadCourses() {
-            const { data, error } = await sb.from('courses').select('course_name, status');
-            const table = document.getElementById('courses-table');
-            if (error) {
-                table.innerHTML = `<tr><td colspan="2" style="color: red;">Error loading courses.</td></tr>`;
-                return;
-            }
-            table.innerHTML = (data || []).map(c => `<tr><td>${c.course_name}</td><td>Active</td></tr>`).join('');
-        }
-        
-        async function loadExams() {
-            const table = document.getElementById('exams-table');
-            table.innerHTML = '<tr><td colspan="3">Loading exam schedule...</td></tr>';
-            
-            if (!currentUserProfile) {
-                table.innerHTML = '<tr><td colspan="3">Error: Profile not loaded.</td></tr>';
-                return;
-            }
-
-            const studentProgram = currentUserProfile.program_type;
-            
-            const { data: exams, error } = await sb
-                .from('cats_exams')
-                .select('title, exam_date, status') 
-                .eq('program_type', studentProgram)
-                .order('exam_date', { ascending: true });
-                
-            if (error) {
-                table.innerHTML = `<tr><td colspan="3" style="color: red;">Error loading exams: ${error.message}</td></tr>`;
-                return;
-            }
-
-            table.innerHTML = (exams || []).map(e => {
-                const date = new Date(e.exam_date).toLocaleDateString();
-                return `
-                    <tr>
-                        <td>${e.title}</td>
-                        <td>${date}</td>
-                        <td>${e.status || 'Scheduled'}</td>
-                    </tr>
-                `;
-            }).join('');
-        }
-
-        async function loadResources() {
-            const list = document.getElementById('resources-list');
-            list.innerHTML = 'Loading resources...';
-            
-            if (!currentUserProfile) {
-                list.innerHTML = '<p style="color: red;">Error: Profile not loaded.</p>';
-                return;
-            }
-            
-            const studentProgram = currentUserProfile.program_type;
-
-            const { data: resources, error } = await sb
-                .from('resources')
-                .select('title, file_path')
-                .or(`program_type.eq.${studentProgram},program_type.eq.ALL`)
-                .order('created_at', { ascending: false });
-
-            if (error) {
-                list.innerHTML = `<p style="color: red;">Error loading resources: ${error.message}</p>`;
-                return;
-            }
-
-            list.innerHTML = (resources || []).map(r => `
-                <p><a href="${SUPABASE_URL}/storage/v1/object/public/resources/${r.file_path}" target="_blank" style="color: var(--color-primary); text-decoration: none; font-weight: 500;">
-                    <span style="font-size: 1.2em; margin-right: 5px;">&#x1F4C4;</span> ${r.title}
-                </a></p>
-            `).join('');
-        }
-
-        async function loadStudentMessages() {
-            const inboxContainer = document.getElementById('messages-list'); 
-            inboxContainer.innerHTML = '<p>Loading messages...</p>';
-            
-            if (!currentUserProfile) {
-                inboxContainer.innerHTML = '<p style="color: red;">Error: Student profile not found.</p>';
-                return;
-            }
-
-            const studentProgram = currentUserProfile.program_type;
-
-            const { data: messages, error } = await sb
-                .from('messages')
-                .select('body, created_at')
-                // Filter messages: where program_type matches student's OR is 'ALL'
-                .or(`program_type.eq.${studentProgram},program_type.eq.ALL`)
-                .order('created_at', { ascending: false })
-                .limit(20);
-
-            if (error) {
-                console.error('Error loading messages:', error);
-                inboxContainer.innerHTML = `<p style="color:red;">Error loading messages: ${error.message}</p>`;
-                return;
-            }
-
-            let html = '';
-            if (messages.length === 0) {
-                 html += '<p>No new messages from the administration.</p>';
-            } else {
-                messages.forEach(msg => {
-                    const date = new Date(msg.created_at).toLocaleString();
-                    html += `
-                        <div style="border: 1px solid #E5E7EB; padding: 15px; margin-bottom: 10px; border-radius: var(--border-radius); background-color: #F9FAFB;">
-                            <p style="margin: 0 0 10px 0; font-weight: 600; color: var(--color-dark);">
-                                <span style="color: var(--color-primary); margin-right: 10px;">&#9993;</span>Admin Announcement
-                            </p>
-                            <p style="margin: 0 0 5px 0;">${msg.body}</p>
-                            <p style="margin: 0; font-size: 0.8rem; color: #6B7280;">Sent: ${date}</p>
-                        </div>
-                    `;
-                });
-            }
-            inboxContainer.innerHTML = html;
-        }
-
-        // --- NEW: Student sends message to Admin ---
-        messageForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const messageBody = document.getElementById('student-message-body').value.trim();
-            const statusElement = document.getElementById('message-status');
-
-            if (!currentUserId) {
-                statusElement.textContent = 'Error: User not authenticated.';
-                statusElement.style.color = '#EF4444';
-                return;
-            }
-
-            statusElement.textContent = 'Sending...';
-            statusElement.style.color = '#3B82F6';
-            
-            // Insert the message into the same 'messages' table, but with a different program_type
-            // We use a reserved value like 'TO_ADMIN' to differentiate it from broadcast messages
-            const { error } = await sb
-                .from('messages')
-                .insert({
-                    sender_id: currentUserId,
-                    body: messageBody,
-                    program_type: 'TO_ADMIN' // Use a distinct identifier for messages sent *to* the admin
-                });
-
-            if (error) {
-                console.error('Error sending message:', error);
-                statusElement.textContent = `Error sending message: ${error.message}`;
-                statusElement.style.color = '#EF4444';
-            } else {
-                statusElement.textContent = 'Message sent successfully to the administration!';
-                statusElement.style.color = '#059669';
-                document.getElementById('student-message-body').value = ''; // Clear textarea
-                setTimeout(() => { statusElement.textContent = ''; }, 5000);
-            }
-        });
-
-
-        // *************************************************************************
-        // *** 4. EXISTING FUNCTIONS (Attendance and Geo-Location) ***
-        // *************************************************************************
-        
-        async function loadAttendance(userId) {
-            const { data, error } = await sb.from('attendance').select('course_or_rotation, session_type, date, status').eq('student_id', userId);
-            const table = document.getElementById('attendance-table');
-            if (error) {
-                table.innerHTML = `<tr><td colspan="4" style="color: red;">Error loading attendance history.</td></tr>`;
-                return;
-            }
-            table.innerHTML = (data || []).map(a => `
-                <tr>
-                    <td>${a.course_or_rotation}</td>
-                    <td><td>${a.session_type}</td>
-                    <td>${a.date}</td>
-                    <td>${a.status || 'Present'}</td>
-                </tr>`).join('');
-        }
-        
-        async function loadGeoAttendanceHistory(userId) {
-            const { data, error } = await sb
-                .from('geo_attendance_logs')
-                .select('check_in_time, session_type, latitude, longitude, accuracy_meters, address_snapshot, is_verified')
-                .eq('student_id', userId)
-                .order('check_in_time', { ascending: false });
-
-            const table = document.getElementById('geo-attendance-history');
-            
-            if (error) {
-                table.innerHTML = `<tr><td colspan="5" style="color: red;">Error loading Geo History.</td></tr>`;
-                return;
-            }
-
-            table.innerHTML = (data || []).map(a => `
-                <tr>
-                    <td>${new Date(a.check_in_time).toLocaleString()}</td>
-                    <td>${a.session_type}</td>
-                    <td><span title="${a.address_snapshot || 'Address N/A'}">${a.latitude.toFixed(6)}, ${a.longitude.toFixed(6)}</span></td>
-                    <td>${a.accuracy_meters.toFixed(2)}</td>
-                    <td>${a.is_verified ? 'Yes' : 'No (Pending)'}</td>
-                </tr>`).join('');
-        }
-        
-        async function getLocationAndAddress() {
-            geoMessage.textContent = 'Acquiring GPS location...';
-
-            return new Promise((resolve, reject) => {
-                if (!navigator.geolocation) {
-                    return reject(new Error("Geolocation not supported by your browser."));
-                }
-                
-                navigator.geolocation.getCurrentPosition(
-                    async (position) => {
-                        const { latitude: lat, longitude: long, accuracy } = position.coords;
-                        
-                        geoMessage.textContent = `Location acquired. Accuracy: ${accuracy.toFixed(2)}m. Getting address...`;
-
-                        try {
-                            const url = `${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${lat}&lon=${long}&format=json&zoom=18`;
-                            const response = await fetch(url);
-                            
-                            if (!response.ok) {
-                                throw new Error(`LocationIQ failed (Status: ${response.status})`);
-                            }
-                            
-                            const data = await response.json();
-                            const address = data.display_name || 'Address unavailable'; 
-                            
-                            resolve({ lat, long, accuracy, address });
-
-                        } catch (apiError) {
-                            console.error("Reverse Geocoding Error:", apiError);
-                            // Fallback: Resolve with coordinates only
-                            resolve({ 
-                                lat, 
-                                long, 
-                                accuracy, 
-                                address: `Coords Only: ${lat.toFixed(6)}, ${long.toFixed(6)} (Address lookup failed)` 
-                            });
-                        }
-                    },
-                    (geoError) => {
-                        let message = `GPS Error (${geoError.code}): ${geoError.message}`;
-                        reject(new Error(message));
-                    }, 
-                    {
-                        enableHighAccuracy: true,
-                        timeout: 10000,
-                        maximumAge: 0
-                    }
-                );
-            });
-        }
-
-        async function geoCheckIn() {
-            if (!currentUserId) { 
-                geoMessage.textContent = "Error: User not logged in."; 
-                return; 
-            }
-            
-            const sessionType = document.getElementById('session-type').value;
-            checkInButton.disabled = true;
-            checkInButton.textContent = 'Processing...';
-            geoMessage.style.color = '#3B82F6';
-
-            try {
-                const locationData = await getLocationAndAddress();
-                
-                geoMessage.textContent = `Location confirmed: ${locationData.address}. Submitting attendance...`;
-                
-                const { data, error } = await sb.rpc('record_daily_attendance', {
-                    _student_id: currentUserId,
-                    _session_type: sessionType,
-                    _lat: locationData.lat,
-                    _long: locationData.long,
-                    _accuracy_meters: locationData.accuracy,
-                    _address_snapshot: locationData.address
-                });
-                
-                if (error) {
-                    throw new Error(error.message || 'Attendance record failed due to a database error.');
-                }
-                
-                geoMessage.style.color = '#059669'; 
-                geoMessage.textContent = `Check-in successful! Session: ${sessionType}. Location: ${locationData.address}`;
-                loadGeoAttendanceHistory(currentUserId);
-
-            } catch (e) {
-                console.error("Attendance Failed:", e);
-                geoMessage.style.color = '#EF4444'; 
-                geoMessage.textContent = `Check-in Failed: ${e.message}.`;
-            } finally {
-                checkInButton.textContent = 'Check In Now';
-                checkInButton.disabled = false;
-            }
-        }
-
-
-        // *************************************************************************
-        // *** 5. ROBUST INITIALIZATION SEQUENCE ***
-        // *************************************************************************
-
-        async function loadDashboardData(userId) {
-            currentUserId = userId; 
-
-            // 1. Load Profile FIRST to get the program_type
-            await loadProfile(currentUserId);
-            if (!currentUserProfile) return; 
-
-            // 2. Load Data for ALL Tabs (now filtered by program_type)
-            loadCourses();
+        // Load data specific to the tab being activated (important for real-time updates)
+        if (tabId === 'profile' && currentUserId) loadProfile(currentUserId);
+        if (tabId === 'attendance' && currentUserId) {
             loadAttendance(currentUserId);
             loadGeoAttendanceHistory(currentUserId);
-            loadExams(); 
-            loadResources(); 
-            loadStudentMessages(); 
-            
-            // 3. Show Dashboard
-            showTab('dashboard');
+        }
+        if (tabId === 'cats' && currentUserId) loadExams();
+        if (tabId === 'resources' && currentUserId) loadResources();
+        if (tabId === 'messages' && currentUserId) loadStudentMessages();
+        if (tabId === 'courses' && currentUserId) loadCourses(); // Re-add loadCourses here
+    }
 
-            // 4. Subscribe to Realtime Updates
-            subscribeToRealtimeChannels(currentUserId);
+    // Add listeners to enable switching
+    navLinks.forEach(link => {
+        link.addEventListener('click', e => {
+            e.preventDefault();
+            showTab(link.dataset.tab);
+        });
+    });
+
+    async function logout() {
+        sb.realtime.channels.forEach(channel => sb.removeChannel(channel));
+        await sb.auth.signOut();
+        window.location.href = "login.html"; 
+    }
+
+    // *************************************************************************
+    // *** 3. REALTIME SUBSCRIPTIONS AND DATA FETCHING LOGIC ***
+    // *************************************************************************
+    
+    function handleCoursesUpdate(payload) { loadCourses(); }
+    function handleAttendanceUpdate(payload) { if (currentUserId) { loadAttendance(currentUserId); } }
+    function handleGeoHistoryUpdate(payload) { if (currentUserId) { loadGeoAttendanceHistory(currentUserId); } }
+    // Handlers for filtered tables
+    function handleResourcesUpdate(payload) { loadResources(); }
+    function handleExamsUpdate(payload) { loadExams(); }
+    function handleMessagesUpdate(payload) { loadStudentMessages(); } // Messages filtered client-side
+
+    async function subscribeToRealtimeChannels(userId) {
+        sb.realtime.channels.forEach(channel => sb.removeChannel(channel));
+        
+        // General Channels
+        sb.channel('public:courses').on('postgres_changes', { event: '*', schema: 'public', table: 'courses' }, handleCoursesUpdate).subscribe();
+        sb.channel('public:messages').on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, handleMessagesUpdate).subscribe();
+        
+        // User-specific Channels
+        sb.channel(`attendance:user:${userId}`)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance', filter: `student_id=eq.${userId}` }, handleAttendanceUpdate)
+          .subscribe();
+          
+        sb.channel(`geo_attendance:user:${userId}`)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'geo_attendance_logs', filter: `student_id=eq.${userId}` }, handleGeoHistoryUpdate)
+          .subscribe();
+
+        // Program-specific Channels (Filtered by program_type, listen for ANY change and reload)
+        sb.channel('public:resources').on('postgres_changes', { event: '*', schema: 'public', table: 'resources' }, handleResourcesUpdate).subscribe();
+        sb.channel('public:cats_exams').on('postgres_changes', { event: '*', schema: 'public', table: 'cats_exams' }, handleExamsUpdate).subscribe();
+    }
+
+    async function loadProfile(userId) {
+        const { data: profile, error: profileError } = await sb
+            .from('profiles')
+            .select('full_name, email, phone, program_type') 
+            .eq('id', userId)
+            .single();
+
+        if (profileError) {
+            console.error("Profile Fetch Error:", profileError);
+            // Handle RLS error gracefully
+            document.getElementById('profile-info').innerHTML = `<p style="color: red;">Error loading profile: ${profileError.message}. Check RLS policy on 'profiles' table.</p>`;
+            return;
         }
 
-        // The robust session listener
-        sb.auth.onAuthStateChange((event, session) => {
-            if (session) {
-                loadDashboardData(session.user.id);
-            } else if (event === 'SIGNED_OUT' || (event === 'INITIAL_SESSION' && !session)) {
-                window.location.href = "login.html";
+        currentUserProfile = profile; 
+
+        const firstName = profile.full_name ? profile.full_name.split(' ')[0] : 'Student';
+        document.querySelector('header h1').textContent = `Welcome, ${firstName}!`;
+        document.getElementById('student-name').textContent = profile.full_name || 'N/A';
+        document.getElementById('student-email').textContent = profile.email || 'N/A';
+        document.getElementById('student-phone').textContent = profile.phone || 'N/A';
+        document.getElementById('student-program').textContent = profile.program_type || 'N/A';
+        
+        // Load the initial dashboard data that depends on the profile
+        loadAttendance(currentUserId);
+        loadGeoAttendanceHistory(currentUserId);
+    }
+
+    async function loadCourses() {
+        // This is a dummy query for demonstration. The actual course filter is complex.
+        const { data, error } = await sb.from('courses').select('course_name, status');
+        const table = document.getElementById('courses-table');
+        if (error) {
+            table.innerHTML = `<tr><td colspan="2" style="color: red;">Error loading courses: ${error.message}</td></tr>`;
+            return;
+        }
+        table.innerHTML = (data || []).map(c => `<tr><td>${c.course_name}</td><td>Active</td></tr>`).join('');
+    }
+    
+    async function loadExams() {
+        const table = document.getElementById('exams-table');
+        table.innerHTML = '<tr><td colspan="3">Loading exam schedule...</td></tr>';
+        
+        if (!currentUserProfile || !currentUserProfile.program_type) {
+            table.innerHTML = '<tr><td colspan="3" style="color: red;">Error: Student program type is not loaded or set.</td></tr>';
+            return;
+        }
+
+        const studentProgram = currentUserProfile.program_type;
+        
+        const { data: exams, error } = await sb
+            .from('cats_exams')
+            .select('title, exam_date, status') 
+            .eq('program_type', studentProgram) // Client-side filter applied *after* RLS
+            .order('exam_date', { ascending: true });
+            
+        if (error) {
+            table.innerHTML = `<tr><td colspan="3" style="color: red;">Error loading exams: ${error.message}. (Check RLS on 'cats_exams')</td></tr>`;
+            return;
+        }
+
+        table.innerHTML = (exams || []).map(e => {
+            const date = new Date(e.exam_date).toLocaleDateString();
+            return `
+                <tr>
+                    <td>${e.title}</td>
+                    <td>${date}</td>
+                    <td>${e.status || 'Scheduled'}</td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    async function loadResources() {
+        const list = document.getElementById('resources-list');
+        list.innerHTML = 'Loading resources...';
+        
+        if (!currentUserProfile || !currentUserProfile.program_type) {
+            list.innerHTML = '<p style="color: red;">Error: Student program not loaded.</p>';
+            return;
+        }
+        
+        const studentProgram = currentUserProfile.program_type;
+
+        const { data: resources, error } = await sb
+            .from('resources')
+            .select('title, file_path')
+            .or(`program_type.eq.${studentProgram},program_type.eq.ALL`)
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            list.innerHTML = `<p style="color: red;">Error loading resources: ${error.message}</p>`;
+            return;
+        }
+
+        list.innerHTML = (resources || []).map(r => `
+            <p><a href="${SUPABASE_URL}/storage/v1/object/public/resources/${r.file_path}" target="_blank" style="color: var(--color-primary); text-decoration: none; font-weight: 500;">
+                <span style="font-size: 1.2em; margin-right: 5px;">&#x1F4C4;</span> ${r.title}
+            </a></p>
+        `).join('');
+    }
+
+    async function loadStudentMessages() {
+        const inboxContainer = document.getElementById('messages-list'); 
+        inboxContainer.innerHTML = '<p>Loading messages...</p>';
+        
+        if (!currentUserProfile || !currentUserProfile.program_type) {
+            inboxContainer.innerHTML = '<p style="color: red;">Error: Student profile not found.</p>';
+            return;
+        }
+
+        const studentProgram = currentUserProfile.program_type;
+
+        const { data: messages, error } = await sb
+            .from('messages')
+            .select('body, created_at')
+            // Filter messages: where program_type matches student's OR is 'ALL'
+            .or(`program_type.eq.${studentProgram},program_type.eq.ALL`)
+            .order('created_at', { ascending: false })
+            .limit(20);
+
+        if (error) {
+            console.error('Error loading messages:', error);
+            inboxContainer.innerHTML = `<p style="color:red;">Error loading messages: ${error.message}</p>`;
+            return;
+        }
+
+        let html = '';
+        if (messages.length === 0) {
+             html += '<p>No new messages from the administration.</p>';
+        } else {
+            messages.forEach(msg => {
+                const date = new Date(msg.created_at).toLocaleString();
+                html += `
+                    <div style="border: 1px solid #E5E7EB; padding: 15px; margin-bottom: 10px; border-radius: var(--border-radius); background-color: #F9FAFB;">
+                        <p style="margin: 0 0 10px 0; font-weight: 600; color: var(--color-dark);">
+                            <span style="color: var(--color-primary); margin-right: 10px;">&#9993;</span>Admin Announcement
+                        </p>
+                        <p style="margin: 0 0 5px 0;">${msg.body}</p>
+                        <p style="margin: 0; font-size: 0.8rem; color: #6B7280;">Sent: ${date}</p>
+                    </div>
+                `;
+            });
+        }
+        inboxContainer.innerHTML = html;
+    }
+
+    // --- NEW: Student sends message to Admin ---
+    messageForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const messageBody = document.getElementById('student-message-body').value.trim();
+        const statusElement = document.getElementById('message-status');
+
+        if (!currentUserId) {
+            statusElement.textContent = 'Error: User not authenticated.';
+            statusElement.style.color = '#EF4444';
+            return;
+        }
+
+        statusElement.textContent = 'Sending...';
+        statusElement.style.color = '#3B82F6';
+        
+        const { error } = await sb
+            .from('messages')
+            .insert({
+                sender_id: currentUserId,
+                body: messageBody,
+                program_type: 'TO_ADMIN' 
+            });
+
+        if (error) {
+            console.error('Error sending message:', error);
+            statusElement.textContent = `Error sending message: ${error.message}`;
+            statusElement.style.color = '#EF4444';
+        } else {
+            statusElement.textContent = 'Message sent successfully to the administration!';
+            statusElement.style.color = '#059669';
+            document.getElementById('student-message-body').value = ''; 
+            setTimeout(() => { statusElement.textContent = ''; }, 5000);
+        }
+    });
+
+
+    // *************************************************************************
+    // *** 4. EXISTING FUNCTIONS (Attendance and Geo-Location) ***
+    // *************************************************************************
+    
+    async function loadAttendance(userId) {
+        // NOTE: The previous RLS error was due to policy logic/setup.
+        // This function uses the CONFIRMED column 'student_id'.
+        const { data, error } = await sb
+            .from('attendance')
+            .select('course_or_rotation, session_type, date, status')
+            .eq('student_id', userId) // Using the confirmed 'student_id' column
+            .order('date', { ascending: false }); // Sort by newest date first
+
+        const table = document.getElementById('attendance-table');
+        if (error) {
+            console.error("Attendance Fetch Error:", error);
+            table.innerHTML = `<tr><td colspan="4" style="color: red;">Error loading attendance history: ${error.message}</td></tr>`;
+            return;
+        }
+        
+        table.innerHTML = (data || []).map(a => `
+            <tr>
+                <td>${a.course_or_rotation || 'N/A'}</td>
+                <td>${a.session_type || 'N/A'}</td>
+                <td>${a.date || 'N/A'}</td>
+                <td>${a.status || 'Present'}</td>
+            </tr>`).join('');
+    }
+    
+    async function loadGeoAttendanceHistory(userId) {
+        const { data, error } = await sb
+            .from('geo_attendance_logs')
+            .select('check_in_time, session_type, latitude, longitude, accuracy_meters, address_snapshot, is_verified')
+            .eq('student_id', userId)
+            .order('check_in_time', { ascending: false });
+
+        const table = document.getElementById('geo-attendance-history');
+        
+        if (error) {
+            table.innerHTML = `<tr><td colspan="5" style="color: red;">Error loading Geo History: ${error.message}</td></tr>`;
+            return;
+        }
+
+        table.innerHTML = (data || []).map(a => `
+            <tr>
+                <td>${new Date(a.check_in_time).toLocaleString()}</td>
+                <td>${a.session_type}</td>
+                <td><span title="${a.address_snapshot || 'Address N/A'}">${a.latitude.toFixed(6)}, ${a.longitude.toFixed(6)}</span></td>
+                <td>${a.accuracy_meters.toFixed(2)}</td>
+                <td>${a.is_verified ? 'Yes' : 'No (Pending)'}</td>
+            </tr>`).join('');
+    }
+    
+    async function getLocationAndAddress() {
+        checkInButton.disabled = true;
+        geoMessage.textContent = 'Acquiring GPS location...';
+        geoMessage.style.color = 'var(--color-primary)';
+
+        return new Promise((resolve, reject) => {
+            if (!navigator.geolocation) {
+                checkInButton.disabled = false;
+                geoMessage.textContent = 'Error: Geolocation not supported by your browser.';
+                geoMessage.style.color = '#EF4444';
+                return reject(new Error("Geolocation not supported by your browser."));
             }
+            
+            navigator.geolocation.getCurrentPosition(
+                async (position) => {
+                    const { latitude: lat, longitude: long, accuracy } = position.coords;
+                    
+                    geoMessage.textContent = `Location acquired. Accuracy: ${accuracy.toFixed(2)}m. Getting address...`;
+
+                    try {
+                        // ** LOCATIONIQ Reverse Geocoding API Call **
+                        const url = `${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${lat}&lon=${long}&format=json`;
+                        const response = await fetch(url);
+                        const data = await response.json();
+
+                        const address = data.display_name || `Lat: ${lat.toFixed(6)}, Lon: ${long.toFixed(6)}`;
+
+                        geoMessage.textContent = `Address: ${address}. Ready for check-in.`;
+                        checkInButton.disabled = false;
+                        resolve({ latitude: lat, longitude: long, accuracy: accuracy, address: address });
+
+                    } catch (error) {
+                        console.error('Reverse Geocoding Error:', error);
+                        geoMessage.textContent = `Location: ${lat.toFixed(6)}, ${long.toFixed(6)}. (Address lookup failed)`;
+                        checkInButton.disabled = false;
+                        resolve({ latitude: lat, longitude: long, accuracy: accuracy, address: null }); // Resolve even if address fails
+                    }
+
+                },
+                (error) => {
+                    checkInButton.disabled = false;
+                    geoMessage.textContent = `Error getting location: ${error.message}. Please enable GPS.`;
+                    geoMessage.style.color = '#EF4444';
+                    reject(error);
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
         });
-    </script>
-</body>
-</html>
+    }
+    
+    async function geoCheckIn() {
+        if (!currentUserId) {
+            geoMessage.textContent = 'Error: Not logged in.';
+            geoMessage.style.color = '#EF4444';
+            return;
+        }
+
+        checkInButton.disabled = true;
+        geoMessage.textContent = 'Initiating check-in...';
+        geoMessage.style.color = 'var(--color-primary)';
+
+        try {
+            const locationData = await getLocationAndAddress();
+            const sessionType = document.getElementById('session-type').value;
+
+            // 1. Insert into geo_attendance_logs (The precise log)
+            const { error: geoLogError } = await sb
+                .from('geo_attendance_logs')
+                .insert({
+                    student_id: currentUserId,
+                    session_type: sessionType,
+                    latitude: locationData.latitude,
+                    longitude: locationData.longitude,
+                    accuracy_meters: locationData.accuracy,
+                    address_snapshot: locationData.address
+                    // check_in_time is set to NOW() by default in Postgres
+                });
+
+            if (geoLogError) {
+                throw new Error(`Geo Log Error: ${geoLogError.message}`);
+            }
+
+            // 2. Insert into attendance (The simpler, old attendance table - assuming a default course/rotation for simplicity)
+            const { error: attendanceError } = await sb
+                .from('attendance')
+                .insert({
+                    student_id: currentUserId,
+                    course_or_rotation: currentUserProfile.program_type || 'General',
+                    session_type: sessionType,
+                    date: new Date().toISOString().split('T')[0], // Today's date (YYYY-MM-DD)
+                    status: 'Present'
+                });
+
+            if (attendanceError) {
+                // Not a fatal error, but worth logging
+                console.warn('Could not insert into simple attendance table:', attendanceError.message);
+            }
+
+            geoMessage.textContent = `Check-in successful! Logged for ${sessionType}.`;
+            geoMessage.style.color = 'var(--color-secondary)';
+            
+            // Reload history immediately
+            loadGeoAttendanceHistory(currentUserId);
+            loadAttendance(currentUserId);
+
+        } catch (error) {
+            console.error("Check-in Failed:", error);
+            geoMessage.textContent = `Check-in FAILED: ${error.message}`;
+            geoMessage.style.color = '#EF4444';
+        } finally {
+            checkInButton.disabled = false;
+        }
+    }
+
+
+    // *************************************************************************
+    // *** 5. INITIALIZATION LOGIC ***
+    // *************************************************************************
+    
+    async function initialize() {
+        const { data: { user } } = await sb.auth.getUser();
+
+        if (user) {
+            currentUserId = user.id;
+            // Load essential data
+            await loadProfile(currentUserId); 
+            loadCourses();
+            
+            // Set up real-time
+            subscribeToRealtimeChannels(currentUserId);
+            
+            // Load dashboard tabs
+            showTab('dashboard'); 
+            
+        } else {
+            // Not logged in, redirect to login page
+            window.location.href = "login.html"; 
+        }
+    }
+
+    // Call initialization on page load
+    initialize();
+
+</script>
