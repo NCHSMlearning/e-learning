@@ -201,10 +201,12 @@
     
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            // *** CONFIGURATION: REPLACE THESE WITH YOUR ACTUAL SUPABASE KEYS ***
-            const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
-            // Use your actual Anon Key here:
-            const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQxTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk'; 
+            // =========================================================================
+            // *** SUPABASE CONFIGURATION - Using the keys you provided ***
+            // =========================================================================
+            const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co'; 
+            const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk'; 
+            // =========================================================================
             
             // Create the Supabase client instance
             const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -219,7 +221,6 @@
             const errorMsg = document.getElementById('errorMsg');
             const loginForm = document.getElementById('loginForm');
             const loginButton = document.getElementById('loginButton');
-            // const rememberMe = document.getElementById('rememberMe'); // Not used in final logic
 
             if (!loginForm) {
                 console.error("Login form element not found!");
@@ -239,7 +240,12 @@
                     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password });
                     
                     if (authError || !authData.user) {
-                        errorMsg.innerText = authError?.message || 'Login failed: Check your username and password.';
+                        // Display specific error for Invalid Key if applicable, otherwise display Auth error
+                        if (authError && authError.message && authError.message.includes('Invalid API Key')) {
+                             errorMsg.innerText = 'Login failed: Critical API key error. Please contact the administrator.';
+                        } else {
+                            errorMsg.innerText = authError?.message || 'Login failed: Check your username and password.';
+                        }
                         loginButton.disabled = false;
                         return;
                     }
@@ -249,7 +255,7 @@
                     // 2. GET ROLE AND CRITICAL APPROVAL STATUS
                     const { data: profile, error: profileError } = await supabase
                         .from('profiles')
-                        .select('role, approved') // <--- FETCHING 'approved'
+                        .select('role, approved') // Fetching 'approved' status
                         .eq('id', userId)
                         .single();
 
@@ -262,12 +268,14 @@
                         return;
                     }
 
-                    // --- CRITICAL SECURITY CHECK ---
+                    // --- CRITICAL SECURITY CHECK: BLOCK UNAPPROVED USER ---
                     if (profile.approved === false) {
-                        // **Block access** and destroy the active session
+                        // 1. Block access message
+                        errorMsg.innerText = 'Login failed: Your account is pending approval from an administrator.';
+                        
+                        // 2. Destroy the active session so they can't access any other pages
                         await supabase.auth.signOut(); 
                         
-                        errorMsg.innerText = 'Login failed: Your account is pending approval from an administrator.';
                         loginButton.disabled = false;
                         return;
                     }
