@@ -936,77 +936,77 @@ async function loadAttendance() {
                 attendanceMap.invalidateSize(); 
             }, 100);
         }
+/*******************
+ * CATS / Exams Tab
+ *******************/
+$('add-exam-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const program_type = $('exam_program').value;
+    const course_id = $('exam_course_id').value;
+    const title = $('exam_title').value.trim();
+    const exam_date = $('exam_date').value;
+    const status = $('exam_status').value;
 
-        /*******************
-         * CATS / Exams Tab
-         *******************/
-        $('add-exam-form').addEventListener('submit', async e => {
-            e.preventDefault();
-            const program_type = $('exam_program').value;
-            const course_id = $('exam_course_id').value;
-            const title = $('exam_title').value.trim();
-            const exam_date = $('exam_date').value;
-            const status = $('exam_status').value;
+    if(!program_type || !course_id || !title || !exam_date) 
+        return alert('Fill all required fields.');
 
-            if(!program_type || !course_id || !title || !exam_date) return alert('Fill all required fields.');
+    const { error } = await sb.from('cats_exams').insert([{
+        program_type,
+        course_id,
+        title,
+        exam_date,
+        status,
+        created_by: currentUserProfile.id
+    }]);
 
-            const { error } = await sb.from('exams_cats').insert([{
-                program_type,
-                course_id,
-                title,
-                exam_date,
-                status,
-                created_by: currentUserProfile.id
-            }]);
+    if (error) {
+        console.error('Add Exam Error:', error);
+        return alert('Error adding exam: ' + error.message);
+    }
 
-            if (error) {
-                console.error('Add Exam Error:', error);
-                return alert('Error adding exam: ' + error.message);
-            }
+    alert('✅ Exam/CAT scheduled successfully!');
+    $('add-exam-form').reset();
+    loadExams();
+});
 
-            alert('✅ Exam/CAT scheduled successfully!');
-            $('add-exam-form').reset();
-            loadExams();
-        });
+async function loadExams() {
+    const tbody = $('exams-table');
+    tbody.innerHTML = '<tr><td colspan="6">Loading exams...</td></tr>';
 
-        async function loadExams() {
-            const tbody = $('exams-table');
-            tbody.innerHTML = '<tr><td colspan="6">Loading exams...</td></tr>';
+    const { data, error } = await sb.from('cats_exams')
+        .select(`
+            *,
+            courses(course_name)
+        `)
+        .order('exam_date', { ascending: false });
 
-            const { data, error } = await sb.from('exams_cats')
-                .select(`
-                    *,
-                    courses(course_name)
-                `)
-                .order('exam_date', { ascending: false });
+    if (error) {
+        tbody.innerHTML = `<tr><td colspan="6">Error loading exams: ${error.message}</td></tr>`;
+        return;
+    }
+    
+    tbody.innerHTML = '';
+    data.forEach(e => {
+        const date = new Date(e.exam_date).toDateString();
+        tbody.innerHTML += `<tr>
+            <td>${escapeHtml(e.program_type)}</td>
+            <td>${escapeHtml(e.courses.course_name)}</td>
+            <td>${escapeHtml(e.title)}</td>
+            <td>${date}</td>
+            <td>${escapeHtml(e.status)}</td>
+            <td>
+                <button class="btn btn-delete" onclick="deleteExam('${e.id}')">Delete</button>
+            </td>
+        </tr>`;
+    });
+}
 
-            if (error) {
-                tbody.innerHTML = `<tr><td colspan="6">Error loading exams: ${error.message}</td></tr>`;
-                return;
-            }
-            
-            tbody.innerHTML = '';
-            data.forEach(e => {
-                const date = new Date(e.exam_date).toDateString();
-                tbody.innerHTML += `<tr>
-                    <td>${escapeHtml(e.program_type)}</td>
-                    <td>${escapeHtml(e.courses.course_name)}</td>
-                    <td>${escapeHtml(e.title)}</td>
-                    <td>${date}</td>
-                    <td>${escapeHtml(e.status)}</td>
-                    <td>
-                        <button class="btn btn-delete" onclick="deleteExam('${e.id}')">Delete</button>
-                    </td>
-                </tr>`;
-            });
-        }
-
-        async function deleteExam(id) {
-            if (!confirm('Are you sure you want to delete this Exam/CAT?')) return;
-            const { error } = await sb.from('exams_cats').delete().eq('id', id);
-            if (error) return alert('Error deleting exam: ' + error.message);
-            loadExams();
-        }
+async function deleteExam(id) {
+    if (!confirm('Are you sure you want to delete this Exam/CAT?')) return;
+    const { error } = await sb.from('cats_exams').delete().eq('id', id);
+    if (error) return alert('Error deleting exam: ' + error.message);
+    loadExams();
+}
 
         /*******************
          * Messages Tab
