@@ -845,41 +845,45 @@
             loadAttendance();
         });
 
+async function loadAttendance() {
+    const tbody = $('attendance-table');
+    tbody.innerHTML = '<tr><td colspan="6">Loading attendance records...</td></tr>';
 
-        async function loadAttendance() {
-            const tbody = $('attendance-table');
-            tbody.innerHTML = '<tr><td colspan="6">Loading attendance records...</td></tr>';
+    const { data, error } = await sb.from('geo_attendance_logs')
+        .select(`
+            *,
+            profiles(full_name)
+        `)
+        .order('check_in_time', { ascending: false })
+        .limit(50); 
 
-            const { data, error } = await sb.from('geo_attendance_logs')
-                .select(`
-                    *,
-                    profiles(full_name)
-                `)
-                .order('check_in_time', { ascending: false })
-                .limit(50); 
+    if (error) {
+        tbody.innerHTML = `<tr><td colspan="6">Error loading attendance: ${error.message}</td></tr>`;
+        return;
+    }
 
-            if (error) {
-                tbody.innerHTML = `<tr><td colspan="6">Error loading attendance: ${error.message}</td></tr>`;
-                return;
-            }
+    tbody.innerHTML = '';
+    data.forEach(r => {
+        const dateTime = new Date(r.check_in_time).toLocaleString();
+        
+        // --- FIX APPLIED HERE ---
+        // 1. We use (r.log_type || 'N/A') to ensure it's a string, even if null.
+        // 2. We then safely call .toUpperCase()
+        const logTypeDisplay = escapeHtml((r.log_type || 'N/A').toUpperCase()); // Safely handle null log_type
 
-            tbody.innerHTML = '';
-            data.forEach(r => {
-                const dateTime = new Date(r.check_in_time).toLocaleString();
-                const geoData = r.latitude && r.longitude ? 
-                    `<button class="btn btn-map" onclick="showMapModal(${r.latitude}, ${r.longitude}, '${escapeHtml(r.location_name)}', '${escapeHtml(r.profiles.full_name)}')">View Map</button>` : 'N/A';
+        const geoData = r.latitude && r.longitude ? 
+            `<button class="btn btn-map" onclick="showMapModal(${r.latitude}, ${r.longitude}, '${escapeHtml(r.location_name)}', '${escapeHtml(r.profiles.full_name)}')">View Map</button>` : 'N/A';
 
-                tbody.innerHTML += `<tr>
-                    <td>${escapeHtml(r.profiles.full_name)}</td>
-                    <td>${escapeHtml(r.log_type.toUpperCase())} ${r.session_type ? `(${r.session_type})` : ''}</td>
-                    <td>${escapeHtml(r.location_name || 'N/A')}</td>
-                    <td>${dateTime}</td>
-                    <td>${geoData}</td>
-                    <td><button class="btn btn-delete" onclick="deleteAttendanceLog('${r.id}')">Delete Log</button></td>
-                </tr>`;
-            });
-
-        }
+        tbody.innerHTML += `<tr>
+            <td>${escapeHtml(r.profiles.full_name)}</td>
+            <td>${logTypeDisplay} ${r.session_type ? `(${r.session_type})` : ''}</td>
+            <td>${escapeHtml(r.location_name || 'N/A')}</td>
+            <td>${dateTime}</td>
+            <td>${geoData}</td>
+            <td><button class="btn btn-delete" onclick="deleteAttendanceLog('${r.id}')">Delete Log</button></td>
+        </tr>`;
+    });
+}
         
         function filterAttendanceTable() {
             const filter = $('attendance-search').value.toUpperCase();
