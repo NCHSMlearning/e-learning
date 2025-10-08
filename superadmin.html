@@ -769,93 +769,103 @@
         }
 
         /*******************
-         * Attendance Tab
-         *******************/
-        async function markMyAttendance() {
-            if (!currentUserProfile) {
-                alert('User profile not loaded. Please log in again.');
-                return;
+ * Unified Attendance Tab
+ *******************/
+async function markAttendance({ manual=false, manualData={} } = {}) {
+    if (!currentUserProfile) {
+        return alert('User profile not loaded. Please log in again.');
+    }
+
+    let logEntry = {
+        user_id: currentUserProfile.id,
+        log_type: manual ? 'manual' : 'self_checkin',
+        course_id: null,
+        session_type: null,
+        location_name: null,
+        latitude: null,
+        longitude: null,
+        accuracy: null,
+        ip_address: null,
+        device_id: null,
+        check_in_time: new Date().toISOString(),
+        recorded_by: currentUserProfile.id
+    };
+
+    try {
+        if (manual) {
+            // Manual attendance
+            const { user_id, session_type, course_id, location, date, time } = manualData;
+            if (!user_id || !session_type || !location || !date) 
+                return alert('Fill all required fields for manual attendance.');
+
+            logEntry.user_id = user_id;
+            logEntry.session_type = session_type;
+            logEntry.course_id = course_id || null;
+            logEntry.location_name = `[MANUAL] ${location.trim()}`;
+            logEntry.check_in_time = time ? `${date}T${time}:00+03:00` : `${date}T00:00:00+03:00`;
+        } else {
+            // Self-checkin using geolocation
+            if (!confirm('Marking attendance logs your current location. Continue?')) return;
+
+            const coords = await getGeoLocation();
+            const { latitude, longitude, accuracy } = coords;
+            const ip_address = await getIPAddress();
+            const device_id = getDeviceId();
+            const location_name = await reverseGeocode(latitude, longitude);
+
+            if (!location_name || location_name.toLowerCase().includes('uncoordinated')) {
+                return alert('Could not determine a valid location. Please try again.');
             }
 
-            if (!confirm('Marking attendance logs your current location (latitude, longitude, IP, and device ID). Continue?')) return;
-            
-            try {
-                const coords = await getGeoLocation();
-                const { latitude, longitude, accuracy } = coords;
-                const ip_address = await getIPAddress();
-                const device_id = getDeviceId();
-                const location_name = await reverseGeocode(latitude, longitude);
-
-                const { error } = await sb.from('geo_attendance_logs').insert([{
-                    user_id: currentUserProfile.id,
-                    latitude: latitude,
-                    longitude: longitude,
-                    accuracy: accuracy,
-                    ip_address: ip_address,
-                    device_id: device_id,
-                    location_name: location_name,
-                    log_type: 'self_checkin'
-                }]);
-
-                if (error) {
-                    console.error('Attendance Log Error:', error);
-                    return alert('Failed to log attendance: ' + error.message);
-                }
-
-                alert(`✅ Attendance logged at ${location_name} (Lat: ${latitude.toFixed(4)}, Lon: ${longitude.toFixed(4)})`);
-                loadAttendance();
-                loadDashboardData();
-
-            } catch (err) {
-                alert('Geolocation failed: ' + err);
-            }
+            logEntry.latitude = latitude;
+            logEntry.longitude = longitude;
+            logEntry.accuracy = accuracy;
+            logEntry.ip_address = ip_address;
+            logEntry.device_id = device_id;
+            logEntry.location_name = location_name;
         }
-        
-        $('manual-attendance-form').addEventListener('submit', async e => {
-            e.preventDefault();
-            const user_id = $('att_student_id').value;
-            const session_type = $('att_session_type').value;
-            const course_id = $('att_course_id').value || null;
-            const location = $('att_location').value.trim();
-            const date = $('att_date').value;
-            const time = $('att_time').value;
 
-            if(!user_id || !session_type || !location || !date) return alert('Fill all required fields.');
-            
-            // Combine date and time, assuming East Africa Time (+03) or adjusting as needed.
-            const check_in_time = time ? `${date}T${time}:00+03:00` : new Date().toISOString(); 
+        const { error } = await sb.from('geo_attendance_logs').insert([logEntry]);
 
-            const { error } = await sb.from('geo_attendance_logs').insert([{
-                user_id: user_id,
-                log_type: 'manual',
-                session_type: session_type,
-                course_id: course_id,
-                location_name: `[MANUAL] ${location}`,
-                check_in_time: check_in_time,
-                recorded_by: currentUserProfile.id
-            }]);
+        if (error) {
+            console.error('Attendance Error:', error);
+            return alert('Failed to log attendance: ' + error.message);
+        }
 
-            if (error) {
-                console.error('Manual Attendance Error:', error);
-                return alert('Failed to mark manual attendance: ' + error.message);
-            }
+        alert(`✅ Attendance logged successfully at ${logEntry.location_name}`);
+        loadAttendance();
+        loadDashboardData();
 
-            alert('✅ Manual attendance marked successfully!');
-            $('manual-attendance-form').reset();
-            loadAttendance();
-        });
+    } catch (err) {
+        alert('Attendance failed: ' + err.message);
+    }
+}
 
+// Manual attendance form
+$('manual-attendance-form').addEventListener('submit', e => {
+    e.preventDefault();
+    markAttendance({
+        manual: true,
+        manualData: {
+            user_id: $('att_student_id').value,
+            session_type: $('att_session_type').value,
+            course_id: $('att_course_id').value,
+            location: $('att_location').value,
+            date: $('att_date').value,
+            time: $('att_time').value
+        }
+    });
+});
+
+// Load attendance table
 async function loadAttendance() {
     const tbody = $('attendance-table');
     tbody.innerHTML = '<tr><td colspan="6">Loading attendance records...</td></tr>';
 
     const { data, error } = await sb.from('geo_attendance_logs')
-        .select(`
-            *,
-            profiles(full_name)
-        `)
+        .select(`*, profiles(full_name)`)
         .order('check_in_time', { ascending: false })
-        .limit(50); 
+        .limit(50);
 
     if (error) {
         tbody.innerHTML = `<tr><td colspan="6">Error loading attendance: ${error.message}</td></tr>`;
@@ -865,13 +875,8 @@ async function loadAttendance() {
     tbody.innerHTML = '';
     data.forEach(r => {
         const dateTime = new Date(r.check_in_time).toLocaleString();
-        
-        // --- FIX APPLIED HERE ---
-        // 1. We use (r.log_type || 'N/A') to ensure it's a string, even if null.
-        // 2. We then safely call .toUpperCase()
-        const logTypeDisplay = escapeHtml((r.log_type || 'N/A').toUpperCase()); // Safely handle null log_type
-
-        const geoData = r.latitude && r.longitude ? 
+        const logTypeDisplay = escapeHtml((r.log_type || 'N/A').toUpperCase());
+        const geoData = r.latitude && r.longitude ?
             `<button class="btn btn-map" onclick="showMapModal(${r.latitude}, ${r.longitude}, '${escapeHtml(r.location_name)}', '${escapeHtml(r.profiles.full_name)}')">View Map</button>` : 'N/A';
 
         tbody.innerHTML += `<tr>
@@ -884,58 +889,14 @@ async function loadAttendance() {
         </tr>`;
     });
 }
-        
-        function filterAttendanceTable() {
-            const filter = $('attendance-search').value.toUpperCase();
-            const table = $('attendance-table');
-            const tr = table.getElementsByTagName('tr');
 
-            for (let i = 0; i < tr.length; i++) {
-                const td = tr[i].getElementsByTagName('td')[0]; // Student Name column
-                if (td) {
-                    const txtValue = td.textContent || td.innerText;
-                    tr[i].style.display = txtValue.toUpperCase().indexOf(filter) > -1 ? '' : 'none';
-                }
-            }
-        }
+async function deleteAttendanceLog(id) {
+    if (!confirm('Are you sure you want to delete this attendance log?')) return;
+    const { error } = await sb.from('geo_attendance_logs').delete().eq('id', id);
+    if (error) return alert('Error deleting log: ' + error.message);
+    loadAttendance();
+}
 
-
-        async function deleteAttendanceLog(id) {
-            if (!confirm('Are you sure you want to delete this attendance log?')) return;
-            const { error } = await sb.from('geo_attendance_logs').delete().eq('id', id);
-            if (error) return alert('Error deleting log: ' + error.message);
-            loadAttendance();
-        }
-
-        function showMapModal(lat, lng, locationName, studentName) {
-            const modal = $('mapModal');
-            const info = $('mapInfo');
-            
-            info.innerHTML = `**Student:** ${studentName}<br>**Location:** ${locationName}<br>**Coords:** Lat ${lat.toFixed(4)}, Lon ${lng.toFixed(4)}`;
-            
-            modal.style.display = 'flex';
-            
-            setTimeout(() => {
-                if (attendanceMap) {
-                    attendanceMap.remove();
-                }
-                attendanceMap = L.map('attendanceMap').setView([lat, lng], 16);
-
-                L.tileLayer('https://api.mapbox.com/styles/v1/{id}/tiles/{z}/{x}/{y}?access_token={accessToken}', {
-                    attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, Imagery © <a href="https://www.mapbox.com/">Mapbox</a>',
-                    maxZoom: 18,
-                    id: 'mapbox/streets-v11',
-                    tileSize: 512,
-                    zoomOffset: -1,
-                    accessToken: MAPBOX_ACCESS_TOKEN
-                }).addTo(attendanceMap);
-
-                L.marker([lat, lng]).addTo(attendanceMap)
-                    .bindPopup(`${studentName}'s Check-in Location<br>(${locationName})`).openPopup();
-                    
-                attendanceMap.invalidateSize(); 
-            }, 100);
-        }
 /*******************
  * CATS / Exams Tab
  *******************/
