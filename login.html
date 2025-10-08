@@ -203,23 +203,23 @@
         document.addEventListener('DOMContentLoaded', () => {
             // *** CONFIGURATION: REPLACE THESE WITH YOUR ACTUAL SUPABASE KEYS ***
             const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
-            const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk'; // **REPLACE with your actual Anon Key**
+            // Use your actual Anon Key here:
+            const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQxTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk'; 
             
-            // Create the Supabase client instance with EXPLICIT persistence to localStorage.
-            // THIS IS THE FIX for the immediate logout issue on index.html.
+            // Create the Supabase client instance
             const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
                 auth: {
                     persistSession: true, 
                     autoRefreshToken: true,
                     detectSessionInUrl: true,
-                    storage: window.localStorage, // Force storage in localStorage
+                    storage: window.localStorage, 
                 },
             });
 
             const errorMsg = document.getElementById('errorMsg');
             const loginForm = document.getElementById('loginForm');
             const loginButton = document.getElementById('loginButton');
-            const rememberMe = document.getElementById('rememberMe');
+            // const rememberMe = document.getElementById('rememberMe'); // Not used in final logic
 
             if (!loginForm) {
                 console.error("Login form element not found!");
@@ -235,7 +235,7 @@
                 const password = document.getElementById('password').value;
 
                 try {
-                    // 1. SIGN IN
+                    // 1. SIGN IN (Authenticates the user and gets a session)
                     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password });
                     
                     if (authError || !authData.user) {
@@ -246,23 +246,34 @@
 
                     const userId = authData.user.id;
                     
-                    // 2. GET ROLE from the 'profiles' table
+                    // 2. GET ROLE AND CRITICAL APPROVAL STATUS
                     const { data: profile, error: profileError } = await supabase
                         .from('profiles')
-                        .select('role') 
+                        .select('role, approved') // <--- FETCHING 'approved'
                         .eq('id', userId)
                         .single();
 
                     if (profileError || !profile || !profile.role) {
-                        // This indicates a critical RLS or data issue.
-                        errorMsg.innerText = 'Login successful, but user role is undefined. Contact system admin.';
+                        errorMsg.innerText = 'Login successful, but user profile data is incomplete. Contact system admin.';
                         console.error("Profile Error:", profileError);
                         loginButton.disabled = false;
-                        return; 
+                        // Sign out the user, as the session is valid but profile is broken
+                        await supabase.auth.signOut(); 
+                        return;
                     }
 
-                    // 3. REDIRECT based on the specific roles
-                    const userRole = profile.role.toLowerCase(); 
+                    // --- CRITICAL SECURITY CHECK ---
+                    if (profile.approved === false) {
+                        // **Block access** and destroy the active session
+                        await supabase.auth.signOut(); 
+                        
+                        errorMsg.innerText = 'Login failed: Your account is pending approval from an administrator.';
+                        loginButton.disabled = false;
+                        return;
+                    }
+
+                    // 3. REDIRECT (ONLY runs if approved is TRUE)
+                    const userRole = profile.role.toLowerCase();
                     
                     switch (userRole) {
                         case 'superadmin':
@@ -272,11 +283,7 @@
                             window.location.href = 'admin.html';
                             break;
                         case 'student':
-                            // Successful login and role check: hard redirect to the dashboard
-                            window.location.href = 'index.html'; 
-                            break;
                         default:
-                            console.warn('Unknown role detected:', userRole);
                             window.location.href = 'index.html'; 
                             break;
                     }
