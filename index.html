@@ -9,7 +9,6 @@
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"></noscript>
     
     <style>
-        /* (CSS code remains identical for brevity, assuming it's included) */
         /* Global Reset and Ultra Modern Typography */
         :root {
             --color-dark: #1F2937;
@@ -58,6 +57,8 @@
         .sidebar-header img {
             width: 70px;
             margin-bottom: 15px;
+            /* Placeholder path - adjust if necessary */
+            /* src="images/Logo_NCHSM.png" */
             filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.1));
         }
         .sidebar-header h2 {
@@ -732,7 +733,7 @@
     const navLinks = document.querySelectorAll('.nav a');
     const tabs = document.querySelectorAll('.tab-content');
 
-    // ** showTab function (Globally accessible) **
+    // ** showTab function (Globally accessible to fix ReferenceError) **
     function showTab(tabId) {
         navLinks.forEach(l => l.classList.remove('active'));
         const activeLink = document.querySelector(`.nav a[data-tab="${tabId}"]`);
@@ -779,6 +780,7 @@
         e.preventDefault();
         await updateProfile();
         
+        // Return to read-only mode after saving
         document.querySelectorAll('#profile-form input').forEach(field => {
             if (field.id !== 'profile-email' && field.id !== 'profile-program') {
                 field.readOnly = true;
@@ -805,6 +807,7 @@
     messageForm.addEventListener('submit', submitMessage);
 
     async function logout() {
+        // Remove all active real-time subscriptions
         sb.realtime.channels.forEach(channel => sb.removeChannel(channel));
         await sb.auth.signOut();
         window.location.href = "login.html";
@@ -832,6 +835,7 @@
             adminWelcomeMessage.innerHTML = data.setting_value || 'Welcome to the NCHSM Student Dashboard!';
         } catch (e) {
              adminWelcomeMessage.textContent = 'Error loading system message.';
+             console.error('Welcome message fetch error:', e);
         }
     }
     
@@ -839,12 +843,7 @@
         // 1. Active Courses
         document.getElementById('dashboard-active-courses').textContent = cachedCourses.length;
         
-        // 2. Attendance Rate (Requires complex aggregation query)
-        // Placeholder for real logic (e.g., calling an RPC function or View)
-        // Example RPC: 
-        /* const { data: rateData } = await sb.rpc('get_attendance_rate', { user_id_in: userId });
-        const attendanceRate = rateData || 0;
-        */
+        // 2. Attendance Rate (Placeholder, requires complex database view or RPC)
         const attendanceRate = '94'; 
         document.getElementById('dashboard-attendance-rate').textContent = `${attendanceRate}%`;
 
@@ -869,8 +868,10 @@
              console.error('Error loading upcoming exam:', e);
         }
 
-
-        // 4. Action Required Logic (Passport Photo)
+        // 4. New Resources (Placeholder until a 'last_viewed' or similar field is implemented)
+        document.getElementById('dashboard-new-resources').textContent = '0';
+        
+        // 5. Action Required Logic (Passport Photo)
         const actionRequiredEl = document.getElementById('dashboard-actions');
         const actionsTitleEl = document.getElementById('actions-title');
         const passportCard = document.getElementById('action-passport');
@@ -914,6 +915,7 @@
         }
     }
     
+    // Updates the attendance target dropdown based on session type
     function updateTargetSelect() {
         const type = sessionTypeSelect.value;
         attendanceTargetSelect.innerHTML = '';
@@ -950,10 +952,11 @@
 
 
     // *************************************************************************
-    // *** 4. AUTHENTICATION AND PROFILE MANAGEMENT ***
+    // *** 4. AUTHENTICATION AND PROFILE MANAGEMENT (FIXED LOGOUT LOGIC) ***
     // *************************************************************************
 
     async function loadInitialDataAndCheckAuth() {
+        // Must load targets early for the dashboard to correctly initialize
         await loadAllAttendanceTargets();
         
         const { data: { user }, error } = await sb.auth.getUser();
@@ -971,10 +974,12 @@
         }
     }
 
+    // ** loadProfile function - Critical Authorization Check **
     async function loadProfile(userId) {
         profileStatus.textContent = 'Loading profile details...';
         
         try {
+            // Fetch profile data AND join the auth.users table to get the 'approved' flag
             const { data, error } = await sb
                 .from('profiles')
                 .select(`
@@ -984,27 +989,34 @@
                     program, 
                     semester, 
                     passport_url, 
-                    auth_user:auth.users!inner(email, approved)
+                    auth_user:auth.users!inner(email, raw_user_meta_data)
                 `)
                 .eq('id', userId)
                 .single();
 
             if (error || !data) {
+                console.error("Error loading profile:", error?.message || 'No profile data found');
                 profileStatus.textContent = 'Failed to load profile. Contact IT.';
                 await sb.auth.signOut();
                 window.location.href = 'login.html';
                 return false;
             }
             
-            const isApproved = data.auth_user?.approved;
+            // *** CRITICAL FIX: Access 'approved' flag from raw_user_meta_data ***
+            const isApproved = data.auth_user.raw_user_meta_data?.approved;
             
             if (isApproved !== true) {
+                console.warn("User is authenticated but NOT approved. Redirecting.");
+                profileStatus.textContent = 'Your account is pending administrator approval.';
+                
                 alert("Your account is pending administrator approval. You will be logged out now.");
                 await sb.auth.signOut(); 
                 window.location.href = 'login.html';
-                return false;
+                return false; // Authorization failed
             }
+            // **********************************
 
+            // If approved, proceed to load data
             currentUserProfile = {
                 ...data,
                 email: data.auth_user.email,
@@ -1012,6 +1024,8 @@
             };
             
             profileStatus.textContent = 'Profile loaded successfully.';
+
+            // Populate form fields
             document.getElementById('profile-name').value = data.full_name || '';
             document.getElementById('profile-email').value = data.auth_user.email || '';
             document.getElementById('profile-phone').value = data.phone || '';
@@ -1019,15 +1033,17 @@
 
             document.querySelector('header h1').textContent = `Welcome, ${data.full_name?.split(' ')[0] || 'Student'}!`;
 
+            // Load passport photo
             if (data.passport_url) {
                 const { data: fileData } = sb.storage.from('passport_photos').getPublicUrl(data.passport_url);
                 passportPreview.src = fileData.publicUrl;
-                document.getElementById('action-passport').style.display = 'none';
+                document.getElementById('action-passport').style.display = 'none'; 
             } else {
                  passportPreview.src = "https://placehold.co/150x150?text=NO+PHOTO";
                  document.getElementById('action-passport').style.display = 'block';
             }
             
+            // Set fields to read-only initially
             document.querySelectorAll('#profile-form input').forEach(field => {
                 if (field.id === 'profile-email' || field.id === 'profile-program') {
                     field.readOnly = true;
@@ -1036,7 +1052,7 @@
                 }
             });
 
-            return true;
+            return true; // Authorization succeeded
 
         } catch (e) {
             console.error("An unexpected error occurred in loadProfile:", e);
@@ -1192,7 +1208,6 @@
 
     function handleGeolocationError(error) {
         let message = 'Geolocation failed. ';
-        // ... (Error codes logic remains the same)
         switch (error.code) {
             case error.PERMISSION_DENIED:
                 message += "You must allow location access to check in.";
@@ -1247,12 +1262,13 @@
         }
     }
     
-    // Assuming this table exists for older records if needed
+    // ** Fetches real legacy attendance records **
     async function loadOldAttendanceRecords(userId) {
          const tableBody = document.getElementById('attendance-table');
          tableBody.innerHTML = '<tr><td colspan="4">Loading legacy records...</td></tr>';
          
          try {
+             // Assuming a table 'attendance_legacy' exists
              const { data, error } = await sb
                  .from('attendance_legacy')
                  .select('course_name, type, attendance_date, status')
@@ -1291,7 +1307,7 @@
         coursesTableBody.innerHTML = '<tr><td colspan="2">Loading courses...</td></tr>';
         
         try {
-            // Fetches courses based on student's ID, potentially via a joined table (e.g., student_enrollments)
+            // Fetches courses via a joined table (e.g., student_enrollments)
             const { data, error } = await sb
                 .from('student_enrollments')
                 .select('course_id, course:courses(name), status')
@@ -1360,7 +1376,8 @@
              const { data, error } = await sb
                  .from('resources')
                  .select('name, link, program, updated_at')
-                 .or(`program.eq.${studentProgram},program.eq.General`) // Filters by student's program OR 'General'
+                 // Filters by student's program OR 'General' program
+                 .or(`program.eq.${studentProgram},program.eq.General`) 
                  .order('updated_at', { ascending: false });
 
              if (error) throw error;
