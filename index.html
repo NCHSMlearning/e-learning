@@ -21,6 +21,7 @@
         body {
             font-family: 'Inter', sans-serif;
             min-height: 100vh;
+            background-color: #f8f9fa; /* Light background */
         }
 
         /* Sidebar link styling */
@@ -42,794 +43,549 @@
         
         /* Loading Spinner Animation */
         .loader {
-            border: 4px solid #e2e8f0; /* Slate 200 */
-            border-top: 4px solid #10b981; /* Emerald 500 */
+            border: 4px solid #e2e8f0; /* Light grey */
+            border-top: 4px solid #10b981; /* Emerald */
             border-radius: 50%;
             width: 24px;
             height: 24px;
             animation: spin 1s linear infinite;
         }
+
+        /* Small Loader for async content */
+        .loader-small {
+            border: 3px solid #f3f3f3; /* Light grey */
+            border-top: 3px solid #10b981; /* Emerald */
+            border-radius: 50%;
+            width: 1rem;
+            height: 1rem;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            margin-right: 0.5rem;
+        }
+
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+
+        /* Toast Styling */
+        #toast {
+            visibility: hidden;
+            min-width: 250px;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 12px;
+            padding: 16px;
+            position: fixed;
+            z-index: 1000;
+            left: 50%;
+            bottom: 30px;
+            transform: translateX(-50%);
+            font-size: 16px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        #toast.show {
+            visibility: visible;
+            -webkit-animation: fadein 0.5s, fadeout 0.5s 2.5s;
+            animation: fadein 0.5s, fadeout 0.5s 2.5s;
+        }
+
+        @-webkit-keyframes fadein {
+            from {bottom: 0; opacity: 0;} 
+            to {bottom: 30px; opacity: 1;}
+        }
+
+        @keyframes fadein {
+            from {bottom: 0; opacity: 0;}
+            to {bottom: 30px; opacity: 1;}
+        }
+
+        @-webkit-keyframes fadeout {
+            from {bottom: 30px; opacity: 1;} 
+            to {bottom: 0; opacity: 0;}
+        }
+
+        @keyframes fadeout {
+            from {bottom: 30px; opacity: 1;}
+            to {bottom: 0; opacity: 0;}
+        }
     </style>
+    <!-- Use lucide-react icons equivalent for visual elements -->
+    <!-- Dummy icon styles for the sake of presentation -->
 </head>
-<body class="bg-slate-50">
+<body class="bg-gray-100 min-h-screen">
+    <!-- Main Content Wrapper -->
+    <div id="app-container" class="flex flex-col lg:flex-row min-h-screen">
 
-    <!-- Layout Fix: The flex container spans the whole screen -->
-    <div id="app-container" class="flex min-h-screen">
-
-        <!-- Sidebar Navigation - Darker Slate Background -->
-        <!-- Fixed positioning on small screen, relative on large, always z-50 -->
-        <aside id="sidebar" class="w-64 bg-slate-900 text-gray-200 space-y-6 py-7 px-4 fixed inset-y-0 left-0 transform -translate-x-full lg:relative lg:translate-x-0 transition duration-200 ease-in-out z-50 flex-shrink-0">
-
-            <!-- Sidebar Header -->
-            <div class="sidebar-header flex items-center mb-10">
-                <div class="text-4xl font-extrabold text-emerald-400">
-                    &#x1F393;
-                </div>
-                <h2 class="text-2xl font-bold ml-2 text-white">NCHSM <span id="portal-title" class="text-xl font-medium block leading-none">Student</span></h2>
+        <!-- Sidebar (Hidden on mobile by default) -->
+        <aside id="sidebar" class="fixed inset-y-0 left-0 transform -translate-x-full lg:translate-x-0 lg:relative lg:flex lg:flex-col w-64 bg-slate-900 text-white p-4 space-y-4 transition-transform duration-300 z-50 shadow-2xl">
+            <div class="text-2xl font-bold text-emerald-400 mb-6">
+                NCHSM Portal
             </div>
-
-            <!-- Navigation Links -->
-            <nav class="flex flex-col space-y-2">
-                <a href="#" data-tab="welcome" class="nav-link active">
-                    <span class="mr-3 text-xl">&#x1F3E0;</span>
-                    Welcome/Started
-                </a>
-                <a href="#" data-tab="dashboard" class="nav-link text-slate-300 hover:text-white">
-                    <span class="mr-3 text-xl">&#x1F4C8;</span>
+            
+            <nav class="flex-grow space-y-2">
+                <a href="#" data-tab="dashboard" class="nav-link active" id="dashboard-link">
+                    <!-- Icon for Dashboard -->
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
                     Dashboard
                 </a>
-                
-                <!-- Super Admin Link -->
-                <div id="admin-link-container" class="hidden">
-                    <hr class="my-3 border-slate-700">
-                    <a href="#" data-tab="admin-tools" class="nav-link text-white bg-indigo-800 hover:bg-indigo-700 font-bold">
-                        <span class="mr-3 text-xl">&#x2699;</span>
-                        Admin Tools
-                    </a>
-                    <hr class="my-3 border-slate-700">
-                </div>
-                <!-- End Super Admin Link -->
-
-                <a href="#" data-tab="profile" class="nav-link text-slate-300 hover:text-white">
-                    <span class="mr-3 text-xl">&#x1F464;</span>
-                    My Profile
+                <a href="#" data-tab="attendance" class="nav-link" id="attendance-link">
+                    <!-- Icon for Attendance -->
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 10V6"/><path d="M18 10V6"/><path d="M20 18v-8"/></svg>
+                    Attendance Check-in
                 </a>
-                <a href="#" data-tab="grades" class="nav-link text-slate-300 hover:text-white">
-                    <span class="mr-3 text-xl">&#x1F4DD;</span>
-                    Grades & Reports
-                </a>
-                <a href="#" data-tab="attendance" class="nav-link text-slate-300 hover:text-white">
-                    <span class="mr-3 text-xl">&#x23F0;</span>
-                    Attendance Logs
-                </a>
-                <a href="#" data-tab="announcements" class="nav-link text-slate-300 hover:text-white">
-                    <span class="mr-3 text-xl">&#x1F4E3;</span>
-                    Announcements
-                </a>
-                <a href="#" data-tab="messages" class="nav-link text-slate-300 hover:text-white">
-                    <span class="mr-3 text-xl">&#x1F4E8;</span>
-                    Message Admin
-                </a>
-                 <!-- Placeholder Tabs -->
-                <a href="#" data-tab="courses" class="nav-link text-slate-300 hover:text-white mt-4">
-                    <span class="mr-3 text-xl">&#x1F4D6;</span>
-                    My Courses
-                </a>
-                <a href="#" data-tab="cats-exams" class="nav-link text-slate-300 hover:text-white">
-                    <span class="mr-3 text-xl">&#x1F5D2;</span>
-                    CATs/Exams
-                </a>
-                <!-- CRITICAL FIX: Learning Resources Tab Added -->
-                <a href="#" data-tab="learning-resources" class="nav-link text-slate-300 hover:text-white">
-                    <span class="mr-3 text-xl">&#x1F4DA;</span>
-                    Learning Resources
-                </a>
-                <!-- Logout/Spacer -->
-                <!-- CRITICAL FIX: Link ID added for Logout function -->
-                <a href="#" id="logout-link" class="nav-link bg-red-600 hover:bg-red-700 text-white mt-6 justify-center shadow-lg">
-                    <span class="mr-2">&#x274C;</span>
-                    Logout
+                <a href="#" data-tab="docs" class="nav-link" id="docs-link">
+                    <!-- Icon for Documents -->
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    Documents
                 </a>
             </nav>
 
+            <a href="#" class="nav-link bg-red-700 hover:bg-red-800" id="logout-link">
+                <!-- Icon for Logout -->
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+                Logout
+            </a>
+            
         </aside>
 
-        <!-- Main Content Area - Layout Fix: flex-1 ensures it takes full remaining width -->
-        <div class="flex-1 overflow-x-hidden">
-            
-            <!-- Mobile Header/Toggle -->
-            <header class="flex justify-between items-center bg-white shadow-md p-4 lg:hidden sticky top-0 z-40">
-                <button id="menu-toggle" class="text-gray-600 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 rounded-lg p-2 transition duration-150 ease-in-out">
-                    <!-- Hamburger Icon -->
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+        <!-- Main Content Area -->
+        <main class="flex-grow p-4 md:p-8 transition-all duration-300 overflow-y-auto">
+            <!-- Header for Mobile -->
+            <header class="flex justify-between items-center lg:hidden mb-4">
+                <div class="text-xl font-bold text-slate-800">NCHSM Portal</div>
+                <button id="menu-toggle" class="p-2 rounded-md text-slate-800 hover:bg-gray-200 focus:outline-none">
+                    <!-- Menu Icon -->
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" x2="21" y1="12" y2="12"/><line x1="3" x2="21" y1="6" y2="6"/><line x1="3" x2="21" y1="18" y2="18"/></svg>
                 </button>
-                <h1 class="text-xl font-bold text-gray-800">Portal</h1>
-                <div class="w-6 h-6"></div> <!-- Spacer -->
             </header>
 
-            <!-- Layout Fix: p-6 md:p-10 is the padding, but no max-width is applied, solving the spacing issue -->
-            <main class="p-6 md:p-10">
-                <h1 class="text-4xl font-extrabold text-gray-900 mb-2">Hello, <span id="user-display-name">Loading...</span>!</h1>
-                <p class="text-lg text-slate-500 mb-8" id="user-subtitle">Your academic resources and tools.</p>
+            <!-- Loading Screen / Authentication required -->
+            <div id="loading-screen" class="absolute inset-0 bg-gray-100 flex flex-col items-center justify-center z-40 transition-opacity duration-500">
+                <div class="loader mb-4"></div>
+                <p class="text-lg font-medium text-slate-600" id="loading-message">Initializing...</p>
+            </div>
 
-                <!-- 1. Welcome/Getting Started Tab (Active by default) -->
-                <section id="welcome" class="tab-content active space-y-6">
-                    <!-- Dynamic Welcome/Announcement Message (Styled with a vibrant gradient) -->
-                    <div class="bg-gradient-to-r from-cyan-600 to-blue-700 text-white p-6 rounded-2xl shadow-xl flex items-center gap-4">
-                         <span class="text-4xl">&#x1F4E3;</span>
-                        <h2 class="text-2xl font-bold" id="welcome-subject">Loading Announcement...</h2>
+            <!-- Content Tabs -->
+            <div id="content-area" class="hidden">
+                <h1 class="text-3xl font-extrabold text-slate-800 mb-6">Student Dashboard</h1>
+                
+                <!-- Dashboard Tab -->
+                <div id="tab-dashboard" class="tab-content active bg-white p-6 md:rounded-xl shadow-lg">
+                    <h2 class="text-xl font-semibold mb-2 text-emerald-600">Welcome!</h2>
+                    <div id="welcome-message" class="bg-gray-50 p-4 rounded-xl shadow-inner text-gray-700 italic border-l-4 border-emerald-500 min-h-[5rem] flex items-center justify-center">
+                        <span class="loader-small"></span> Loading welcome message...
                     </div>
-                    <div class="bg-white p-8 rounded-2xl shadow-xl space-y-4 min-h-32 border-t-4 border-cyan-400" id="welcome-body-display">
-                        <div class="flex justify-center items-center h-full">
-                            <div class="loader"></div>
-                            <p class="text-slate-500 ml-4">Loading welcome message content...</p>
-                        </div>
-                    </div>
-                </section>
+                    <p class="mt-4 text-gray-600">This is your main student portal. Please use the navigation on the left to manage your attendance and view documents.</p>
+                </div>
 
-                <!-- 2. Dashboard Tab (Includes Geo-Attendance Check) -->
-                <section id="dashboard" class="tab-content">
-                    <h2 class="text-2xl font-semibold text-gray-800 mb-6">Dashboard Overview & Daily Check-In</h2>
-
-                    <!-- Attendance Check-In Widget -->
-                    <div class="bg-white p-6 rounded-2xl shadow-xl border-l-4 border-emerald-500 mb-8">
-                        <h3 class="text-xl font-semibold text-gray-800 mb-4">Daily Geo-Attendance Check</h3>
-                        <div class="space-y-4">
-                            <!-- Step 1: Session Type -->
-                            <div>
-                                <label for="session-type" class="block text-sm font-medium text-gray-700 mb-1">1. Select Session Type</label>
-                                <select id="session-type" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 transition duration-150 shadow-sm" required>
-                                    <option value="">-- Choose Type --</option>
-                                    <option value="on-class">On Class Session</option>
-                                    <option value="clinicals">Clinicals Session</option>
-                                </select>
-                            </div>
-
-                            <!-- Step 2: Session Detail (Conditionally Hidden/Shown by JS) -->
-                            <div id="session-detail-container" class="hidden">
-                                <label for="session-detail" class="block text-sm font-medium text-gray-700 mb-1">2. Select Lesson/Rotation</label>
-                                <select id="session-detail" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 transition duration-150 shadow-sm" disabled required>
-                                    <!-- Options populated by JS -->
-                                </select>
-                            </div>
-
-                            <button id="check-in-button" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 px-4 rounded-lg transition duration-150 shadow-md hover:shadow-lg disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>
-                                Check In Now
-                            </button>
-                            <p id="check-in-status" class="text-sm text-slate-600 mt-2 text-center">Please select the session type and detail to enable check-in.</p>
-                        </div>
-                    </div>
-
-                    <!-- Other Dashboard Stats -->
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div class="bg-white p-6 rounded-2xl shadow-xl border-l-4 border-emerald-500">
-                            <p class="text-sm font-medium text-slate-500">Current GPA</p>
-                            <p class="text-4xl font-extrabold text-gray-900 mt-1">3.85</p>
-                        </div>
-                        <div class="bg-white p-6 rounded-2xl shadow-xl border-l-4 border-blue-500">
-                            <p class="text-sm font-medium text-slate-500">Attendance Rate</p>
-                            <p class="text-4xl font-extrabold text-gray-900 mt-1">94%</p>
-                        </div>
-                        <div class="bg-white p-6 rounded-2xl shadow-xl border-l-4 border-indigo-500">
-                            <p class="text-sm font-medium text-slate-500">Unread Messages</p>
-                            <p class="text-4xl font-extrabold text-gray-900 mt-1">3</p>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- 3. Super Admin Tools Tab - Distinct Styling -->
-                <section id="admin-tools" class="tab-content">
-                    <h2 class="text-2xl font-semibold text-gray-800 mb-4">Welcome, <span id="admin-name-display">Super Admin Matoka</span>!</h2>
-                    <p class="text-lg text-slate-500 mb-6">Full system oversight and user management.</p>
-
-                    <!-- Edit Welcome Message Panel -->
-                    <div class="bg-white p-6 rounded-2xl shadow-2xl space-y-4 border-t-8 border-indigo-600">
-                        <h3 class="text-xl font-bold text-indigo-700">Edit Student Welcome Message</h3>
-                        <p class="text-sm text-slate-500">Customize the content that appears on the student dashboard's main screen. **HTML formatting is supported**.</p>
-                        
-                        <form id="welcome-message-form">
-                            <textarea id="welcome-message-input" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 resize-y font-mono text-sm shadow-inner" rows="12" placeholder="Enter your custom welcome message HTML here..."></textarea>
-                            <button type="submit" id="save-welcome-button" class="mt-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-6 rounded-lg transition duration-150 w-full md:w-auto shadow-md hover:shadow-lg">
-                                Save Welcome Message
-                            </button>
-                            <p id="save-status" class="text-sm mt-2 text-slate-600"></p>
-                        </form>
-                    </div>
+                <!-- Attendance Check-in Tab -->
+                <div id="tab-attendance" class="tab-content hidden p-6 bg-white md:rounded-xl shadow-lg">
+                    <h2 class="text-2xl font-bold text-slate-700 mb-6 border-b pb-2">Daily Attendance Check-in</h2>
                     
-                    <!-- Current Live Preview -->
-                    <div class="mt-8 mb-8">
-                        <h3 class="text-xl font-semibold text-gray-800 mb-2">Current Live Preview</h3>
-                        <div id="live-preview" class="bg-slate-50 p-6 rounded-xl border-2 border-dashed border-gray-300">
-                            <p class="text-slate-500">Loading live preview...</p>
+                    <div class="mb-6 bg-emerald-50 p-4 rounded-lg border border-emerald-200">
+                        <p class="text-sm font-semibold text-emerald-700">User ID:</p>
+                        <p id="current-user-id" class="break-all font-mono text-xs text-emerald-600 mt-1"></p>
+                    </div>
+
+                    <form id="attendance-form" class="space-y-4 max-w-lg">
+                        <div>
+                            <label for="session-type-select" class="block text-sm font-medium text-gray-700 mb-1">Session Type:</label>
+                            <select id="session-type-select" name="session-type" required
+                                class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm rounded-md shadow-sm bg-white">
+                                <option value="" disabled selected>Select Session Type</option>
+                                <option value="class">On Class</option>
+                                <option value="clinicals">On Clinicals</option>
+                            </select>
                         </div>
-                    </div>
 
-                    <!-- New Live Attendance Logs Section -->
-                    <div class="mt-8 bg-white p-6 rounded-2xl shadow-2xl space-y-4 border-t-8 border-indigo-600">
-                        <h3 class="text-xl font-bold text-indigo-700">Live Student Attendance Logs</h3>
-                        <p class="text-sm text-slate-500 mb-4">All check-in records including the recorded geolocation data. (Sorted by most recent)</p>
-                        <div class="overflow-x-auto">
-                            <table class="min-w-full divide-y divide-gray-200">
-                                <thead class="bg-gray-50">
-                                    <tr>
-                                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time (UTC)</th>
-                                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User ID</th>
-                                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Session</th>
-                                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location (Geocoded)</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="bg-white divide-y divide-gray-200" id="admin-attendance-table-body">
-                                    <tr><td colspan="4" class="px-4 py-4 text-center text-slate-500">No attendance records found yet. Try checking in from the Dashboard tab.</td></tr>
-                                </tbody>
-                            </table>
+                        <div>
+                            <label id="session-detail-label" for="session-detail-select" class="block text-sm font-medium text-gray-700 mb-1">Detail (Course/Department):</label>
+                            <select id="session-detail-select" name="session-detail" required
+                                class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm rounded-md shadow-sm bg-white" disabled>
+                                <option value="" disabled selected>Select a Detail</option>
+                            </select>
                         </div>
-                    </div>
-                </section>
-                <!-- End Super Admin Tools Tab -->
+                        
+                        <button id="check-in-button" type="submit" disabled
+                            class="w-full inline-flex justify-center py-3 px-4 border border-transparent shadow-sm text-sm font-medium rounded-xl text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 transition duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed">
+                            Check In
+                        </button>
+                    </form>
 
-                <!-- 4. Profile Tab -->
-                <section id="profile" class="tab-content">
-                    <h2 class="text-2xl font-semibold text-gray-800 mb-4">My Profile</h2>
-                    <div class="bg-white p-8 rounded-2xl shadow-xl space-y-4 border-l-4 border-gray-400">
-                        <p><strong>User ID:</strong> <span id="user-id-display" class="text-gray-700 font-mono text-sm">Loading...</span></p>
-                        <p><strong>Email:</strong> <span class="text-gray-700">Loading...</span></p>
-                        <p><strong>Student ID:</strong> <span class="text-gray-700">Loading...</span></p>
-                        <p><strong>Program:</strong> <span class="text-gray-700">Loading...</span></p>
-                        <p><strong>Phone:</strong> <span class="text-gray-700">Loading...</span></p>
-                        <p><strong>Account Status:</strong> <span class="text-emerald-600 font-bold">Loading...</span></p>
+                    <h3 class="text-xl font-bold text-slate-700 mt-8 mb-4 border-b pb-2">Recent Attendance</h3>
+                    <div id="recent-attendance-list" class="space-y-3">
+                        <div class="text-gray-500">Loading attendance history...</div>
                     </div>
-                </section>
+                </div>
 
-                <!-- 5. Grades & Reports Tab -->
-                <section id="grades" class="tab-content">
-                    <h2 class="text-2xl font-semibold text-gray-800 mb-4">My Grades & Reports</h2>
-                    <div class="p-8 border-2 border-dashed border-gray-300 rounded-2xl text-center text-slate-500 bg-slate-50">
-                        <p class="text-lg">My Grades & Reports</p>
-                        <p>This tab is where you would view detailed grades for all modules, and download official academic reports. (Under Construction)</p>
-                    </div>
-                </section>
+                <!-- Documents Tab (Placeholder) -->
+                <div id="tab-docs" class="tab-content hidden p-6 bg-white md:rounded-xl shadow-lg">
+                    <h2 class="text-2xl font-bold text-slate-700 mb-4">Academic Documents</h2>
+                    <p class="text-gray-600">This section will contain links to important academic resources, handbooks, and clinical protocols.</p>
+                    <ul class="mt-4 space-y-2 text-emerald-600">
+                        <li><a href="#" class="hover:underline">Student Handbook 2024 (PDF)</a></li>
+                        <li><a href="#" class="hover:underline">Clinical Rotation Schedule (XLSX)</a></li>
+                        <li><a href="#" class="hover:underline">Emergency Protocol Checklist</a></li>
+                    </ul>
+                </div>
+            </div>
+        </main>
 
-                <!-- 6. Attendance Logs Tab -->
-                <section id="attendance" class="tab-content">
-                    <h2 class="text-2xl font-semibold text-gray-800 mb-4">Your Attendance History</h2>
-                    <div class="bg-white p-6 rounded-2xl shadow-xl overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-200">
-                            <thead>
-                                <tr class="bg-gray-50">
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Check-In Time</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Session</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                </tr>
-                            </thead>
-                            <tbody class="bg-white divide-y divide-gray-200" id="attendance-table">
-                                <tr><td colspan="5" class="px-6 py-4 text-center text-slate-500">This tab is a placeholder for detailed student-specific attendance logs.</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </section>
-                
-                <!-- 7. Announcements Tab -->
-                <section id="announcements" class="tab-content">
-                    <h2 class="text-2xl font-semibold text-gray-800 mb-4">Program Announcements</h2>
-                    <div class="bg-white p-6 rounded-2xl shadow-xl space-y-4">
-                        <p class="text-slate-500">Important notices sent by the administration regarding your program or the entire university.</p>
-                        <p class="text-slate-500">Loading announcements...</p>
-                    </div>
-                </section>
-
-                <!-- 8. Message Admin Tab -->
-                <section id="messages" class="tab-content">
-                    <h2 class="text-2xl font-semibold text-gray-800 mb-4">Send Message to Administration</h2>
-                    <div class="bg-white p-6 rounded-2xl shadow-xl">
-                        <form id="messages-form" class="space-y-4">
-                            <textarea id="message-body" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 resize-y shadow-inner" rows="6" placeholder="Use this form to send a private inquiry or report an issue directly to the admin team." required></textarea>
-                            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-150 shadow-md">
-                                Send Message
-                            </button>
-                            <p id="message-status" class="text-sm text-slate-500 mt-2"></p>
-                        </form>
-                    </div>
-                </section>
-
-                <!-- 9. Courses Tab -->
-                <section id="courses" class="tab-content">
-                     <h2 class="text-2xl font-semibold text-gray-800 mb-4">My Enrollment & Courses</h2>
-                    <div class="p-8 border-2 border-dashed border-gray-300 rounded-2xl text-center text-slate-500 bg-slate-50">
-                        <p>This tab would show your full history of enrolled programs and the modules registered for the current term. (Under Construction)</p>
-                    </div>
-                </section>
-                
-                <!-- 10. CATs/Exams Tab -->
-                <section id="cats-exams" class="tab-content">
-                    <h2 class="text-2xl font-semibold text-gray-800 mb-4">CATs/Exams</h2>
-                    <div class="p-8 border-2 border-dashed border-gray-300 rounded-2xl text-center text-slate-500 bg-slate-50">
-                        <p>Schedules and results for CATs and Exams. (Under Construction)</p>
-                    </div>
-                </section>
-                
-                <!-- 11. Learning Resources Tab -->
-                <!-- CRITICAL FIX: Tab content is here and active -->
-                <section id="learning-resources" class="tab-content">
-                    <h2 class="text-2xl font-semibold text-gray-800 mb-4">Learning Resources</h2>
-                    <div class="p-8 border-2 border-dashed border-gray-300 rounded-2xl text-center text-slate-500 bg-slate-50">
-                        <p>Links to student resources, library access, and academic tools. (Under Construction)</p>
-                    </div>
-                </section>
-                
-                <!-- 12. Academic Calendar Tab (still a placeholder) -->
-                <section id="academic-calendar" class="tab-content">
-                    <h2 class="text-2xl font-semibold text-gray-800 mb-4">Academic Calendar</h2>
-                    <div class="p-8 border-2 border-dashed border-gray-300 rounded-2xl text-center text-slate-500 bg-slate-50">
-                        <p>University academic calendar. (Under Construction)</p>
-                    </div>
-                </section>
-            </main>
-        </div>
-
+        <!-- Toast Notification -->
+        <div id="toast" class="toast-hidden"></div>
     </div>
 
-    <!-- Toast Notification / Custom Alert Replacement for Logout -->
-    <div id="toast-message" class="fixed bottom-4 right-4 bg-red-600 text-white p-4 rounded-lg shadow-xl transition-opacity duration-300 opacity-0 z-50">
-        Logging out... Goodbye!
-    </div>
-    <!-- /Toast Notification -->
-
+    <!-- Firebase Imports -->
     <script type="module">
-        // --- Firebase Imports ---
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        // CRITICAL FIX: Added signOut
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, query, addDoc, serverTimestamp, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // LocationIQ Access Token (Publicly exposed by user request)
-        const LOCATIONIQ_ACCESS_TOKEN = "pk.cbe61eae35ecbe1d1d682c347d81381c";
-
-        // --- Global Config ---
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        // CRITICAL FIX: Added defensive parsing and fallback for firebaseConfig
-        let firebaseConfig = {};
-        try {
-            firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-        } catch (e) {
-            console.error("Failed to parse __firebase_config:", e);
-        }
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-        
-        // Firestore paths
-        const WELCOME_MESSAGE_DOC_ID = "main_message";
-        const ATTENDANCE_COLLECTION_PATH = `artifacts/${appId}/public/data/attendance`; // Use one level down for the collection
-
-        let db = null; // Initialize to null
-        let auth = null; // Initialize to null
+        // Global Firebase and App variables
+        let app;
+        let db;
+        let auth;
         let currentUserId = null;
-        let isAuthReady = false;
-        let isAdmin = false;
+        let currentUserEmail = 'Anonymous';
 
-        // --- Firebase Initialization and Auth ---
-        try {
-            if (Object.keys(firebaseConfig).length === 0) {
-                 throw new Error("Firebase config is empty. Cannot initialize.");
-            }
-            
-            const app = initializeApp(firebaseConfig);
-            db = getFirestore(app); // Assign db instance
-            auth = getAuth(app); // Assign auth instance
-            setLogLevel('Debug');
-            
-            onAuthStateChanged(auth, async (user) => {
-                if (user) {
-                    currentUserId = user.uid;
-                    isAuthReady = true;
-                    document.getElementById('user-id-display').textContent = currentUserId;
-                    
-                    // Super Admin Check (Simulated)
-                    // Note: This is where we simulate admin access for the 'Superadmin'
-                    if (currentUserId === 'demo-admin-user-id' || currentUserId.length > 5 && currentUserId.startsWith('F-')) {
-                        isAdmin = true;
-                        document.getElementById('admin-link-container').classList.remove('hidden');
-                        document.getElementById('user-display-name').textContent = 'Super Admin Matoka';
-                        document.getElementById('user-subtitle').textContent = 'Full system oversight and user management.';
-                        document.getElementById('portal-title').textContent = 'Super Admin';
-                        loadAdminAttendance(); // Load logs for admin
-                    } else {
-                        isAdmin = false;
-                        document.getElementById('user-display-name').textContent = 'Jane Doe'; 
-                        document.getElementById('portal-title').textContent = 'Student';
-                    }
+        // Firestore Paths
+        const ATTENDANCE_COLLECTION_NAME = 'attendance';
+        const SETTINGS_PATH = 'settings';
+        const WELCOME_DOC_ID = 'welcome_message';
 
-                    loadWelcomeMessage();
-                } else {
-                    // User signed out or anonymous
-                    currentUserId = crypto.randomUUID(); 
-                    isAuthReady = true;
-                    isAdmin = false;
-                    document.getElementById('admin-link-container').classList.add('hidden');
-                    document.getElementById('user-display-name').textContent = 'Guest'; 
-                    document.getElementById('portal-title').textContent = 'Portal';
-                    document.getElementById('user-id-display').textContent = currentUserId;
-                    
-                    loadWelcomeMessage();
+        // Mock Data for dynamic dropdowns
+        const COURSES = [
+            { id: 'anatomy', name: 'Anatomy 101' },
+            { id: 'physiology', name: 'Physiology 202' },
+            { id: 'pharm', name: 'Pharmacology 303' },
+            { id: 'pathology', name: 'Pathology 404' },
+        ];
+
+        const DEPARTMENTS = [
+            { id: 'pediatrics', name: 'Pediatrics' },
+            { id: 'surgery', name: 'General Surgery' },
+            { id: 'er', name: 'Emergency Room' },
+            { id: 'icu', name: 'Intensive Care Unit (ICU)' },
+            { id: 'obgyn', name: 'Obstetrics/Gynecology (OB-GYN)' },
+        ];
+
+        // UI Elements
+        const loadingScreen = document.getElementById('loading-screen');
+        const contentArea = document.getElementById('content-area');
+        const sidebar = document.getElementById('sidebar');
+        const menuToggle = document.getElementById('menu-toggle');
+        const navLinks = document.querySelectorAll('.nav-link');
+        const logoutLink = document.getElementById('logout-link');
+        const checkInButton = document.getElementById('check-in-button');
+        const sessionTypeSelect = document.getElementById('session-type-select');
+        const sessionDetailSelect = document.getElementById('session-detail-select');
+        const attendanceForm = document.getElementById('attendance-form');
+        const attendanceList = document.getElementById('recent-attendance-list');
+        const userIdDisplay = document.getElementById('current-user-id');
+        const welcomeMessageElement = document.getElementById('welcome-message');
+
+        // --- Utility Functions ---
+
+        function showToast(message, isError = false) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'show';
+            toast.style.backgroundColor = isError ? '#ef4444' : '#10b981';
+            setTimeout(function(){ toast.className = toast.className.replace('show', ''); }, 3000);
+        }
+
+        function showLogoutToast() {
+            showToast("Logging out...", false);
+        }
+
+        function toggleSidebar() {
+            sidebar.classList.toggle('-translate-x-full');
+        }
+
+        function showTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.getElementById(`tab-${tabId}`).classList.add('active');
+            
+            navLinks.forEach(link => {
+                link.classList.remove('active');
+                if (link.getAttribute('data-tab') === tabId) {
+                    link.classList.add('active');
                 }
             });
-
-            if (initialAuthToken) {
-                await signInWithCustomToken(auth, initialAuthToken);
-            } else {
-                await signInAnonymously(auth);
-            }
-
-        } catch (error) {
-            console.error("Firebase initialization or authentication failed:", error);
-            document.getElementById('welcome-body-display').innerHTML = '<p class="text-red-500">Error loading data. Check console for Firebase connection status.</p>';
         }
 
-        // --- Geolocation and Check-in Logic ---
+        // --- Attendance Functions ---
 
-        function getCurrentLocation() {
-            return new Promise((resolve) => {
-                if (!navigator.geolocation) {
-                    console.error('Geolocation is not supported by this browser.');
-                    resolve(null);
+        // Function to validate the form state
+        function validateAttendanceForm() {
+            const typeSelected = sessionTypeSelect.value !== '';
+            const detailSelected = sessionDetailSelect.value !== '';
+            
+            if (typeSelected && detailSelected) {
+                checkInButton.disabled = false;
+            } else {
+                checkInButton.disabled = true;
+            }
+            // Ensure the detail select is enabled if a type is chosen
+            sessionDetailSelect.disabled = !typeSelected;
+        }
+
+        // Function to update the detail dropdown based on session type
+        function updateAttendanceDetail(sessionType) {
+            const sessionDetailSelect = document.getElementById('session-detail-select');
+            sessionDetailSelect.innerHTML = '<option value="" disabled selected>Select a Detail</option>';
+            let details = [];
+            let labelText = 'Detail (Course/Department):'; 
+
+            if (sessionType === 'class') {
+                details = COURSES;
+                labelText = 'Course:';
+            } else if (sessionType === 'clinicals') {
+                details = DEPARTMENTS;
+                labelText = 'Hospital Department:';
+            }
+
+            // Update the label dynamically
+            document.getElementById('session-detail-label').textContent = labelText;
+            
+            // Populate options
+            details.forEach(detail => {
+                const option = document.createElement('option');
+                option.value = detail.id;
+                option.textContent = detail.name;
+                sessionDetailSelect.appendChild(option);
+            });
+
+            // Re-validate the form after updating details
+            validateAttendanceForm();
+        }
+
+        // --- Firestore Functions ---
+
+        // Function to set default welcome message if it doesn't exist (simulating admin setup)
+        async function ensureDefaultWelcomeMessage(db, appId) {
+            const docRef = doc(db, 'artifacts', appId, 'public', 'data', SETTINGS_PATH, WELCOME_DOC_ID);
+            
+            try {
+                const docSnap = await getDoc(docRef);
+                if (!docSnap.exists()) {
+                    console.log("Setting default welcome message...");
+                    await setDoc(docRef, {
+                        message: "A warm welcome to the NCHSM Student Portal! This is a default message. Admins can update this message anytime.",
+                        lastUpdated: serverTimestamp()
+                    });
+                }
+            } catch (e) {
+                console.error("Error ensuring default welcome message:", e);
+            }
+        }
+
+
+        // Function to load the welcome message in real-time
+        function loadWelcomeMessage(db, appId) {
+            const docRef = doc(db, 'artifacts', appId, 'public', 'data', SETTINGS_PATH, WELCOME_DOC_ID);
+
+            // Set up real-time listener
+            return onSnapshot(docRef, (docSnap) => {
+                if (docSnap.exists() && docSnap.data().message) {
+                    welcomeMessageElement.classList.remove('justify-center');
+                    welcomeMessageElement.innerHTML = docSnap.data().message;
+                } else {
+                    welcomeMessageElement.classList.add('justify-center');
+                    welcomeMessageElement.innerHTML = "No welcome message configured by the admin yet.";
+                }
+            }, (error) => {
+                console.error("Error loading welcome message:", error);
+                welcomeMessageElement.classList.add('justify-center');
+                welcomeMessageElement.innerHTML = "Error loading message. Please try refreshing.";
+            });
+        }
+
+        function loadRecentAttendance(db, appId, userId) {
+            const attendancePath = `artifacts/${appId}/users/${userId}/${ATTENDANCE_COLLECTION_NAME}`;
+            const q = collection(db, attendancePath); // No orderBy to avoid index errors, will sort client-side.
+
+            // Clear previous list content and show loading
+            attendanceList.innerHTML = '<div class="flex items-center text-gray-500"><span class="loader-small"></span> Loading history...</div>';
+
+            onSnapshot(q, (snapshot) => {
+                const attendanceRecords = [];
+                snapshot.forEach((doc) => {
+                    const data = doc.data();
+                    if (data.timestamp && data.timestamp.toDate) {
+                        data.timestamp = data.timestamp.toDate();
+                    }
+                    attendanceRecords.push(data);
+                });
+
+                // Sort the records client-side by timestamp (latest first)
+                attendanceRecords.sort((a, b) => b.timestamp - a.timestamp);
+
+                if (attendanceRecords.length === 0) {
+                    attendanceList.innerHTML = '<p class="text-gray-500 italic">No attendance records found yet. Check in to start!</p>';
                     return;
                 }
 
-                navigator.geolocation.getCurrentPosition(
-                    (position) => {
-                        resolve({
-                            lat: position.coords.latitude,
-                            lon: position.coords.longitude
-                        });
-                    },
-                    (error) => {
-                        console.error("Geolocation error:", error.message);
-                        resolve(null);
-                    },
-                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-                );
+                attendanceList.innerHTML = ''; // Clear loading message
+
+                attendanceRecords.slice(0, 10).forEach(record => {
+                    const dateStr = record.timestamp ? record.timestamp.toLocaleString() : 'N/A';
+                    const typeDisplay = record.type === 'class' ? 'Class' : 'Clinical';
+                    
+                    let detailName = 'N/A';
+                    if (record.type === 'class') {
+                        const course = COURSES.find(c => c.id === record.detail);
+                        detailName = course ? course.name : record.detail;
+                    } else if (record.type === 'clinicals') {
+                        const department = DEPARTMENTS.find(d => d.id === record.detail);
+                        detailName = department ? department.name : record.detail;
+                    }
+
+                    const item = document.createElement('div');
+                    item.className = 'flex justify-between items-center p-3 bg-gray-50 rounded-lg shadow-sm border border-gray-200';
+                    item.innerHTML = `
+                        <div>
+                            <p class="font-medium text-slate-700">${typeDisplay} Check-in</p>
+                            <p class="text-sm text-gray-600">${detailName}</p>
+                        </div>
+                        <span class="text-xs text-gray-500">${dateStr}</span>
+                    `;
+                    attendanceList.appendChild(item);
+                });
+
+            }, (error) => {
+                console.error("Error fetching attendance records:", error);
+                attendanceList.innerHTML = '<p class="text-red-500">Error loading attendance history. Check console for details.</p>';
             });
         }
 
-        async function reverseGeocode(lat, lon) {
-            const url = `https://us1.locationiq.com/v1/reverse.php?key=${LOCATIONIQ_ACCESS_TOKEN}&lat=${lat}&lon=${lon}&format=json`;
-            try {
-                const response = await fetch(url);
-                const data = await response.json();
-                
-                if (response.ok && data.display_name) {
-                    return data.display_name;
-                } else {
-                    console.error("LocationIQ API Error:", data.error || data);
-                    return `Location found, but geocoding failed. Coords: ${lat.toFixed(4)}, ${lon.toFixed(4)}`;
-                }
-            } catch (error) {
-                console.error("Error fetching geocode data:", error);
-                return `Geocoding failed. Check API key/Network. Coords: ${lat.toFixed(4)}, ${lon.toFixed(4)}`;
-            }
-        }
 
         async function handleCheckIn(e) {
             e.preventDefault();
+            checkInButton.disabled = true;
+            checkInButton.textContent = 'Checking In...';
             
-            // CRITICAL FIX: Ensure DB is initialized before using collection
-            if (!db) {
-                checkInStatus.textContent = "Error: Database connection failed. Cannot check in.";
-                checkInStatus.classList.add('text-red-600');
-                return;
-            }
-
             const sessionType = sessionTypeSelect.value;
             const sessionDetail = sessionDetailSelect.value;
 
             if (!sessionType || !sessionDetail) {
-                checkInStatus.textContent = "Please select both session type and detail.";
+                showToast("Please select both Session Type and Detail.", true);
+                checkInButton.disabled = false;
+                checkInButton.textContent = 'Check In';
                 return;
             }
 
-            const originalButtonText = checkInButton.textContent;
-            checkInButton.setAttribute('disabled', 'true');
-            checkInButton.textContent = 'Checking location...';
-            checkInStatus.classList.remove('text-red-600', 'text-green-600');
-            checkInStatus.textContent = 'Requesting location access...';
-
-            const location = await getCurrentLocation();
-
-            if (!location) {
-                checkInStatus.textContent = 'Error: Could not get your location. Please ensure location services are enabled and try again.';
-                checkInStatus.classList.add('text-red-600');
-                checkInButton.textContent = originalButtonText;
-                checkInButton.removeAttribute('disabled');
-                return;
-            }
-
-            checkInStatus.textContent = 'Location acquired. Reverse geocoding...';
-            const address = await reverseGeocode(location.lat, location.lon);
-
-            const checkInRecord = {
-                userId: currentUserId,
-                sessionType: sessionType,
-                sessionDetail: sessionDetail,
-                timestamp: new Date().toISOString(),
-                latitude: location.lat,
-                longitude: location.lon,
-                address: address, 
-                timestamp_ms: Date.now() 
-            };
-
-            checkInStatus.textContent = 'Saving record to database...';
             try {
-                // CRITICAL FIX: The collection call now uses the initialized db object
-                const checkinsColRef = collection(db, ATTENDANCE_COLLECTION_PATH); 
-                await addDoc(checkinsColRef, checkInRecord);
+                const attendancePath = `artifacts/${appId}/users/${currentUserId}/${ATTENDANCE_COLLECTION_NAME}`;
+                const colRef = collection(db, attendancePath);
                 
-                const checkInTime = new Date().toLocaleTimeString();
-                checkInStatus.textContent = `Check-In successful! Logged for ${sessionDetail} at ${checkInTime}. Location: ${address}`;
-                checkInStatus.classList.add('text-green-600');
+                const attendanceData = {
+                    userId: currentUserId,
+                    userName: currentUserEmail || currentUserId,
+                    timestamp: serverTimestamp(),
+                    type: sessionType,
+                    detail: sessionDetail,
+                };
+
+                await addDoc(colRef, attendanceData);
+                
+                showToast("Attendance successfully recorded!", false);
+                
+                // Reset form state
+                sessionTypeSelect.value = '';
+                sessionDetailSelect.innerHTML = '<option value="" disabled selected>Select a Detail</option>';
+                document.getElementById('session-detail-label').textContent = 'Detail (Course/Department):';
+                validateAttendanceForm();
 
             } catch (error) {
-                console.error("Error saving check-in record:", error);
-                checkInStatus.textContent = `Error saving check-in: ${error.message}`;
-                checkInStatus.classList.add('text-red-600');
+                console.error("Error checking in:", error);
+                showToast(`Check-in failed: ${error.message}`, true);
             } finally {
-                checkInButton.textContent = originalButtonText;
-                checkInButton.removeAttribute('disabled');
+                checkInButton.textContent = 'Check In';
                 validateAttendanceForm();
             }
         }
 
-        // --- Data Loading Functions (Admin and Welcome) ---
 
-        function loadWelcomeMessage() {
-            if (!isAuthReady || !db) return;
-            try {
-                const welcomeDocRef = doc(db, `artifacts/${appId}/public/data/settings`, WELCOME_MESSAGE_DOC_ID);
+        // --- Initialization ---
 
-                onSnapshot(welcomeDocRef, (docSnap) => {
-                    const defaultMessage = `
-                        <h3 class="text-xl font-semibold text-gray-800 mb-4">Welcome to the Student Portal here!</h3>
-                        <p class="text-gray-700">Use the navigation bar on the left to access your profile, grades, attendance, and communication tools.</p>
-                        <p class="text-gray-700">Customize this message here. <strong>HTML is supported!</strong></p>
-                    `;
-                    
-                    let messageBody = defaultMessage;
-                    let messageSubject = "THE OFFICIAL ANNOUNCMENT IS HERE";
-
-                    if (docSnap.exists()) {
-                        const data = docSnap.data();
-                        messageBody = data.body || defaultMessage;
-                        messageSubject = data.subject || "LATEST ANNOUNCEMENT";
-                    }
-
-                    document.getElementById('welcome-body-display').innerHTML = messageBody;
-                    document.getElementById('welcome-subject').textContent = messageSubject;
-
-                    if (isAdmin) {
-                        document.getElementById('live-preview').innerHTML = messageBody;
-                        document.getElementById('welcome-message-input').value = messageBody;
-                    }
-
-                }, (error) => {
-                    console.error("Error fetching welcome message:", error);
-                });
-            } catch (error) {
-                console.error("Error setting up onSnapshot for welcome message:", error);
-            }
-        }
-
-        function loadAdminAttendance() {
-            if (!isAdmin || !isAuthReady || !db) return;
+        document.addEventListener('DOMContentLoaded', () => {
+            // CRITICAL: Initialize Firebase from global config
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+            const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+            const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
             
-            const tableBody = document.getElementById('admin-attendance-table-body');
-            tableBody.innerHTML = '<tr><td colspan="4" class="px-4 py-4 text-center text-indigo-500"><div class="loader mx-auto mb-2"></div> Loading live attendance feed...</td></tr>';
-
-            try {
-                const checkinsColRef = collection(db, ATTENDANCE_COLLECTION_PATH);
-                const q = query(checkinsColRef);
-
-                onSnapshot(q, (snapshot) => {
-                    const records = [];
-                    snapshot.forEach(doc => {
-                        records.push(doc.data());
-                    });
-
-                    // Client-side sort by timestamp_ms descending (most recent first)
-                    records.sort((a, b) => (b.timestamp_ms || 0) - (a.timestamp_ms || 0));
-
-                    if (records.length === 0) {
-                         tableBody.innerHTML = '<tr><td colspan="4" class="px-4 py-4 text-center text-slate-500">No attendance records found yet. Try checking in from the Dashboard tab.</td></tr>';
-                         return;
-                    }
-
-                    tableBody.innerHTML = records.map(record => {
-                        const date = new Date(record.timestamp);
-                        const timeString = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZoneName: 'short' });
-                        const dateString = date.toLocaleDateString();
-                        // Only show first 8 chars of User ID for brevity, full ID in tooltip
-                        const displayUserId = record.userId ? record.userId.substring(0, 8) + '...' : 'N/A'; 
-
-                        return `
-                            <tr class="hover:bg-gray-50">
-                                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900 font-mono">${dateString} ${timeString}</td>
-                                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500" title="${record.userId || ''}">${displayUserId}</td>
-                                <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-indigo-600">${record.sessionDetail}</td>
-                                <td class="px-4 py-3 text-sm text-gray-700 max-w-sm truncate" title="${record.address || 'N/A'}">
-                                    ${record.address || `Coords: ${record.latitude}, ${record.longitude}`}
-                                </td>
-                            </tr>
-                        `;
-                    }).join('');
-
-                }, (error) => {
-                    console.error("Error fetching admin attendance:", error);
-                    tableBody.innerHTML = '<tr><td colspan="4" class="px-4 py-4 text-center text-red-500">Error loading data. See console.</td></tr>';
-                });
-            } catch (error) {
-                console.error("Error setting up onSnapshot for attendance:", error);
+            if (Object.keys(firebaseConfig).length === 0) {
+                 document.getElementById('loading-message').textContent = 'Firebase configuration missing.';
+                 return;
             }
-        }
-
-        async function saveWelcomeMessage(event) {
-            event.preventDefault();
-            if (!db) return; // safety check
-            
-            const saveButton = document.getElementById('save-welcome-button');
-            const saveStatus = document.getElementById('save-status');
-            const newBody = document.getElementById('welcome-message-input').value;
-            const newSubject = document.getElementById('welcome-subject').textContent;
-
-            saveButton.disabled = true;
-            saveStatus.textContent = 'Saving...';
-            saveStatus.classList.remove('text-green-600', 'text-red-600');
 
             try {
-                const welcomeDocRef = doc(db, `artifacts/${appId}/public/data/settings`, WELCOME_MESSAGE_DOC_ID);
-                await setDoc(welcomeDocRef, {
-                    body: newBody,
-                    subject: newSubject,
-                    lastUpdated: new Date().toISOString(),
-                    updatedBy: currentUserId
-                }, { merge: true });
+                // Set Firestore log level for debugging
+                setLogLevel('Debug');
                 
-                saveStatus.textContent = 'Message saved successfully!';
-                saveStatus.classList.add('text-green-600');
-            } catch (error) {
-                console.error("Error saving welcome message:", error);
-                saveStatus.textContent = `Error saving message: ${error.message}`;
-                saveStatus.classList.add('text-red-600');
-            } finally {
-                saveButton.disabled = false;
-                setTimeout(() => saveStatus.textContent = '', 3000);
-            }
-        }
-
-        // --- UI/Helper Functions ---
-
-        const courses = ["Anatomy & Physiology I", "Medical Microbiology", "Clinical Pharmacology", "Nursing Ethics & Law"];
-        const clinicals = ["Maternity Rotation", "Medical Ward", "Surgical Ward Male", "Surgical Ward Female"];
-
-        const menuToggle = document.getElementById('menu-toggle');
-        const sidebar = document.getElementById('sidebar');
-        const navLinks = document.querySelectorAll('.nav-link');
-        const tabs = document.querySelectorAll('.tab-content');
-        const logoutLink = document.getElementById('logout-link');
-        const toastMessage = document.getElementById('toast-message');
-
-        const sessionTypeSelect = document.getElementById('session-type');
-        const sessionDetailContainer = document.getElementById('session-detail-container');
-        const sessionDetailSelect = document.getElementById('session-detail');
-        const checkInButton = document.getElementById('check-in-button');
-        const checkInStatus = document.getElementById('check-in-status');
-
-        function toggleSidebar() {
-            sidebar.classList.toggle('-translate-x-full');
-            const existingOverlay = document.getElementById('sidebar-overlay');
-            
-            if (!sidebar.classList.contains('-translate-x-full')) {
-                if (!existingOverlay) {
-                    const overlay = document.createElement('div');
-                    overlay.id = 'sidebar-overlay';
-                    overlay.classList.add('fixed', 'inset-0', 'bg-gray-900', 'bg-opacity-50', 'z-40', 'lg:hidden');
-                    overlay.addEventListener('click', toggleSidebar);
-                    document.body.appendChild(overlay);
-                }
-            } else {
-                if (existingOverlay) {
-                    existingOverlay.remove();
-                }
-            }
-        }
-
-        function showTab(tabId) {
-            tabs.forEach(tab => tab.classList.remove('active'));
-            const activeTab = document.getElementById(tabId);
-            if(activeTab) activeTab.classList.add('active');
-
-            navLinks.forEach(l => {
-                l.classList.remove('active', 'text-white', 'font-semibold');
-                if (l.id !== 'logout-link') {
-                    l.classList.add('text-slate-300', 'hover:text-white');
-                }
-            });
-            const activeLink = document.querySelector(`.nav-link[data-tab="${tabId}"]`);
-            if (activeLink) {
-                activeLink.classList.add('active', 'text-white', 'font-semibold');
-                activeLink.classList.remove('text-slate-300', 'hover:text-white');
-            }
-            
-            const adminLink = document.querySelector('.nav-link[data-tab="admin-tools"]');
-             if (adminLink && tabId === 'admin-tools') {
-                adminLink.classList.remove('text-slate-300', 'hover:text-white', 'bg-indigo-800');
-                adminLink.classList.add('bg-indigo-700', 'active');
-            } else if (adminLink) {
-                adminLink.classList.remove('bg-indigo-700', 'active');
-                adminLink.classList.add('bg-indigo-800');
-            }
-        }
-
-        function showLogoutToast() {
-            toastMessage.classList.remove('opacity-0');
-            toastMessage.classList.add('opacity-100');
-            setTimeout(() => {
-                toastMessage.classList.remove('opacity-100');
-                toastMessage.classList.add('opacity-0');
-            }, 2000);
-        }
-
-        function updateAttendanceDetail(sessionType) {
-            sessionDetailSelect.innerHTML = '<option value="">-- Choose Lesson/Rotation --</option>';
-            if (!sessionType) {
-                sessionDetailContainer.classList.add('hidden');
-                sessionDetailSelect.setAttribute('disabled', 'true');
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+            } catch (e) {
+                console.error("Firebase initialization failed:", e);
+                document.getElementById('loading-message').textContent = 'Firebase initialization failed. Check console.';
                 return;
             }
 
-            const optionsData = sessionType === 'on-class' ? courses : clinicals;
-            optionsData.forEach(item => {
-                const option = document.createElement('option');
-                option.value = item;
-                option.textContent = item;
-                sessionDetailSelect.appendChild(option);
+            // CRITICAL: Authentication listener
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    currentUserId = user.uid;
+                    currentUserEmail = user.email || 'Anonymous';
+                    userIdDisplay.textContent = currentUserId;
+
+                    loadingScreen.classList.add('hidden');
+                    contentArea.classList.remove('hidden');
+
+                    // NEW: Load and ensure welcome message
+                    await ensureDefaultWelcomeMessage(db, appId);
+                    loadWelcomeMessage(db, appId);
+
+                    // Load user-specific attendance records
+                    loadRecentAttendance(db, appId, currentUserId);
+                    
+                    showToast(`Welcome back, ${currentUserEmail}!`);
+
+                } else {
+                    currentUserId = null;
+                    currentUserEmail = 'Anonymous';
+                    
+                    // Attempt sign in
+                    try {
+                        if (initialAuthToken) {
+                            await signInWithCustomToken(auth, initialAuthToken);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    } catch (error) {
+                        console.error("Authentication failed:", error);
+                        document.getElementById('loading-message').textContent = 'Authentication required.';
+                        loadingScreen.classList.remove('hidden');
+                        contentArea.classList.add('hidden');
+                    }
+                }
             });
 
-            sessionDetailContainer.classList.remove('hidden');
-            sessionDetailSelect.removeAttribute('disabled');
-            validateAttendanceForm();
-        }
-
-        function validateAttendanceForm() {
-            const typeSelected = sessionTypeSelect.value !== "";
-            const detailSelected = sessionDetailSelect.value !== "";
-
-            if (typeSelected && detailSelected) {
-                checkInButton.removeAttribute('disabled');
-                checkInButton.classList.remove('disabled:bg-gray-400', 'disabled:cursor-not-allowed');
-                checkInStatus.textContent = `Ready to check in for ${sessionDetailSelect.value}.`;
-            } else {
-                checkInButton.setAttribute('disabled', 'true');
-                checkInButton.classList.add('disabled:bg-gray-400', 'disabled:cursor-not-allowed');
-                checkInStatus.textContent = "Please select the session type and detail to enable check-in.";
-            }
-        }
-        
-        // --- Event Listeners ---
-        
-        document.addEventListener('DOMContentLoaded', () => {
-            showTab('welcome');
+            // --- Event Listeners ---
             
-            if (document.getElementById('welcome-message-form')) {
-                document.getElementById('welcome-message-form').addEventListener('submit', saveWelcomeMessage);
-            }
-            
-            checkInButton.addEventListener('click', handleCheckIn);
+            // Attendance check-in event
+            attendanceForm.addEventListener('submit', handleCheckIn);
 
             menuToggle.addEventListener('click', toggleSidebar);
 
+            // Navigation handler
             navLinks.forEach(link => {
                 link.addEventListener('click', (e) => {
                     if (link.id === 'logout-link') return;
@@ -838,6 +594,7 @@
                     if (tabId) {
                         showTab(tabId);
                     }
+                    // Close sidebar on small screens after clicking a link
                     if (window.innerWidth < 1024 && !sidebar.classList.contains('-translate-x-full')) {
                         toggleSidebar();
                     }
@@ -854,15 +611,21 @@
                         // onAuthStateChanged will handle the UI update after successful sign out
                     } catch (error) {
                         console.error("Logout failed:", error);
+                        showToast("Logout failed.", true);
                     }
                 }
             });
 
+            // NEW: Handle session type change to update details
             sessionTypeSelect.addEventListener('change', (e) => {
                 updateAttendanceDetail(e.target.value);
             });
 
+            // Detail change triggers validation (user must select an item)
             sessionDetailSelect.addEventListener('change', validateAttendanceForm);
+
+            // Initial form validation on load
+            validateAttendanceForm();
         });
     </script>
 </body>
