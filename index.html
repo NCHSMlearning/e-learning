@@ -6,6 +6,8 @@
     <title>NCHSM Student Portal</title>
     <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load Supabase SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         /*
         * CRITICAL FIX: Only show the active tab content
@@ -112,8 +114,6 @@
             to {bottom: 0; opacity: 0;}
         }
     </style>
-    <!-- Use lucide-react icons equivalent for visual elements -->
-    <!-- Dummy icon styles for the sake of presentation -->
 </head>
 <body class="bg-gray-100 min-h-screen">
     <!-- Main Content Wrapper -->
@@ -126,27 +126,60 @@
             </div>
             
             <nav class="flex-grow space-y-2">
+                <!-- 1. Dashboard -->
                 <a href="#" data-tab="dashboard" class="nav-link active" id="dashboard-link">
-                    <!-- Icon for Dashboard -->
+                    <!-- Icon: Home -->
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
                     Dashboard
                 </a>
-                <a href="#" data-tab="attendance" class="nav-link" id="attendance-link">
-                    <!-- Icon for Attendance -->
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 10V6"/><path d="M18 10V6"/><path d="M20 18v-8"/></svg>
-                    Attendance Check-in
+                
+                <!-- 2. Profile -->
+                <a href="#" data-tab="profile" class="nav-link" id="profile-link">
+                    <!-- Icon: User -->
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    Profile
                 </a>
-                <a href="#" data-tab="docs" class="nav-link" id="docs-link">
-                    <!-- Icon for Documents -->
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
-                    Documents
+
+                <!-- 3. My Courses -->
+                <a href="#" data-tab="courses" class="nav-link" id="courses-link">
+                    <!-- Icon: Book Open -->
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+                    My Courses
+                </a>
+
+                <!-- 4. Attendance (Check-in) -->
+                <a href="#" data-tab="attendance" class="nav-link" id="attendance-link">
+                    <!-- Icon: Users/Attendance -->
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 10V6"/><path d="M18 10V6"/><path d="M20 18v-8"/></svg>
+                    Attendance
+                </a>
+
+                <!-- 5. CATS/Exams -->
+                <a href="#" data-tab="cats" class="nav-link" id="cats-link">
+                    <!-- Icon: Graduation Cap -->
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3"><path d="M21.42 10.922a1 1 0 0 0-.019-1.843L15 6 9 3 2.5 6.5l6 3.5 3.5-2z"/><path d="M11 11v11a1 1 0 0 1-2 0V11"/><path d="M22 10v11a1 1 0 0 1-2 0V10"/><line x1="12" x2="12" y1="14" y2="22"/></svg>
+                    CATS/Exams
+                </a>
+
+                <!-- 6. Resources (formerly Documents) -->
+                <a href="#" data-tab="resources" class="nav-link" id="resources-link">
+                    <!-- Icon: Folders -->
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3"><path d="M4 20h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-7.93a1 1 0 0 0-.68.28L8 8H4c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2z"/></svg>
+                    Resources
+                </a>
+
+                <!-- 7. Messages -->
+                <a href="#" data-tab="messages" class="nav-link" id="messages-link">
+                    <!-- Icon: Message Square -->
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    Messages
                 </a>
             </nav>
 
             <a href="#" class="nav-link bg-red-700 hover:bg-red-800" id="logout-link">
                 <!-- Icon for Logout -->
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
-                Logout
+                Logout (Guest ID)
             </a>
             
         </aside>
@@ -170,23 +203,41 @@
 
             <!-- Content Tabs -->
             <div id="content-area" class="hidden">
-                <h1 class="text-3xl font-extrabold text-slate-800 mb-6">Student Dashboard</h1>
+                <h1 class="text-3xl font-extrabold text-slate-800 mb-6" id="current-tab-title">Student Dashboard</h1>
                 
-                <!-- Dashboard Tab -->
+                <!-- 1. Dashboard Tab -->
                 <div id="tab-dashboard" class="tab-content active bg-white p-6 md:rounded-xl shadow-lg">
                     <h2 class="text-xl font-semibold mb-2 text-emerald-600">Welcome!</h2>
                     <div id="welcome-message" class="bg-gray-50 p-4 rounded-xl shadow-inner text-gray-700 italic border-l-4 border-emerald-500 min-h-[5rem] flex items-center justify-center">
                         <span class="loader-small"></span> Loading welcome message...
                     </div>
-                    <p class="mt-4 text-gray-600">This is your main student portal. Please use the navigation on the left to manage your attendance and view documents.</p>
+                    <p class="mt-4 text-gray-600">This is your main student portal, powered by Supabase. Use the navigation on the left to access all portal features.</p>
                 </div>
 
-                <!-- Attendance Check-in Tab -->
+                <!-- 2. Profile Tab (NEW) -->
+                <div id="tab-profile" class="tab-content hidden p-6 bg-white md:rounded-xl shadow-lg">
+                    <h2 class="text-2xl font-bold text-slate-700 mb-4">My Profile</h2>
+                    <p class="text-gray-600">This section will show personal information, contact details, and student ID.</p>
+                    <div class="mt-4 p-4 border rounded-lg bg-yellow-50 text-yellow-800">
+                        <p><strong>Placeholder:</strong> User information and editing functionality will be built here.</p>
+                    </div>
+                </div>
+
+                <!-- 3. My Courses Tab (NEW) -->
+                <div id="tab-courses" class="tab-content hidden p-6 bg-white md:rounded-xl shadow-lg">
+                    <h2 class="text-2xl font-bold text-slate-700 mb-4">My Courses</h2>
+                    <p class="text-gray-600">View your enrolled courses, schedules, and overall progress.</p>
+                    <div class="mt-4 p-4 border rounded-lg bg-yellow-50 text-yellow-800">
+                        <p><strong>Placeholder:</strong> Course listings, grades, and resources will be displayed here.</p>
+                    </div>
+                </div>
+
+                <!-- 4. Attendance Check-in Tab -->
                 <div id="tab-attendance" class="tab-content hidden p-6 bg-white md:rounded-xl shadow-lg">
                     <h2 class="text-2xl font-bold text-slate-700 mb-6 border-b pb-2">Daily Attendance Check-in</h2>
                     
                     <div class="mb-6 bg-emerald-50 p-4 rounded-lg border border-emerald-200">
-                        <p class="text-sm font-semibold text-emerald-700">User ID:</p>
+                        <p class="text-sm font-semibold text-emerald-700">Guest User ID:</p>
                         <p id="current-user-id" class="break-all font-mono text-xs text-emerald-600 mt-1"></p>
                     </div>
 
@@ -213,6 +264,7 @@
                             class="w-full inline-flex justify-center py-3 px-4 border border-transparent shadow-sm text-sm font-medium rounded-xl text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 transition duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed">
                             Check In
                         </button>
+                         <p id="geoloc-status" class="text-sm text-gray-500 mt-2">Status: Awaiting Check-in...</p>
                     </form>
 
                     <h3 class="text-xl font-bold text-slate-700 mt-8 mb-4 border-b pb-2">Recent Attendance</h3>
@@ -221,16 +273,35 @@
                     </div>
                 </div>
 
-                <!-- Documents Tab (Placeholder) -->
-                <div id="tab-docs" class="tab-content hidden p-6 bg-white md:rounded-xl shadow-lg">
-                    <h2 class="text-2xl font-bold text-slate-700 mb-4">Academic Documents</h2>
-                    <p class="text-gray-600">This section will contain links to important academic resources, handbooks, and clinical protocols.</p>
+                <!-- 5. CATS/Exams Tab (NEW) -->
+                <div id="tab-cats" class="tab-content hidden p-6 bg-white md:rounded-xl shadow-lg">
+                    <h2 class="text-2xl font-bold text-slate-700 mb-4">CATS/Exams</h2>
+                    <p class="text-gray-600">Track your Continuous Assessment Tests (CATS) and final exam scores.</p>
+                    <div class="mt-4 p-4 border rounded-lg bg-yellow-50 text-yellow-800">
+                        <p><strong>Placeholder:</strong> Scores, upcoming exam schedules, and results publication will go here.</p>
+                    </div>
+                </div>
+
+                <!-- 6. Resources Tab (RENAMED) -->
+                <div id="tab-resources" class="tab-content hidden p-6 bg-white md:rounded-xl shadow-lg">
+                    <h2 class="text-2xl font-bold text-slate-700 mb-4">Academic Resources</h2>
+                    <p class="text-gray-600">Access vital academic resources, handbooks, and clinical protocols.</p>
                     <ul class="mt-4 space-y-2 text-emerald-600">
                         <li><a href="#" class="hover:underline">Student Handbook 2024 (PDF)</a></li>
                         <li><a href="#" class="hover:underline">Clinical Rotation Schedule (XLSX)</a></li>
                         <li><a href="#" class="hover:underline">Emergency Protocol Checklist</a></li>
                     </ul>
                 </div>
+
+                <!-- 7. Messages Tab (NEW) -->
+                <div id="tab-messages" class="tab-content hidden p-6 bg-white md:rounded-xl shadow-lg">
+                    <h2 class="text-2xl font-bold text-slate-700 mb-4">Messages</h2>
+                    <p class="text-gray-600">Your communication hub for important alerts and messages from faculty.</p>
+                    <div class="mt-4 p-4 border rounded-lg bg-yellow-50 text-yellow-800">
+                        <p><strong>Placeholder:</strong> An inbox system for communication will be implemented here.</p>
+                    </div>
+                </div>
+
             </div>
         </main>
 
@@ -238,24 +309,25 @@
         <div id="toast" class="toast-hidden"></div>
     </div>
 
-    <!-- Firebase Imports -->
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, query, addDoc, serverTimestamp, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        // ** SUPABASE CONFIGURATION **
+        const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
+        const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-        // Global Firebase and App variables
-        let app;
-        let db;
-        let auth;
+        // ** LOCATIONIQ CONFIGURATION (Geocoding API) **
+        const LOCATIONIQ_API_KEY = 'pk.cbe61eae35ecbe1d1d682c347d81381c';
+        const LOCATIONIQ_API_URL = 'https://us1.locationiq.com/v1/reverse.php';
+        
+        // Global App variables
         let currentUserId = null;
-        let currentUserEmail = 'Anonymous';
+        const GUEST_ID_KEY = 'nchsm_guest_id';
+        const APP_ID = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
-        // Firestore Paths
-        const ATTENDANCE_COLLECTION_NAME = 'attendance';
-        const SETTINGS_PATH = 'settings';
-        const WELCOME_DOC_ID = 'welcome_message';
+        // Supabase Table Names
+        const ATTENDANCE_TABLE = 'attendance';
+        const SETTINGS_TABLE = 'settings';
+        const WELCOME_KEY = 'welcome_message';
 
         // Mock Data for dynamic dropdowns
         const COURSES = [
@@ -287,9 +359,14 @@
         const attendanceList = document.getElementById('recent-attendance-list');
         const userIdDisplay = document.getElementById('current-user-id');
         const welcomeMessageElement = document.getElementById('welcome-message');
+        const geolocStatus = document.getElementById('geoloc-status');
+        const tabTitle = document.getElementById('current-tab-title');
 
         // --- Utility Functions ---
 
+        /**
+         * Shows a transient toast notification.
+         */
         function showToast(message, isError = false) {
             const toast = document.getElementById('toast');
             toast.textContent = message;
@@ -298,14 +375,16 @@
             setTimeout(function(){ toast.className = toast.className.replace('show', ''); }, 3000);
         }
 
-        function showLogoutToast() {
-            showToast("Logging out...", false);
-        }
-
+        /**
+         * Toggles the mobile sidebar visibility.
+         */
         function toggleSidebar() {
             sidebar.classList.toggle('-translate-x-full');
         }
 
+        /**
+         * Switches the active content tab.
+         */
         function showTab(tabId) {
             document.querySelectorAll('.tab-content').forEach(tab => {
                 tab.classList.remove('active');
@@ -316,13 +395,30 @@
                 link.classList.remove('active');
                 if (link.getAttribute('data-tab') === tabId) {
                     link.classList.add('active');
+                    // Update main title
+                    tabTitle.textContent = link.textContent.trim(); 
                 }
             });
         }
 
-        // --- Attendance Functions ---
+        /**
+         * Generates or retrieves a persistent Guest User ID.
+         */
+        function getOrCreateGuestId() {
+            let id = localStorage.getItem(GUEST_ID_KEY);
+            if (!id) {
+                // Generate a simple UUID if not found
+                id = crypto.randomUUID();
+                localStorage.setItem(GUEST_ID_KEY, id);
+            }
+            return id;
+        }
 
-        // Function to validate the form state
+        // --- Attendance UI/Helper Functions ---
+
+        /**
+         * Validates the form state and enables/disables the check-in button.
+         */
         function validateAttendanceForm() {
             const typeSelected = sessionTypeSelect.value !== '';
             const detailSelected = sessionDetailSelect.value !== '';
@@ -336,7 +432,9 @@
             sessionDetailSelect.disabled = !typeSelected;
         }
 
-        // Function to update the detail dropdown based on session type
+        /**
+         * Updates the detail dropdown based on session type (Class/Clinicals).
+         */
         function updateAttendanceDetail(sessionType) {
             const sessionDetailSelect = document.getElementById('session-detail-select');
             sessionDetailSelect.innerHTML = '<option value="" disabled selected>Select a Detail</option>';
@@ -366,76 +464,92 @@
             validateAttendanceForm();
         }
 
-        // --- Firestore Functions ---
+        // --- Supabase and LocationIQ Functions ---
 
-        // Function to set default welcome message if it doesn't exist (simulating admin setup)
-        async function ensureDefaultWelcomeMessage(db, appId) {
-            const docRef = doc(db, 'artifacts', appId, 'public', 'data', SETTINGS_PATH, WELCOME_DOC_ID);
-            
+        /**
+         * Ensures a default welcome message exists in the settings table.
+         */
+        async function ensureDefaultWelcomeMessage() {
             try {
-                const docSnap = await getDoc(docRef);
-                if (!docSnap.exists()) {
+                const { data: existing, error: selectError } = await sb
+                    .from(SETTINGS_TABLE)
+                    .select('*')
+                    .eq('key', WELCOME_KEY);
+
+                if (selectError) throw selectError;
+
+                if (!existing || existing.length === 0) {
                     console.log("Setting default welcome message...");
-                    await setDoc(docRef, {
-                        message: "A warm welcome to the NCHSM Student Portal! This is a default message. Admins can update this message anytime.",
-                        lastUpdated: serverTimestamp()
-                    });
+                    const { error: insertError } = await sb
+                        .from(SETTINGS_TABLE)
+                        .insert({
+                            key: WELCOME_KEY,
+                            value: "A warm welcome to the NCHSM Student Portal! This message is editable by an administrator.",
+                            app_id: APP_ID
+                        });
+                    if (insertError) throw insertError;
                 }
             } catch (e) {
                 console.error("Error ensuring default welcome message:", e);
             }
         }
 
-
-        // Function to load the welcome message in real-time
-        function loadWelcomeMessage(db, appId) {
-            const docRef = doc(db, 'artifacts', appId, 'public', 'data', SETTINGS_PATH, WELCOME_DOC_ID);
-
-            // Set up real-time listener
-            return onSnapshot(docRef, (docSnap) => {
-                if (docSnap.exists() && docSnap.data().message) {
-                    welcomeMessageElement.classList.remove('justify-center');
-                    welcomeMessageElement.innerHTML = docSnap.data().message;
-                } else {
-                    welcomeMessageElement.classList.add('justify-center');
-                    welcomeMessageElement.innerHTML = "No welcome message configured by the admin yet.";
-                }
-            }, (error) => {
-                console.error("Error loading welcome message:", error);
-                welcomeMessageElement.classList.add('justify-center');
-                welcomeMessageElement.innerHTML = "Error loading message. Please try refreshing.";
-            });
-        }
-
-        function loadRecentAttendance(db, appId, userId) {
-            const attendancePath = `artifacts/${appId}/users/${userId}/${ATTENDANCE_COLLECTION_NAME}`;
-            const q = collection(db, attendancePath); // No orderBy to avoid index errors, will sort client-side.
-
-            // Clear previous list content and show loading
-            attendanceList.innerHTML = '<div class="flex items-center text-gray-500"><span class="loader-small"></span> Loading history...</div>';
-
-            onSnapshot(q, (snapshot) => {
-                const attendanceRecords = [];
-                snapshot.forEach((doc) => {
-                    const data = doc.data();
-                    if (data.timestamp && data.timestamp.toDate) {
-                        data.timestamp = data.timestamp.toDate();
+        /**
+         * Loads the welcome message in real-time using Supabase Realtime.
+         */
+        function loadWelcomeMessage() {
+            // Initial fetch
+            sb.from(SETTINGS_TABLE)
+                .select('value')
+                .eq('key', WELCOME_KEY)
+                .then(({ data, error }) => {
+                    if (error) throw error;
+                    if (data && data.length > 0) {
+                        welcomeMessageElement.classList.remove('justify-center');
+                        welcomeMessageElement.innerHTML = data[0].value;
+                    } else {
+                        welcomeMessageElement.classList.add('justify-center');
+                        welcomeMessageElement.innerHTML = "No welcome message configured by the admin yet.";
                     }
-                    attendanceRecords.push(data);
+                })
+                .catch(e => {
+                    console.error("Error initial loading welcome message:", e);
+                    welcomeMessageElement.classList.add('justify-center');
+                    welcomeMessageElement.innerHTML = "Error loading message. Please try refreshing.";
                 });
 
-                // Sort the records client-side by timestamp (latest first)
-                attendanceRecords.sort((a, b) => b.timestamp - a.timestamp);
+            // Set up Realtime listener for changes
+            sb.channel('public:settings')
+                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: SETTINGS_TABLE, filter: `key=eq.${WELCOME_KEY}` }, (payload) => {
+                    if (payload.new.value) {
+                        welcomeMessageElement.classList.remove('justify-center');
+                        welcomeMessageElement.innerHTML = payload.new.value;
+                        showToast("Welcome message updated by admin!");
+                    }
+                })
+                .subscribe();
+        }
 
-                if (attendanceRecords.length === 0) {
+        /**
+         * Loads recent attendance records in real-time using Supabase Realtime.
+         */
+        function loadRecentAttendance(userId) {
+            
+            attendanceList.innerHTML = '<div class="flex items-center text-gray-500"><span class="loader-small"></span> Loading history...</div>';
+
+            const renderList = (records) => {
+                if (records.length === 0) {
                     attendanceList.innerHTML = '<p class="text-gray-500 italic">No attendance records found yet. Check in to start!</p>';
                     return;
                 }
 
+                // Sort the records client-side by created_at (latest first)
+                records.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
                 attendanceList.innerHTML = ''; // Clear loading message
 
-                attendanceRecords.slice(0, 10).forEach(record => {
-                    const dateStr = record.timestamp ? record.timestamp.toLocaleString() : 'N/A';
+                records.slice(0, 10).forEach(record => {
+                    const dateStr = new Date(record.created_at).toLocaleString();
                     const typeDisplay = record.type === 'class' ? 'Class' : 'Clinical';
                     
                     let detailName = 'N/A';
@@ -447,29 +561,134 @@
                         detailName = department ? department.name : record.detail;
                     }
 
+                    const locationDisplay = record.location_data || 'Location Unknown';
+
                     const item = document.createElement('div');
-                    item.className = 'flex justify-between items-center p-3 bg-gray-50 rounded-lg shadow-sm border border-gray-200';
+                    item.className = 'p-3 bg-gray-50 rounded-lg shadow-sm border border-gray-200';
                     item.innerHTML = `
-                        <div>
-                            <p class="font-medium text-slate-700">${typeDisplay} Check-in</p>
-                            <p class="text-sm text-gray-600">${detailName}</p>
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <p class="font-medium text-slate-700">${typeDisplay} Check-in: <span class="text-emerald-600">${detailName}</span></p>
+                            </div>
+                            <span class="text-xs text-gray-500">${dateStr}</span>
                         </div>
-                        <span class="text-xs text-gray-500">${dateStr}</span>
+                        <p class="text-xs text-gray-400 mt-1 truncate">@ ${locationDisplay}</p>
                     `;
                     attendanceList.appendChild(item);
                 });
+            };
 
-            }, (error) => {
-                console.error("Error fetching attendance records:", error);
-                attendanceList.innerHTML = '<p class="text-red-500">Error loading attendance history. Check console for details.</p>';
+            // Initial data fetch
+            sb.from(ATTENDANCE_TABLE)
+                .select('*')
+                .eq('user_id', userId)
+                .order('created_at', { ascending: false })
+                .limit(10)
+                .then(({ data, error }) => {
+                    if (error) throw error;
+                    renderList(data);
+                })
+                .catch(e => {
+                    console.error("Error initial loading attendance:", e);
+                    attendanceList.innerHTML = '<p class="text-red-500">Error loading attendance history. Check console for details.</p>';
+                });
+
+            // Set up Realtime listener for new inserts
+            sb.channel('public:attendance')
+                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: ATTENDANCE_TABLE, filter: `user_id=eq.${userId}` }, (payload) => {
+                    // Refetch all and re-render to ensure sorting and limits are respected
+                    sb.from(ATTENDANCE_TABLE)
+                        .select('*')
+                        .eq('user_id', userId)
+                        .then(({ data, error }) => {
+                            if (error) throw error;
+                            renderList(data);
+                        })
+                        .catch(e => console.error("Error updating list via Realtime:", e));
+                })
+                .subscribe();
+        }
+
+        /**
+         * Gets the user's current position and converts it to a readable address using LocationIQ.
+         * @returns {Promise<string>} The formatted address string.
+         */
+        async function getGeolocationAndReverseGeocode() {
+            return new Promise((resolve, reject) => {
+                geolocStatus.textContent = 'Status: Fetching geolocation...';
+                
+                // 1. Get Geolocation
+                if (!navigator.geolocation) {
+                    reject(new Error("Geolocation is not supported by this browser."));
+                    return;
+                }
+
+                navigator.geolocation.getCurrentPosition(async (position) => {
+                    const lat = position.coords.latitude;
+                    const lon = position.coords.longitude;
+                    
+                    geolocStatus.textContent = `Status: Location found (${lat.toFixed(4)}, ${lon.toFixed(4)}). Reverse geocoding...`;
+
+                    // 2. Reverse Geocode via LocationIQ
+                    const url = new URL(LOCATIONIQ_API_URL);
+                    url.searchParams.append('key', LOCATIONIQ_API_KEY);
+                    url.searchParams.append('lat', lat);
+                    url.searchParams.append('lon', lon);
+                    url.searchParams.append('format', 'json');
+
+                    try {
+                        const response = await fetch(url.toString());
+                        const data = await response.json();
+
+                        if (data.error) {
+                            console.warn("LocationIQ Error:", data.error);
+                            resolve(`Lat: ${lat.toFixed(4)}, Lon: ${lon.toFixed(4)} (Geocode failed)`);
+                            return;
+                        }
+
+                        // Format the address for display
+                        const address = data.display_name || `Lat: ${lat.toFixed(4)}, Lon: ${lon.toFixed(4)}`;
+                        geolocStatus.textContent = `Status: Location resolved.`;
+                        resolve(address);
+
+                    } catch (error) {
+                        console.error("LocationIQ Fetch Error:", error);
+                        resolve(`Lat: ${lat.toFixed(4)}, Lon: ${lon.toFixed(4)} (API error)`);
+                    }
+                }, (error) => {
+                    let errorMessage = 'Geolocation failed.';
+                    switch(error.code) {
+                        case error.PERMISSION_DENIED:
+                            errorMessage = "Location required: Please allow location access to check-in.";
+                            break;
+                        case error.POSITION_UNAVAILABLE:
+                            errorMessage = "Location information is unavailable.";
+                            break;
+                        case error.TIMEOUT:
+                            errorMessage = "Location request timed out.";
+                            break;
+                        default:
+                            errorMessage = "An unknown error occurred while getting location.";
+                            break;
+                    }
+                    geolocStatus.textContent = `Status: ${errorMessage}`;
+                    reject(new Error(errorMessage));
+                }, {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 0
+                });
             });
         }
 
 
+        /**
+         * Handles the final check-in process, including geolocation and Supabase insertion.
+         */
         async function handleCheckIn(e) {
             e.preventDefault();
             checkInButton.disabled = true;
-            checkInButton.textContent = 'Checking In...';
+            checkInButton.innerHTML = '<span class="loader-small mr-2"></span> Submitting...';
             
             const sessionType = sessionTypeSelect.value;
             const sessionDetail = sessionDetailSelect.value;
@@ -481,31 +700,37 @@
                 return;
             }
 
-            try {
-                const attendancePath = `artifacts/${appId}/users/${currentUserId}/${ATTENDANCE_COLLECTION_NAME}`;
-                const colRef = collection(db, attendancePath);
-                
-                const attendanceData = {
-                    userId: currentUserId,
-                    userName: currentUserEmail || currentUserId,
-                    timestamp: serverTimestamp(),
-                    type: sessionType,
-                    detail: sessionDetail,
-                };
+            let locationData = 'Location Not Recorded';
 
-                await addDoc(colRef, attendanceData);
+            try {
+                // 1. Get location data
+                locationData = await getGeolocationAndReverseGeocode();
+                
+                // 2. Insert into Supabase
+                const { error } = await sb
+                    .from(ATTENDANCE_TABLE)
+                    .insert({
+                        user_id: currentUserId,
+                        app_id: APP_ID, // Include app_id for separation
+                        type: sessionType,
+                        detail: sessionDetail,
+                        location_data: locationData,
+                    });
+
+                if (error) throw error;
                 
                 showToast("Attendance successfully recorded!", false);
                 
-                // Reset form state
+                // 3. Reset form state
                 sessionTypeSelect.value = '';
                 sessionDetailSelect.innerHTML = '<option value="" disabled selected>Select a Detail</option>';
                 document.getElementById('session-detail-label').textContent = 'Detail (Course/Department):';
+                geolocStatus.textContent = 'Status: Check-in complete.';
                 validateAttendanceForm();
 
             } catch (error) {
-                console.error("Error checking in:", error);
-                showToast(`Check-in failed: ${error.message}`, true);
+                console.error("Error during check-in or geolocation:", error);
+                showToast(`Check-in failed: ${error.message || 'Check console for details.'}`, true);
             } finally {
                 checkInButton.textContent = 'Check In';
                 validateAttendanceForm();
@@ -516,67 +741,21 @@
         // --- Initialization ---
 
         document.addEventListener('DOMContentLoaded', () => {
-            // CRITICAL: Initialize Firebase from global config
-            const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-            const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-            const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
             
-            if (Object.keys(firebaseConfig).length === 0) {
-                 document.getElementById('loading-message').textContent = 'Firebase configuration missing.';
-                 return;
-            }
+            // 1. Set up Guest User ID (to replace Firebase anonymous user logic)
+            currentUserId = getOrCreateGuestId();
+            userIdDisplay.textContent = currentUserId;
 
-            try {
-                // Set Firestore log level for debugging
-                setLogLevel('Debug');
-                
-                app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
-                auth = getAuth(app);
-            } catch (e) {
-                console.error("Firebase initialization failed:", e);
-                document.getElementById('loading-message').textContent = 'Firebase initialization failed. Check console.';
-                return;
-            }
+            // 2. Load Content
+            loadingScreen.classList.add('hidden');
+            contentArea.classList.remove('hidden');
 
-            // CRITICAL: Authentication listener
-            onAuthStateChanged(auth, async (user) => {
-                if (user) {
-                    currentUserId = user.uid;
-                    currentUserEmail = user.email || 'Anonymous';
-                    userIdDisplay.textContent = currentUserId;
-
-                    loadingScreen.classList.add('hidden');
-                    contentArea.classList.remove('hidden');
-
-                    // NEW: Load and ensure welcome message
-                    await ensureDefaultWelcomeMessage(db, appId);
-                    loadWelcomeMessage(db, appId);
-
-                    // Load user-specific attendance records
-                    loadRecentAttendance(db, appId, currentUserId);
-                    
-                    showToast(`Welcome back, ${currentUserEmail}!`);
-
-                } else {
-                    currentUserId = null;
-                    currentUserEmail = 'Anonymous';
-                    
-                    // Attempt sign in
-                    try {
-                        if (initialAuthToken) {
-                            await signInWithCustomToken(auth, initialAuthToken);
-                        } else {
-                            await signInAnonymously(auth);
-                        }
-                    } catch (error) {
-                        console.error("Authentication failed:", error);
-                        document.getElementById('loading-message').textContent = 'Authentication required.';
-                        loadingScreen.classList.remove('hidden');
-                        contentArea.classList.add('hidden');
-                    }
-                }
-            });
+            // 3. Setup Supabase Listeners
+            ensureDefaultWelcomeMessage();
+            loadWelcomeMessage();
+            loadRecentAttendance(currentUserId);
+            
+            showToast(`Welcome! You are operating as Guest ID: ${currentUserId.substring(0, 8)}...`);
 
             // --- Event Listeners ---
             
@@ -588,7 +767,6 @@
             // Navigation handler
             navLinks.forEach(link => {
                 link.addEventListener('click', (e) => {
-                    if (link.id === 'logout-link') return;
                     e.preventDefault();
                     const tabId = link.getAttribute('data-tab');
                     if (tabId) {
@@ -601,22 +779,16 @@
                 });
             });
 
-            // CRITICAL FIX: Logout functionality implemented
-            logoutLink.addEventListener('click', async (e) => {
+            // The Logout button for Guest Mode simply clears the local ID and refreshes
+            logoutLink.addEventListener('click', (e) => {
                 e.preventDefault();
-                showLogoutToast();
-                if (auth) {
-                    try {
-                        await signOut(auth);
-                        // onAuthStateChanged will handle the UI update after successful sign out
-                    } catch (error) {
-                        console.error("Logout failed:", error);
-                        showToast("Logout failed.", true);
-                    }
-                }
+                showToast("Resetting local Guest ID.", false);
+                localStorage.removeItem(GUEST_ID_KEY);
+                // Simple redirect to reload the application with a new UUID
+                setTimeout(() => window.location.reload(), 1000); 
             });
 
-            // NEW: Handle session type change to update details
+            // Handle session type change to update details
             sessionTypeSelect.addEventListener('change', (e) => {
                 updateAttendanceDetail(e.target.value);
             });
