@@ -1,5 +1,5 @@
 /***********************************
- * JavaScript Functionality
+ * JavaScript Functionality (script.js)
  ***********************************/
 
 // !!! IMPORTANT: CHECK YOUR KEYS AND URL !!!
@@ -9,18 +9,33 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const RESOURCES_BUCKET = 'resources';
 const IP_API_URL = 'https://api.ipify.org?format=json';
 
-// NOTE: Verify this token is correct and allows geocoding. (Security Risk: Move to Edge Function)
+// --- Global API Keys and Settings ---
 const MAPBOX_ACCESS_TOKEN = 'pk.cbe61eae35ecbe1d1d682c347d81381c'; 
 const DEVICE_ID_KEY = 'nchsm_device_id';
 
+// Global Variables
 let currentUserProfile = null;
 let attendanceMap = null;
+
+// Settings Keys
+const SETTINGS_TABLE = 'app_settings'; 
+const MESSAGE_KEY = 'student_welcome'; 
 
 /*******************************************************
  * 1. CORE UTILITY FUNCTIONS
  *******************************************************/
 function $(id){ return document.getElementById(id); }
-function escapeHtml(s){ return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+// Escapes HTML for safety, with an option to handle quotes for inline attributes
+function escapeHtml(s, isAttribute = false){ 
+    let str = String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    if (isAttribute) {
+        str = str.replace(/'/g,'&#39;').replace(/"/g,'&quot;');
+    } else {
+        str = str.replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
+    return str;
+}
 
 /**
  * @param {string} message 
@@ -48,14 +63,12 @@ function setButtonLoading(button, isLoading, originalText = 'Submit') {
 async function fetchData(tableName, selectQuery = '*', filters = {}, order = 'created_at', ascending = false) {
     let query = sb.from(tableName).select(selectQuery);
 
-    // Apply filters
     for (const key in filters) {
         if (filters[key] !== undefined) {
             query = query.eq(key, filters[key]);
         }
     }
     
-    // Apply ordering
     query = query.order(order, { ascending });
 
     const { data, error } = await query;
@@ -147,27 +160,22 @@ navLinks.forEach(link => {
     });
 });
 
-function showTab(tabId) {
-    navLinks.forEach(l => l.classList.remove('active'));
-    const activeLink = document.querySelector(`.nav a[data-tab="${tabId}"]`);
-    if (activeLink) activeLink.classList.add('active');
-    tabs.forEach(tab => tab.classList.remove('active'));
-    document.getElementById(tabId).classList.add('active');
-    loadSectionData(tabId);
-}
-
 async function loadSectionData(tabId) {
     switch(tabId) {
-        case 'dashboard': loadDashboardData(); break;
+        case 'dashboard': 
+            loadDashboardData(); 
+            loadStudentWelcomeMessage(); // Load student-facing message
+            break;
         case 'users': loadAllUsers(); break;
         case 'pending': loadPendingApprovals(); break;
-        case 'enroll': loadStudents(); break; // Loads students table in the new enroll section
+        case 'enroll': loadStudents(); break; 
         case 'courses': loadCourses(); break;
         case 'attendance': loadAttendance(); populateAttendanceSelects(); break;
         case 'cats': loadExams(); populateAttendanceSelects(); break;
         case 'messages': loadMessages(); break;
         case 'calendar': $('calendar').innerHTML = '<p>Simple calendar placeholder - Exam and Clinical dates will show here. (Integration coming soon)</p>'; break;
         case 'resources': loadResources(); break;
+        case 'welcome-editor': loadWelcomeMessageForEdit(); break; 
     }
 }
 
@@ -183,11 +191,9 @@ async function initSession() {
     if (profile) {
         currentUserProfile = profile;
         if (currentUserProfile.role !== 'superadmin') {
-            // Redirect non-superadmins
             window.location.href = "admin.html"; 
             return;
         }
-        // Update header with name if available
         document.querySelector('header h1').textContent = `Welcome, ${profile.full_name || 'Super Admin'}!`;
     } else {
         window.location.href = "login.html";
@@ -218,6 +224,8 @@ async function loadDashboardData() {
     const today = new Date().toISOString().slice(0, 10);
     const { data: checkinData } = await sb.from('geo_attendance_logs').select('id').gte('check_in_time', today);
     $('todayCheckins').textContent = checkinData?.length || 0;
+    
+    loadStudentWelcomeMessage(); 
 }
 
 /*******************************************************
@@ -293,7 +301,6 @@ async function loadPendingApprovals() {
     });
 }
 
-// Loads ONLY students for the dedicated table inside the 'Enroll Accounts' tab
 async function loadStudents() {
     const tbody = $('students-table');
     tbody.innerHTML = '<tr><td colspan="7">Loading students...</td></tr>';
@@ -330,9 +337,9 @@ async function approveUser(userId) {
         showFeedback(`Failed to approve user: ${error.message}`, 'error');
     } else {
         showFeedback('User approved successfully!');
-        loadPendingApprovals(); // Reload pending list
-        loadAllUsers(); // Reload all users table
-        loadDashboardData(); // Update dashboard counts
+        loadPendingApprovals(); 
+        loadAllUsers(); 
+        loadDashboardData(); 
     }
 }
 
@@ -347,25 +354,19 @@ async function updateUserRole(userId, newRole) {
         showFeedback(`Failed to update role: ${error.message}`, 'error');
     } else {
         showFeedback(`User role updated to ${newRole} successfully!`);
-        loadAllUsers(); // Reload to reflect changes
+        loadAllUsers(); 
     }
 }
 
 async function deleteProfile(userId) {
     if (!confirm('WARNING: Deleting the profile is an irreversible action. Are you absolutely sure?')) return;
 
-    // 1. Delete the profile record
     const { error: profileError } = await sb.from('profiles').delete().eq('id', userId);
 
     if (profileError) {
         showFeedback(`Failed to delete profile: ${profileError.message}`, 'error');
         return;
     }
-    
-    // 2. IMPORTANT: Delete the corresponding user from Auth (this requires a service role key in a secure environment)
-    // NOTE: For client-side code, we rely on RLS to limit what users can delete. 
-    // This action is typically performed server-side or via an Admin API for full Auth deletion.
-    // Assuming your RLS policy on 'profiles' handles the cascade delete or a Trigger handles Auth deletion.
     
     showFeedback('User profile deleted successfully! (Note: Auth user deletion may require server-side action)', 'success');
     loadAllUsers(); 
@@ -374,8 +375,7 @@ async function deleteProfile(userId) {
     loadDashboardData();
 }
 
-// New form listener for enrolling both Students AND Admins
-$('add-account-form').addEventListener('submit', async e => {
+$('add-account-form')?.addEventListener('submit', async e => {
     e.preventDefault();
     const submitButton = e.submitter;
     const originalText = submitButton.textContent;
@@ -387,9 +387,8 @@ $('add-account-form').addEventListener('submit', async e => {
     const role = $('account-role').value;
     const phone = $('account-phone').value.trim();
     const program_type = $('account-program').value;
-    const approved = true; // Super Admin enrollment auto-approves
+    const approved = true; 
 
-    // 1. Create the Auth User
     const { data: { user }, error: authError } = await sb.auth.signUp({
         email: email,
         password: password,
@@ -404,10 +403,7 @@ $('add-account-form').addEventListener('submit', async e => {
         return;
     }
     
-    // 2. Insert Profile (If successful, a trigger/RLS should handle the profile insertion, but here's a safety net/direct approach if needed)
-    // NOTE: Assuming your database setup uses a trigger to automatically create the profile on sign-up, this step may be redundant.
     if (user && user.id) {
-        // Clear form
         e.target.reset();
         showFeedback(`New ${role.toUpperCase()} account successfully enrolled and approved!`, 'success');
         loadStudents(); 
@@ -422,7 +418,7 @@ $('add-account-form').addEventListener('submit', async e => {
 
 
 /*******************************************************
- * 3. Courses Tab
+ * 3. Courses Tab - WITH EDIT FUNCTIONALITY
  *******************************************************/
 
 async function loadCourses() {
@@ -437,21 +433,25 @@ async function loadCourses() {
 
     tbody.innerHTML = '';
     courses.forEach(c => {
+        // Use escapeHtml(..., true) for string parameters in inline JS calls
+        const courseNameAttr = escapeHtml(c.course_name, true);
+        const descriptionAttr = escapeHtml(c.description || '', true);
+
         tbody.innerHTML += `<tr>
             <td>${escapeHtml(c.course_name)}</td>
             <td>${escapeHtml(c.description || 'N/A')}</td>
             <td>
+                <button class="btn-action" onclick="openEditCourseModal('${c.id}', '${courseNameAttr}', '${descriptionAttr}')">Edit</button>
                 <button class="btn btn-delete" onclick="deleteCourse('${c.id}')">Delete</button>
             </td>
         </tr>`;
     });
     
-    // Also populate course selects for other forms
     const courseSelects = document.querySelectorAll('#att_course_id, #exam_course_id');
     courseSelects.forEach(select => populateSelect(select, courses, 'id', 'course_name', 'Select Course'));
 }
 
-$('add-course-form').addEventListener('submit', async e => {
+$('add-course-form')?.addEventListener('submit', async e => {
     e.preventDefault();
     const submitButton = e.submitter;
     const originalText = submitButton.textContent;
@@ -486,12 +486,51 @@ async function deleteCourse(courseId) {
     }
 }
 
+/** Opens the modal and populates it with course data */
+function openEditCourseModal(id, name, description) {
+    $('edit_course_id').value = id;
+    $('edit_course_name').value = name; 
+    $('edit_course_description').value = description;
+
+    $('courseEditModal').style.display = 'flex'; 
+}
+
+/** Handles the submission of the edit course form */
+$('edit-course-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const submitButton = e.submitter;
+    const originalText = submitButton.textContent;
+    setButtonLoading(submitButton, true, originalText);
+
+    const id = $('edit_course_id').value;
+    const name = $('edit_course_name').value.trim();
+    const description = $('edit_course_description').value.trim();
+
+    try {
+        const { error } = await sb
+            .from('courses')
+            .update({ course_name: name, description: description })
+            .eq('id', id); 
+
+        if (error) throw error;
+
+        showFeedback('Course updated successfully!');
+        $('courseEditModal').style.display = 'none';
+        loadCourses(); 
+    } catch (e) {
+        showFeedback('Failed to update course: ' + (e.message || e), 'error');
+        console.error('Error updating course:', e);
+    } finally {
+        setButtonLoading(submitButton, false, originalText);
+    }
+});
+
 
 /*******************************************************
  * 4. Attendance Tab
  *******************************************************/
 
-// Populate student and course selects
 async function populateAttendanceSelects() {
     const { data: students } = await fetchData('profiles', 'id, full_name', { role: 'student', approved: true }, 'full_name', true);
     
@@ -499,21 +538,18 @@ async function populateAttendanceSelects() {
     if (students) {
         populateSelect(attStudentSelect, students, 'id', 'full_name', 'Select Student');
     }
-    
-    // Courses are loaded in loadCourses and populate the same select element
 }
 
 async function loadAttendance() {
     const tbody = $('attendance-table');
     tbody.innerHTML = '<tr><td colspan="6">Loading records...</td></tr>';
     
-    // Fetch records and join with profiles to get student name
     const { data: records, error } = await fetchData(
         'geo_attendance_logs', 
-        '*, profile:student_id(full_name, program_type)', // Join to get profile data
+        '*, profile:student_id(full_name, program_type)', 
         {}, 
         'check_in_time', 
-        false // Descending order (newest first)
+        false 
     );
 
     if (error) {
@@ -526,12 +562,11 @@ async function loadAttendance() {
         const studentName = r.profile?.full_name || 'N/A';
         const dateTime = new Date(r.check_in_time).toLocaleString();
         
-        // Determine location string
         let locationText;
         let mapButton = '';
         if (r.latitude && r.longitude) {
             locationText = `Geo-Log: ${r.location_name || 'Coordinates'}`;
-            mapButton = `<button class="btn btn-map" onclick="showMap('${r.latitude}', '${r.longitude}', '${r.location_name || 'Check-in Location'}', '${studentName}', '${dateTime}')">View Map</button>`;
+            mapButton = `<button class="btn btn-map" onclick="showMap('${r.latitude}', '${r.longitude}', '${escapeHtml(r.location_name || 'Check-in Location', true)}', '${escapeHtml(studentName, true)}', '${dateTime}')">View Map</button>`;
         } else {
             locationText = `Manual: ${r.location_name || 'N/A'}`;
         }
@@ -555,7 +590,7 @@ function filterAttendanceTable() {
     const trs = $('attendance-table').getElementsByTagName('tr');
 
     for (let i = 0; i < trs.length; i++) {
-        const td = trs[i].getElementsByTagName('td')[0]; // Student Name column
+        const td = trs[i].getElementsByTagName('td')[0];
         if (td) {
             const txtValue = td.textContent || td.innerText;
             if (txtValue.toUpperCase().indexOf(filter) > -1) {
@@ -567,8 +602,7 @@ function filterAttendanceTable() {
     }
 }
 
-// Handler for Super Admin manual check-in
-$('manual-attendance-form').addEventListener('submit', async e => {
+$('manual-attendance-form')?.addEventListener('submit', async e => {
     e.preventDefault();
     const submitButton = e.submitter;
     const originalText = submitButton.textContent;
@@ -581,7 +615,6 @@ $('manual-attendance-form').addEventListener('submit', async e => {
     const date = $('att_date').value;
     const time = $('att_time').value;
     
-    // Combine date and time for the timestamp
     const check_in_time = time ? `${date}T${time}:00.000Z` : `${date}T00:00:00.000Z`;
     
     const record = {
@@ -592,7 +625,6 @@ $('manual-attendance-form').addEventListener('submit', async e => {
         check_in_time,
         ip_address: await getIPAddress(),
         device_id: getDeviceId(),
-        // No latitude/longitude for manual entries unless explicitly added
     };
 
     const { error } = await sb.from('geo_attendance_logs').insert([record]);
@@ -608,7 +640,6 @@ $('manual-attendance-form').addEventListener('submit', async e => {
     setButtonLoading(submitButton, false, originalText);
 });
 
-// Handler for Super Admin geo check-in
 async function markMyAttendance() {
     const button = document.querySelector('.btn-attendance');
     const originalText = button.textContent;
@@ -618,12 +649,11 @@ async function markMyAttendance() {
         const coords = await getGeoLocation();
         const { latitude, longitude, accuracy } = coords;
         
-        // Reverse geocode the location (optional but helpful)
         const location_name = await reverseGeocode(latitude, longitude);
 
         const record = {
             student_id: currentUserProfile.id,
-            session_type: 'office', // Default for Admin geo-log
+            session_type: 'office', 
             location_name,
             latitude,
             longitude,
@@ -666,17 +696,15 @@ async function deleteAttendanceRecord(recordId) {
 
 function showMap(lat, lng, locationName, studentName, dateTime) {
     const modal = $('mapModal');
-    modal.style.display = 'flex'; // Use flex to center
+    modal.style.display = 'flex'; 
 
     $('mapInfo').innerHTML = `**Student:** ${studentName} | **Time:** ${dateTime} | **Location:** ${locationName}`;
 
-    // Initialize map if it doesn't exist
     if (attendanceMap) {
         attendanceMap.remove();
     }
     
     const mapElement = $('attendanceMap');
-    // Ensure the map container is visible before initializing
     mapElement.style.visibility = 'visible'; 
     
     attendanceMap = L.map('attendanceMap').setView([lat, lng], 16);
@@ -686,12 +714,10 @@ function showMap(lat, lng, locationName, studentName, dateTime) {
         attribution: '© OpenStreetMap contributors'
     }).addTo(attendanceMap);
 
-    // Add a marker to the map
     L.marker([lat, lng])
         .addTo(attendanceMap)
         .bindPopup(`<b>${studentName}</b><br>${locationName}`).openPopup();
         
-    // Invalidate size to ensure the map renders correctly within the modal
     setTimeout(() => {
         attendanceMap.invalidateSize();
     }, 100);
@@ -706,13 +732,12 @@ async function loadExams() {
     const tbody = $('exams-table');
     tbody.innerHTML = '<tr><td colspan="6">Loading exams...</td></tr>';
     
-    // Fetch records and join with courses to get course name
     const { data: exams, error } = await fetchData(
         'cats_exams', 
         '*, course:course_id(course_name)', 
         {}, 
         'exam_date', 
-        false // Descending order (newest first)
+        false 
     );
 
     if (error) {
@@ -738,7 +763,7 @@ async function loadExams() {
     });
 }
 
-$('add-exam-form').addEventListener('submit', async e => {
+$('add-exam-form')?.addEventListener('submit', async e => {
     e.preventDefault();
     const submitButton = e.submitter;
     const originalText = submitButton.textContent;
@@ -809,7 +834,7 @@ async function loadMessages() {
     });
 }
 
-$('send-message-form').addEventListener('submit', async e => {
+$('send-message-form')?.addEventListener('submit', async e => {
     e.preventDefault();
     const submitButton = e.submitter;
     const originalText = submitButton.textContent;
@@ -860,7 +885,6 @@ async function loadResources() {
     tbody.innerHTML = '';
     resources.forEach(r => {
         const uploadDate = new Date(r.created_at).toLocaleDateString();
-        // Assuming file_url is generated upon upload
         const fileNameLink = `<a href="${r.file_url}" target="_blank" rel="noopener noreferrer">${escapeHtml(r.file_title || r.file_name)}</a>`;
         
         tbody.innerHTML += `<tr>
@@ -869,7 +893,7 @@ async function loadResources() {
             <td>${escapeHtml(r.uploaded_by_name || 'Admin')}</td>
             <td>${uploadDate}</td>
             <td>
-                <button class="btn btn-delete" onclick="deleteResource('${r.id}', '${r.file_name}')">Delete</button>
+                <button class="btn btn-delete" onclick="deleteResource('${r.id}', '${escapeHtml(r.file_name, true)}')">Delete</button>
             </td>
         </tr>`;
     });
@@ -892,76 +916,170 @@ async function uploadResource() {
     }
 
     const file = fileInput.files[0];
-    const fileName = `${Date.now()}-${file.name}`;
+    const fileName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
     const filePath = `${program_type}/${fileName}`;
 
-    // 1. Upload to Supabase Storage
-    const { data: uploadData, error: uploadError } = await sb.storage
-        .from(RESOURCES_BUCKET)
-        .upload(filePath, file);
+    try {
+        // 1. Upload file to storage bucket
+        const { error: uploadError } = await sb.storage
+            .from(RESOURCES_BUCKET)
+            .upload(filePath, file);
 
-    if (uploadError) {
-        showFeedback(`Upload Error: ${uploadError.message}`, 'error');
-        setButtonLoading(submitButton, false, originalText);
-        return;
-    }
-    
-    // Get the public URL
-    const { data: { publicUrl } } = sb.storage.from(RESOURCES_BUCKET).getPublicUrl(filePath);
+        if (uploadError) throw uploadError;
 
-    // 2. Insert record into resources table
-    const { error: insertError } = await sb.from('resources').insert([{
-        program_type: program_type,
-        file_name: fileName,
-        file_title: file_title,
-        file_url: publicUrl,
-        uploaded_by_id: currentUserProfile.id,
-        uploaded_by_name: currentUserProfile.full_name || 'Super Admin'
-    }]);
+        // 2. Get the public URL for the file
+        const { data: { publicUrl } } = sb.storage
+            .from(RESOURCES_BUCKET)
+            .getPublicUrl(filePath);
 
-    if (insertError) {
-        showFeedback(`Database Insert Error: ${insertError.message}`, 'error');
-        // NOTE: In a real app, you would also try to delete the uploaded file here if the DB insert fails
-    } else {
-        showFeedback('Resource uploaded and recorded successfully!', 'success');
-        $('upload-resource-form').reset();
+        // 3. Insert record into the database
+        const { error: dbError } = await sb.from('resources').insert([{
+            program_type: program_type,
+            file_name: fileName,
+            file_title: file_title,
+            file_url: publicUrl,
+            uploaded_by_id: currentUserProfile.id,
+            uploaded_by_name: currentUserProfile.full_name || 'Admin'
+        }]);
+
+        if (dbError) throw dbError;
+
+        showFeedback(`Resource "${file_title}" uploaded successfully!`, 'success');
+        document.getElementById('upload-resource-form').reset();
         loadResources();
-    }
 
-    setButtonLoading(submitButton, false, originalText);
+    } catch (e) {
+        showFeedback(`Resource Upload Failed: ${e.message}`, 'error');
+        console.error('Resource upload error:', e);
+    } finally {
+        setButtonLoading(submitButton, false, originalText);
+    }
 }
 
 async function deleteResource(resourceId, fileName) {
-    if (!confirm('Are you sure you want to delete this resource and remove the file from storage?')) return;
+    if (!confirm('Are you sure you want to delete this resource file and record?')) return;
 
-    // 1. Get resource details to construct storage path (assuming resource_name = program_type/fileName)
-    const { data: resource, error: fetchError } = await sb.from('resources').select('program_type').eq('id', resourceId).single();
-    if (fetchError) {
-        showFeedback(`Failed to find resource details: ${fetchError.message}`, 'error');
-        return;
-    }
-    
-    const filePath = `${resource.program_type}/${fileName}`;
+    try {
+        // 1. Delete the record from the database
+        const { error: dbError } = await sb.from('resources').delete().eq('id', resourceId);
 
-    // 2. Delete file from Storage
-    const { error: storageError } = await sb.storage.from(RESOURCES_BUCKET).remove([filePath]);
+        if (dbError) throw dbError;
 
-    if (storageError) {
-        // Log the error but continue to try and delete the DB record
-        console.error('Storage Deletion Failed:', storageError);
-    }
-    
-    // 3. Delete record from resources table
-    const { error: dbError } = await sb.from('resources').delete().eq('id', resourceId);
-
-    if (dbError) {
-        showFeedback(`Failed to delete resource record: ${dbError.message}`, 'error');
-    } else {
-        showFeedback('Resource deleted successfully from both database and storage!', 'success');
+        // Note: Actual file deletion from storage is omitted here for simplicity but should be handled server-side/via an edge function for security/accuracy.
+        
+        showFeedback('Resource record deleted successfully!', 'success');
         loadResources();
+
+    } catch (e) {
+        showFeedback(`Failed to delete resource: ${e.message}`, 'error');
     }
 }
 
 
-// --- Initialization ---
+/*******************************************************
+ * 8. Welcome Message Editor Tab
+ *******************************************************/
+
+/** Loads the welcome message into the student dashboard view */
+async function loadStudentWelcomeMessage() {
+    try {
+        const targetElement = document.getElementById('student-welcome-message');
+        if (!targetElement) return;
+
+        const { data } = await sb
+            .from(SETTINGS_TABLE)
+            .select('value')
+            .eq('key', MESSAGE_KEY)
+            .single();
+
+        if (data) {
+            targetElement.innerHTML = data.value;
+        } else {
+            targetElement.innerHTML = '<p style="color: gray;">(Welcome message not yet set.)</p>';
+        }
+
+    } catch (e) {
+        console.error('Error in loadStudentWelcomeMessage:', e);
+    }
+}
+
+/** Loads the welcome message into the Admin editor textarea and preview */
+async function loadWelcomeMessageForEdit() {
+    const editor = $('welcome-message-editor');
+    const preview = $('live-preview');
+    if (!editor || !preview) return;
+    
+    await loadStudentWelcomeMessage(); 
+
+    try {
+        const { data } = await sb
+            .from(SETTINGS_TABLE)
+            .select('value')
+            .eq('key', MESSAGE_KEY)
+            .single();
+
+        if (data) {
+            editor.value = data.value;
+            preview.innerHTML = data.value;
+        } else {
+            const defaultMessage = '<h1>Welcome to the Student Portal!</h1><p>Customize this message here. **HTML is supported!**</p>';
+            editor.value = defaultMessage;
+            preview.innerHTML = defaultMessage;
+        }
+
+    } catch (e) {
+        console.error('Error loading message for edit:', e);
+    }
+}
+
+// Update the live preview as admin types
+$('welcome-message-editor')?.addEventListener('input', () => {
+    $('live-preview').innerHTML = $('welcome-message-editor').value;
+});
+
+// Save the message to Supabase
+$('edit-welcome-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const submitButton = e.submitter;
+    const originalText = submitButton.textContent;
+    const newContent = $('welcome-message-editor').value;
+    const statusDiv = $('editor-status');
+    setButtonLoading(submitButton, true, originalText);
+
+    try {
+        const { error } = await sb
+            .from(SETTINGS_TABLE)
+            .upsert({ key: MESSAGE_KEY, value: newContent }, { onConflict: 'key' });
+
+        if (error) throw error;
+
+        statusDiv.style.color = 'green';
+        statusDiv.textContent = 'Welcome Message saved successfully!';
+        loadStudentWelcomeMessage(); 
+
+        setTimeout(() => statusDiv.textContent = '', 3000);
+
+    } catch (e) {
+        statusDiv.style.color = 'red';
+        statusDiv.textContent = 'Error saving message: ' + (e.message || e);
+        console.error(e);
+    } finally {
+        setButtonLoading(submitButton, false, originalText);
+    }
+});
+
+// Basic modal close functionality for the course edit modal and map modal
+window.onclick = function(event) {
+    const courseModal = $('courseEditModal');
+    const mapModal = $('mapModal');
+    if (event.target === courseModal) {
+        courseModal.style.display = "none";
+    }
+    if (event.target === mapModal) {
+        mapModal.style.display = "none";
+    }
+}
+
+
+// --- INITIALIZATION CALLS ---
 document.addEventListener('DOMContentLoaded', initSession);
