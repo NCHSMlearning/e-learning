@@ -3,693 +3,922 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NCHSM Student Portal (Supabase)</title>
-    <!-- Load Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Load Supabase CDN -->
+    <title>NCHSM Student Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"></noscript>
+    
     <style>
-        /* Set Inter font and warmer background */
+        /* Global Reset and Ultra Modern Typography */
+        :root {
+            --color-dark: #1F2937; /* Deep Charcoal */
+            --color-sidebar: #111827; /* Near-black for deep contrast */
+            --color-primary: #3B82F6; /* Modern Sky Blue */
+            --color-secondary: #059669; /* Success Green */
+            --color-background: #F9FAFB; /* Off-white for content */
+            --color-card-bg: #FFFFFF;
+            --color-text-light: #D1D5DB; /* Light gray for sidebar text */
+            --color-text-dark: #374151; /* Dark gray for body text */
+            --border-radius: 12px;
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+        }
+
         body {
+            margin: 0;
             font-family: 'Inter', sans-serif;
+            background-color: var(--color-background);
+            color: var(--color-text-dark);
+            -webkit-font-smoothing: antialiased;
+        }
+        .container {
+            display: flex;
             min-height: 100vh;
         }
 
-        /* CRITICAL FIX: Only show the active tab content */
-        .tab-content {
-            display: none;
-        }
-        .tab-content.active {
-            display: block;
-        }
-
-        /* Sidebar link styling */
-        .nav-link {
-            transition: all 0.2s ease-in-out;
-            padding: 0.75rem 1rem;
+        /* 1. Sidebar (Sleek, Dark, High Contrast) */
+        .sidebar {
+            width: 250px;
+            background-color: var(--color-sidebar);
+            color: var(--color-text-light);
             display: flex;
-            align-items: center;
-            border-radius: 0.75rem; /* Smoother corners */
+            flex-direction: column;
+            padding: 30px 20px;
+            box-shadow: var(--shadow-lg);
+            z-index: 10;
         }
-        .nav-link:hover {
-            background-color: #1e293b; /* Slate 800 on hover */
+        .sidebar-header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #374151;
         }
-        .nav-link.active {
-            background-color: #10b981; /* Emerald 500 for active link */
-            color: #ffffff;
+        .sidebar-header img {
+            width: 70px;
+            margin-bottom: 15px;
+            filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.1));
+        }
+        .sidebar-header h2 {
+            font-weight: 700;
+            font-size: 1.2rem;
+            color: white;
+            letter-spacing: 0.5px;
+        }
+        .nav { 
+            list-style: none; padding: 0; flex-grow: 1; 
+        }
+        .nav a { 
+            color: var(--color-text-light); 
+            text-decoration: none; 
+            padding: 12px 15px; 
+            border-radius: var(--border-radius); 
+            display: block; 
+            transition: all 0.2s ease-in-out; 
+            font-weight: 500;
+            margin-bottom: 8px;
+        }
+        .nav a:hover { 
+            background-color: #1F2937;
+            color: white;
+        }
+        .nav a.active { 
+            background-color: var(--color-primary); 
+            color: white; 
+            box-shadow: var(--shadow-md);
             font-weight: 600;
         }
-
-        /* Loading Spinner Animation */
-        .loader {
-            border: 4px solid #e2e8f0;
-            border-top: 4px solid #10b981;
-            border-radius: 50%;
-            width: 24px;
-            height: 24px;
-            animation: spin 1s linear infinite;
+        .logout { 
+            margin-top: auto; 
+            text-align: center; 
+            padding-top: 20px;
         }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        .logout a { 
+            display: block;
+            width: 100%;
+            padding: 12px 20px; 
+            background-color: #EF4444;
+            color: #fff; 
+            text-decoration: none; 
+            border-radius: var(--border-radius); 
+            cursor: pointer;
+            font-weight: 600;
+            transition: background-color 0.2s;
+        }
+        .logout a:hover { 
+            background-color: #DC2626; 
         }
 
-        /* Utility for loading text/placeholder */
-        .loading-placeholder {
-            min-height: 1.5rem;
+        /* 2. Main Content Area */
+        .main { 
+            flex: 1; 
+            padding: 40px; 
+            overflow-y: auto; 
+        }
+        header h1 { 
+            margin: 0; 
+            font-size: 2.5rem; 
+            font-weight: 700;
+            color: var(--color-dark);
+        }
+        .subtitle { 
+            color: #6B7280; 
+            margin-top: 5px;
+            margin-bottom: 30px; 
+            font-weight: 400;
+        }
+
+        /* 3. Cards (Elevated and Responsive) */
+        .cards { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); 
+            gap: 25px; 
+            margin-bottom: 40px; 
+        }
+        .card { 
+            background-color: var(--color-card-bg); 
+            padding: 25px; 
+            border-radius: var(--border-radius); 
+            cursor: pointer; 
+            box-shadow: var(--shadow-md); 
+            transition: transform 0.3s ease, box-shadow 0.3s ease; 
+            border-left: 5px solid var(--color-primary);
+        }
+        .card:hover { 
+            transform: translateY(-8px); 
+            box-shadow: var(--shadow-lg); 
+            border-left-color: var(--color-secondary);
+        }
+        .card h3 { 
+            margin-top: 0; 
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--color-dark);
+        }
+        .tab-content h2 {
+            font-size: 1.8rem;
+            font-weight: 600;
+            margin-top: 0;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #E5E7EB;
+            padding-bottom: 10px;
+        }
+
+        /* 4. Tables (Striped and Clean) */
+        table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            background-color: var(--color-card-bg); 
+            border-radius: var(--border-radius); 
+            overflow: hidden; 
+            box-shadow: var(--shadow-md);
+        }
+        th, td { 
+            padding: 15px 20px; 
+            text-align: left; 
+            font-size: 0.9rem;
+        }
+        th { 
+            background-color: #F3F4F6;
+            color: var(--color-dark);
+            font-weight: 600;
+            border-bottom: 2px solid #E5E7EB;
+        }
+        tbody tr:nth-child(even) {
+            background-color: #F9FAFB;
+        }
+        tbody tr:hover { 
+            background-color: #E5E7EB;
+        }
+        td {
+            border-bottom: 1px solid #F3F4F6;
+        }
+
+        /* 5. Tab Content Management (Crucial Fix) */
+        .tab-content { 
+            display: none; 
+            padding-top: 10px; /* Space below h2 */
+        }
+        .tab-content.active { 
+            display: block; 
+        }
+        
+        /* 6. Check-in Controls (The most crucial functional area) */
+        .check-in-controls {
+            background-color: var(--color-card-bg);
+            padding: 30px;
+            border-radius: var(--border-radius);
+            margin-bottom: 30px;
+            box-shadow: var(--shadow-md);
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            flex-wrap: wrap;
+            border-top: 5px solid var(--color-primary);
+        }
+        .check-in-controls label {
+            font-weight: 600;
+            color: var(--color-dark);
+        }
+        .check-in-controls select {
+            padding: 10px 15px;
+            border-radius: 6px;
+            border: 1px solid #D1D5DB;
+            background-color: #fff;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        .check-in-controls button {
+            padding: 12px 25px;
+            background-color: var(--color-secondary); 
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 1rem;
+            transition: all 0.2s;
+        }
+        .check-in-controls button:hover:not(:disabled) {
+            background-color: #047857;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(5, 150, 105, 0.3);
+        }
+        .check-in-controls button:disabled {
+            background-color: #A7F3D0;
+            cursor: not-allowed;
+            color: #065F46;
+        }
+        #geo-message {
+            margin-top: 15px;
+            font-style: italic;
+            color: var(--color-text-dark);
+            width: 100%;
+            padding: 10px;
+            border-radius: 6px;
+            background-color: #F0F4F8;
+            font-size: 0.95rem;
+        }
+        
+        /* 7. Form Styling (Messages Tab) */
+        #message-form {
+            background-color: var(--color-card-bg);
+            padding: 20px;
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow-md);
+            margin-bottom: 30px;
+        }
+        #message-form textarea {
+            width: 100%;
+            min-height: 100px; /* Reduced height for better UX */
+            padding: 15px;
+            border: 1px solid #D1D5DB;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+            font-size: 1rem;
+            resize: vertical;
+        }
+        #message-form button {
+            background-color: var(--color-primary);
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background-color 0.2s;
+        }
+        #message-form button:hover {
+            background-color: #2563EB;
+        }
+        #message-status {
+            margin-top: 10px;
+            font-weight: 500;
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+            }
+            .sidebar {
+                width: 100%;
+                padding: 20px 0;
+                height: auto;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            }
+            .nav {
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: space-around;
+                margin-top: 10px;
+            }
+            .nav li {
+                width: 30%;
+                margin: 5px 0;
+            }
+            .nav a {
+                text-align: center;
+                padding: 8px 10px;
+                font-size: 0.8rem;
+            }
+            .main {
+                padding: 20px;
+            }
+            .cards {
+                grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            }
         }
     </style>
 </head>
-<body class="bg-gray-50">
-
-    <!-- Toast Notification Area -->
-    <div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2"></div>
-
-    <!-- Loading Overlay -->
-    <div id="loading-overlay" class="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50">
-        <div class="bg-white p-6 rounded-xl shadow-2xl flex items-center space-x-3">
-            <div class="loader"></div>
-            <p class="font-semibold text-gray-700">Loading Student Portal...</p>
-        </div>
-    </div>
-
-    <!-- Main Application Container -->
-    <div id="app-container" class="min-h-screen lg:flex">
-
-        <!-- Sidebar (Navigation) -->
-        <aside id="sidebar" class="fixed lg:sticky top-0 left-0 h-full w-64 bg-slate-900 text-white p-4 flex flex-col transition-transform duration-300 ease-in-out z-40 lg:translate-x-0 -translate-x-full shadow-2xl">
-            <h2 class="text-2xl font-bold mb-8 text-emerald-400">NCHSM Student</h2>
-
-            <nav class="flex-grow space-y-2">
-                <!-- 1. Dashboard (New Default Active Tab) -->
-                <a href="#" class="nav-link active" data-tab="dashboard">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
-                    Dashboard
-                </a>
-
-                <!-- 2. Profile (Used for viewing profile data) -->
-                <a href="#" class="nav-link" data-tab="profile">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
-                    Profile
-                </a>
-
-                <!-- 3. My Courses -->
-                <a href="#" class="nav-link" data-tab="my-courses">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
-                    My Courses
-                </a>
-
-                <!-- 4. Attendance (Used for check-in) -->
-                <a href="#" class="nav-link" data-tab="attendance">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
-                    Attendance
-                </a>
-
-                <!-- 5. CATS/Exams -->
-                <a href="#" class="nav-link" data-tab="cats-exams">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                    CATS/Exams
-                </a>
-
-                <!-- 6. Resources -->
-                <a href="#" class="nav-link" data-tab="resources">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H5a2 2 0 00-2 2v5a2 2 0 002 2z"></path></svg>
-                    Resources
-                </a>
-
-                <!-- 7. Messages -->
-                <a href="#" class="nav-link" data-tab="messages">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.155A12.29 12.29 0 012 12C2 7.582 6.03 4 11 4s9 3.582 9 8z"></path></svg>
-                    Messages
-                </a>
-            </nav>
-
-            <div class="mt-8 pt-4 border-t border-slate-700">
-                <a href="#" id="logout-link" class="nav-link text-red-400 hover:bg-red-900">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
-                    Logout
-                </a>
+<body>
+    <div class="container">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <img src="images/Logo_NCHSM.png" alt="Logo">
+                <h2>STUDENT PORTAL</h2>
             </div>
+            <ul class="nav">
+                <li><a href="#" data-tab="dashboard" class="active">Dashboard</a></li>
+                <li><a href="#" data-tab="profile">Profile</a></li>
+                <li><a href="#" data-tab="courses">My Courses</a></li>
+                <li><a href="#" data-tab="attendance">Attendance</a></li>
+                <li><a href="#" data-tab="cats">CATS/Exams</a></li>
+                <li><a href="#" data-tab="resources">Resources</a></li>
+                <li><a href="#" data-tab="messages">Messages</a></li>
+            </ul>
+            <div class="logout"><a href="#" onclick="logout()">Logout</a></div>
         </aside>
 
-        <!-- Menu Toggle Button for Mobile -->
-        <button id="menu-toggle" class="lg:hidden fixed top-4 left-4 z-50 p-2 bg-slate-900 text-white rounded-full shadow-lg">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
-        </button>
-
-        <!-- Main Content Area -->
-        <main class="flex-grow p-4 lg:p-8 ml-0 lg:ml-64 transition-all duration-300">
-            <header class="mb-8 border-b pb-4">
-                <h1 id="user-header" class="text-xl font-extrabold text-gray-900">Welcome, Student!</h1>
-                <p id="user-id-display" class="text-xs text-gray-500 break-all mt-1">Session ID: Loading...</p>
+        <main class="main">
+            <header>
+                <h1>Welcome, Student!</h1>
+                <p class="subtitle">Access your learning tools and updates</p>
             </header>
-            
-            <!-- NEW: Dashboard Tab Content (Default View) -->
-            <div id="dashboard" class="tab-content active w-full p-4 lg:p-8">
-                <h2 class="text-3xl font-bold text-gray-800 mb-6">Student Dashboard</h2>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <!-- Dashboard Card 1: Attendance Summary -->
-                    <div class="bg-white p-6 rounded-xl shadow-lg border-l-4 border-emerald-500">
-                        <p class="text-sm font-medium text-gray-500">Attendance Status</p>
-                        <p class="text-2xl font-bold text-gray-900 mt-1">Checked In <span class="text-emerald-500">Live</span></p>
-                        <p class="text-xs text-gray-500 mt-2">Last check-in: 10:30 AM (Funda. Lecture)</p>
-                    </div>
-                    <!-- Dashboard Card 2: Upcoming CATS -->
-                    <div class="bg-white p-6 rounded-xl shadow-lg border-l-4 border-blue-500">
-                        <p class="text-sm font-medium text-gray-500">Upcoming CAT/Exam</p>
-                        <p class="text-2xl font-bold text-gray-900 mt-1">Pathophysiology</p>
-                        <p class="text-xs text-gray-500 mt-2">Date: Next Friday, 2 PM</p>
-                    </div>
-                    <!-- Dashboard Card 3: Notifications/Messages -->
-                    <div class="bg-white p-6 rounded-xl shadow-lg border-l-4 border-amber-500">
-                        <p class="text-sm font-medium text-gray-500">New Messages</p>
-                        <p class="text-2xl font-bold text-gray-900 mt-1">3 Unread</p>
-                        <p class="text-xs text-gray-500 mt-2">From: Admin, Course Coordinator</p>
-                    </div>
-                </div>
-                <h3 class="text-2xl font-bold text-gray-800 mt-10 mb-4">Quick Actions</h3>
-                <div class="flex flex-wrap gap-4">
-                    <button onclick="showTab('attendance')" class="py-2 px-4 bg-emerald-500 text-white rounded-lg shadow hover:bg-emerald-600 transition">Check In Now</button>
-                    <button onclick="showTab('profile')" class="py-2 px-4 bg-blue-500 text-white rounded-lg shadow hover:bg-blue-600 transition">Update Profile</button>
-                    <button onclick="showTab('my-courses')" class="py-2 px-4 bg-purple-500 text-white rounded-lg shadow hover:bg-purple-600 transition">View Courses</button>
-                </div>
-            </div>
 
-            <!-- Attendance Tab Content -->
-            <div id="attendance" class="tab-content w-full p-4 lg:p-8">
-                <h2 class="text-3xl font-bold text-gray-800 mb-6">Attendance Check-in</h2>
-                <div class="bg-white p-6 rounded-xl shadow-lg max-w-xl">
-                    <form id="attendance-form" class="space-y-4">
-                        <div>
-                            <label for="session-type" class="block text-sm font-medium text-gray-700 mb-1">Session Type</label>
-                            <select id="session-type" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 transition duration-150">
-                                <option value="">Select Session Type</option>
-                                <option value="Class Session">Class Session</option>
-                                <option value="Clinical">Clinical</option>
-                            </select>
-                        </div>
-                        <div id="session-detail-group" class="hidden">
-                            <label for="session-detail" class="block text-sm font-medium text-gray-700 mb-1">Session Detail</label>
-                            <select id="session-detail" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 transition duration-150">
-                                <!-- Options populated by JS -->
-                            </select>
-                        </div>
-                        <button type="submit" id="check-in-button" disabled class="w-full py-3 px-4 bg-gray-400 text-white font-semibold rounded-lg shadow-md hover:bg-gray-500 transition duration-300 disabled:opacity-50 disabled:cursor-not-allowed">
-                            Select Session Details
-                        </button>
-                    </form>
+            <section id="dashboard" class="tab-content active">
+                <div class="cards">
+                    <div class="card" onclick="showTab('profile')"><h3>My Profile</h3></div>
+                    <div class="card" onclick="showTab('courses')"><h3>My Courses</h3></div>
+                    <div class="card" onclick="showTab('attendance')"><h3>Attendance</h3></div>
+                    <div class="card" onclick="showTab('cats')"><h3>CATS/Exams</h3></div>
                 </div>
+            </section>
+
+            <section id="profile" class="tab-content">
+                <h2>My Profile</h2>
+                <div id="profile-info">
+                    <p><strong>Name:</strong> <span id="student-name">...loading...</span></p>
+                    <p><strong>Email:</strong> <span id="student-email">...loading...</span></p>
+                    <p><strong>Phone:</strong> <span id="student-phone">...loading...</span></p>
+                    <p><strong>Program:</strong> <span id="student-program">...loading...</span></p>
+                </div>
+            </section>
+
+            <section id="courses" class="tab-content">
+                <h2>My Courses (Real-Time)</h2>
+                <table>
+                    <thead><tr><th>Course Name</th><th>Status</th></tr></thead>
+                    <tbody id="courses-table">
+                        <tr><td colspan="2">Loading courses...</td></tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section id="attendance" class="tab-content">
+                <h2>Daily Attendance Check-in</h2>
+
+                <div class="check-in-controls">
+                    <label for="session-type">Session Type:</label>
+                    <select id="session-type">
+                        <option value="Clinical">Clinical Rotation</option>
+                        <option value="Call">On Call</option>
+                    </select>
+                    
+                    <button id="check-in-button" onclick="geoCheckIn()">Check In Now</button>
+                    
+                    <p id="geo-message">Click "Check In Now" to submit your attendance and location.</p>
+                </div>
+
+                <h2>Past Attendance Records (Old Table)</h2>
+                <table>
+                    <thead><tr><th>Course/Rotation</th><th>Type</th><th>Date</th><th>Status</th></tr></thead>
+                    <tbody id="attendance-table">
+                        <tr><td colspan="4">Loading attendance records...</td></tr>
+                    </tbody>
+                </table>
+
+                <h3>Geo Attendance History (Check-in Logs)</h3>
+                <table>
+                    <thead><tr><th>Time</th><th>Session Type</th><th>Location (Lat, Long)</th><th>Accuracy (m)</th><th>Verified by Admin</th></tr></thead>
+                    <tbody id="geo-attendance-history">
+                        <tr><td colspan="5">Loading geo check-in history...</td></tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section id="cats" class="tab-content">
+                <h2>CATS / Exams Schedule</h2>
+                <table>
+                    <thead><tr><th>Exam Name</th><th>Date</th><th>Status</th></tr></thead>
+                    <tbody id="exams-table">
+                        <tr><td colspan="3">Loading exam schedule...</td></tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section id="resources" class="tab-content">
+                <h2>Learning Resources (Filtered by Program)</h2>
+                <div id="resources-list">Loading resources...</div>
+            </section>
+
+            <section id="messages" class="tab-content">
+                <h2>Message Admin / Instructor</h2>
+                <form id="message-form">
+                    <textarea id="student-message-body" placeholder="Write your message to the administration..." required></textarea>
+                    <button type="submit">Send Message</button>
+                    <p id="message-status"></p>
+                </form>
                 
-                <h3 class="text-2xl font-bold text-gray-800 mt-10 mb-4">Your Recent Check-ins</h3>
-                <div id="attendance-list" class="space-y-4 max-w-4xl">
-                    <p class="text-gray-500" id="attendance-status">Loading attendance history...</p>
-                </div>
-            </div>
-
-            <!-- Registration Tab Content (Kept hidden but accessible via Profile tab's "Edit" button) -->
-            <div id="registration" class="tab-content w-full p-4 lg:p-8">
-                <h2 class="text-3xl font-bold text-gray-800 mb-6">Student Data Update (Registration)</h2>
-                <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100 max-w-lg mx-auto">
-                    <p class="text-gray-600 mb-6">Please enter or update your details below. This information will be saved to your profile.</p>
-                    <form id="register-form" class="space-y-4">
-                        <input type="text" id="full_name" placeholder="Full Name" required
-                               class="w-full p-3 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 transition duration-150">
-                        <input type="email" id="email" placeholder="Email" required
-                               class="w-full p-3 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 transition duration-150">
-                        <input type="text" id="student_id_number" placeholder="Admission/Student ID Number" required
-                               class="w-full p-3 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 transition duration-150">
-                        <input type="tel" id="phone" placeholder="Phone Number" required
-                               class="w-full p-3 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 transition duration-150">
-                        
-                        <button type="submit" id="save-data-button" class="w-full py-3 px-4 bg-emerald-500 text-white font-semibold rounded-lg shadow-md hover:bg-emerald-600 transition duration-300">
-                            Save My Profile Data
-                        </button>
-                    </form>
-                </div>
-            </div>
-
-            <!-- Profile Tab Content -->
-            <div id="profile" class="tab-content w-full p-4 lg:p-8">
-                <h2 class="text-3xl font-bold text-gray-800 mb-6">Student Profile</h2>
-                <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100 max-w-lg mx-auto">
-                    <div class="space-y-6">
-                        <!-- Full Name -->
-                        <div class="border-b pb-3">
-                            <p class="text-sm font-medium text-gray-500">Full Name</p>
-                            <p id="profile-full_name" class="text-xl font-semibold text-gray-800 loading-placeholder">Loading...</p>
-                        </div>
-                        <!-- Email -->
-                        <div class="border-b pb-3">
-                            <p class="text-sm font-medium text-gray-500">Email</p>
-                            <p id="profile-email" class="text-xl font-semibold text-gray-800 loading-placeholder">Loading...</p>
-                        </div>
-                        <!-- Student ID Number -->
-                        <div class="border-b pb-3">
-                            <p class="text-sm font-medium text-gray-500">Student ID Number</p>
-                            <p id="profile-student_id_number" class="text-xl font-semibold text-gray-800 loading-placeholder">Loading...</p>
-                        </div>
-                        <!-- Phone Number -->
-                        <div class="pb-3">
-                            <p class="text-sm font-medium text-gray-500">Phone Number</p>
-                            <p id="profile-phone" class="text-xl font-semibold text-gray-800 loading-placeholder">Loading...</p>
-                        </div>
-                    </div>
-                    <button onclick="showTab('registration')" class="mt-8 w-full py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition">
-                        Edit My Data
-                    </button>
-                    <p class="text-xs mt-4 text-gray-400 text-center">Your data is securely stored in Supabase (profiles table).</p>
-                </div>
-            </div>
-
-            <!-- My Courses Tab Content -->
-            <div id="my-courses" class="tab-content w-full p-4 lg:p-8">
-                <h2 class="text-3xl font-bold text-gray-800">My Courses</h2>
-                <p class="mt-4 text-gray-600">This section will show a list of your registered courses and important course materials.</p>
-            </div>
-
-            <!-- NEW: CATS/Exams Tab Content -->
-            <div id="cats-exams" class="tab-content w-full p-4 lg:p-8">
-                <h2 class="text-3xl font-bold text-gray-800">CATS & Examination Results</h2>
-                <p class="mt-4 text-gray-600">This section will display your continuous assessment test (CAT) scores and official exam results.</p>
-            </div>
-
-            <!-- NEW: Resources Tab Content -->
-            <div id="resources" class="tab-content w-full p-4 lg:p-8">
-                <h2 class="text-3xl font-bold text-gray-800">Student Resources</h2>
-                <p class="mt-4 text-gray-600">Find useful documents, reading lists, and external links here.</p>
-            </div>
-
-            <!-- NEW: Messages Tab Content -->
-            <div id="messages" class="tab-content w-full p-4 lg:p-8">
-                <h2 class="text-3xl font-bold text-gray-800">Messages & Notifications</h2>
-                <p class="mt-4 text-gray-600">Check your inbox for official messages from the administration and faculty.</p>
-            </div>
-
+                <div id="messages-list">
+                     </div>
+            </section>
         </main>
     </div>
 
-    <script type="module">
-        // --- CONFIGURATION: UPDATE THESE VALUES ***
-        const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
+    <script>
+    // *************************************************************************
+    // *** 1. CONFIGURATION: UPDATE THESE VALUES ***
+    // *************************************************************************
+    
+    // ** SUPABASE CONFIGURATION **
+    const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // ** LOCATIONIQ CONFIGURATION (Geocoding API) **
+    const LOCATIONIQ_API_KEY = 'pk.cbe61eae35ecbe1d1d682c347d81381c';
+    const LOCATIONIQ_API_URL = 'https://us1.locationiq.com/v1/reverse.php';
+
+    let currentUserId = null;
+    let currentUserProfile = null; // Stores the full profile including program_type
+
+    const geoMessage = document.getElementById('geo-message');
+    const checkInButton = document.getElementById('check-in-button');
+    const messageForm = document.getElementById('message-form');
+
+    // *************************************************************************
+    // *** 2. UI AND NAVIGATION LOGIC (Tab Hiding/Showing) ***
+    // *************************************************************************
+    const navLinks = document.querySelectorAll('.nav a');
+    const tabs = document.querySelectorAll('.tab-content');
+
+    function showTab(tabId) {
+        navLinks.forEach(l => l.classList.remove('active'));
+        const activeLink = document.querySelector(.nav a[data-tab="${tabId}"]);
+        if(activeLink) activeLink.classList.add('active');
+
+        tabs.forEach(tab => tab.classList.remove('active'));
+        const activeTab = document.getElementById(tabId);
+        if(activeTab) activeTab.classList.add('active');
         
-        // ** LOCATIONIQ CONFIGURATION (Geocoding API) **
-        const LOCATIONIQ_API_KEY = 'pk.cbe61eae35ecbe1d1d682c347d81381c';
-        const LOCATIONIQ_API_URL = 'https://us1.locationiq.com/v1/reverse.php';
-        
-        // --- GLOBAL VARIABLES ---
-        let sb = null; // Supabase Client
-        let userId = null; // Simulated User ID
-        const SESSION_KEY = 'nchsm_student_portal_user_id';
+        // Load data specific to the tab being activated (important for real-time updates)
+        if (tabId === 'profile' && currentUserId) loadProfile(currentUserId);
+        if (tabId === 'attendance' && currentUserId) {
+            loadAttendance(currentUserId);
+            loadGeoAttendanceHistory(currentUserId);
+        }
+        if (tabId === 'cats' && currentUserId) loadExams();
+        if (tabId === 'resources' && currentUserId) loadResources();
+        if (tabId === 'messages' && currentUserId) loadStudentMessages();
+        if (tabId === 'courses' && currentUserId) loadCourses(); // Re-add loadCourses here
+    }
 
-        // --- DOM Elements ---
-        const appContainer = document.getElementById('app-container');
-        const navLinks = document.querySelectorAll('.nav-link[data-tab]');
-        const sidebar = document.getElementById('sidebar');
-        const menuToggle = document.getElementById('menu-toggle');
-        const logoutLink = document.getElementById('logout-link');
-        const loadingOverlay = document.getElementById('loading-overlay');
-        const attendanceList = document.getElementById('attendance-list');
-        const attendanceStatus = document.getElementById('attendance-status');
-        const sessionTypeSelect = document.getElementById('session-type');
-        const sessionDetailGroup = document.getElementById('session-detail-group');
-        const sessionDetailSelect = document.getElementById('session-detail');
-        const checkInButton = document.getElementById('check-in-button');
-        const registerForm = document.getElementById('register-form');
-        const userIdDisplay = document.getElementById('user-id-display');
-        
-        // --- Helper Functions ---
-        
-        /** Shows or hides the loading overlay. */
-        const setLoading = (isLoading) => {
-            if (isLoading) {
-                loadingOverlay.classList.remove('hidden');
-            } else {
-                loadingOverlay.classList.add('hidden');
-            }
-        };
-
-        /** Displays a custom toast notification. */
-        const showToast = (message, type = 'info', duration = 3000) => {
-            const container = document.getElementById('toast-container');
-            const toast = document.createElement('div');
-            let bgColor = type === 'success' ? 'bg-emerald-500' : (type === 'error' ? 'bg-red-500' : 'bg-blue-500');
-            toast.className = `flex items-center ${bgColor} text-white text-sm font-bold px-4 py-3 rounded-lg shadow-xl transition-all duration-300 transform translate-x-0`;
-            toast.textContent = message;
-            container.appendChild(toast);
-
-            setTimeout(() => {
-                toast.classList.add('opacity-0');
-                setTimeout(() => toast.remove(), 500);
-            }, duration);
-        };
-
-        const toggleSidebar = () => {
-            sidebar.classList.toggle('-translate-x-full');
-        };
-
-        /** Switches the active content tab. */
-        const showTab = (tabId) => {
-            // Hide all tab content
-            document.querySelectorAll('.tab-content').forEach(content => {
-                content.classList.remove('active');
-            });
-            // Show the requested tab content
-            document.getElementById(tabId)?.classList.add('active');
-
-            // Update active state in navigation
-            navLinks.forEach(link => {
-                if (link.getAttribute('data-tab') === tabId) {
-                    link.classList.add('active');
-                } else {
-                    link.classList.remove('active');
-                }
-            });
-
-            // Fetch data only when switching to specific data-intensive tabs
-            if (tabId === 'profile' && userId) {
-                fetchUserProfileData(userId);
-            } else if (tabId === 'attendance' && userId) {
-                fetchAttendanceHistory(userId);
-            }
-        };
-
-        // --- Supabase Setup and Session Management ---
-
-        const setupSupabaseAndSession = () => {
-            setLoading(true); // Ensure loading screen is visible immediately
-            try {
-                // Initialize Supabase Client
-                sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-                    global: { fetch: fetch }
-                });
-
-                // Load or create User ID (Simulating session)
-                let storedId = localStorage.getItem(SESSION_KEY);
-                if (!storedId) {
-                    storedId = crypto.randomUUID();
-                    localStorage.setItem(SESSION_KEY, storedId);
-                    showToast('New student session started.', 'info');
-                }
-                userId = storedId;
-                
-                // Update UI with session details
-                userIdDisplay.textContent = `Session ID: ${userId}`;
-
-                // Initial data load for key components
-                fetchUserProfileData(userId);
-                fetchAttendanceHistory(userId); // Runs in background even if dashboard is visible
-                
-            } catch (error) {
-                console.error("Supabase Initialization Failed:", error);
-                showToast("Failed to connect to the portal backend. Check console.", "error");
-            } finally {
-                // Hide loading screen after a short delay to allow initial rendering
-                setTimeout(() => setLoading(false), 500); 
-            }
-        };
-        
-        // --- Supabase Data Operations ---
-
-        /** Fetches and displays the user's profile data from the 'profiles' table. */
-        const fetchUserProfileData = async (currentUserId) => {
-            const profileFields = ['full_name', 'email', 'student_id_number', 'phone'];
-
-            profileFields.forEach(field => {
-                document.getElementById(`profile-${field}`)?.innerText = 'Loading...';
-            });
-
-            try {
-                const { data, error } = await sb
-                    .from('profiles')
-                    .select('*')
-                    .eq('user_id', currentUserId)
-                    .single();
-
-                if (error && error.code !== 'PGRST116') { // PGRST116 is "No rows found"
-                    throw error;
-                }
-
-                if (data) {
-                    profileFields.forEach(field => {
-                        const element = document.getElementById(`profile-${field}`);
-                        if (element) {
-                            element.innerText = data[field] || 'Not provided';
-                            document.getElementById(field).value = data[field] || '';
-                        }
-                    });
-                    // Use the fetched name in the header
-                    document.getElementById('user-header').textContent = `Welcome, ${data.full_name.split(' ')[0] || 'Student'}!`;
-                } else {
-                    console.log("No profile data found. User needs to register.");
-                    profileFields.forEach(field => {
-                        document.getElementById(`profile-${field}`)?.innerText = 'Not registered yet.';
-                        document.getElementById(field).value = ''; // Clear form
-                    });
-                    document.getElementById('user-header').textContent = `Welcome, Student!`;
-                }
-            } catch (error) {
-                console.error("Error fetching profile data:", error);
-                showToast("Failed to load profile data.", "error");
-            }
-        };
-
-        /** Handles the submission of the registration form to save/update profile data. */
-        const handleRegistration = async (e) => {
+    // Add listeners to enable switching
+    navLinks.forEach(link => {
+        link.addEventListener('click', e => {
             e.preventDefault();
-            if (!userId) { return showToast('Session not active.', 'error'); }
-
-            setLoading(true);
-            try {
-                const profileData = {
-                    user_id: userId, // CRITICAL: Used as primary key for upsert
-                    full_name: registerForm.elements['full_name'].value,
-                    email: registerForm.elements['email'].value,
-                    student_id_number: registerForm.elements['student_id_number'].value,
-                    phone: registerForm.elements['phone'].value,
-                    updatedAt: new Date().toISOString()
-                };
-
-                const { error } = await sb
-                    .from('profiles')
-                    .upsert(profileData, { onConflict: 'user_id' }); // Use upsert for create/update
-
-                if (error) throw error;
-
-                showToast('Registration data saved successfully!', 'success');
-                showTab('profile'); // Automatically switch back to the profile view
-            } catch (error) {
-                console.error("Error saving registration data:", error);
-                showToast(`Failed to save data: ${error.message}`, 'error');
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        /** Handles the check-in process by saving attendance record to the 'attendance' table. */
-        const handleCheckIn = async (e) => {
-            e.preventDefault();
-
-            if (checkInButton.disabled || !userId) return;
-
-            setLoading(true);
-            try {
-                const checkInTime = new Date();
-                const sessionType = sessionTypeSelect.value;
-                const sessionDetailId = sessionDetailSelect.value;
-                const sessionName = sessionDetailSelect.options[sessionDetailSelect.selectedIndex].textContent;
-
-                const attendanceData = {
-                    user_id: userId,
-                    sessionType: sessionType,
-                    sessionDetailId: sessionDetailId,
-                    sessionName: sessionName,
-                    timestamp: checkInTime.toISOString()
-                };
-
-                const { error } = await sb
-                    .from('attendance')
-                    .insert([attendanceData]);
-
-                if (error) throw error;
-
-                showToast(`Checked in for ${sessionName}!`, 'success');
-                // Manually refresh history after check-in
-                fetchAttendanceHistory(userId); 
-
-                // Reset form fields
-                sessionTypeSelect.value = '';
-                updateAttendanceDetail('');
-                validateAttendanceForm();
-
-            } catch (error) {
-                console.error("Attendance check-in failed:", error);
-                showToast(`Check-in failed: ${error.message}`, 'error');
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        /** Fetches and displays the user's recent attendance history from the 'attendance' table. */
-        const fetchAttendanceHistory = async (currentUserId) => {
-            attendanceStatus.textContent = 'Loading attendance history...';
-            attendanceList.innerHTML = ''; // Clear previous list
-
-            try {
-                const { data, error } = await sb
-                    .from('attendance')
-                    .select('*')
-                    .eq('user_id', currentUserId)
-                    .order('timestamp', { ascending: false })
-                    .limit(5);
-
-                if (error && error.code !== 'PGRST116') {
-                    throw error;
-                }
-
-                if (data && data.length > 0) {
-                    data.forEach((record) => {
-                        const listItem = document.createElement('div');
-                        const checkInDate = new Date(record.timestamp);
-                        const formattedTime = checkInDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-                        const formattedDate = checkInDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-
-                        listItem.className = 'bg-emerald-50 p-4 rounded-lg border border-emerald-100 flex justify-between items-center shadow-sm';
-                        listItem.innerHTML = `
-                            <div>
-                                <p class="text-lg font-semibold text-emerald-800">${record.sessionName}</p>
-                                <p class="text-sm text-gray-600 capitalize">${record.sessionType}</p>
-                            </div>
-                            <div class="text-right">
-                                <p class="text-base font-bold text-emerald-600">${formattedTime}</p>
-                                <p class="text-xs text-gray-500">${formattedDate}</p>
-                            </div>
-                        `;
-                        attendanceList.appendChild(listItem);
-                    });
-                    attendanceStatus.classList.add('hidden');
-                } else {
-                    attendanceStatus.textContent = 'No attendance records found yet.';
-                    attendanceStatus.classList.remove('hidden');
-                }
-            } catch (error) {
-                console.error("Error setting up attendance listener:", error);
-                attendanceStatus.textContent = 'Failed to load attendance history.';
-                attendanceStatus.classList.remove('hidden');
-            }
-        };
-
-
-        // --- Attendance Dropdown Logic ---
-
-        const courseOptions = [
-            { id: 'my_course_1', name: 'Fundamentals of Nursing (Lecture)' },
-            { id: 'my_course_2', name: 'Pathophysiology 202 (Seminar)' },
-            { id: 'my_course_3', name: 'Pharmacology Lab' },
-            { id: 'my_course_4', name: 'Clinical Ethics 101' }
-        ];
-
-        const clinicalRotations = [
-            { id: 'mat_med_surg', name: 'Maternity/Medical Surgical Rotation' },
-            { id: 'opd_casualty', name: 'OPD/Casualty Rotation' },
-            { id: 'mch_paediatrics', name: 'MCH/Peaditrics Rotation' },
-            { id: 'psychiatry', name: 'Psyschiatry Rotation' },
-            { id: 'theatre', name: 'Theatre Rotation' },
-            { id: 'icu', name: 'ICU Rotation' }
-        ];
-
-        const updateAttendanceDetail = (sessionType) => {
-            sessionDetailSelect.innerHTML = '<option value="">Select Detail</option>';
-            sessionDetailGroup.classList.add('hidden');
-            
-            let options = [];
-
-            if (sessionType === 'Class Session') {
-                options = courseOptions;
-                sessionDetailGroup.classList.remove('hidden');
-            } else if (sessionType === 'Clinical') {
-                options = clinicalRotations;
-                sessionDetailGroup.classList.remove('hidden');
-            }
-
-            options.forEach(opt => {
-                const option = document.createElement('option');
-                option.value = opt.id;
-                option.textContent = opt.name;
-                sessionDetailSelect.appendChild(option);
-            });
-            
-            validateAttendanceForm();
-        };
-
-        const validateAttendanceForm = () => {
-            const sessionType = sessionTypeSelect.value;
-            const sessionDetail = sessionDetailSelect.value;
-            checkInButton.disabled = !(sessionType && sessionDetail);
-            
-            // Update button styling based on disabled state
-            checkInButton.textContent = checkInButton.disabled ? 'Select Session Details' : 'Check In';
-            checkInButton.classList.toggle('bg-gray-400', checkInButton.disabled);
-            checkInButton.classList.toggle('hover:bg-gray-500', checkInButton.disabled);
-            checkInButton.classList.toggle('bg-emerald-500', !checkInButton.disabled);
-            checkInButton.classList.toggle('hover:bg-emerald-600', !checkInButton.disabled);
-        };
-
-
-        // --- Initialisation and Event Listeners ---
-        
-        document.addEventListener('DOMContentLoaded', () => {
-            
-            // 1. Setup Supabase and load the session data (userId)
-            setupSupabaseAndSession();
-
-            // 2. Attach UI Event Listeners
-            
-            // Registration Form Handler
-            if (registerForm) {
-                registerForm.addEventListener('submit', handleRegistration);
-            }
-
-            // Attendance Form Handlers
-            document.getElementById('attendance-form').addEventListener('submit', handleCheckIn);
-            sessionTypeSelect.addEventListener('change', (e) => {
-                updateAttendanceDetail(e.target.value);
-            });
-            sessionDetailSelect.addEventListener('change', validateAttendanceForm);
-            validateAttendanceForm(); // Initial state check
-
-            // Sidebar and Navigation Handlers
-            menuToggle.addEventListener('click', toggleSidebar);
-
-            navLinks.forEach(link => {
-                link.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    const tabId = link.getAttribute('data-tab');
-                    if (tabId) {
-                        showTab(tabId);
-                    }
-                    if (window.innerWidth < 1024 && !sidebar.classList.contains('-translate-x-full')) {
-                        toggleSidebar();
-                    }
-                });
-            });
-
-            // LOGOUT Functionality (Clearing local session data)
-            logoutLink.addEventListener('click', async (e) => {
-                e.preventDefault();
-                showToast('Logging out and clearing session...', 'info', 1500);
-
-                // Clear the locally stored user ID to simulate logout
-                localStorage.removeItem(SESSION_KEY);
-                
-                // Clear state and reload the application context
-                userId = null;
-                setTimeout(() => {
-                    // Simulating redirect to the login page by reloading the app to get a new session ID
-                    window.location.reload(); 
-                }, 1500);
-            });
+            showTab(link.dataset.tab);
         });
-    </script>
-</body>
-</html>
+    });
+
+    async function logout() {
+        sb.realtime.channels.forEach(channel => sb.removeChannel(channel));
+        await sb.auth.signOut();
+        window.location.href = "login.html"; 
+    }
+
+    // *************************************************************************
+    // *** 3. REALTIME SUBSCRIPTIONS AND DATA FETCHING LOGIC ***
+    // *************************************************************************
+    
+    function handleCoursesUpdate(payload) { loadCourses(); }
+    function handleAttendanceUpdate(payload) { if (currentUserId) { loadAttendance(currentUserId); } }
+    function handleGeoHistoryUpdate(payload) { if (currentUserId) { loadGeoAttendanceHistory(currentUserId); } }
+    // Handlers for filtered tables
+    function handleResourcesUpdate(payload) { loadResources(); }
+    function handleExamsUpdate(payload) { loadExams(); }
+    function handleMessagesUpdate(payload) { loadStudentMessages(); } // Messages filtered client-side
+
+    async function subscribeToRealtimeChannels(userId) {
+        sb.realtime.channels.forEach(channel => sb.removeChannel(channel));
+        
+        // General Channels
+        sb.channel('public:courses').on('postgres_changes', { event: '*', schema: 'public', table: 'courses' }, handleCoursesUpdate).subscribe();
+        sb.channel('public:messages').on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, handleMessagesUpdate).subscribe();
+        
+        // User-specific Channels
+        sb.channel(attendance:user:${userId})
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance', filter: student_id=eq.${userId} }, handleAttendanceUpdate)
+          .subscribe();
+          
+        sb.channel(geo_attendance:user:${userId})
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'geo_attendance_logs', filter: student_id=eq.${userId} }, handleGeoHistoryUpdate)
+          .subscribe();
+
+        // Program-specific Channels (Filtered by program_type, listen for ANY change and reload)
+        sb.channel('public:resources').on('postgres_changes', { event: '*', schema: 'public', table: 'resources' }, handleResourcesUpdate).subscribe();
+        sb.channel('public:cats_exams').on('postgres_changes', { event: '*', schema: 'public', table: 'cats_exams' }, handleExamsUpdate).subscribe();
+    }
+
+    async function loadProfile(userId) {
+        const { data: profile, error: profileError } = await sb
+            .from('profiles')
+            .select('full_name, email, phone, program_type') 
+            .eq('id', userId)
+            .single();
+
+        if (profileError) {
+            console.error("Profile Fetch Error:", profileError);
+            // Handle RLS error gracefully
+            document.getElementById('profile-info').innerHTML = <p style="color: red;">Error loading profile: ${profileError.message}. Check RLS policy on 'profiles' table.</p>;
+            return;
+        }
+
+        currentUserProfile = profile; 
+
+        const firstName = profile.full_name ? profile.full_name.split(' ')[0] : 'Student';
+        document.querySelector('header h1').textContent = Welcome, ${firstName}!;
+        document.getElementById('student-name').textContent = profile.full_name || 'N/A';
+        document.getElementById('student-email').textContent = profile.email || 'N/A';
+        document.getElementById('student-phone').textContent = profile.phone || 'N/A';
+        document.getElementById('student-program').textContent = profile.program_type || 'N/A';
+        
+        // Load the initial dashboard data that depends on the profile
+        loadAttendance(currentUserId);
+        loadGeoAttendanceHistory(currentUserId);
+    }
+
+    async function loadCourses() {
+        // This is a dummy query for demonstration. The actual course filter is complex.
+        const { data, error } = await sb.from('courses').select('course_name, status');
+        const table = document.getElementById('courses-table');
+        if (error) {
+            table.innerHTML = <tr><td colspan="2" style="color: red;">Error loading courses: ${error.message}</td></tr>;
+            return;
+        }
+        table.innerHTML = (data || []).map(c => <tr><td>${c.course_name}</td><td>Active</td></tr>).join('');
+    }
+    
+    async function loadExams() {
+        const table = document.getElementById('exams-table');
+        table.innerHTML = '<tr><td colspan="3">Loading exam schedule...</td></tr>';
+        
+        if (!currentUserProfile || !currentUserProfile.program_type) {
+            table.innerHTML = '<tr><td colspan="3" style="color: red;">Error: Student program type is not loaded or set.</td></tr>';
+            return;
+        }
+
+        const studentProgram = currentUserProfile.program_type;
+        
+        const { data: exams, error } = await sb
+            .from('cats_exams')
+            .select('title, exam_date, status') 
+            .eq('program_type', studentProgram) // Client-side filter applied after RLS
+            .order('exam_date', { ascending: true });
+            
+        if (error) {
+            table.innerHTML = <tr><td colspan="3" style="color: red;">Error loading exams: ${error.message}. (Check RLS on 'cats_exams')</td></tr>;
+            return;
+        }
+
+        table.innerHTML = (exams || []).map(e => {
+            const date = new Date(e.exam_date).toLocaleDateString();
+            return `
+                <tr>
+                    <td>${e.title}</td>
+                    <td>${date}</td>
+                    <td>${e.status || 'Scheduled'}</td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    async function loadResources() {
+        const list = document.getElementById('resources-list');
+        list.innerHTML = 'Loading resources...';
+        
+        if (!currentUserProfile || !currentUserProfile.program_type) {
+            list.innerHTML = '<p style="color: red;">Error: Student program not loaded.</p>';
+            return;
+        }
+        
+        const studentProgram = currentUserProfile.program_type;
+
+        const { data: resources, error } = await sb
+            .from('resources')
+            .select('title, file_path')
+            .or(program_type.eq.${studentProgram},program_type.eq.ALL)
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            list.innerHTML = <p style="color: red;">Error loading resources: ${error.message}</p>;
+            return;
+        }
+
+        list.innerHTML = (resources || []).map(r => `
+            <p><a href="${SUPABASE_URL}/storage/v1/object/public/resources/${r.file_path}" target="_blank" style="color: var(--color-primary); text-decoration: none; font-weight: 500;">
+                <span style="font-size: 1.2em; margin-right: 5px;">&#x1F4C4;</span> ${r.title}
+            </a></p>
+        `).join('');
+    }
+
+    async function loadStudentMessages() {
+        const inboxContainer = document.getElementById('messages-list'); 
+        inboxContainer.innerHTML = '<p>Loading messages...</p>';
+        
+        if (!currentUserProfile || !currentUserProfile.program_type) {
+            inboxContainer.innerHTML = '<p style="color: red;">Error: Student profile not found.</p>';
+            return;
+        }
+
+        const studentProgram = currentUserProfile.program_type;
+
+        const { data: messages, error } = await sb
+            .from('messages')
+            .select('body, created_at')
+            // Filter messages: where program_type matches student's OR is 'ALL'
+            .or(program_type.eq.${studentProgram},program_type.eq.ALL)
+            .order('created_at', { ascending: false })
+            .limit(20);
+
+        if (error) {
+            console.error('Error loading messages:', error);
+            inboxContainer.innerHTML = <p style="color:red;">Error loading messages: ${error.message}</p>;
+            return;
+        }
+
+        let html = '';
+        if (messages.length === 0) {
+             html += '<p>No new messages from the administration.</p>';
+        } else {
+            messages.forEach(msg => {
+                const date = new Date(msg.created_at).toLocaleString();
+                html += `
+                    <div style="border: 1px solid #E5E7EB; padding: 15px; margin-bottom: 10px; border-radius: var(--border-radius); background-color: #F9FAFB;">
+                        <p style="margin: 0 0 10px 0; font-weight: 600; color: var(--color-dark);">
+                            <span style="color: var(--color-primary); margin-right: 10px;">&#9993;</span>Admin Announcement
+                        </p>
+                        <p style="margin: 0 0 5px 0;">${msg.body}</p>
+                        <p style="margin: 0; font-size: 0.8rem; color: #6B7280;">Sent: ${date}</p>
+                    </div>
+                `;
+            });
+        }
+        inboxContainer.innerHTML = html;
+    }
+
+    // --- NEW: Student sends message to Admin ---
+    messageForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const messageBody = document.getElementById('student-message-body').value.trim();
+        const statusElement = document.getElementById('message-status');
+
+        if (!currentUserId) {
+            statusElement.textContent = 'Error: User not authenticated.';
+            statusElement.style.color = '#EF4444';
+            return;
+        }
+
+        statusElement.textContent = 'Sending...';
+        statusElement.style.color = '#3B82F6';
+        
+        const { error } = await sb
+            .from('messages')
+            .insert({
+                sender_id: currentUserId,
+                body: messageBody,
+                program_type: 'TO_ADMIN' 
+            });
+
+        if (error) {
+            console.error('Error sending message:', error);
+            statusElement.textContent = Error sending message: ${error.message};
+            statusElement.style.color = '#EF4444';
+        } else {
+            statusElement.textContent = 'Message sent successfully to the administration!';
+            statusElement.style.color = '#059669';
+            document.getElementById('student-message-body').value = ''; 
+            setTimeout(() => { statusElement.textContent = ''; }, 5000);
+        }
+    });
+
+
+    // *************************************************************************
+    // *** 4. EXISTING FUNCTIONS (Attendance and Geo-Location) ***
+    // *************************************************************************
+    
+    async function loadAttendance(userId) {
+        // NOTE: The previous RLS error was due to policy logic/setup.
+        // This function uses the CONFIRMED column 'student_id'.
+        const { data, error } = await sb
+            .from('attendance')
+            .select('course_or_rotation, session_type, date, status')
+            .eq('student_id', userId) // Using the confirmed 'student_id' column
+            .order('date', { ascending: false }); // Sort by newest date first
+
+        const table = document.getElementById('attendance-table');
+        if (error) {
+            console.error("Attendance Fetch Error:", error);
+            table.innerHTML = <tr><td colspan="4" style="color: red;">Error loading attendance history: ${error.message}</td></tr>;
+            return;
+        }
+        
+        table.innerHTML = (data || []).map(a => `
+            <tr>
+                <td>${a.course_or_rotation || 'N/A'}</td>
+                <td>${a.session_type || 'N/A'}</td>
+                <td>${a.date || 'N/A'}</td>
+                <td>${a.status || 'Present'}</td>
+            </tr>`).join('');
+    }
+    
+    async function loadGeoAttendanceHistory(userId) {
+        const { data, error } = await sb
+            .from('geo_attendance_logs')
+            .select('check_in_time, session_type, latitude, longitude, accuracy_meters, address_snapshot, is_verified')
+            .eq('student_id', userId)
+            .order('check_in_time', { ascending: false });
+
+        const table = document.getElementById('geo-attendance-history');
+        
+        if (error) {
+            table.innerHTML = <tr><td colspan="5" style="color: red;">Error loading Geo History: ${error.message}</td></tr>;
+            return;
+        }
+
+        table.innerHTML = (data || []).map(a => `
+            <tr>
+                <td>${new Date(a.check_in_time).toLocaleString()}</td>
+                <td>${a.session_type}</td>
+                <td><span title="${a.address_snapshot || 'Address N/A'}">${a.latitude.toFixed(6)}, ${a.longitude.toFixed(6)}</span></td>
+                <td>${a.accuracy_meters.toFixed(2)}</td>
+                <td>${a.is_verified ? 'Yes' : 'No (Pending)'}</td>
+            </tr>`).join('');
+    }
+    
+    async function getLocationAndAddress() {
+        checkInButton.disabled = true;
+        geoMessage.textContent = 'Acquiring GPS location...';
+        geoMessage.style.color = 'var(--color-primary)';
+
+        return new Promise((resolve, reject) => {
+            if (!navigator.geolocation) {
+                checkInButton.disabled = false;
+                geoMessage.textContent = 'Error: Geolocation not supported by your browser.';
+                geoMessage.style.color = '#EF4444';
+                return reject(new Error("Geolocation not supported by your browser."));
+            }
+            
+            navigator.geolocation.getCurrentPosition(
+                async (position) => {
+                    const { latitude: lat, longitude: long, accuracy } = position.coords;
+                    
+                    geoMessage.textContent = Location acquired. Accuracy: ${accuracy.toFixed(2)}m. Getting address...;
+
+                    try {
+                        // ** LOCATIONIQ Reverse Geocoding API Call **
+                        const url = ${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${lat}&lon=${long}&format=json;
+                        const response = await fetch(url);
+                        const data = await response.json();
+
+                        const address = data.display_name || Lat: ${lat.toFixed(6)}, Lon: ${long.toFixed(6)};
+
+                        geoMessage.textContent = Address: ${address}. Ready for check-in.;
+                        checkInButton.disabled = false;
+                        resolve({ latitude: lat, longitude: long, accuracy: accuracy, address: address });
+
+                    } catch (error) {
+                        console.error('Reverse Geocoding Error:', error);
+                        geoMessage.textContent = Location: ${lat.toFixed(6)}, ${long.toFixed(6)}. (Address lookup failed);
+                        checkInButton.disabled = false;
+                        resolve({ latitude: lat, longitude: long, accuracy: accuracy, address: null }); // Resolve even if address fails
+                    }
+
+                },
+                (error) => {
+                    checkInButton.disabled = false;
+                    geoMessage.textContent = Error getting location: ${error.message}. Please enable GPS.;
+                    geoMessage.style.color = '#EF4444';
+                    reject(error);
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
+        });
+    }
+    
+    async function geoCheckIn() {
+        if (!currentUserId) {
+            geoMessage.textContent = 'Error: Not logged in.';
+            geoMessage.style.color = '#EF4444';
+            return;
+        }
+
+        checkInButton.disabled = true;
+        geoMessage.textContent = 'Initiating check-in...';
+        geoMessage.style.color = 'var(--color-primary)';
+
+        try {
+            const locationData = await getLocationAndAddress();
+            const sessionType = document.getElementById('session-type').value;
+
+            // 1. Insert into geo_attendance_logs (The precise log)
+            const { error: geoLogError } = await sb
+                .from('geo_attendance_logs')
+                .insert({
+                    student_id: currentUserId,
+                    session_type: sessionType,
+                    latitude: locationData.latitude,
+                    longitude: locationData.longitude,
+                    accuracy_meters: locationData.accuracy,
+                    address_snapshot: locationData.address
+                    // check_in_time is set to NOW() by default in Postgres
+                });
+
+            if (geoLogError) {
+                throw new Error(Geo Log Error: ${geoLogError.message});
+            }
+
+            // 2. Insert into attendance (The simpler, old attendance table - assuming a default course/rotation for simplicity)
+            const { error: attendanceError } = await sb
+                .from('attendance')
+                .insert({
+                    student_id: currentUserId,
+                    course_or_rotation: currentUserProfile.program_type || 'General',
+                    session_type: sessionType,
+                    date: new Date().toISOString().split('T')[0], // Today's date (YYYY-MM-DD)
+                    status: 'Present'
+                });
+
+            if (attendanceError) {
+                // Not a fatal error, but worth logging
+                console.warn('Could not insert into simple attendance table:', attendanceError.message);
+            }
+
+            geoMessage.textContent = Check-in successful! Logged for ${sessionType}.;
+            geoMessage.style.color = 'var(--color-secondary)';
+            
+            // Reload history immediately
+            loadGeoAttendanceHistory(currentUserId);
+            loadAttendance(currentUserId);
+
+        } catch (error) {
+            console.error("Check-in Failed:", error);
+            geoMessage.textContent = Check-in FAILED: ${error.message};
+            geoMessage.style.color = '#EF4444';
+        } finally {
+            checkInButton.disabled = false;
+        }
+    }
+
+
+    // *************************************************************************
+    // *** 5. INITIALIZATION LOGIC ***
+    // *************************************************************************
+    
+    async function initialize() {
+        const { data: { user } } = await sb.auth.getUser();
+
+        if (user) {
+            currentUserId = user.id;
+            // Load essential data
+            await loadProfile(currentUserId); 
+            loadCourses();
+            
+            // Set up real-time
+            subscribeToRealtimeChannels(currentUserId);
+            
+            // Load dashboard tabs
+            showTab('dashboard'); 
+            
+        } else {
+            // Not logged in, redirect to login page
+            window.location.href = "login.html"; 
+        }
+    }
+
+    // Call initialization on page load
+    initialize();
+
+</script>
