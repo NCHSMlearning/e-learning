@@ -544,7 +544,7 @@
     const sessionTypeSelect = document.getElementById('session-type');
     const attendanceTargetSelect = document.getElementById('attendance-target');
     const checkInDatetimeInput = document.getElementById('check-in-datetime');
-    const adminWelcomeMessage = document.getElementById('admin-welcome-message'); // NEW
+    const adminWelcomeMessage = document.getElementById('admin-welcome-message'); 
 
     // *************************************************************************
     // *** 2. UI AND NAVIGATION LOGIC (Tab Hiding/Showing) ***
@@ -569,10 +569,10 @@
             updateTargetSelect();
         }
         if (tabId === 'cats' && currentUserId) loadExams();
-        if (tabId === 'resources' && currentUserId) loadResources();
-        if (tabId === 'messages' && currentUserId) loadStudentMessages();
+        if (tabId === 'resources' && currentUserId) loadResources();     // Defined below
+        if (tabId === 'messages' && currentUserId) loadStudentMessages(); // Defined below
         if (tabId === 'courses' && currentUserId) loadCourses(); 
-        if (tabId === 'dashboard') loadWelcomeMessage(); // NEW: Load message on dashboard view
+        if (tabId === 'dashboard') loadWelcomeMessage();
     }
 
     navLinks.forEach(link => {
@@ -589,10 +589,9 @@
     }
 
     // *************************************************************************
-    // *** 3. CORE DATA FUNCTIONS (Updated with Welcome Message) ***
+    // *** 3. CORE DATA FUNCTIONS (Resolves load... is not defined errors) ***
     // *************************************************************************
     
-    // NEW: Function to load the welcome message from the system_settings table
     async function loadWelcomeMessage() {
         adminWelcomeMessage.textContent = 'Loading message...';
         const { data, error } = await sb
@@ -657,8 +656,6 @@
         }
     }
 
-    // ... (loadAttendance, loadGeoAttendanceHistory, loadExams, loadResources, loadStudentMessages, messageForm listener remain the same) ...
-    
     async function loadAttendance(userId) {
         const { data, error } = await sb
             .from('attendance')
@@ -706,8 +703,39 @@
             </tr>`).join('');
     }
 
+    // *** MISSING FUNCTION 1 (Required by showTab) ***
+    async function loadExams() {
+        // Mock data loading or real Supabase call here
+        const table = document.getElementById('exams-table');
+        // Placeholder implementation
+        table.innerHTML = `<tr><td colspan="3">CATS/Exams data loading (or define your Supabase query here)...</td></tr>`;
+    }
+
+    // *** MISSING FUNCTION 2 (Required by showTab) ***
+    async function loadResources() {
+        const list = document.getElementById('resources-list');
+        // Placeholder implementation
+        list.innerHTML = `<p>Loading learning resources... (or define your Supabase query here)</p>`;
+        
+        // Example: Fetch resources filtered by user's program_type
+        // const { data, error } = await sb.from('resources').select('*').eq('program_type', currentUserProfile?.program_type);
+        // list.innerHTML = (data || []).map(r => `<div><a href="${r.link}">${r.title}</a></div>`).join('');
+    }
+
+    // *** MISSING FUNCTION 3 (Required by showTab) ***
+    async function loadStudentMessages() {
+        const list = document.getElementById('messages-list');
+        // Placeholder implementation
+        list.innerHTML = `<p>Loading your messages... (or define your Supabase query here)</p>`;
+        
+        // Example: Fetch messages sent to or from this student
+        // const { data, error } = await sb.from('messages').select('subject, body, created_at').eq('recipient_id', currentUserId);
+        // list.innerHTML = (data || []).map(m => `<div><strong>${m.subject}</strong>: ${m.body}</div>`).join('');
+    }
+
+
     // *************************************************************************
-    // *** 4. DYNAMIC ATTENDANCE LOGIC (Unchanged) ***
+    // *** 4. DYNAMIC ATTENDANCE LOGIC (Resolves getLocationAndAddress error) ***
     // *************************************************************************
 
     function updateTargetSelect() {
@@ -725,7 +753,6 @@
         } else if (sessionType === 'Class') {
             document.getElementById('target-label').textContent = 'Course Session:';
             
-            // Uses cachedCourses from loadCourses(true)
             options = cachedCourses.map(course => 
                 `<option value="${course.course_name}">${course.course_name}</option>`
             ).join('');
@@ -736,6 +763,61 @@
         }
 
         attendanceTargetSelect.innerHTML = options || '<option value="">No options available</option>';
+    }
+
+    // *** MISSING FUNCTION 4 (Required by geoCheckIn) ***
+    async function getLocationAndAddress() {
+        return new Promise((resolve, reject) => {
+            if (!navigator.geolocation) {
+                return reject(new Error('Geolocation is not supported by your browser.'));
+            }
+            
+            // Placeholder/Mock Coordinates for testing
+            const mockLatitude = -1.286389; // Example: Nairobi, Kenya
+            const mockLongitude = 36.817223;
+            const mockAccuracy = 50;
+
+            geoMessage.textContent = 'Using mock GPS coordinates for testing...';
+
+            // Use a timeout to simulate the time it takes to get GPS, then resolve with mock data
+            setTimeout(() => {
+                 resolve({ 
+                    latitude: mockLatitude, 
+                    longitude: mockLongitude, 
+                    accuracy_meters: mockAccuracy 
+                });
+            }, 1000); // 1 second delay
+            
+            /* Uncomment and remove mock logic above to use real GPS
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    resolve({
+                        latitude: position.coords.latitude,
+                        longitude: position.coords.longitude,
+                        accuracy_meters: position.coords.accuracy
+                    });
+                },
+                (error) => {
+                    reject(new Error(`Geolocation failed: ${error.message}`));
+                },
+                { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+            );
+            */
+        });
+    }
+
+    // *** MISSING FUNCTION 5 (Required by geoCheckIn) ***
+    async function reverseGeocode(lat, lon) {
+        // Placeholder/Mock Address
+        return "Mock Address near Central Business District"; 
+        
+        /* Uncomment and remove mock logic above to use real Geocoding API
+        const url = `${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${lat}&lon=${lon}&format=json`;
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`Geocoding failed: ${response.statusText}`);
+        const data = await response.json();
+        return data.display_name;
+        */
     }
 
     async function geoCheckIn() {
@@ -774,11 +856,13 @@
         checkInButton.disabled = true;
 
         try {
-            const { latitude, longitude, accuracy_meters } = await getLocationAndAddress();
+            // This function is now defined in Section 4
+            const { latitude, longitude, accuracy_meters } = await getLocationAndAddress(); 
             
             geoMessage.textContent = `Recording GPS location. Submitting record for ${selectedTarget}...`;
 
-            const address = await reverseGeocode(latitude, longitude);
+            // This function is now defined in Section 4
+            const address = await reverseGeocode(latitude, longitude); 
 
             // 1. Insert into the geo_attendance_logs table
             const { error: geoError } = await sb
@@ -822,10 +906,8 @@
         }
     }
     
-    // ... (getLocationAndAddress and reverseGeocode remain the same) ...
-
     // *************************************************************************
-    // *** 5. INITIALIZATION (Updated to include Welcome Message load) ***
+    // *** 5. INITIALIZATION ***
     // *************************************************************************
 
     async function initialize() {
@@ -837,21 +919,47 @@
         }
 
         currentUserId = user.id;
-        // subscribeToRealtimeChannels(currentUserId); // Re-add this when setting up realtime
         
         await loadProfile(currentUserId); 
         await loadCourses(true);
         updateTargetSelect();
         
-        loadWelcomeMessage(); // NEW: Load the welcome message on initialization
+        loadWelcomeMessage(); 
     }
     
-    // Set up message form submit listener (If not already done)
+    // Set up message form submit listener 
     messageForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        // ... (message submission logic goes here, omitted for brevity)
-        document.getElementById('message-status').textContent = 'Message sent (Mock)!';
-        messageForm.reset();
+        const messageBody = document.getElementById('student-message-body').value;
+        const statusEl = document.getElementById('message-status');
+
+        if (!messageBody) {
+            statusEl.textContent = 'Message cannot be empty.';
+            statusEl.style.color = '#EF4444';
+            return;
+        }
+
+        try {
+            // Insert the message into a 'student_messages' table (you must create this table)
+            const { error } = await sb.from('student_messages').insert([
+                { 
+                    sender_id: currentUserId, 
+                    body: messageBody,
+                    // You might add a recipient_role or a specific admin_id here
+                }
+            ]);
+
+            if (error) throw error;
+
+            statusEl.textContent = 'Message sent successfully! The admin will review it shortly.';
+            statusEl.style.color = 'var(--color-secondary)';
+            messageForm.reset();
+            loadStudentMessages(); // Refresh the message list if you implement one
+        } catch (error) {
+            console.error('Message submission failed:', error);
+            statusEl.textContent = `Failed to send message: ${error.message}`;
+            statusEl.style.color = '#EF4444';
+        }
     });
 
     initialize();
