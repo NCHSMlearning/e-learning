@@ -3,802 +3,922 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NCHSM Student Portal</title>
-    <!-- Load Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Load Supabase SDK -->
+    <title>NCHSM Student Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"></noscript>
+    
     <style>
-        /*
-        * CRITICAL FIX: Only show the active tab content
-        */
-        .tab-content {
-            display: none;
-        }
-        .tab-content.active {
-            display: block;
+        /* Global Reset and Ultra Modern Typography */
+        :root {
+            --color-dark: #1F2937; /* Deep Charcoal */
+            --color-sidebar: #111827; /* Near-black for deep contrast */
+            --color-primary: #3B82F6; /* Modern Sky Blue */
+            --color-secondary: #059669; /* Success Green */
+            --color-background: #F9FAFB; /* Off-white for content */
+            --color-card-bg: #FFFFFF;
+            --color-text-light: #D1D5DB; /* Light gray for sidebar text */
+            --color-text-dark: #374151; /* Dark gray for body text */
+            --border-radius: 12px;
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
         }
 
-        /* Set Inter font and warmer background */
         body {
+            margin: 0;
             font-family: 'Inter', sans-serif;
+            background-color: var(--color-background);
+            color: var(--color-text-dark);
+            -webkit-font-smoothing: antialiased;
+        }
+        .container {
+            display: flex;
             min-height: 100vh;
-            background-color: #f8f9fa; /* Light background */
         }
 
-        /* Sidebar link styling */
-        .nav-link {
-            transition: all 0.2s ease-in-out;
-            padding: 0.75rem 1rem;
+        /* 1. Sidebar (Sleek, Dark, High Contrast) */
+        .sidebar {
+            width: 250px;
+            background-color: var(--color-sidebar);
+            color: var(--color-text-light);
             display: flex;
-            align-items: center;
-            border-radius: 0.75rem; /* Smoother corners */
+            flex-direction: column;
+            padding: 30px 20px;
+            box-shadow: var(--shadow-lg);
+            z-index: 10;
         }
-        .nav-link:hover {
-            background-color: #1e293b; /* Slate 800 on hover */
+        .sidebar-header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #374151;
         }
-        .nav-link.active {
-            background-color: #10b981; /* Emerald 500 for active link */
-            color: #ffffff;
+        .sidebar-header img {
+            width: 70px;
+            margin-bottom: 15px;
+            filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.1));
+        }
+        .sidebar-header h2 {
+            font-weight: 700;
+            font-size: 1.2rem;
+            color: white;
+            letter-spacing: 0.5px;
+        }
+        .nav { 
+            list-style: none; padding: 0; flex-grow: 1; 
+        }
+        .nav a { 
+            color: var(--color-text-light); 
+            text-decoration: none; 
+            padding: 12px 15px; 
+            border-radius: var(--border-radius); 
+            display: block; 
+            transition: all 0.2s ease-in-out; 
+            font-weight: 500;
+            margin-bottom: 8px;
+        }
+        .nav a:hover { 
+            background-color: #1F2937;
+            color: white;
+        }
+        .nav a.active { 
+            background-color: var(--color-primary); 
+            color: white; 
+            box-shadow: var(--shadow-md);
             font-weight: 600;
         }
+        .logout { 
+            margin-top: auto; 
+            text-align: center; 
+            padding-top: 20px;
+        }
+        .logout a { 
+            display: block;
+            width: 100%;
+            padding: 12px 20px; 
+            background-color: #EF4444;
+            color: #fff; 
+            text-decoration: none; 
+            border-radius: var(--border-radius); 
+            cursor: pointer;
+            font-weight: 600;
+            transition: background-color 0.2s;
+        }
+        .logout a:hover { 
+            background-color: #DC2626; 
+        }
+
+        /* 2. Main Content Area */
+        .main { 
+            flex: 1; 
+            padding: 40px; 
+            overflow-y: auto; 
+        }
+        header h1 { 
+            margin: 0; 
+            font-size: 2.5rem; 
+            font-weight: 700;
+            color: var(--color-dark);
+        }
+        .subtitle { 
+            color: #6B7280; 
+            margin-top: 5px;
+            margin-bottom: 30px; 
+            font-weight: 400;
+        }
+
+        /* 3. Cards (Elevated and Responsive) */
+        .cards { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); 
+            gap: 25px; 
+            margin-bottom: 40px; 
+        }
+        .card { 
+            background-color: var(--color-card-bg); 
+            padding: 25px; 
+            border-radius: var(--border-radius); 
+            cursor: pointer; 
+            box-shadow: var(--shadow-md); 
+            transition: transform 0.3s ease, box-shadow 0.3s ease; 
+            border-left: 5px solid var(--color-primary);
+        }
+        .card:hover { 
+            transform: translateY(-8px); 
+            box-shadow: var(--shadow-lg); 
+            border-left-color: var(--color-secondary);
+        }
+        .card h3 { 
+            margin-top: 0; 
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--color-dark);
+        }
+        .tab-content h2 {
+            font-size: 1.8rem;
+            font-weight: 600;
+            margin-top: 0;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #E5E7EB;
+            padding-bottom: 10px;
+        }
+
+        /* 4. Tables (Striped and Clean) */
+        table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            background-color: var(--color-card-bg); 
+            border-radius: var(--border-radius); 
+            overflow: hidden; 
+            box-shadow: var(--shadow-md);
+        }
+        th, td { 
+            padding: 15px 20px; 
+            text-align: left; 
+            font-size: 0.9rem;
+        }
+        th { 
+            background-color: #F3F4F6;
+            color: var(--color-dark);
+            font-weight: 600;
+            border-bottom: 2px solid #E5E7EB;
+        }
+        tbody tr:nth-child(even) {
+            background-color: #F9FAFB;
+        }
+        tbody tr:hover { 
+            background-color: #E5E7EB;
+        }
+        td {
+            border-bottom: 1px solid #F3F4F6;
+        }
+
+        /* 5. Tab Content Management (Crucial Fix) */
+        .tab-content { 
+            display: none; 
+            padding-top: 10px; /* Space below h2 */
+        }
+        .tab-content.active { 
+            display: block; 
+        }
         
-        /* Loading Spinner Animation */
-        .loader {
-            border: 4px solid #e2e8f0; /* Light grey */
-            border-top: 4px solid #10b981; /* Emerald */
-            border-radius: 50%;
-            width: 24px;
-            height: 24px;
-            animation: spin 1s linear infinite;
+        /* 6. Check-in Controls (The most crucial functional area) */
+        .check-in-controls {
+            background-color: var(--color-card-bg);
+            padding: 30px;
+            border-radius: var(--border-radius);
+            margin-bottom: 30px;
+            box-shadow: var(--shadow-md);
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            flex-wrap: wrap;
+            border-top: 5px solid var(--color-primary);
         }
-
-        /* Small Loader for async content */
-        .loader-small {
-            border: 3px solid #f3f3f3; /* Light grey */
-            border-top: 3px solid #10b981; /* Emerald */
-            border-radius: 50%;
-            width: 1rem;
-            height: 1rem;
-            animation: spin 1s linear infinite;
-            display: inline-block;
-            margin-right: 0.5rem;
+        .check-in-controls label {
+            font-weight: 600;
+            color: var(--color-dark);
         }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        .check-in-controls select {
+            padding: 10px 15px;
+            border-radius: 6px;
+            border: 1px solid #D1D5DB;
+            background-color: #fff;
+            cursor: pointer;
+            font-size: 1rem;
         }
-
-        /* Toast Styling */
-        #toast {
-            visibility: hidden;
-            min-width: 250px;
-            background-color: #333;
-            color: #fff;
-            text-align: center;
-            border-radius: 12px;
-            padding: 16px;
-            position: fixed;
-            z-index: 1000;
-            left: 50%;
-            bottom: 30px;
-            transform: translateX(-50%);
-            font-size: 16px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        .check-in-controls button {
+            padding: 12px 25px;
+            background-color: var(--color-secondary); 
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 1rem;
+            transition: all 0.2s;
         }
-
-        #toast.show {
-            visibility: visible;
-            -webkit-animation: fadein 0.5s, fadeout 0.5s 2.5s;
-            animation: fadein 0.5s, fadeout 0.5s 2.5s;
+        .check-in-controls button:hover:not(:disabled) {
+            background-color: #047857;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(5, 150, 105, 0.3);
         }
-
-        @-webkit-keyframes fadein {
-            from {bottom: 0; opacity: 0;} 
-            to {bottom: 30px; opacity: 1;}
+        .check-in-controls button:disabled {
+            background-color: #A7F3D0;
+            cursor: not-allowed;
+            color: #065F46;
         }
-
-        @keyframes fadein {
-            from {bottom: 0; opacity: 0;}
-            to {bottom: 30px; opacity: 1;}
+        #geo-message {
+            margin-top: 15px;
+            font-style: italic;
+            color: var(--color-text-dark);
+            width: 100%;
+            padding: 10px;
+            border-radius: 6px;
+            background-color: #F0F4F8;
+            font-size: 0.95rem;
         }
-
-        @-webkit-keyframes fadeout {
-            from {bottom: 30px; opacity: 1;} 
-            to {bottom: 0; opacity: 0;}
+        
+        /* 7. Form Styling (Messages Tab) */
+        #message-form {
+            background-color: var(--color-card-bg);
+            padding: 20px;
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow-md);
+            margin-bottom: 30px;
         }
-
-        @keyframes fadeout {
-            from {bottom: 30px; opacity: 1;}
-            to {bottom: 0; opacity: 0;}
+        #message-form textarea {
+            width: 100%;
+            min-height: 100px; /* Reduced height for better UX */
+            padding: 15px;
+            border: 1px solid #D1D5DB;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+            font-size: 1rem;
+            resize: vertical;
+        }
+        #message-form button {
+            background-color: var(--color-primary);
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background-color 0.2s;
+        }
+        #message-form button:hover {
+            background-color: #2563EB;
+        }
+        #message-status {
+            margin-top: 10px;
+            font-weight: 500;
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+            }
+            .sidebar {
+                width: 100%;
+                padding: 20px 0;
+                height: auto;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            }
+            .nav {
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: space-around;
+                margin-top: 10px;
+            }
+            .nav li {
+                width: 30%;
+                margin: 5px 0;
+            }
+            .nav a {
+                text-align: center;
+                padding: 8px 10px;
+                font-size: 0.8rem;
+            }
+            .main {
+                padding: 20px;
+            }
+            .cards {
+                grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            }
         }
     </style>
 </head>
-<body class="bg-gray-100 min-h-screen">
-    <!-- Main Content Wrapper -->
-    <div id="app-container" class="flex flex-col lg:flex-row min-h-screen">
-
-        <!-- Sidebar (Hidden on mobile by default) -->
-        <aside id="sidebar" class="fixed inset-y-0 left-0 transform -translate-x-full lg:translate-x-0 lg:relative lg:flex lg:flex-col w-64 bg-slate-900 text-white p-4 space-y-4 transition-transform duration-300 z-50 shadow-2xl">
-            <div class="text-2xl font-bold text-emerald-400 mb-6">
-                NCHSM Portal
+<body>
+    <div class="container">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <img src="images/Logo_NCHSM.png" alt="Logo">
+                <h2>STUDENT PORTAL</h2>
             </div>
-            
-            <nav class="flex-grow space-y-2">
-                <!-- 1. Dashboard -->
-                <a href="#" data-tab="dashboard" class="nav-link active" id="dashboard-link">
-                    <!-- Icon: Home -->
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-                    Dashboard
-                </a>
-                
-                <!-- 2. Profile -->
-                <a href="#" data-tab="profile" class="nav-link" id="profile-link">
-                    <!-- Icon: User -->
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                    Profile
-                </a>
-
-                <!-- 3. My Courses -->
-                <a href="#" data-tab="courses" class="nav-link" id="courses-link">
-                    <!-- Icon: Book Open -->
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
-                    My Courses
-                </a>
-
-                <!-- 4. Attendance (Check-in) -->
-                <a href="#" data-tab="attendance" class="nav-link" id="attendance-link">
-                    <!-- Icon: Users/Attendance -->
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 10V6"/><path d="M18 10V6"/><path d="M20 18v-8"/></svg>
-                    Attendance
-                </a>
-
-                <!-- 5. CATS/Exams -->
-                <a href="#" data-tab="cats" class="nav-link" id="cats-link">
-                    <!-- Icon: Graduation Cap -->
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3"><path d="M21.42 10.922a1 1 0 0 0-.019-1.843L15 6 9 3 2.5 6.5l6 3.5 3.5-2z"/><path d="M11 11v11a1 1 0 0 1-2 0V11"/><path d="M22 10v11a1 1 0 0 1-2 0V10"/><line x1="12" x2="12" y1="14" y2="22"/></svg>
-                    CATS/Exams
-                </a>
-
-                <!-- 6. Resources (formerly Documents) -->
-                <a href="#" data-tab="resources" class="nav-link" id="resources-link">
-                    <!-- Icon: Folders -->
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3"><path d="M4 20h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-7.93a1 1 0 0 0-.68.28L8 8H4c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2z"/></svg>
-                    Resources
-                </a>
-
-                <!-- 7. Messages -->
-                <a href="#" data-tab="messages" class="nav-link" id="messages-link">
-                    <!-- Icon: Message Square -->
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                    Messages
-                </a>
-            </nav>
-
-            <a href="#" class="nav-link bg-red-700 hover:bg-red-800" id="logout-link">
-                <!-- Icon for Logout -->
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
-                Logout (Guest ID)
-            </a>
-            
+            <ul class="nav">
+                <li><a href="#" data-tab="dashboard" class="active">Dashboard</a></li>
+                <li><a href="#" data-tab="profile">Profile</a></li>
+                <li><a href="#" data-tab="courses">My Courses</a></li>
+                <li><a href="#" data-tab="attendance">Attendance</a></li>
+                <li><a href="#" data-tab="cats">CATS/Exams</a></li>
+                <li><a href="#" data-tab="resources">Resources</a></li>
+                <li><a href="#" data-tab="messages">Messages</a></li>
+            </ul>
+            <div class="logout"><a href="#" onclick="logout()">Logout</a></div>
         </aside>
 
-        <!-- Main Content Area -->
-        <main class="flex-grow p-4 md:p-8 transition-all duration-300 overflow-y-auto">
-            <!-- Header for Mobile -->
-            <header class="flex justify-between items-center lg:hidden mb-4">
-                <div class="text-xl font-bold text-slate-800">NCHSM Portal</div>
-                <button id="menu-toggle" class="p-2 rounded-md text-slate-800 hover:bg-gray-200 focus:outline-none">
-                    <!-- Menu Icon -->
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" x2="21" y1="12" y2="12"/><line x1="3" x2="21" y1="6" y2="6"/><line x1="3" x2="21" y1="18" y2="18"/></svg>
-                </button>
+        <main class="main">
+            <header>
+                <h1>Welcome, Student!</h1>
+                <p class="subtitle">Access your learning tools and updates</p>
             </header>
 
-            <!-- Loading Screen / Authentication required -->
-            <div id="loading-screen" class="absolute inset-0 bg-gray-100 flex flex-col items-center justify-center z-40 transition-opacity duration-500">
-                <div class="loader mb-4"></div>
-                <p class="text-lg font-medium text-slate-600" id="loading-message">Initializing...</p>
-            </div>
-
-            <!-- Content Tabs -->
-            <div id="content-area" class="hidden">
-                <h1 class="text-3xl font-extrabold text-slate-800 mb-6" id="current-tab-title">Student Dashboard</h1>
-                
-                <!-- 1. Dashboard Tab -->
-                <div id="tab-dashboard" class="tab-content active bg-white p-6 md:rounded-xl shadow-lg">
-                    <h2 class="text-xl font-semibold mb-2 text-emerald-600">Welcome!</h2>
-                    <div id="welcome-message" class="bg-gray-50 p-4 rounded-xl shadow-inner text-gray-700 italic border-l-4 border-emerald-500 min-h-[5rem] flex items-center justify-center">
-                        <span class="loader-small"></span> Loading welcome message...
-                    </div>
-                    <p class="mt-4 text-gray-600">This is your main student portal, powered by Supabase. Use the navigation on the left to access all portal features.</p>
+            <section id="dashboard" class="tab-content active">
+                <div class="cards">
+                    <div class="card" onclick="showTab('profile')"><h3>My Profile</h3></div>
+                    <div class="card" onclick="showTab('courses')"><h3>My Courses</h3></div>
+                    <div class="card" onclick="showTab('attendance')"><h3>Attendance</h3></div>
+                    <div class="card" onclick="showTab('cats')"><h3>CATS/Exams</h3></div>
                 </div>
+            </section>
 
-                <!-- 2. Profile Tab (NEW) -->
-                <div id="tab-profile" class="tab-content hidden p-6 bg-white md:rounded-xl shadow-lg">
-                    <h2 class="text-2xl font-bold text-slate-700 mb-4">My Profile</h2>
-                    <p class="text-gray-600">This section will show personal information, contact details, and student ID.</p>
-                    <div class="mt-4 p-4 border rounded-lg bg-yellow-50 text-yellow-800">
-                        <p><strong>Placeholder:</strong> User information and editing functionality will be built here.</p>
-                    </div>
+            <section id="profile" class="tab-content">
+                <h2>My Profile</h2>
+                <div id="profile-info">
+                    <p><strong>Name:</strong> <span id="student-name">...loading...</span></p>
+                    <p><strong>Email:</strong> <span id="student-email">...loading...</span></p>
+                    <p><strong>Phone:</strong> <span id="student-phone">...loading...</span></p>
+                    <p><strong>Program:</strong> <span id="student-program">...loading...</span></p>
                 </div>
+            </section>
 
-                <!-- 3. My Courses Tab (NEW) -->
-                <div id="tab-courses" class="tab-content hidden p-6 bg-white md:rounded-xl shadow-lg">
-                    <h2 class="text-2xl font-bold text-slate-700 mb-4">My Courses</h2>
-                    <p class="text-gray-600">View your enrolled courses, schedules, and overall progress.</p>
-                    <div class="mt-4 p-4 border rounded-lg bg-yellow-50 text-yellow-800">
-                        <p><strong>Placeholder:</strong> Course listings, grades, and resources will be displayed here.</p>
-                    </div>
-                </div>
+            <section id="courses" class="tab-content">
+                <h2>My Courses (Real-Time)</h2>
+                <table>
+                    <thead><tr><th>Course Name</th><th>Status</th></tr></thead>
+                    <tbody id="courses-table">
+                        <tr><td colspan="2">Loading courses...</td></tr>
+                    </tbody>
+                </table>
+            </section>
 
-                <!-- 4. Attendance Check-in Tab -->
-                <div id="tab-attendance" class="tab-content hidden p-6 bg-white md:rounded-xl shadow-lg">
-                    <h2 class="text-2xl font-bold text-slate-700 mb-6 border-b pb-2">Daily Attendance Check-in</h2>
+            <section id="attendance" class="tab-content">
+                <h2>Daily Attendance Check-in</h2>
+
+                <div class="check-in-controls">
+                    <label for="session-type">Session Type:</label>
+                    <select id="session-type">
+                        <option value="Clinical">Clinical Rotation</option>
+                        <option value="Call">On Call</option>
+                    </select>
                     
-                    <div class="mb-6 bg-emerald-50 p-4 rounded-lg border border-emerald-200">
-                        <p class="text-sm font-semibold text-emerald-700">Guest User ID:</p>
-                        <p id="current-user-id" class="break-all font-mono text-xs text-emerald-600 mt-1"></p>
-                    </div>
-
-                    <form id="attendance-form" class="space-y-4 max-w-lg">
-                        <div>
-                            <label for="session-type-select" class="block text-sm font-medium text-gray-700 mb-1">Session Type:</label>
-                            <select id="session-type-select" name="session-type" required
-                                class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm rounded-md shadow-sm bg-white">
-                                <option value="" disabled selected>Select Session Type</option>
-                                <option value="class">On Class</option>
-                                <option value="clinicals">On Clinicals</option>
-                            </select>
-                        </div>
-
-                        <div>
-                            <label id="session-detail-label" for="session-detail-select" class="block text-sm font-medium text-gray-700 mb-1">Detail (Course/Department):</label>
-                            <select id="session-detail-select" name="session-detail" required
-                                class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm rounded-md shadow-sm bg-white" disabled>
-                                <option value="" disabled selected>Select a Detail</option>
-                            </select>
-                        </div>
-                        
-                        <button id="check-in-button" type="submit" disabled
-                            class="w-full inline-flex justify-center py-3 px-4 border border-transparent shadow-sm text-sm font-medium rounded-xl text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 transition duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed">
-                            Check In
-                        </button>
-                         <p id="geoloc-status" class="text-sm text-gray-500 mt-2">Status: Awaiting Check-in...</p>
-                    </form>
-
-                    <h3 class="text-xl font-bold text-slate-700 mt-8 mb-4 border-b pb-2">Recent Attendance</h3>
-                    <div id="recent-attendance-list" class="space-y-3">
-                        <div class="text-gray-500">Loading attendance history...</div>
-                    </div>
+                    <button id="check-in-button" onclick="geoCheckIn()">Check In Now</button>
+                    
+                    <p id="geo-message">Click "Check In Now" to submit your attendance and location.</p>
                 </div>
 
-                <!-- 5. CATS/Exams Tab (NEW) -->
-                <div id="tab-cats" class="tab-content hidden p-6 bg-white md:rounded-xl shadow-lg">
-                    <h2 class="text-2xl font-bold text-slate-700 mb-4">CATS/Exams</h2>
-                    <p class="text-gray-600">Track your Continuous Assessment Tests (CATS) and final exam scores.</p>
-                    <div class="mt-4 p-4 border rounded-lg bg-yellow-50 text-yellow-800">
-                        <p><strong>Placeholder:</strong> Scores, upcoming exam schedules, and results publication will go here.</p>
-                    </div>
-                </div>
+                <h2>Past Attendance Records (Old Table)</h2>
+                <table>
+                    <thead><tr><th>Course/Rotation</th><th>Type</th><th>Date</th><th>Status</th></tr></thead>
+                    <tbody id="attendance-table">
+                        <tr><td colspan="4">Loading attendance records...</td></tr>
+                    </tbody>
+                </table>
 
-                <!-- 6. Resources Tab (RENAMED) -->
-                <div id="tab-resources" class="tab-content hidden p-6 bg-white md:rounded-xl shadow-lg">
-                    <h2 class="text-2xl font-bold text-slate-700 mb-4">Academic Resources</h2>
-                    <p class="text-gray-600">Access vital academic resources, handbooks, and clinical protocols.</p>
-                    <ul class="mt-4 space-y-2 text-emerald-600">
-                        <li><a href="#" class="hover:underline">Student Handbook 2024 (PDF)</a></li>
-                        <li><a href="#" class="hover:underline">Clinical Rotation Schedule (XLSX)</a></li>
-                        <li><a href="#" class="hover:underline">Emergency Protocol Checklist</a></li>
-                    </ul>
-                </div>
+                <h3>Geo Attendance History (Check-in Logs)</h3>
+                <table>
+                    <thead><tr><th>Time</th><th>Session Type</th><th>Location (Lat, Long)</th><th>Accuracy (m)</th><th>Verified by Admin</th></tr></thead>
+                    <tbody id="geo-attendance-history">
+                        <tr><td colspan="5">Loading geo check-in history...</td></tr>
+                    </tbody>
+                </table>
+            </section>
 
-                <!-- 7. Messages Tab (NEW) -->
-                <div id="tab-messages" class="tab-content hidden p-6 bg-white md:rounded-xl shadow-lg">
-                    <h2 class="text-2xl font-bold text-slate-700 mb-4">Messages</h2>
-                    <p class="text-gray-600">Your communication hub for important alerts and messages from faculty.</p>
-                    <div class="mt-4 p-4 border rounded-lg bg-yellow-50 text-yellow-800">
-                        <p><strong>Placeholder:</strong> An inbox system for communication will be implemented here.</p>
-                    </div>
-                </div>
+            <section id="cats" class="tab-content">
+                <h2>CATS / Exams Schedule</h2>
+                <table>
+                    <thead><tr><th>Exam Name</th><th>Date</th><th>Status</th></tr></thead>
+                    <tbody id="exams-table">
+                        <tr><td colspan="3">Loading exam schedule...</td></tr>
+                    </tbody>
+                </table>
+            </section>
 
-            </div>
+            <section id="resources" class="tab-content">
+                <h2>Learning Resources (Filtered by Program)</h2>
+                <div id="resources-list">Loading resources...</div>
+            </section>
+
+            <section id="messages" class="tab-content">
+                <h2>Message Admin / Instructor</h2>
+                <form id="message-form">
+                    <textarea id="student-message-body" placeholder="Write your message to the administration..." required></textarea>
+                    <button type="submit">Send Message</button>
+                    <p id="message-status"></p>
+                </form>
+                
+                <div id="messages-list">
+                     </div>
+            </section>
         </main>
-
-        <!-- Toast Notification -->
-        <div id="toast" class="toast-hidden"></div>
     </div>
 
-    <script type="module">
-        // ** SUPABASE CONFIGURATION **
-        const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
-        const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    <script>
+    // *************************************************************************
+    // *** 1. CONFIGURATION: UPDATE THESE VALUES ***
+    // *************************************************************************
+    
+    // ** SUPABASE CONFIGURATION **
+    const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-        // ** LOCATIONIQ CONFIGURATION (Geocoding API) **
-        const LOCATIONIQ_API_KEY = 'pk.cbe61eae35ecbe1d1d682c347d81381c';
-        const LOCATIONIQ_API_URL = 'https://us1.locationiq.com/v1/reverse.php';
+    // ** LOCATIONIQ CONFIGURATION (Geocoding API) **
+    const LOCATIONIQ_API_KEY = 'pk.cbe61eae35ecbe1d1d682c347d81381c';
+    const LOCATIONIQ_API_URL = 'https://us1.locationiq.com/v1/reverse.php';
+
+    let currentUserId = null;
+    let currentUserProfile = null; // Stores the full profile including program_type
+
+    const geoMessage = document.getElementById('geo-message');
+    const checkInButton = document.getElementById('check-in-button');
+    const messageForm = document.getElementById('message-form');
+
+    // *************************************************************************
+    // *** 2. UI AND NAVIGATION LOGIC (Tab Hiding/Showing) ***
+    // *************************************************************************
+    const navLinks = document.querySelectorAll('.nav a');
+    const tabs = document.querySelectorAll('.tab-content');
+
+    function showTab(tabId) {
+        navLinks.forEach(l => l.classList.remove('active'));
+        const activeLink = document.querySelector(.nav a[data-tab="${tabId}"]);
+        if(activeLink) activeLink.classList.add('active');
+
+        tabs.forEach(tab => tab.classList.remove('active'));
+        const activeTab = document.getElementById(tabId);
+        if(activeTab) activeTab.classList.add('active');
         
-        // Global App variables
-        let currentUserId = null;
-        const GUEST_ID_KEY = 'nchsm_guest_id';
-        const APP_ID = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        // Load data specific to the tab being activated (important for real-time updates)
+        if (tabId === 'profile' && currentUserId) loadProfile(currentUserId);
+        if (tabId === 'attendance' && currentUserId) {
+            loadAttendance(currentUserId);
+            loadGeoAttendanceHistory(currentUserId);
+        }
+        if (tabId === 'cats' && currentUserId) loadExams();
+        if (tabId === 'resources' && currentUserId) loadResources();
+        if (tabId === 'messages' && currentUserId) loadStudentMessages();
+        if (tabId === 'courses' && currentUserId) loadCourses(); // Re-add loadCourses here
+    }
 
-        // Supabase Table Names
-        const ATTENDANCE_TABLE = 'attendance';
-        const SETTINGS_TABLE = 'settings';
-        const WELCOME_KEY = 'welcome_message';
+    // Add listeners to enable switching
+    navLinks.forEach(link => {
+        link.addEventListener('click', e => {
+            e.preventDefault();
+            showTab(link.dataset.tab);
+        });
+    });
 
-        // Mock Data for dynamic dropdowns
-        const COURSES = [
-            { id: 'anatomy', name: 'Anatomy 101' },
-            { id: 'physiology', name: 'Physiology 202' },
-            { id: 'pharm', name: 'Pharmacology 303' },
-            { id: 'pathology', name: 'Pathology 404' },
-        ];
+    async function logout() {
+        sb.realtime.channels.forEach(channel => sb.removeChannel(channel));
+        await sb.auth.signOut();
+        window.location.href = "login.html"; 
+    }
 
-        const DEPARTMENTS = [
-            { id: 'pediatrics', name: 'Pediatrics' },
-            { id: 'surgery', name: 'General Surgery' },
-            { id: 'er', name: 'Emergency Room' },
-            { id: 'icu', name: 'Intensive Care Unit (ICU)' },
-            { id: 'obgyn', name: 'Obstetrics/Gynecology (OB-GYN)' },
-        ];
+    // *************************************************************************
+    // *** 3. REALTIME SUBSCRIPTIONS AND DATA FETCHING LOGIC ***
+    // *************************************************************************
+    
+    function handleCoursesUpdate(payload) { loadCourses(); }
+    function handleAttendanceUpdate(payload) { if (currentUserId) { loadAttendance(currentUserId); } }
+    function handleGeoHistoryUpdate(payload) { if (currentUserId) { loadGeoAttendanceHistory(currentUserId); } }
+    // Handlers for filtered tables
+    function handleResourcesUpdate(payload) { loadResources(); }
+    function handleExamsUpdate(payload) { loadExams(); }
+    function handleMessagesUpdate(payload) { loadStudentMessages(); } // Messages filtered client-side
 
-        // UI Elements
-        const loadingScreen = document.getElementById('loading-screen');
-        const contentArea = document.getElementById('content-area');
-        const sidebar = document.getElementById('sidebar');
-        const menuToggle = document.getElementById('menu-toggle');
-        const navLinks = document.querySelectorAll('.nav-link');
-        const logoutLink = document.getElementById('logout-link');
-        const checkInButton = document.getElementById('check-in-button');
-        const sessionTypeSelect = document.getElementById('session-type-select');
-        const sessionDetailSelect = document.getElementById('session-detail-select');
-        const attendanceForm = document.getElementById('attendance-form');
-        const attendanceList = document.getElementById('recent-attendance-list');
-        const userIdDisplay = document.getElementById('current-user-id');
-        const welcomeMessageElement = document.getElementById('welcome-message');
-        const geolocStatus = document.getElementById('geoloc-status');
-        const tabTitle = document.getElementById('current-tab-title');
+    async function subscribeToRealtimeChannels(userId) {
+        sb.realtime.channels.forEach(channel => sb.removeChannel(channel));
+        
+        // General Channels
+        sb.channel('public:courses').on('postgres_changes', { event: '*', schema: 'public', table: 'courses' }, handleCoursesUpdate).subscribe();
+        sb.channel('public:messages').on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, handleMessagesUpdate).subscribe();
+        
+        // User-specific Channels
+        sb.channel(attendance:user:${userId})
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance', filter: student_id=eq.${userId} }, handleAttendanceUpdate)
+          .subscribe();
+          
+        sb.channel(geo_attendance:user:${userId})
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'geo_attendance_logs', filter: student_id=eq.${userId} }, handleGeoHistoryUpdate)
+          .subscribe();
 
-        // --- Utility Functions ---
+        // Program-specific Channels (Filtered by program_type, listen for ANY change and reload)
+        sb.channel('public:resources').on('postgres_changes', { event: '*', schema: 'public', table: 'resources' }, handleResourcesUpdate).subscribe();
+        sb.channel('public:cats_exams').on('postgres_changes', { event: '*', schema: 'public', table: 'cats_exams' }, handleExamsUpdate).subscribe();
+    }
 
-        /**
-         * Shows a transient toast notification.
-         */
-        function showToast(message, isError = false) {
-            const toast = document.getElementById('toast');
-            toast.textContent = message;
-            toast.className = 'show';
-            toast.style.backgroundColor = isError ? '#ef4444' : '#10b981';
-            setTimeout(function(){ toast.className = toast.className.replace('show', ''); }, 3000);
+    async function loadProfile(userId) {
+        const { data: profile, error: profileError } = await sb
+            .from('profiles')
+            .select('full_name, email, phone, program_type') 
+            .eq('id', userId)
+            .single();
+
+        if (profileError) {
+            console.error("Profile Fetch Error:", profileError);
+            // Handle RLS error gracefully
+            document.getElementById('profile-info').innerHTML = <p style="color: red;">Error loading profile: ${profileError.message}. Check RLS policy on 'profiles' table.</p>;
+            return;
         }
 
-        /**
-         * Toggles the mobile sidebar visibility.
-         */
-        function toggleSidebar() {
-            sidebar.classList.toggle('-translate-x-full');
+        currentUserProfile = profile; 
+
+        const firstName = profile.full_name ? profile.full_name.split(' ')[0] : 'Student';
+        document.querySelector('header h1').textContent = Welcome, ${firstName}!;
+        document.getElementById('student-name').textContent = profile.full_name || 'N/A';
+        document.getElementById('student-email').textContent = profile.email || 'N/A';
+        document.getElementById('student-phone').textContent = profile.phone || 'N/A';
+        document.getElementById('student-program').textContent = profile.program_type || 'N/A';
+        
+        // Load the initial dashboard data that depends on the profile
+        loadAttendance(currentUserId);
+        loadGeoAttendanceHistory(currentUserId);
+    }
+
+    async function loadCourses() {
+        // This is a dummy query for demonstration. The actual course filter is complex.
+        const { data, error } = await sb.from('courses').select('course_name, status');
+        const table = document.getElementById('courses-table');
+        if (error) {
+            table.innerHTML = <tr><td colspan="2" style="color: red;">Error loading courses: ${error.message}</td></tr>;
+            return;
+        }
+        table.innerHTML = (data || []).map(c => <tr><td>${c.course_name}</td><td>Active</td></tr>).join('');
+    }
+    
+    async function loadExams() {
+        const table = document.getElementById('exams-table');
+        table.innerHTML = '<tr><td colspan="3">Loading exam schedule...</td></tr>';
+        
+        if (!currentUserProfile || !currentUserProfile.program_type) {
+            table.innerHTML = '<tr><td colspan="3" style="color: red;">Error: Student program type is not loaded or set.</td></tr>';
+            return;
         }
 
-        /**
-         * Switches the active content tab.
-         */
-        function showTab(tabId) {
-            document.querySelectorAll('.tab-content').forEach(tab => {
-                tab.classList.remove('active');
-            });
-            document.getElementById(`tab-${tabId}`).classList.add('active');
+        const studentProgram = currentUserProfile.program_type;
+        
+        const { data: exams, error } = await sb
+            .from('cats_exams')
+            .select('title, exam_date, status') 
+            .eq('program_type', studentProgram) // Client-side filter applied after RLS
+            .order('exam_date', { ascending: true });
             
-            navLinks.forEach(link => {
-                link.classList.remove('active');
-                if (link.getAttribute('data-tab') === tabId) {
-                    link.classList.add('active');
-                    // Update main title
-                    tabTitle.textContent = link.textContent.trim(); 
-                }
+        if (error) {
+            table.innerHTML = <tr><td colspan="3" style="color: red;">Error loading exams: ${error.message}. (Check RLS on 'cats_exams')</td></tr>;
+            return;
+        }
+
+        table.innerHTML = (exams || []).map(e => {
+            const date = new Date(e.exam_date).toLocaleDateString();
+            return `
+                <tr>
+                    <td>${e.title}</td>
+                    <td>${date}</td>
+                    <td>${e.status || 'Scheduled'}</td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    async function loadResources() {
+        const list = document.getElementById('resources-list');
+        list.innerHTML = 'Loading resources...';
+        
+        if (!currentUserProfile || !currentUserProfile.program_type) {
+            list.innerHTML = '<p style="color: red;">Error: Student program not loaded.</p>';
+            return;
+        }
+        
+        const studentProgram = currentUserProfile.program_type;
+
+        const { data: resources, error } = await sb
+            .from('resources')
+            .select('title, file_path')
+            .or(program_type.eq.${studentProgram},program_type.eq.ALL)
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            list.innerHTML = <p style="color: red;">Error loading resources: ${error.message}</p>;
+            return;
+        }
+
+        list.innerHTML = (resources || []).map(r => `
+            <p><a href="${SUPABASE_URL}/storage/v1/object/public/resources/${r.file_path}" target="_blank" style="color: var(--color-primary); text-decoration: none; font-weight: 500;">
+                <span style="font-size: 1.2em; margin-right: 5px;">&#x1F4C4;</span> ${r.title}
+            </a></p>
+        `).join('');
+    }
+
+    async function loadStudentMessages() {
+        const inboxContainer = document.getElementById('messages-list'); 
+        inboxContainer.innerHTML = '<p>Loading messages...</p>';
+        
+        if (!currentUserProfile || !currentUserProfile.program_type) {
+            inboxContainer.innerHTML = '<p style="color: red;">Error: Student profile not found.</p>';
+            return;
+        }
+
+        const studentProgram = currentUserProfile.program_type;
+
+        const { data: messages, error } = await sb
+            .from('messages')
+            .select('body, created_at')
+            // Filter messages: where program_type matches student's OR is 'ALL'
+            .or(program_type.eq.${studentProgram},program_type.eq.ALL)
+            .order('created_at', { ascending: false })
+            .limit(20);
+
+        if (error) {
+            console.error('Error loading messages:', error);
+            inboxContainer.innerHTML = <p style="color:red;">Error loading messages: ${error.message}</p>;
+            return;
+        }
+
+        let html = '';
+        if (messages.length === 0) {
+             html += '<p>No new messages from the administration.</p>';
+        } else {
+            messages.forEach(msg => {
+                const date = new Date(msg.created_at).toLocaleString();
+                html += `
+                    <div style="border: 1px solid #E5E7EB; padding: 15px; margin-bottom: 10px; border-radius: var(--border-radius); background-color: #F9FAFB;">
+                        <p style="margin: 0 0 10px 0; font-weight: 600; color: var(--color-dark);">
+                            <span style="color: var(--color-primary); margin-right: 10px;">&#9993;</span>Admin Announcement
+                        </p>
+                        <p style="margin: 0 0 5px 0;">${msg.body}</p>
+                        <p style="margin: 0; font-size: 0.8rem; color: #6B7280;">Sent: ${date}</p>
+                    </div>
+                `;
             });
         }
+        inboxContainer.innerHTML = html;
+    }
 
-        /**
-         * Generates or retrieves a persistent Guest User ID.
-         */
-        function getOrCreateGuestId() {
-            let id = localStorage.getItem(GUEST_ID_KEY);
-            if (!id) {
-                // Generate a simple UUID if not found
-                id = crypto.randomUUID();
-                localStorage.setItem(GUEST_ID_KEY, id);
-            }
-            return id;
+    // --- NEW: Student sends message to Admin ---
+    messageForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const messageBody = document.getElementById('student-message-body').value.trim();
+        const statusElement = document.getElementById('message-status');
+
+        if (!currentUserId) {
+            statusElement.textContent = 'Error: User not authenticated.';
+            statusElement.style.color = '#EF4444';
+            return;
         }
 
-        // --- Attendance UI/Helper Functions ---
+        statusElement.textContent = 'Sending...';
+        statusElement.style.color = '#3B82F6';
+        
+        const { error } = await sb
+            .from('messages')
+            .insert({
+                sender_id: currentUserId,
+                body: messageBody,
+                program_type: 'TO_ADMIN' 
+            });
 
-        /**
-         * Validates the form state and enables/disables the check-in button.
-         */
-        function validateAttendanceForm() {
-            const typeSelected = sessionTypeSelect.value !== '';
-            const detailSelected = sessionDetailSelect.value !== '';
-            
-            if (typeSelected && detailSelected) {
+        if (error) {
+            console.error('Error sending message:', error);
+            statusElement.textContent = Error sending message: ${error.message};
+            statusElement.style.color = '#EF4444';
+        } else {
+            statusElement.textContent = 'Message sent successfully to the administration!';
+            statusElement.style.color = '#059669';
+            document.getElementById('student-message-body').value = ''; 
+            setTimeout(() => { statusElement.textContent = ''; }, 5000);
+        }
+    });
+
+
+    // *************************************************************************
+    // *** 4. EXISTING FUNCTIONS (Attendance and Geo-Location) ***
+    // *************************************************************************
+    
+    async function loadAttendance(userId) {
+        // NOTE: The previous RLS error was due to policy logic/setup.
+        // This function uses the CONFIRMED column 'student_id'.
+        const { data, error } = await sb
+            .from('attendance')
+            .select('course_or_rotation, session_type, date, status')
+            .eq('student_id', userId) // Using the confirmed 'student_id' column
+            .order('date', { ascending: false }); // Sort by newest date first
+
+        const table = document.getElementById('attendance-table');
+        if (error) {
+            console.error("Attendance Fetch Error:", error);
+            table.innerHTML = <tr><td colspan="4" style="color: red;">Error loading attendance history: ${error.message}</td></tr>;
+            return;
+        }
+        
+        table.innerHTML = (data || []).map(a => `
+            <tr>
+                <td>${a.course_or_rotation || 'N/A'}</td>
+                <td>${a.session_type || 'N/A'}</td>
+                <td>${a.date || 'N/A'}</td>
+                <td>${a.status || 'Present'}</td>
+            </tr>`).join('');
+    }
+    
+    async function loadGeoAttendanceHistory(userId) {
+        const { data, error } = await sb
+            .from('geo_attendance_logs')
+            .select('check_in_time, session_type, latitude, longitude, accuracy_meters, address_snapshot, is_verified')
+            .eq('student_id', userId)
+            .order('check_in_time', { ascending: false });
+
+        const table = document.getElementById('geo-attendance-history');
+        
+        if (error) {
+            table.innerHTML = <tr><td colspan="5" style="color: red;">Error loading Geo History: ${error.message}</td></tr>;
+            return;
+        }
+
+        table.innerHTML = (data || []).map(a => `
+            <tr>
+                <td>${new Date(a.check_in_time).toLocaleString()}</td>
+                <td>${a.session_type}</td>
+                <td><span title="${a.address_snapshot || 'Address N/A'}">${a.latitude.toFixed(6)}, ${a.longitude.toFixed(6)}</span></td>
+                <td>${a.accuracy_meters.toFixed(2)}</td>
+                <td>${a.is_verified ? 'Yes' : 'No (Pending)'}</td>
+            </tr>`).join('');
+    }
+    
+    async function getLocationAndAddress() {
+        checkInButton.disabled = true;
+        geoMessage.textContent = 'Acquiring GPS location...';
+        geoMessage.style.color = 'var(--color-primary)';
+
+        return new Promise((resolve, reject) => {
+            if (!navigator.geolocation) {
                 checkInButton.disabled = false;
-            } else {
-                checkInButton.disabled = true;
+                geoMessage.textContent = 'Error: Geolocation not supported by your browser.';
+                geoMessage.style.color = '#EF4444';
+                return reject(new Error("Geolocation not supported by your browser."));
             }
-            // Ensure the detail select is enabled if a type is chosen
-            sessionDetailSelect.disabled = !typeSelected;
-        }
-
-        /**
-         * Updates the detail dropdown based on session type (Class/Clinicals).
-         */
-        function updateAttendanceDetail(sessionType) {
-            const sessionDetailSelect = document.getElementById('session-detail-select');
-            sessionDetailSelect.innerHTML = '<option value="" disabled selected>Select a Detail</option>';
-            let details = [];
-            let labelText = 'Detail (Course/Department):'; 
-
-            if (sessionType === 'class') {
-                details = COURSES;
-                labelText = 'Course:';
-            } else if (sessionType === 'clinicals') {
-                details = DEPARTMENTS;
-                labelText = 'Hospital Department:';
-            }
-
-            // Update the label dynamically
-            document.getElementById('session-detail-label').textContent = labelText;
             
-            // Populate options
-            details.forEach(detail => {
-                const option = document.createElement('option');
-                option.value = detail.id;
-                option.textContent = detail.name;
-                sessionDetailSelect.appendChild(option);
-            });
-
-            // Re-validate the form after updating details
-            validateAttendanceForm();
-        }
-
-        // --- Supabase and LocationIQ Functions ---
-
-        /**
-         * Ensures a default welcome message exists in the settings table.
-         */
-        async function ensureDefaultWelcomeMessage() {
-            try {
-                const { data: existing, error: selectError } = await sb
-                    .from(SETTINGS_TABLE)
-                    .select('*')
-                    .eq('key', WELCOME_KEY);
-
-                if (selectError) throw selectError;
-
-                if (!existing || existing.length === 0) {
-                    console.log("Setting default welcome message...");
-                    const { error: insertError } = await sb
-                        .from(SETTINGS_TABLE)
-                        .insert({
-                            key: WELCOME_KEY,
-                            value: "A warm welcome to the NCHSM Student Portal! This message is editable by an administrator.",
-                            app_id: APP_ID
-                        });
-                    if (insertError) throw insertError;
-                }
-            } catch (e) {
-                console.error("Error ensuring default welcome message:", e);
-            }
-        }
-
-        /**
-         * Loads the welcome message in real-time using Supabase Realtime.
-         */
-        function loadWelcomeMessage() {
-            // Initial fetch
-            sb.from(SETTINGS_TABLE)
-                .select('value')
-                .eq('key', WELCOME_KEY)
-                .then(({ data, error }) => {
-                    if (error) throw error;
-                    if (data && data.length > 0) {
-                        welcomeMessageElement.classList.remove('justify-center');
-                        welcomeMessageElement.innerHTML = data[0].value;
-                    } else {
-                        welcomeMessageElement.classList.add('justify-center');
-                        welcomeMessageElement.innerHTML = "No welcome message configured by the admin yet.";
-                    }
-                })
-                .catch(e => {
-                    console.error("Error initial loading welcome message:", e);
-                    welcomeMessageElement.classList.add('justify-center');
-                    welcomeMessageElement.innerHTML = "Error loading message. Please try refreshing.";
-                });
-
-            // Set up Realtime listener for changes
-            sb.channel('public:settings')
-                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: SETTINGS_TABLE, filter: `key=eq.${WELCOME_KEY}` }, (payload) => {
-                    if (payload.new.value) {
-                        welcomeMessageElement.classList.remove('justify-center');
-                        welcomeMessageElement.innerHTML = payload.new.value;
-                        showToast("Welcome message updated by admin!");
-                    }
-                })
-                .subscribe();
-        }
-
-        /**
-         * Loads recent attendance records in real-time using Supabase Realtime.
-         */
-        function loadRecentAttendance(userId) {
-            
-            attendanceList.innerHTML = '<div class="flex items-center text-gray-500"><span class="loader-small"></span> Loading history...</div>';
-
-            const renderList = (records) => {
-                if (records.length === 0) {
-                    attendanceList.innerHTML = '<p class="text-gray-500 italic">No attendance records found yet. Check in to start!</p>';
-                    return;
-                }
-
-                // Sort the records client-side by created_at (latest first)
-                records.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-
-                attendanceList.innerHTML = ''; // Clear loading message
-
-                records.slice(0, 10).forEach(record => {
-                    const dateStr = new Date(record.created_at).toLocaleString();
-                    const typeDisplay = record.type === 'class' ? 'Class' : 'Clinical';
+            navigator.geolocation.getCurrentPosition(
+                async (position) => {
+                    const { latitude: lat, longitude: long, accuracy } = position.coords;
                     
-                    let detailName = 'N/A';
-                    if (record.type === 'class') {
-                        const course = COURSES.find(c => c.id === record.detail);
-                        detailName = course ? course.name : record.detail;
-                    } else if (record.type === 'clinicals') {
-                        const department = DEPARTMENTS.find(d => d.id === record.detail);
-                        detailName = department ? department.name : record.detail;
-                    }
-
-                    const locationDisplay = record.location_data || 'Location Unknown';
-
-                    const item = document.createElement('div');
-                    item.className = 'p-3 bg-gray-50 rounded-lg shadow-sm border border-gray-200';
-                    item.innerHTML = `
-                        <div class="flex justify-between items-start">
-                            <div>
-                                <p class="font-medium text-slate-700">${typeDisplay} Check-in: <span class="text-emerald-600">${detailName}</span></p>
-                            </div>
-                            <span class="text-xs text-gray-500">${dateStr}</span>
-                        </div>
-                        <p class="text-xs text-gray-400 mt-1 truncate">@ ${locationDisplay}</p>
-                    `;
-                    attendanceList.appendChild(item);
-                });
-            };
-
-            // Initial data fetch
-            sb.from(ATTENDANCE_TABLE)
-                .select('*')
-                .eq('user_id', userId)
-                .order('created_at', { ascending: false })
-                .limit(10)
-                .then(({ data, error }) => {
-                    if (error) throw error;
-                    renderList(data);
-                })
-                .catch(e => {
-                    console.error("Error initial loading attendance:", e);
-                    attendanceList.innerHTML = '<p class="text-red-500">Error loading attendance history. Check console for details.</p>';
-                });
-
-            // Set up Realtime listener for new inserts
-            sb.channel('public:attendance')
-                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: ATTENDANCE_TABLE, filter: `user_id=eq.${userId}` }, (payload) => {
-                    // Refetch all and re-render to ensure sorting and limits are respected
-                    sb.from(ATTENDANCE_TABLE)
-                        .select('*')
-                        .eq('user_id', userId)
-                        .then(({ data, error }) => {
-                            if (error) throw error;
-                            renderList(data);
-                        })
-                        .catch(e => console.error("Error updating list via Realtime:", e));
-                })
-                .subscribe();
-        }
-
-        /**
-         * Gets the user's current position and converts it to a readable address using LocationIQ.
-         * @returns {Promise<string>} The formatted address string.
-         */
-        async function getGeolocationAndReverseGeocode() {
-            return new Promise((resolve, reject) => {
-                geolocStatus.textContent = 'Status: Fetching geolocation...';
-                
-                // 1. Get Geolocation
-                if (!navigator.geolocation) {
-                    reject(new Error("Geolocation is not supported by this browser."));
-                    return;
-                }
-
-                navigator.geolocation.getCurrentPosition(async (position) => {
-                    const lat = position.coords.latitude;
-                    const lon = position.coords.longitude;
-                    
-                    geolocStatus.textContent = `Status: Location found (${lat.toFixed(4)}, ${lon.toFixed(4)}). Reverse geocoding...`;
-
-                    // 2. Reverse Geocode via LocationIQ
-                    const url = new URL(LOCATIONIQ_API_URL);
-                    url.searchParams.append('key', LOCATIONIQ_API_KEY);
-                    url.searchParams.append('lat', lat);
-                    url.searchParams.append('lon', lon);
-                    url.searchParams.append('format', 'json');
+                    geoMessage.textContent = Location acquired. Accuracy: ${accuracy.toFixed(2)}m. Getting address...;
 
                     try {
-                        const response = await fetch(url.toString());
+                        // ** LOCATIONIQ Reverse Geocoding API Call **
+                        const url = ${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${lat}&lon=${long}&format=json;
+                        const response = await fetch(url);
                         const data = await response.json();
 
-                        if (data.error) {
-                            console.warn("LocationIQ Error:", data.error);
-                            resolve(`Lat: ${lat.toFixed(4)}, Lon: ${lon.toFixed(4)} (Geocode failed)`);
-                            return;
-                        }
+                        const address = data.display_name || Lat: ${lat.toFixed(6)}, Lon: ${long.toFixed(6)};
 
-                        // Format the address for display
-                        const address = data.display_name || `Lat: ${lat.toFixed(4)}, Lon: ${lon.toFixed(4)}`;
-                        geolocStatus.textContent = `Status: Location resolved.`;
-                        resolve(address);
+                        geoMessage.textContent = Address: ${address}. Ready for check-in.;
+                        checkInButton.disabled = false;
+                        resolve({ latitude: lat, longitude: long, accuracy: accuracy, address: address });
 
                     } catch (error) {
-                        console.error("LocationIQ Fetch Error:", error);
-                        resolve(`Lat: ${lat.toFixed(4)}, Lon: ${lon.toFixed(4)} (API error)`);
+                        console.error('Reverse Geocoding Error:', error);
+                        geoMessage.textContent = Location: ${lat.toFixed(6)}, ${long.toFixed(6)}. (Address lookup failed);
+                        checkInButton.disabled = false;
+                        resolve({ latitude: lat, longitude: long, accuracy: accuracy, address: null }); // Resolve even if address fails
                     }
-                }, (error) => {
-                    let errorMessage = 'Geolocation failed.';
-                    switch(error.code) {
-                        case error.PERMISSION_DENIED:
-                            errorMessage = "Location required: Please allow location access to check-in.";
-                            break;
-                        case error.POSITION_UNAVAILABLE:
-                            errorMessage = "Location information is unavailable.";
-                            break;
-                        case error.TIMEOUT:
-                            errorMessage = "Location request timed out.";
-                            break;
-                        default:
-                            errorMessage = "An unknown error occurred while getting location.";
-                            break;
-                    }
-                    geolocStatus.textContent = `Status: ${errorMessage}`;
-                    reject(new Error(errorMessage));
-                }, {
-                    enableHighAccuracy: true,
-                    timeout: 10000,
-                    maximumAge: 0
-                });
-            });
-        }
 
-
-        /**
-         * Handles the final check-in process, including geolocation and Supabase insertion.
-         */
-        async function handleCheckIn(e) {
-            e.preventDefault();
-            checkInButton.disabled = true;
-            checkInButton.innerHTML = '<span class="loader-small mr-2"></span> Submitting...';
-            
-            const sessionType = sessionTypeSelect.value;
-            const sessionDetail = sessionDetailSelect.value;
-
-            if (!sessionType || !sessionDetail) {
-                showToast("Please select both Session Type and Detail.", true);
-                checkInButton.disabled = false;
-                checkInButton.textContent = 'Check In';
-                return;
-            }
-
-            let locationData = 'Location Not Recorded';
-
-            try {
-                // 1. Get location data
-                locationData = await getGeolocationAndReverseGeocode();
-                
-                // 2. Insert into Supabase
-                const { error } = await sb
-                    .from(ATTENDANCE_TABLE)
-                    .insert({
-                        user_id: currentUserId,
-                        app_id: APP_ID, // Include app_id for separation
-                        type: sessionType,
-                        detail: sessionDetail,
-                        location_data: locationData,
-                    });
-
-                if (error) throw error;
-                
-                showToast("Attendance successfully recorded!", false);
-                
-                // 3. Reset form state
-                sessionTypeSelect.value = '';
-                sessionDetailSelect.innerHTML = '<option value="" disabled selected>Select a Detail</option>';
-                document.getElementById('session-detail-label').textContent = 'Detail (Course/Department):';
-                geolocStatus.textContent = 'Status: Check-in complete.';
-                validateAttendanceForm();
-
-            } catch (error) {
-                console.error("Error during check-in or geolocation:", error);
-                showToast(`Check-in failed: ${error.message || 'Check console for details.'}`, true);
-            } finally {
-                checkInButton.textContent = 'Check In';
-                validateAttendanceForm();
-            }
-        }
-
-
-        // --- Initialization ---
-
-        document.addEventListener('DOMContentLoaded', () => {
-            
-            // 1. Set up Guest User ID (to replace Firebase anonymous user logic)
-            currentUserId = getOrCreateGuestId();
-            userIdDisplay.textContent = currentUserId;
-
-            // 2. Load Content
-            loadingScreen.classList.add('hidden');
-            contentArea.classList.remove('hidden');
-
-            // 3. Setup Supabase Listeners
-            ensureDefaultWelcomeMessage();
-            loadWelcomeMessage();
-            loadRecentAttendance(currentUserId);
-            
-            showToast(`Welcome! You are operating as Guest ID: ${currentUserId.substring(0, 8)}...`);
-
-            // --- Event Listeners ---
-            
-            // Attendance check-in event
-            attendanceForm.addEventListener('submit', handleCheckIn);
-
-            menuToggle.addEventListener('click', toggleSidebar);
-
-            // Navigation handler
-            navLinks.forEach(link => {
-                link.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    const tabId = link.getAttribute('data-tab');
-                    if (tabId) {
-                        showTab(tabId);
-                    }
-                    // Close sidebar on small screens after clicking a link
-                    if (window.innerWidth < 1024 && !sidebar.classList.contains('-translate-x-full')) {
-                        toggleSidebar();
-                    }
-                });
-            });
-
-            // The Logout button for Guest Mode simply clears the local ID and refreshes
-            logoutLink.addEventListener('click', (e) => {
-                e.preventDefault();
-                showToast("Resetting local Guest ID.", false);
-                localStorage.removeItem(GUEST_ID_KEY);
-                // Simple redirect to reload the application with a new UUID
-                setTimeout(() => window.location.reload(), 1000); 
-            });
-
-            // Handle session type change to update details
-            sessionTypeSelect.addEventListener('change', (e) => {
-                updateAttendanceDetail(e.target.value);
-            });
-
-            // Detail change triggers validation (user must select an item)
-            sessionDetailSelect.addEventListener('change', validateAttendanceForm);
-
-            // Initial form validation on load
-            validateAttendanceForm();
+                },
+                (error) => {
+                    checkInButton.disabled = false;
+                    geoMessage.textContent = Error getting location: ${error.message}. Please enable GPS.;
+                    geoMessage.style.color = '#EF4444';
+                    reject(error);
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
         });
-    </script>
-</body>
-</html>
+    }
+    
+    async function geoCheckIn() {
+        if (!currentUserId) {
+            geoMessage.textContent = 'Error: Not logged in.';
+            geoMessage.style.color = '#EF4444';
+            return;
+        }
+
+        checkInButton.disabled = true;
+        geoMessage.textContent = 'Initiating check-in...';
+        geoMessage.style.color = 'var(--color-primary)';
+
+        try {
+            const locationData = await getLocationAndAddress();
+            const sessionType = document.getElementById('session-type').value;
+
+            // 1. Insert into geo_attendance_logs (The precise log)
+            const { error: geoLogError } = await sb
+                .from('geo_attendance_logs')
+                .insert({
+                    student_id: currentUserId,
+                    session_type: sessionType,
+                    latitude: locationData.latitude,
+                    longitude: locationData.longitude,
+                    accuracy_meters: locationData.accuracy,
+                    address_snapshot: locationData.address
+                    // check_in_time is set to NOW() by default in Postgres
+                });
+
+            if (geoLogError) {
+                throw new Error(Geo Log Error: ${geoLogError.message});
+            }
+
+            // 2. Insert into attendance (The simpler, old attendance table - assuming a default course/rotation for simplicity)
+            const { error: attendanceError } = await sb
+                .from('attendance')
+                .insert({
+                    student_id: currentUserId,
+                    course_or_rotation: currentUserProfile.program_type || 'General',
+                    session_type: sessionType,
+                    date: new Date().toISOString().split('T')[0], // Today's date (YYYY-MM-DD)
+                    status: 'Present'
+                });
+
+            if (attendanceError) {
+                // Not a fatal error, but worth logging
+                console.warn('Could not insert into simple attendance table:', attendanceError.message);
+            }
+
+            geoMessage.textContent = Check-in successful! Logged for ${sessionType}.;
+            geoMessage.style.color = 'var(--color-secondary)';
+            
+            // Reload history immediately
+            loadGeoAttendanceHistory(currentUserId);
+            loadAttendance(currentUserId);
+
+        } catch (error) {
+            console.error("Check-in Failed:", error);
+            geoMessage.textContent = Check-in FAILED: ${error.message};
+            geoMessage.style.color = '#EF4444';
+        } finally {
+            checkInButton.disabled = false;
+        }
+    }
+
+
+    // *************************************************************************
+    // *** 5. INITIALIZATION LOGIC ***
+    // *************************************************************************
+    
+    async function initialize() {
+        const { data: { user } } = await sb.auth.getUser();
+
+        if (user) {
+            currentUserId = user.id;
+            // Load essential data
+            await loadProfile(currentUserId); 
+            loadCourses();
+            
+            // Set up real-time
+            subscribeToRealtimeChannels(currentUserId);
+            
+            // Load dashboard tabs
+            showTab('dashboard'); 
+            
+        } else {
+            // Not logged in, redirect to login page
+            window.location.href = "login.html"; 
+        }
+    }
+
+    // Call initialization on page load
+    initialize();
+
+</script>
