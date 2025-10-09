@@ -233,11 +233,11 @@
             border-radius: var(--border-radius);
             margin-bottom: 30px;
             box-shadow: var(--shadow-md);
+            border-top: 5px solid var(--color-primary);
             display: flex;
             flex-direction: column;
             gap: 15px;
             flex-wrap: wrap;
-            border-top: 5px solid var(--color-primary);
         }
         .control-group {
             display: flex;
@@ -635,7 +635,7 @@
 
                 <h3>Geo Attendance History (Check-in Logs)</h3>
                 <table>
-                    <thead><tr><th>Time</th><th>Session Type</th><th>Location (Lat, Long)</th><th>Accuracy (m)</th><th>Verified by Admin</th></tr></thead>
+                    <thead><tr><th>Time</th><th>Session Type</th><th>Location (Friendly Name)</th><th>Accuracy (m)</th><th>Verified by Admin</th></tr></thead>
                     <tbody id="geo-attendance-history">
                         <tr><td colspan="5">Loading geo check-in history...</td></tr>
                     </tbody>
@@ -681,9 +681,8 @@
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // ** LOCATIONIQ CONFIGURATION (Geocoding API) - REPLACE KEY WITH YOUR OWN! **
-    // Get a free key from locationiq.com
-    const LOCATIONIQ_API_KEY = 'pk.cbe61eae35ecbe1d1d682c347d81381c'; // <--- MUST BE REPLACED
+    // ** LOCATIONIQ CONFIGURATION (Geocoding API) **
+    const LOCATIONIQ_API_KEY = 'pk.cbe61eae35ecbe1d1d682c347d81381c'; // <--- API KEY INJECTED
     const LOCATIONIQ_API_URL = 'https://us1.locationiq.com/v1/reverse.php';
 
     // ** STATIC MOCK DATA (REPLACE WITH REAL SUPABASE TABLES) **
@@ -1033,27 +1032,24 @@
             <tr>
                 <td>${new Date(a.check_in_time).toLocaleString()}</td>
                 <td>${a.session_type}</td>
-                <td><span title="${a.address_snapshot || 'Address N/A'}">${a.latitude.toFixed(6)}, ${a.longitude.toFixed(6)}</span></td>
+                <td><span title="${a.latitude.toFixed(6)}, ${a.longitude.toFixed(6)}">${a.address_snapshot || 'Address N/A'}</span></td>
                 <td>${a.accuracy_meters.toFixed(2)}</td>
                 <td>${a.is_verified ? 'Yes' : 'No (Pending)'}</td>
             </tr>`).join('');
     }
 
-    // *** PLACEHOLDER FUNCTIONS ***
+    // *** PLACEHOLDER FUNCTIONS (To ensure all tabs load something) ***
     async function loadExams() {
-        // This function needs to be filled with logic to fetch exam data
         const table = document.getElementById('exams-table');
         table.innerHTML = `<tr><td colspan="3">No upcoming CATS/Exams found.</td></tr>`;
     }
 
     async function loadResources() {
-        // This function needs to be filled with logic to fetch learning resources
         const list = document.getElementById('resources-list');
         list.innerHTML = `<p>No learning resources found for your program.</p>`;
     }
 
     async function loadStudentMessages() {
-        // This function needs to be filled with logic to fetch messages from admin/instructors
         const list = document.getElementById('messages-list');
         list.innerHTML = `<p>No new messages.</p>`;
     }
@@ -1135,7 +1131,7 @@
      * Calls the LocationIQ API to get a human-readable address.
      */
     async function reverseGeocode(lat, lon) {
-        if (LOCATIONIQ_API_KEY === 'YOUR_LOCATIONIQ_API_KEY_HERE') {
+        if (LOCATIONIQ_API_KEY === 'YOUR_LOCATIONIQ_API_KEY_HERE' || !LOCATIONIQ_API_KEY) {
              console.warn("LocationIQ API key is not set. Using mock address.");
              return `[MOCK ADDRESS]: Lat: ${lat.toFixed(4)}, Lon: ${lon.toFixed(4)}`;
         }
@@ -1195,7 +1191,7 @@
 
             const address = await reverseGeocode(latitude, longitude); 
             
-            // Display the successful address to the user!
+            // Display the friendly address to the user!
             geoMessage.textContent = `3. Submitting check-in for ${selectedTarget} at: ${address}...`;
 
             // 3. Insert into the geo_attendance_logs table
