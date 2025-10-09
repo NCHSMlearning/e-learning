@@ -3,25 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NCHSM Student Portal</title>
+    <title>NCHSM Student Portal (Supabase)</title>
     <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load Supabase CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-        /*
-        * CRITICAL FIX: Only show the active tab content
-        */
+        /* Set Inter font and warmer background */
+        body {
+            font-family: 'Inter', sans-serif;
+            min-height: 100vh;
+        }
+
+        /* CRITICAL FIX: Only show the active tab content */
         .tab-content {
             display: none;
         }
         .tab-content.active {
             display: block;
-        }
-
-        /* Set Inter font and warmer background */
-        body {
-            font-family: 'Inter', sans-serif;
-            min-height: 100vh;
-            background-color: #f7f9fb; /* Light background */
         }
 
         /* Sidebar link styling */
@@ -40,14 +39,14 @@
             color: #ffffff;
             font-weight: 600;
         }
-        
+
         /* Loading Spinner Animation */
         .loader {
             border: 4px solid #e2e8f0;
             border-top: 4px solid #10b981;
             border-radius: 50%;
-            width: 30px;
-            height: 30px;
+            width: 24px;
+            height: 24px;
             animation: spin 1s linear infinite;
         }
         @keyframes spin {
@@ -55,593 +54,641 @@
             100% { transform: rotate(360deg); }
         }
 
-        /* Toast Message Styling */
-        .toast {
-            transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
-            transform: translateY(20px);
-            opacity: 0;
-        }
-        .toast.show {
-            transform: translateY(0);
-            opacity: 1;
+        /* Utility for loading text/placeholder */
+        .loading-placeholder {
+            min-height: 1.5rem;
         }
     </style>
 </head>
 <body class="bg-gray-50">
-    <!-- Main App Container -->
-    <div class="flex h-screen overflow-hidden">
-        
-        <!-- Sidebar (Fixed on Desktop, Hidden on Mobile) -->
-        <aside id="sidebar" class="fixed inset-y-0 left-0 transform -translate-x-full lg:translate-x-0 lg:static lg:w-64 w-64 bg-slate-900 text-white z-50 transition-transform duration-300 ease-in-out p-4 flex flex-col shadow-xl">
-            <!-- Logo and Header -->
-            <div class="mb-8 p-2">
-                <h1 class="text-2xl font-bold text-emerald-400">NCHSM Portal</h1>
-                <p class="text-sm text-slate-400">Student Dashboard</p>
-            </div>
 
-            <!-- Navigation Links -->
+    <!-- Toast Notification Area -->
+    <div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2"></div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-xl shadow-2xl flex items-center space-x-3">
+            <div class="loader"></div>
+            <p class="font-semibold text-gray-700">Loading Student Portal...</p>
+        </div>
+    </div>
+
+    <!-- Main Application Container -->
+    <div id="app-container" class="min-h-screen lg:flex">
+
+        <!-- Sidebar (Navigation) -->
+        <aside id="sidebar" class="fixed lg:sticky top-0 left-0 h-full w-64 bg-slate-900 text-white p-4 flex flex-col transition-transform duration-300 ease-in-out z-40 lg:translate-x-0 -translate-x-full shadow-2xl">
+            <h2 class="text-2xl font-bold mb-8 text-emerald-400">NCHSM Student</h2>
+
             <nav class="flex-grow space-y-2">
+                <!-- 1. Dashboard (New Default Active Tab) -->
                 <a href="#" class="nav-link active" data-tab="dashboard">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1"></path></svg>
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
                     Dashboard
                 </a>
+
+                <!-- 2. Profile (Used for viewing profile data) -->
                 <a href="#" class="nav-link" data-tab="profile">
                     <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
                     Profile
                 </a>
+
+                <!-- 3. My Courses -->
                 <a href="#" class="nav-link" data-tab="my-courses">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.205 5 7.5 5A3.5 3.5 0 007 10.5v2M12 6.253C13.168 5.477 14.795 5 16.5 5A3.5 3.5 0 0117 10.5v2m-2-2h2m-2 4h2m-2 4h2m-6-4h.01M16 16v-4m-6 4h.01"></path></svg>
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
                     My Courses
                 </a>
+
+                <!-- 4. Attendance (Used for check-in) -->
                 <a href="#" class="nav-link" data-tab="attendance">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h.01M16 11h.01M9 15h.01M15 15h.01M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
                     Attendance
                 </a>
+
+                <!-- 5. CATS/Exams -->
                 <a href="#" class="nav-link" data-tab="cats-exams">
                     <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
                     CATS/Exams
                 </a>
+
+                <!-- 6. Resources -->
                 <a href="#" class="nav-link" data-tab="resources">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.205 5 7.5 5A3.5 3.5 0 007 10.5v2M12 6.253C13.168 5.477 14.795 5 16.5 5A3.5 3.5 0 0117 10.5v2M16.5 5h.01M17 10.5h.01"></path></svg>
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H5a2 2 0 00-2 2v5a2 2 0 002 2z"></path></svg>
                     Resources
                 </a>
+
+                <!-- 7. Messages -->
                 <a href="#" class="nav-link" data-tab="messages">
-                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.645A19.56 19.56 0 0212 2a1 1 0 011 1v2a1 1 0 001 1h4a1 1 0 011 1v4a1 1 0 001 1z"></path></svg>
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.155A12.29 12.29 0 012 12C2 7.582 6.03 4 11 4s9 3.582 9 8z"></path></svg>
                     Messages
                 </a>
             </nav>
 
-            <!-- Logout Link -->
             <div class="mt-8 pt-4 border-t border-slate-700">
-                <a href="#" id="logout-link" class="nav-link bg-red-700 hover:bg-red-600 text-white justify-center">
-                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                <a href="#" id="logout-link" class="nav-link text-red-400 hover:bg-red-900">
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
                     Logout
                 </a>
             </div>
         </aside>
 
-        <!-- Content Area -->
-        <main class="flex-1 overflow-x-hidden overflow-y-auto">
-            <!-- Top Bar/Header -->
-            <header class="bg-white shadow-md p-4 flex justify-between items-center sticky top-0 z-40">
-                <button id="menu-toggle" class="lg:hidden text-slate-900 focus:outline-none">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>
-                </button>
-                <div class="flex-grow">
-                    <h2 id="current-tab-title" class="text-xl font-semibold text-slate-800 ml-4">Dashboard</h2>
-                </div>
-                <div class="flex items-center space-x-4">
-                    <div id="auth-status" class="text-sm text-gray-500">Loading...</div>
-                    <div id="profile-initial" class="w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center text-white font-bold cursor-pointer shadow-lg">?</div>
-                </div>
+        <!-- Menu Toggle Button for Mobile -->
+        <button id="menu-toggle" class="lg:hidden fixed top-4 left-4 z-50 p-2 bg-slate-900 text-white rounded-full shadow-lg">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+        </button>
+
+        <!-- Main Content Area -->
+        <main class="flex-grow p-4 lg:p-8 ml-0 lg:ml-64 transition-all duration-300">
+            <header class="mb-8 border-b pb-4">
+                <h1 id="user-header" class="text-xl font-extrabold text-gray-900">Welcome, Student!</h1>
+                <p id="user-id-display" class="text-xs text-gray-500 break-all mt-1">Session ID: Loading...</p>
             </header>
-
-            <!-- Page Content -->
-            <div class="p-4 lg:p-8">
-                <!-- Tab Content Containers -->
-
-                <!-- Dashboard Tab -->
-                <div id="dashboard" class="tab-content active bg-white p-6 rounded-xl shadow-lg">
-                    <h3 class="text-2xl font-bold text-slate-700 mb-4">Welcome Back!</h3>
-                    <p class="text-gray-600">This is your main dashboard. Use the sidebar to navigate to your courses, check attendance, or view exam results.</p>
-                    
-                    <div id="dashboard-user-info" class="mt-6 p-4 bg-emerald-50 rounded-lg border border-emerald-200">
-                        <h4 class="text-lg font-semibold text-emerald-700">Student Status</h4>
-                        <div id="dashboard-user-id" class="text-sm text-gray-600 mt-2 break-all">User ID: N/A</div>
+            
+            <!-- NEW: Dashboard Tab Content (Default View) -->
+            <div id="dashboard" class="tab-content active w-full p-4 lg:p-8">
+                <h2 class="text-3xl font-bold text-gray-800 mb-6">Student Dashboard</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <!-- Dashboard Card 1: Attendance Summary -->
+                    <div class="bg-white p-6 rounded-xl shadow-lg border-l-4 border-emerald-500">
+                        <p class="text-sm font-medium text-gray-500">Attendance Status</p>
+                        <p class="text-2xl font-bold text-gray-900 mt-1">Checked In <span class="text-emerald-500">Live</span></p>
+                        <p class="text-xs text-gray-500 mt-2">Last check-in: 10:30 AM (Funda. Lecture)</p>
+                    </div>
+                    <!-- Dashboard Card 2: Upcoming CATS -->
+                    <div class="bg-white p-6 rounded-xl shadow-lg border-l-4 border-blue-500">
+                        <p class="text-sm font-medium text-gray-500">Upcoming CAT/Exam</p>
+                        <p class="text-2xl font-bold text-gray-900 mt-1">Pathophysiology</p>
+                        <p class="text-xs text-gray-500 mt-2">Date: Next Friday, 2 PM</p>
+                    </div>
+                    <!-- Dashboard Card 3: Notifications/Messages -->
+                    <div class="bg-white p-6 rounded-xl shadow-lg border-l-4 border-amber-500">
+                        <p class="text-sm font-medium text-gray-500">New Messages</p>
+                        <p class="text-2xl font-bold text-gray-900 mt-1">3 Unread</p>
+                        <p class="text-xs text-gray-500 mt-2">From: Admin, Course Coordinator</p>
                     </div>
                 </div>
-
-                <!-- Profile Tab -->
-                <div id="profile" class="tab-content bg-white p-6 rounded-xl shadow-lg">
-                    <h3 class="text-2xl font-bold text-slate-700 mb-4">My Profile</h3>
-                    <div class="space-y-4">
-                        <p class="text-gray-600">Name: <span id="profile-name" class="font-medium">N/A</span></p>
-                        <p class="text-gray-600">Email: <span id="profile-email" class="font-medium">N/A</span></p>
-                        <p class="text-gray-600 break-all">Current User ID (for collaboration): <span id="profile-user-id" class="font-medium">N/A</span></p>
-                        <button id="refresh-profile-button" class="mt-4 bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition duration-150 shadow-md">
-                            Refresh Data
-                        </button>
-                    </div>
+                <h3 class="text-2xl font-bold text-gray-800 mt-10 mb-4">Quick Actions</h3>
+                <div class="flex flex-wrap gap-4">
+                    <button onclick="showTab('attendance')" class="py-2 px-4 bg-emerald-500 text-white rounded-lg shadow hover:bg-emerald-600 transition">Check In Now</button>
+                    <button onclick="showTab('profile')" class="py-2 px-4 bg-blue-500 text-white rounded-lg shadow hover:bg-blue-600 transition">Update Profile</button>
+                    <button onclick="showTab('my-courses')" class="py-2 px-4 bg-purple-500 text-white rounded-lg shadow hover:bg-purple-600 transition">View Courses</button>
                 </div>
+            </div>
 
-                <!-- My Courses Tab -->
-                <div id="my-courses" class="tab-content bg-white p-6 rounded-xl shadow-lg">
-                    <h3 class="text-2xl font-bold text-slate-700 mb-4">My Courses</h3>
-                    <p class="text-gray-600">List of enrolled courses and materials will appear here.</p>
-                    <!-- Course list will be dynamically populated or mocked here -->
-                    <div id="course-list" class="mt-4 space-y-4">
-                        <div class="bg-gray-100 p-4 rounded-lg shadow-sm">
-                            <h4 class="font-semibold text-lg text-slate-700">Nursing Fundamentals (NF101)</h4>
-                            <p class="text-sm text-gray-500">Dr. Jane Smith</p>
-                            <span class="inline-block mt-2 px-3 py-1 text-sm font-semibold text-emerald-800 bg-emerald-200 rounded-full">Active</span>
-                        </div>
-                        <div class="bg-gray-100 p-4 rounded-lg shadow-sm">
-                            <h4 class="font-semibold text-lg text-slate-700">Pathophysiology (PAT203)</h4>
-                            <p class="text-sm text-gray-500">Prof. John Doe</p>
-                            <span class="inline-block mt-2 px-3 py-1 text-sm font-semibold text-yellow-800 bg-yellow-200 rounded-full">In Progress</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Attendance Tab - CRITICAL FOCUS FOR THIS UPDATE -->
-                <div id="attendance" class="tab-content bg-white p-6 rounded-xl shadow-lg">
-                    <h3 class="text-2xl font-bold text-slate-700 mb-4">Daily Attendance Check-In</h3>
-                    <p class="text-gray-600 mb-6">Select the session type and detail, then click Check-In to record your attendance.</p>
-                    
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <!-- Session Type -->
-                        <div class="mb-4">
-                            <label for="session-type" class="block text-sm font-medium text-gray-700">Session Type</label>
-                            <select id="session-type" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm rounded-lg shadow-sm">
+            <!-- Attendance Tab Content -->
+            <div id="attendance" class="tab-content w-full p-4 lg:p-8">
+                <h2 class="text-3xl font-bold text-gray-800 mb-6">Attendance Check-in</h2>
+                <div class="bg-white p-6 rounded-xl shadow-lg max-w-xl">
+                    <form id="attendance-form" class="space-y-4">
+                        <div>
+                            <label for="session-type" class="block text-sm font-medium text-gray-700 mb-1">Session Type</label>
+                            <select id="session-type" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 transition duration-150">
                                 <option value="">Select Session Type</option>
                                 <option value="Class Session">Class Session</option>
                                 <option value="Clinical">Clinical</option>
                             </select>
                         </div>
-        
-                        <!-- Session Detail (Dynamically Updated) -->
-                        <div class="mb-4">
-                            <label for="session-detail" class="block text-sm font-medium text-gray-700">Session Detail</label>
-                            <select id="session-detail" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm rounded-lg shadow-sm" disabled>
-                                <option value="">Select detail after choosing type</option>
+                        <div id="session-detail-group" class="hidden">
+                            <label for="session-detail" class="block text-sm font-medium text-gray-700 mb-1">Session Detail</label>
+                            <select id="session-detail" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 transition duration-150">
+                                <!-- Options populated by JS -->
                             </select>
                         </div>
-                    </div>
-
-                    <!-- Check-In Button -->
-                    <button id="check-in-button" disabled class="mt-4 w-full md:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-6 rounded-xl transition duration-150 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
-                        Check-In Now
-                    </button>
-                    
-                    <div id="check-in-status" class="mt-4 p-3 rounded-lg text-sm text-center hidden"></div>
-                    
-                    <!-- Attendance History -->
-                    <h4 class="text-xl font-semibold text-slate-700 mt-8 mb-4 border-t pt-4">Your Recent Attendance</h4>
-                    <div id="attendance-list" class="space-y-3">
-                        <p class="text-gray-500">No attendance records found.</p>
-                    </div>
+                        <button type="submit" id="check-in-button" disabled class="w-full py-3 px-4 bg-gray-400 text-white font-semibold rounded-lg shadow-md hover:bg-gray-500 transition duration-300 disabled:opacity-50 disabled:cursor-not-allowed">
+                            Select Session Details
+                        </button>
+                    </form>
                 </div>
                 
-                <!-- CATS/Exams Tab -->
-                <div id="cats-exams" class="tab-content bg-white p-6 rounded-xl shadow-lg">
-                    <h3 class="text-2xl font-bold text-slate-700 mb-4">CATS & Exams</h3>
-                    <p class="text-gray-600">View your continuous assessment tests (CATS) and exam results here.</p>
-                    <div id="cats-exams-content" class="mt-4">
-                        <div class="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
-                            <h4 class="font-semibold text-lg text-yellow-700">Upcoming Exam</h4>
-                            <p class="text-sm text-gray-600">Pathophysiology Mid-Term: November 15th</p>
+                <h3 class="text-2xl font-bold text-gray-800 mt-10 mb-4">Your Recent Check-ins</h3>
+                <div id="attendance-list" class="space-y-4 max-w-4xl">
+                    <p class="text-gray-500" id="attendance-status">Loading attendance history...</p>
+                </div>
+            </div>
+
+            <!-- Registration Tab Content (Kept hidden but accessible via Profile tab's "Edit" button) -->
+            <div id="registration" class="tab-content w-full p-4 lg:p-8">
+                <h2 class="text-3xl font-bold text-gray-800 mb-6">Student Data Update (Registration)</h2>
+                <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100 max-w-lg mx-auto">
+                    <p class="text-gray-600 mb-6">Please enter or update your details below. This information will be saved to your profile.</p>
+                    <form id="register-form" class="space-y-4">
+                        <input type="text" id="full_name" placeholder="Full Name" required
+                               class="w-full p-3 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 transition duration-150">
+                        <input type="email" id="email" placeholder="Email" required
+                               class="w-full p-3 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 transition duration-150">
+                        <input type="text" id="student_id_number" placeholder="Admission/Student ID Number" required
+                               class="w-full p-3 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 transition duration-150">
+                        <input type="tel" id="phone" placeholder="Phone Number" required
+                               class="w-full p-3 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 transition duration-150">
+                        
+                        <button type="submit" id="save-data-button" class="w-full py-3 px-4 bg-emerald-500 text-white font-semibold rounded-lg shadow-md hover:bg-emerald-600 transition duration-300">
+                            Save My Profile Data
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Profile Tab Content -->
+            <div id="profile" class="tab-content w-full p-4 lg:p-8">
+                <h2 class="text-3xl font-bold text-gray-800 mb-6">Student Profile</h2>
+                <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100 max-w-lg mx-auto">
+                    <div class="space-y-6">
+                        <!-- Full Name -->
+                        <div class="border-b pb-3">
+                            <p class="text-sm font-medium text-gray-500">Full Name</p>
+                            <p id="profile-full_name" class="text-xl font-semibold text-gray-800 loading-placeholder">Loading...</p>
+                        </div>
+                        <!-- Email -->
+                        <div class="border-b pb-3">
+                            <p class="text-sm font-medium text-gray-500">Email</p>
+                            <p id="profile-email" class="text-xl font-semibold text-gray-800 loading-placeholder">Loading...</p>
+                        </div>
+                        <!-- Student ID Number -->
+                        <div class="border-b pb-3">
+                            <p class="text-sm font-medium text-gray-500">Student ID Number</p>
+                            <p id="profile-student_id_number" class="text-xl font-semibold text-gray-800 loading-placeholder">Loading...</p>
+                        </div>
+                        <!-- Phone Number -->
+                        <div class="pb-3">
+                            <p class="text-sm font-medium text-gray-500">Phone Number</p>
+                            <p id="profile-phone" class="text-xl font-semibold text-gray-800 loading-placeholder">Loading...</p>
                         </div>
                     </div>
+                    <button onclick="showTab('registration')" class="mt-8 w-full py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition">
+                        Edit My Data
+                    </button>
+                    <p class="text-xs mt-4 text-gray-400 text-center">Your data is securely stored in Supabase (profiles table).</p>
                 </div>
-
-                <!-- Resources Tab -->
-                <div id="resources" class="tab-content bg-white p-6 rounded-xl shadow-lg">
-                    <h3 class="text-2xl font-bold text-slate-700 mb-4">Resources</h3>
-                    <p class="text-gray-600">Access reading materials, lecture notes, and library links.</p>
-                </div>
-                
-                <!-- Messages Tab -->
-                <div id="messages" class="tab-content bg-white p-6 rounded-xl shadow-lg">
-                    <h3 class="text-2xl font-bold text-slate-700 mb-4">Messages</h3>
-                    <p class="text-gray-600">Your communication inbox.</p>
-                </div>
-
             </div>
+
+            <!-- My Courses Tab Content -->
+            <div id="my-courses" class="tab-content w-full p-4 lg:p-8">
+                <h2 class="text-3xl font-bold text-gray-800">My Courses</h2>
+                <p class="mt-4 text-gray-600">This section will show a list of your registered courses and important course materials.</p>
+            </div>
+
+            <!-- NEW: CATS/Exams Tab Content -->
+            <div id="cats-exams" class="tab-content w-full p-4 lg:p-8">
+                <h2 class="text-3xl font-bold text-gray-800">CATS & Examination Results</h2>
+                <p class="mt-4 text-gray-600">This section will display your continuous assessment test (CAT) scores and official exam results.</p>
+            </div>
+
+            <!-- NEW: Resources Tab Content -->
+            <div id="resources" class="tab-content w-full p-4 lg:p-8">
+                <h2 class="text-3xl font-bold text-gray-800">Student Resources</h2>
+                <p class="mt-4 text-gray-600">Find useful documents, reading lists, and external links here.</p>
+            </div>
+
+            <!-- NEW: Messages Tab Content -->
+            <div id="messages" class="tab-content w-full p-4 lg:p-8">
+                <h2 class="text-3xl font-bold text-gray-800">Messages & Notifications</h2>
+                <p class="mt-4 text-gray-600">Check your inbox for official messages from the administration and faculty.</p>
+            </div>
+
         </main>
     </div>
 
-    <!-- Loading Overlay -->
-    <div id="loading-overlay" class="fixed inset-0 bg-white bg-opacity-75 z-[100] flex items-center justify-center hidden">
-        <div class="loader"></div>
-        <p class="ml-4 text-slate-700 font-medium">Authenticating...</p>
-    </div>
-
-    <!-- Toast Message Container -->
-    <div id="toast-container" class="fixed bottom-5 right-5 z-50 space-y-3">
-        <!-- Toast messages will be injected here -->
-    </div>
-
-    <!-- Firebase Script Includes -->
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, orderBy, limit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        // --- CONFIGURATION: UPDATE THESE VALUES ***
+        const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
+        
+        // ** LOCATIONIQ CONFIGURATION (Geocoding API) **
+        const LOCATIONIQ_API_KEY = 'pk.cbe61eae35ecbe1d1d682c347d81381c';
+        const LOCATIONIQ_API_URL = 'https://us1.locationiq.com/v1/reverse.php';
+        
+        // --- GLOBAL VARIABLES ---
+        let sb = null; // Supabase Client
+        let userId = null; // Simulated User ID
+        const SESSION_KEY = 'nchsm_student_portal_user_id';
 
-        // Global Variables
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        // --- DOM Elements ---
+        const appContainer = document.getElementById('app-container');
+        const navLinks = document.querySelectorAll('.nav-link[data-tab]');
+        const sidebar = document.getElementById('sidebar');
+        const menuToggle = document.getElementById('menu-toggle');
+        const logoutLink = document.getElementById('logout-link');
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const attendanceList = document.getElementById('attendance-list');
+        const attendanceStatus = document.getElementById('attendance-status');
+        const sessionTypeSelect = document.getElementById('session-type');
+        const sessionDetailGroup = document.getElementById('session-detail-group');
+        const sessionDetailSelect = document.getElementById('session-detail');
+        const checkInButton = document.getElementById('check-in-button');
+        const registerForm = document.getElementById('register-form');
+        const userIdDisplay = document.getElementById('user-id-display');
+        
+        // --- Helper Functions ---
+        
+        /** Shows or hides the loading overlay. */
+        const setLoading = (isLoading) => {
+            if (isLoading) {
+                loadingOverlay.classList.remove('hidden');
+            } else {
+                loadingOverlay.classList.add('hidden');
+            }
+        };
 
-        let app, db, auth;
-        let userId = null;
-        let isAuthReady = false;
-
-        // --- Utility Functions ---
-
-        /**
-         * Shows a transient toast message.
-         * @param {string} message - The message content.
-         * @param {string} type - 'success', 'error', or 'info'.
-         */
-        function showToast(message, type = 'info') {
+        /** Displays a custom toast notification. */
+        const showToast = (message, type = 'info', duration = 3000) => {
             const container = document.getElementById('toast-container');
-            const colorMap = {
-                success: 'bg-green-500',
-                error: 'bg-red-500',
-                info: 'bg-blue-500',
-                warning: 'bg-yellow-500',
-            };
-
             const toast = document.createElement('div');
-            toast.className = `toast p-4 rounded-xl shadow-xl text-white font-semibold ${colorMap[type]} max-w-xs`;
+            let bgColor = type === 'success' ? 'bg-emerald-500' : (type === 'error' ? 'bg-red-500' : 'bg-blue-500');
+            toast.className = `flex items-center ${bgColor} text-white text-sm font-bold px-4 py-3 rounded-lg shadow-xl transition-all duration-300 transform translate-x-0`;
             toast.textContent = message;
             container.appendChild(toast);
 
-            // Force reflow/repaint for CSS transition to work
-            void toast.offsetWidth;
-            toast.classList.add('show');
-
             setTimeout(() => {
-                toast.classList.remove('show');
-                toast.addEventListener('transitionend', () => toast.remove());
-            }, 3000);
-        }
+                toast.classList.add('opacity-0');
+                setTimeout(() => toast.remove(), 500);
+            }, duration);
+        };
 
-        function showLogoutToast() {
-            showToast('Signing out...', 'info');
-        }
+        const toggleSidebar = () => {
+            sidebar.classList.toggle('-translate-x-full');
+        };
 
-        function showLoading(show) {
-            document.getElementById('loading-overlay').classList.toggle('hidden', !show);
-        }
-
-        function showTab(tabId) {
-            document.querySelectorAll('.tab-content').forEach(tab => {
-                tab.classList.remove('active');
+        /** Switches the active content tab. */
+        const showTab = (tabId) => {
+            // Hide all tab content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
             });
-            document.getElementById(tabId).classList.add('active');
+            // Show the requested tab content
+            document.getElementById(tabId)?.classList.add('active');
 
-            document.querySelectorAll('.nav-link').forEach(link => {
-                link.classList.remove('active');
+            // Update active state in navigation
+            navLinks.forEach(link => {
                 if (link.getAttribute('data-tab') === tabId) {
                     link.classList.add('active');
+                } else {
+                    link.classList.remove('active');
                 }
             });
 
-            // Update header title
-            const title = document.querySelector(`.nav-link[data-tab="${tabId}"]`).textContent.trim();
-            document.getElementById('current-tab-title').textContent = title;
-        }
-
-        /**
-         * Toggles the sidebar visibility on mobile screens.
-         */
-        function toggleSidebar() {
-            const sidebar = document.getElementById('sidebar');
-            sidebar.classList.toggle('-translate-x-full');
-            // Add or remove overlay if necessary (not fully implemented here, but good practice)
-        }
-
-
-        // --- Firestore & Auth Functions ---
-
-        /**
-         * Initializes Firebase and authenticates the user.
-         */
-        async function setupFirebase() {
-            if (Object.keys(firebaseConfig).length === 0) {
-                console.error("Firebase config is missing.");
-                showToast("Firebase setup failed: Config missing.", "error");
-                return;
+            // Fetch data only when switching to specific data-intensive tabs
+            if (tabId === 'profile' && userId) {
+                fetchUserProfileData(userId);
+            } else if (tabId === 'attendance' && userId) {
+                fetchAttendanceHistory(userId);
             }
-            
-            app = initializeApp(firebaseConfig);
-            db = getFirestore(app);
-            auth = getAuth(app);
+        };
 
-            // Listen for auth state changes
-            onAuthStateChanged(auth, async (user) => {
-                if (user) {
-                    userId = user.uid;
-                    isAuthReady = true;
-                    console.log("Authenticated with UID:", userId);
-                    updateUserInfoUI(user);
-                    
-                    // Fetch data once auth is ready (e.g., attendance records)
-                    fetchAttendanceHistory(userId);
-                } else {
-                    userId = null;
-                    isAuthReady = true;
-                    console.log("User is signed out.");
-                    updateUserInfoUI(null);
+        // --- Supabase Setup and Session Management ---
+
+        const setupSupabaseAndSession = () => {
+            setLoading(true); // Ensure loading screen is visible immediately
+            try {
+                // Initialize Supabase Client
+                sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+                    global: { fetch: fetch }
+                });
+
+                // Load or create User ID (Simulating session)
+                let storedId = localStorage.getItem(SESSION_KEY);
+                if (!storedId) {
+                    storedId = crypto.randomUUID();
+                    localStorage.setItem(SESSION_KEY, storedId);
+                    showToast('New student session started.', 'info');
                 }
-                showLoading(false);
+                userId = storedId;
+                
+                // Update UI with session details
+                userIdDisplay.textContent = `Session ID: ${userId}`;
+
+                // Initial data load for key components
+                fetchUserProfileData(userId);
+                fetchAttendanceHistory(userId); // Runs in background even if dashboard is visible
+                
+            } catch (error) {
+                console.error("Supabase Initialization Failed:", error);
+                showToast("Failed to connect to the portal backend. Check console.", "error");
+            } finally {
+                // Hide loading screen after a short delay to allow initial rendering
+                setTimeout(() => setLoading(false), 500); 
+            }
+        };
+        
+        // --- Supabase Data Operations ---
+
+        /** Fetches and displays the user's profile data from the 'profiles' table. */
+        const fetchUserProfileData = async (currentUserId) => {
+            const profileFields = ['full_name', 'email', 'student_id_number', 'phone'];
+
+            profileFields.forEach(field => {
+                document.getElementById(`profile-${field}`)?.innerText = 'Loading...';
             });
 
-            // Attempt to sign in with custom token or anonymously
-            showLoading(true);
             try {
-                if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                    showToast('Welcome back!', 'success');
+                const { data, error } = await sb
+                    .from('profiles')
+                    .select('*')
+                    .eq('user_id', currentUserId)
+                    .single();
+
+                if (error && error.code !== 'PGRST116') { // PGRST116 is "No rows found"
+                    throw error;
+                }
+
+                if (data) {
+                    profileFields.forEach(field => {
+                        const element = document.getElementById(`profile-${field}`);
+                        if (element) {
+                            element.innerText = data[field] || 'Not provided';
+                            document.getElementById(field).value = data[field] || '';
+                        }
+                    });
+                    // Use the fetched name in the header
+                    document.getElementById('user-header').textContent = `Welcome, ${data.full_name.split(' ')[0] || 'Student'}!`;
                 } else {
-                    await signInAnonymously(auth);
-                    showToast('Signed in anonymously.', 'info');
+                    console.log("No profile data found. User needs to register.");
+                    profileFields.forEach(field => {
+                        document.getElementById(`profile-${field}`)?.innerText = 'Not registered yet.';
+                        document.getElementById(field).value = ''; // Clear form
+                    });
+                    document.getElementById('user-header').textContent = `Welcome, Student!`;
                 }
             } catch (error) {
-                console.error("Auth failed:", error);
-                showToast(`Authentication failed: ${error.message}`, 'error');
-                showLoading(false);
+                console.error("Error fetching profile data:", error);
+                showToast("Failed to load profile data.", "error");
             }
-        }
+        };
 
-        /**
-         * Updates the UI elements showing user ID and status.
-         * @param {object} user - The Firebase User object or null.
-         */
-        function updateUserInfoUI(user) {
-            const authStatus = document.getElementById('auth-status');
-            const profileInitial = document.getElementById('profile-initial');
-            const profileName = document.getElementById('profile-name');
-            const profileEmail = document.getElementById('profile-email');
-            const dashboardUserId = document.getElementById('dashboard-user-id');
-            const profileUserId = document.getElementById('profile-user-id');
+        /** Handles the submission of the registration form to save/update profile data. */
+        const handleRegistration = async (e) => {
+            e.preventDefault();
+            if (!userId) { return showToast('Session not active.', 'error'); }
 
-            if (user) {
-                authStatus.textContent = user.isAnonymous ? 'Anonymous' : 'Authenticated';
-                profileInitial.textContent = user.email ? user.email.charAt(0).toUpperCase() : (user.displayName ? user.displayName.charAt(0).toUpperCase() : 'S');
-                profileName.textContent = user.displayName || 'Student User';
-                profileEmail.textContent = user.email || 'N/A';
-                dashboardUserId.textContent = `User ID: ${user.uid}`;
-                profileUserId.textContent = user.uid;
-            } else {
-                authStatus.textContent = 'Signed Out';
-                profileInitial.textContent = '?';
-                profileName.textContent = 'N/A';
-                profileEmail.textContent = 'N/A';
-                dashboardUserId.textContent = 'User ID: N/A';
-                profileUserId.textContent = 'N/A';
+            setLoading(true);
+            try {
+                const profileData = {
+                    user_id: userId, // CRITICAL: Used as primary key for upsert
+                    full_name: registerForm.elements['full_name'].value,
+                    email: registerForm.elements['email'].value,
+                    student_id_number: registerForm.elements['student_id_number'].value,
+                    phone: registerForm.elements['phone'].value,
+                    updatedAt: new Date().toISOString()
+                };
+
+                const { error } = await sb
+                    .from('profiles')
+                    .upsert(profileData, { onConflict: 'user_id' }); // Use upsert for create/update
+
+                if (error) throw error;
+
+                showToast('Registration data saved successfully!', 'success');
+                showTab('profile'); // Automatically switch back to the profile view
+            } catch (error) {
+                console.error("Error saving registration data:", error);
+                showToast(`Failed to save data: ${error.message}`, 'error');
+            } finally {
+                setLoading(false);
             }
-        }
+        };
 
-        // --- Attendance Logic ---
+        /** Handles the check-in process by saving attendance record to the 'attendance' table. */
+        const handleCheckIn = async (e) => {
+            e.preventDefault();
 
-        /**
-         * Validates the attendance form and enables/disables the check-in button.
-         * The button is enabled only if both Session Type and Session Detail are selected.
-         */
-        function validateAttendanceForm() {
-            const sessionType = document.getElementById('session-type').value;
-            const sessionDetail = document.getElementById('session-detail').value;
-            const checkInButton = document.getElementById('check-in-button');
-            
-            if (sessionType && sessionDetail) {
-                checkInButton.disabled = false;
-                checkInButton.classList.remove('opacity-50', 'cursor-not-allowed');
-            } else {
-                checkInButton.disabled = true;
-                checkInButton.classList.add('opacity-50', 'cursor-not-allowed');
+            if (checkInButton.disabled || !userId) return;
+
+            setLoading(true);
+            try {
+                const checkInTime = new Date();
+                const sessionType = sessionTypeSelect.value;
+                const sessionDetailId = sessionDetailSelect.value;
+                const sessionName = sessionDetailSelect.options[sessionDetailSelect.selectedIndex].textContent;
+
+                const attendanceData = {
+                    user_id: userId,
+                    sessionType: sessionType,
+                    sessionDetailId: sessionDetailId,
+                    sessionName: sessionName,
+                    timestamp: checkInTime.toISOString()
+                };
+
+                const { error } = await sb
+                    .from('attendance')
+                    .insert([attendanceData]);
+
+                if (error) throw error;
+
+                showToast(`Checked in for ${sessionName}!`, 'success');
+                // Manually refresh history after check-in
+                fetchAttendanceHistory(userId); 
+
+                // Reset form fields
+                sessionTypeSelect.value = '';
+                updateAttendanceDetail('');
+                validateAttendanceForm();
+
+            } catch (error) {
+                console.error("Attendance check-in failed:", error);
+                showToast(`Check-in failed: ${error.message}`, 'error');
+            } finally {
+                setLoading(false);
             }
-        }
+        };
 
-        /**
-         * CRITICAL FIX: Dynamically updates the session detail options based on session type.
-         * @param {string} sessionType - The selected session type ('Class Session' or 'Clinical').
-         */
-        function updateAttendanceDetail(sessionType) {
-            const sessionDetailSelect = document.getElementById('session-detail');
-            // Clear existing options and add default
-            sessionDetailSelect.innerHTML = '<option value="">Select detail after choosing type</option>';
+        /** Fetches and displays the user's recent attendance history from the 'attendance' table. */
+        const fetchAttendanceHistory = async (currentUserId) => {
+            attendanceStatus.textContent = 'Loading attendance history...';
+            attendanceList.innerHTML = ''; // Clear previous list
+
+            try {
+                const { data, error } = await sb
+                    .from('attendance')
+                    .select('*')
+                    .eq('user_id', currentUserId)
+                    .order('timestamp', { ascending: false })
+                    .limit(5);
+
+                if (error && error.code !== 'PGRST116') {
+                    throw error;
+                }
+
+                if (data && data.length > 0) {
+                    data.forEach((record) => {
+                        const listItem = document.createElement('div');
+                        const checkInDate = new Date(record.timestamp);
+                        const formattedTime = checkInDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                        const formattedDate = checkInDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+                        listItem.className = 'bg-emerald-50 p-4 rounded-lg border border-emerald-100 flex justify-between items-center shadow-sm';
+                        listItem.innerHTML = `
+                            <div>
+                                <p class="text-lg font-semibold text-emerald-800">${record.sessionName}</p>
+                                <p class="text-sm text-gray-600 capitalize">${record.sessionType}</p>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-base font-bold text-emerald-600">${formattedTime}</p>
+                                <p class="text-xs text-gray-500">${formattedDate}</p>
+                            </div>
+                        `;
+                        attendanceList.appendChild(listItem);
+                    });
+                    attendanceStatus.classList.add('hidden');
+                } else {
+                    attendanceStatus.textContent = 'No attendance records found yet.';
+                    attendanceStatus.classList.remove('hidden');
+                }
+            } catch (error) {
+                console.error("Error setting up attendance listener:", error);
+                attendanceStatus.textContent = 'Failed to load attendance history.';
+                attendanceStatus.classList.remove('hidden');
+            }
+        };
+
+
+        // --- Attendance Dropdown Logic ---
+
+        const courseOptions = [
+            { id: 'my_course_1', name: 'Fundamentals of Nursing (Lecture)' },
+            { id: 'my_course_2', name: 'Pathophysiology 202 (Seminar)' },
+            { id: 'my_course_3', name: 'Pharmacology Lab' },
+            { id: 'my_course_4', name: 'Clinical Ethics 101' }
+        ];
+
+        const clinicalRotations = [
+            { id: 'mat_med_surg', name: 'Maternity/Medical Surgical Rotation' },
+            { id: 'opd_casualty', name: 'OPD/Casualty Rotation' },
+            { id: 'mch_paediatrics', name: 'MCH/Peaditrics Rotation' },
+            { id: 'psychiatry', name: 'Psyschiatry Rotation' },
+            { id: 'theatre', name: 'Theatre Rotation' },
+            { id: 'icu', name: 'ICU Rotation' }
+        ];
+
+        const updateAttendanceDetail = (sessionType) => {
+            sessionDetailSelect.innerHTML = '<option value="">Select Detail</option>';
+            sessionDetailGroup.classList.add('hidden');
             
             let options = [];
 
             if (sessionType === 'Class Session') {
-                // Options representing 'My Courses'
-                options = [
-                    { value: 'course_nursing_fundamentals', text: 'Nursing Fundamentals (Lecture)' },
-                    { value: 'course_pathophysiology', text: 'Pathophysiology (Seminar)' },
-                    { value: 'course_pharmacology', text: 'Pharmacology (Lab)' },
-                    { value: 'course_advanced_mch', text: 'Advanced MCH' }
-                ];
-                sessionDetailSelect.disabled = false;
+                options = courseOptions;
+                sessionDetailGroup.classList.remove('hidden');
             } else if (sessionType === 'Clinical') {
-                // Specific clinical rotations requested by the user
-                options = [
-                    { value: 'rotation_maternity_surgical', text: 'Maternity/Medical Surgical Rotation' },
-                    { value: 'rotation_opd_casualty', text: 'OPD/Casualty Rotation' },
-                    { value: 'rotation_mch_paediatrics', text: 'MCH/Peaditrics Rotation' },
-                    { value: 'rotation_psychiatry', text: 'Psyschiatry Rotation' },
-                    { value: 'rotation_theatre', text: 'Theatre Rotation' },
-                    { value: 'rotation_icu', text: 'ICU Rotation' }
-                ];
-                sessionDetailSelect.disabled = false;
-            } else {
-                // Reset or default state
-                sessionDetailSelect.disabled = true;
+                options = clinicalRotations;
+                sessionDetailGroup.classList.remove('hidden');
             }
 
-            // Populate the dropdown with new options
             options.forEach(opt => {
-                const optionElement = document.createElement('option');
-                optionElement.value = opt.value;
-                optionElement.textContent = opt.text;
-                sessionDetailSelect.appendChild(optionElement);
+                const option = document.createElement('option');
+                option.value = opt.id;
+                option.textContent = opt.name;
+                sessionDetailSelect.appendChild(option);
             });
             
-            // Re-validate the form state after updating details
             validateAttendanceForm();
-        }
+        };
 
-        /**
-         * Handles the check-in process by saving attendance record to Firestore.
-         */
-        async function handleCheckIn() {
-            if (!isAuthReady || !userId) {
-                showToast("Authentication not complete. Please wait.", "warning");
-                return;
-            }
+        const validateAttendanceForm = () => {
+            const sessionType = sessionTypeSelect.value;
+            const sessionDetail = sessionDetailSelect.value;
+            checkInButton.disabled = !(sessionType && sessionDetail);
             
-            const sessionType = document.getElementById('session-type').value;
-            const sessionDetail = document.getElementById('session-detail').value;
-            const checkInButton = document.getElementById('check-in-button');
-            const statusDiv = document.getElementById('check-in-status');
-
-            if (!sessionType || !sessionDetail) {
-                showToast("Please select both Session Type and Session Detail.", "warning");
-                return;
-            }
-
-            const checkInTime = new Date();
-            const attendanceData = {
-                userId: userId,
-                sessionType: sessionType,
-                sessionDetail: sessionDetailSelect.options[sessionDetailSelect.selectedIndex].text,
-                timestamp: checkInTime,
-                date: checkInTime.toLocaleDateString(),
-                time: checkInTime.toLocaleTimeString(),
-            };
-
-            checkInButton.disabled = true;
-            checkInButton.textContent = 'Checking In...';
-            statusDiv.textContent = '';
-
-            try {
-                // Store attendance in a private collection for the user
-                const path = `/artifacts/${appId}/users/${userId}/attendance`;
-                await addDoc(collection(db, path), attendanceData);
-                
-                showToast('Attendance recorded successfully!', 'success');
-                statusDiv.textContent = `Checked in successfully for ${attendanceData.sessionDetail} at ${attendanceData.time} (${attendanceData.date})`;
-                statusDiv.className = 'mt-4 p-3 rounded-lg text-sm text-center bg-green-100 text-green-700 block';
-            } catch (error) {
-                console.error("Error writing attendance:", error);
-                showToast(`Check-In Failed: ${error.message}`, 'error');
-                statusDiv.textContent = 'Check-In failed. Please try again.';
-                statusDiv.className = 'mt-4 p-3 rounded-lg text-sm text-center bg-red-100 text-red-700 block';
-            } finally {
-                checkInButton.textContent = 'Check-In Now';
-                validateAttendanceForm(); // Re-validate and potentially re-enable
-            }
-        }
-
-        /**
-         * Fetches and displays the user's recent attendance history.
-         * @param {string} currentUserId - The authenticated user's ID.
-         */
-        function fetchAttendanceHistory(currentUserId) {
-            if (!db || !currentUserId) return;
-
-            const path = `/artifacts/${appId}/users/${currentUserId}/attendance`;
-            const attendanceCollection = collection(db, path);
-            
-            // Query to get the last 5 records, ordered by timestamp descending
-            const q = query(attendanceCollection, orderBy("timestamp", "desc"), limit(5));
-
-            const attendanceListDiv = document.getElementById('attendance-list');
-
-            // Set up real-time listener
-            onSnapshot(q, (snapshot) => {
-                attendanceListDiv.innerHTML = '';
-                if (snapshot.empty) {
-                    attendanceListDiv.innerHTML = '<p class="text-gray-500">No recent attendance records found.</p>';
-                    return;
-                }
-
-                snapshot.docs.forEach(docSnapshot => {
-                    const data = docSnapshot.data();
-                    const item = document.createElement('div');
-                    item.className = 'p-3 bg-gray-50 border border-gray-200 rounded-lg shadow-sm';
-                    item.innerHTML = `
-                        <p class="font-semibold text-slate-700">${data.sessionDetail}</p>
-                        <p class="text-sm text-gray-500">Type: ${data.sessionType} | Date: ${data.date} | Time: ${data.time}</p>
-                    `;
-                    attendanceListDiv.appendChild(item);
-                });
-            }, (error) => {
-                console.error("Error fetching attendance history:", error);
-                attendanceListDiv.innerHTML = '<p class="text-red-500">Error loading history.</p>';
-            });
-        }
+            // Update button styling based on disabled state
+            checkInButton.textContent = checkInButton.disabled ? 'Select Session Details' : 'Check In';
+            checkInButton.classList.toggle('bg-gray-400', checkInButton.disabled);
+            checkInButton.classList.toggle('hover:bg-gray-500', checkInButton.disabled);
+            checkInButton.classList.toggle('bg-emerald-500', !checkInButton.disabled);
+            checkInButton.classList.toggle('hover:bg-emerald-600', !checkInButton.disabled);
+        };
 
 
-        // --- Event Listeners and Initial Setup ---
-
+        // --- Initialisation and Event Listeners ---
+        
         document.addEventListener('DOMContentLoaded', () => {
-            // Get necessary DOM elements
-            const menuToggle = document.getElementById('menu-toggle');
-            const sidebar = document.getElementById('sidebar');
-            const navLinks = document.querySelectorAll('.nav-link');
-            const logoutLink = document.getElementById('logout-link');
-            const checkInButton = document.getElementById('check-in-button');
-            const sessionTypeSelect = document.getElementById('session-type');
-            const sessionDetailSelect = document.getElementById('session-detail');
-
-            // 1. Setup Firebase
-            setupFirebase();
-
-            // 2. Initial setup of Attendance form
-            validateAttendanceForm();
             
-            // 3. Setup General Event Listeners
-            checkInButton.addEventListener('click', handleCheckIn);
+            // 1. Setup Supabase and load the session data (userId)
+            setupSupabaseAndSession();
 
+            // 2. Attach UI Event Listeners
+            
+            // Registration Form Handler
+            if (registerForm) {
+                registerForm.addEventListener('submit', handleRegistration);
+            }
+
+            // Attendance Form Handlers
+            document.getElementById('attendance-form').addEventListener('submit', handleCheckIn);
+            sessionTypeSelect.addEventListener('change', (e) => {
+                updateAttendanceDetail(e.target.value);
+            });
+            sessionDetailSelect.addEventListener('change', validateAttendanceForm);
+            validateAttendanceForm(); // Initial state check
+
+            // Sidebar and Navigation Handlers
             menuToggle.addEventListener('click', toggleSidebar);
 
             navLinks.forEach(link => {
                 link.addEventListener('click', (e) => {
-                    if (link.id === 'logout-link') return;
                     e.preventDefault();
                     const tabId = link.getAttribute('data-tab');
                     if (tabId) {
                         showTab(tabId);
                     }
-                    // Close sidebar on link click on mobile
                     if (window.innerWidth < 1024 && !sidebar.classList.contains('-translate-x-full')) {
                         toggleSidebar();
                     }
                 });
             });
 
-            // CRITICAL FIX: Logout functionality implemented
+            // LOGOUT Functionality (Clearing local session data)
             logoutLink.addEventListener('click', async (e) => {
                 e.preventDefault();
-                showLogoutToast();
-                if (auth) {
-                    try {
-                        await signOut(auth);
-                        // onAuthStateChanged will handle the UI update after successful sign out
-                    } catch (error) {
-                        console.error("Logout failed:", error);
-                    }
-                }
-            });
+                showToast('Logging out and clearing session...', 'info', 1500);
 
-            // 4. Setup Attendance Dropdown Listeners
-            sessionTypeSelect.addEventListener('change', (e) => {
-                updateAttendanceDetail(e.target.value);
+                // Clear the locally stored user ID to simulate logout
+                localStorage.removeItem(SESSION_KEY);
+                
+                // Clear state and reload the application context
+                userId = null;
+                setTimeout(() => {
+                    // Simulating redirect to the login page by reloading the app to get a new session ID
+                    window.location.reload(); 
+                }, 1500);
             });
-
-            sessionDetailSelect.addEventListener('change', validateAttendanceForm);
         });
     </script>
 </body>
