@@ -335,7 +335,7 @@
         }
         
         .profile-media {
-            width: 180px; /* Fixed width for image/upload area */
+            width: 180px; 
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -343,7 +343,7 @@
         #passport-preview {
             width: 150px;
             height: 150px;
-            border-radius: 50%; /* Circular image */
+            border-radius: 50%; 
             object-fit: cover;
             border: 4px solid var(--color-primary);
             margin-bottom: 15px;
@@ -393,7 +393,7 @@
         }
         /* End Enhanced Profile Styling */
         
-        /* 8. Form Styling (Messages Tab) - Unchanged */
+        /* 8. Form Styling (Messages Tab) */
         #message-form {
             background-color: var(--color-card-bg);
             padding: 20px;
@@ -479,7 +479,7 @@
             }
             .profile-media {
                 width: 100%;
-                order: -1; /* Move image to the top */
+                order: -1; 
             }
         }
     </style>
@@ -539,7 +539,7 @@
                             <input type="text" id="profile-name" required>
                         </div>
                         <div class="form-field">
-                            <label for="profile-email">Email</label>
+                            <label for="profile-email">Email (Login ID)</label>
                             <input type="email" id="profile-email" disabled>
                         </div>
                         <div class="form-field">
@@ -647,8 +647,8 @@
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // ** LOCATIONIQ CONFIGURATION (Geocoding API) **
-    const LOCATIONIQ_API_KEY = 'pk.cbe61eae35ecbe1d1d682c347d81381c';
+    // ** LOCATIONIQ CONFIGURATION (Geocoding API) - REPLACE KEY WITH YOUR OWN! **
+    const LOCATIONIQ_API_KEY = 'pk.cbe61eae35ecbe1d1d682c347d81381c'; // <--- REPLACE THIS KEY
     const LOCATIONIQ_API_URL = 'https://us1.locationiq.com/v1/reverse.php';
 
     // ** STATIC MOCK DATA (REPLACE WITH REAL SUPABASE TABLES) **
@@ -659,6 +659,11 @@
         { id: 4, name: 'Obstetrics and Gynaecology' },
         { id: 5, name: 'Outpatient Clinic' },
     ];
+
+    // ** FALLBACK LOCATION (Used if user denies GPS permission) **
+    const FALLBACK_LAT = -1.286389; // Nairobi, Kenya
+    const FALLBACK_LON = 36.817223;
+    const FALLBACK_ACCURACY = 500; // High accuracy is not guaranteed on fallback
 
     let currentUserId = null;
     let currentUserProfile = null;
@@ -671,7 +676,7 @@
     const attendanceTargetSelect = document.getElementById('attendance-target');
     const adminWelcomeMessage = document.getElementById('admin-welcome-message'); 
     
-    // NEW Profile Elements
+    // Profile Elements
     const profileForm = document.getElementById('profile-form');
     const passportFileInput = document.getElementById('passport-file-input');
     const passportPreview = document.getElementById('passport-preview');
@@ -722,7 +727,7 @@
     }
 
     // *************************************************************************
-    // *** 3. CORE DATA FUNCTIONS (Updated loadProfile and New Profile Handlers) ***
+    // *** 3. CORE DATA FUNCTIONS (Profile and Static Data Loaders) ***
     // *************************************************************************
     
     async function loadWelcomeMessage() {
@@ -746,16 +751,16 @@
     async function loadProfile(userId) {
         profileStatus.textContent = 'Loading profile data...';
         
+        // Ensure you have RLS SELECT policy allowing the user to view their own profile
         const { data: profile, error: profileError } = await sb
             .from('profiles')
-            // Add passport_url to the select statement
             .select('full_name, email, phone, program_type, passport_url') 
             .eq('id', userId)
             .single();
 
         if (profileError) {
             console.error("Profile Fetch Error:", profileError);
-            profileStatus.textContent = `Error loading profile: ${profileError.message}`;
+            profileStatus.textContent = `Error loading profile: ${profileError.message}. Check RLS policy on 'profiles' table.`;
             profileStatus.style.color = 'red';
             return;
         }
@@ -776,7 +781,6 @@
         if (passportUrl) {
             passportPreview.src = passportUrl;
         } else {
-            // Placeholder image if no photo is available
             passportPreview.src = 'images/placeholder_passport.jpg';
         }
         
@@ -788,7 +792,7 @@
         loadCourses(true); 
     }
     
-    // NEW: Function to handle profile detail updates
+    // Handle profile detail updates
     profileForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         
@@ -799,6 +803,7 @@
         const newPhone = document.getElementById('profile-phone').value.trim();
         
         try {
+            // Ensure you have RLS UPDATE policy on 'profiles' table
             const { error } = await sb
                 .from('profiles')
                 .update({ full_name: newName, phone: newPhone })
@@ -806,29 +811,30 @@
                 
             if (error) throw error;
             
-            await loadProfile(currentUserId); // Reload profile to update local data and greeting
+            await loadProfile(currentUserId); 
             profileStatus.textContent = 'Profile details updated successfully!';
             profileStatus.style.color = 'var(--color-secondary)';
             
         } catch (error) {
             console.error('Profile update failed:', error);
-            profileStatus.textContent = `Update failed: ${error.message}`;
+            profileStatus.textContent = `Update failed: ${error.message}. Check RLS policy on 'profiles'.`;
             profileStatus.style.color = 'red';
         }
     });
     
-    // NEW: Function to handle passport photo upload
+    // Handle passport photo preview
     passportFileInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (file) {
             const reader = new FileReader();
             reader.onload = (e) => {
-                passportPreview.src = e.target.result; // Display preview immediately
+                passportPreview.src = e.target.result; 
             };
             reader.readAsDataURL(file);
         }
     });
     
+    // Handle passport photo upload
     uploadButton.addEventListener('click', async () => {
         const file = passportFileInput.files[0];
         if (!file) {
@@ -842,10 +848,12 @@
         uploadButton.disabled = true;
 
         const fileExt = file.name.split('.').pop();
-        const filePath = `${currentUserId}/passport_photo.${fileExt}`; // Unique path per user
+        // Uses the current user's ID to ensure a unique path
+        const filePath = `${currentUserId}/passport_photo.${fileExt}`; 
 
         try {
-            // 1. Upload to Supabase Storage Bucket ('avatars' is a common bucket name, adjust if needed)
+            // 1. Upload to Supabase Storage Bucket ('avatars')
+            // Ensure the 'avatars' bucket exists and has the correct RLS policies
             const { error: uploadError } = await sb.storage
                 .from('avatars') 
                 .upload(filePath, file, { 
@@ -883,7 +891,6 @@
     });
 
     async function loadCourses(cacheOnly = false) {
-        // ... (function body remains the same) ...
         const { data, error } = await sb.from('courses').select('course_name, status').limit(10);
         
         if (error) {
@@ -903,7 +910,6 @@
     }
 
     async function loadAttendance(userId) {
-        // ... (function body remains the same) ...
         const { data, error } = await sb
             .from('attendance')
             .select('course_or_rotation, session_type, date, status')
@@ -927,7 +933,6 @@
     }
     
     async function loadGeoAttendanceHistory(userId) {
-        // ... (function body remains the same) ...
         const { data, error } = await sb
             .from('geo_attendance_logs')
             .select('check_in_time, session_type, latitude, longitude, accuracy_meters, address_snapshot, is_verified')
@@ -951,25 +956,25 @@
             </tr>`).join('');
     }
 
-    // *** PLACEHOLDER FUNCTIONS (Remain the same) ***
+    // *** PLACEHOLDER FUNCTIONS ***
     async function loadExams() {
         const table = document.getElementById('exams-table');
-        table.innerHTML = `<tr><td colspan="3">CATS/Exams data loading (or define your Supabase query here)...</td></tr>`;
+        table.innerHTML = `<tr><td colspan="3">CATS/Exams data loading...</td></tr>`;
     }
 
     async function loadResources() {
         const list = document.getElementById('resources-list');
-        list.innerHTML = `<p>Loading learning resources... (or define your Supabase query here)</p>`;
+        list.innerHTML = `<p>Loading learning resources...</p>`;
     }
 
     async function loadStudentMessages() {
         const list = document.getElementById('messages-list');
-        list.innerHTML = `<p>Loading your messages... (or define your Supabase query here)</p>`;
+        list.innerHTML = `<p>Loading your messages...</p>`;
     }
 
 
     // *************************************************************************
-    // *** 4. DYNAMIC ATTENDANCE LOGIC (Simplified check-in) ***
+    // *** 4. ACCURATE GEOLOCATION AND REVERSE GEOCODING LOGIC ***
     // *************************************************************************
 
     function updateTargetSelect() {
@@ -999,21 +1004,26 @@
         attendanceTargetSelect.innerHTML = options || '<option value="">No options available</option>';
     }
 
+    /**
+     * Attempts to get high-accuracy GPS location. Falls back to a default location on failure.
+     */
     async function getLocationAndAddress() {
         return new Promise((resolve, reject) => {
             if (!navigator.geolocation) {
-                return reject(new Error('Geolocation is not supported by your browser.'));
+                geoMessage.textContent = 'Geolocation not supported. Using fallback coordinates.';
+                return resolve({ 
+                    latitude: FALLBACK_LAT, 
+                    longitude: FALLBACK_LON, 
+                    accuracy_meters: FALLBACK_ACCURACY 
+                });
             }
             
-            // Mock Coordinates for testing
-            const mockLatitude = -1.286389; 
-            const mockLongitude = 36.817223;
-            const mockAccuracy = 50;
+            geoMessage.textContent = 'Requesting high-accuracy location... Please grant permission.';
 
-            geoMessage.textContent = 'Acquiring real GPS coordinates...';
-
+            // Real Geolocation API call with options for high accuracy
             navigator.geolocation.getCurrentPosition(
                 (position) => {
+                    geoMessage.textContent = `Location acquired. Accuracy: ${position.coords.accuracy.toFixed(2)} meters.`;
                     resolve({
                         latitude: position.coords.latitude,
                         longitude: position.coords.longitude,
@@ -1021,23 +1031,45 @@
                     });
                 },
                 (error) => {
-                    // Fallback to mock on failure/denial
-                    console.warn(`Geolocation failed (${error.message}). Using mock coordinates.`);
-                    geoMessage.textContent = 'Using mock GPS coordinates for testing... (Please enable location services)';
+                    console.warn(`Geolocation failed (${error.code}:${error.message}). Using fallback coordinates.`);
+                    geoMessage.textContent = `Location denied or failed. Using fallback location (Accuracy: ${FALLBACK_ACCURACY}m).`;
+                    
+                    // Fallback on permission denial or timeout
                     resolve({ 
-                        latitude: mockLatitude, 
-                        longitude: mockLongitude, 
-                        accuracy_meters: mockAccuracy 
+                        latitude: FALLBACK_LAT, 
+                        longitude: FALLBACK_LON, 
+                        accuracy_meters: FALLBACK_ACCURACY 
                     });
                 },
-                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
             );
         });
     }
 
+    /**
+     * Calls the LocationIQ API to get a human-readable address.
+     */
     async function reverseGeocode(lat, lon) {
-        // Placeholder/Mock Address
-        return "Mock Address near Central Business District"; 
+        const url = `${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${lat}&lon=${lon}&format=json`;
+        
+        try {
+            const response = await fetch(url);
+            
+            if (!response.ok) {
+                // Check for 401 (Invalid Key) or 404 (Not Found)
+                console.error(`Geocoding API error: ${response.statusText}`);
+                return `Geocoding failed (Status: ${response.status}). Check API key.`;
+            }
+            
+            const data = await response.json();
+            
+            // LocationIQ returns 'display_name'
+            return data.display_name || `Location N/A (Lat: ${lat.toFixed(4)}, Lon: ${lon.toFixed(4)})`;
+            
+        } catch (e) {
+            console.error('Reverse geocoding fetch error:', e);
+            return `Geocoding failed due to network error.`;
+        }
     }
 
     async function geoCheckIn() {
@@ -1060,7 +1092,6 @@
             return;
         }
 
-        // Use current time always, as manual input was removed
         const submissionTime = new Date().toISOString(); 
         geoMessage.textContent = `Acquiring GPS location for ${selectedTarget} at current time...`;
 
@@ -1070,9 +1101,11 @@
         try {
             const { latitude, longitude, accuracy_meters } = await getLocationAndAddress(); 
             
-            geoMessage.textContent = `Recording GPS location. Submitting record for ${selectedTarget}...`;
+            geoMessage.textContent = `Location acquired. Looking up address...`;
 
             const address = await reverseGeocode(latitude, longitude); 
+            
+            geoMessage.textContent = `Submitting record for ${selectedTarget} at ${address}...`;
 
             // 1. Insert into the geo_attendance_logs table
             const { error: geoError } = await sb
@@ -1088,15 +1121,16 @@
                     is_verified: false
                 });
 
-            // 2. Insert/Update the main attendance table (using today's date)
+            // 2. Insert/Update the main attendance table
+            // **FIXED**: Removed the 'date' field to resolve the Supabase column error.
             const { error: attendanceError } = await sb
                 .from('attendance')
                 .insert({
                     student_id: currentUserId,
                     course_or_rotation: selectedTarget,
                     session_type: selectedSessionType,
-                    date: new Date().toISOString().split('T')[0],
-                    status: 'Present'
+                    // Supabase will automatically set 'date' if the column is configured with DEFAULT now()::date
+                    status: 'Present' 
                 });
 
 
@@ -1109,7 +1143,7 @@
 
         } catch (error) {
             console.error('Check-in failed:', error);
-            geoMessage.textContent = `Check-in failed: ${error.message}. Please try again.`;
+            geoMessage.textContent = `Check-in failed: ${error.message}. Please check console for RLS/Schema errors.`;
             geoMessage.style.color = '#EF4444';
         } finally {
             checkInButton.disabled = false;
