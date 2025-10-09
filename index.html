@@ -683,46 +683,36 @@
 
    <script>
     // *************************************************************************
-    // *** 1. CONFIGURATION: UPDATE THESE VALUES ***
+    // *** 1. CONFIGURATION & INITIALIZATION ***
     // *************************************************************************
     
     // ** SUPABASE CONFIGURATION **
     const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Ppk';
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     // ** LOCATIONIQ CONFIGURATION (Geocoding API) **
-    const LOCATIONIQ_API_KEY = 'pk.cbe61eae35ecbe1d1d682c347d81381c'; // <--- API KEY INJECTED
+    const LOCATIONIQ_API_KEY = 'pk.cbe61eae35ecbe1d1d682c347d81381c'; 
     const LOCATIONIQ_API_URL = 'https://us1.locationiq.com/v1/reverse.php';
-
-    // ** STATIC MOCK DATA (REPLACE WITH REAL SUPABASE TABLES) **
-    const MOCK_HOSPITAL_DEPARTMENTS = [
-        { id: '1', name: 'Accident & Emergency' },
-        { id: '2', name: 'Inpatient Medicine' },
-        { id: '3', name: 'Operating Theatres' },
-        { id: '4', name: 'Obstetrics and Gynaecology' },
-        { id: '5', name: 'Outpatient Clinic' },
-    ];
-    // Mock courses, using UUIDs for safety
-    const MOCK_COURSES = [
-        { id: '1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d', name: 'Anatomy 101' },
-        { id: '2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e', name: 'Physiology 101' },
-        { id: '3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f', name: 'Clinical Skills' },
-    ];
 
     // ** FALLBACK LOCATION (Used if user denies GPS permission) **
     const FALLBACK_LAT = -1.286389; // Nairobi, Kenya
     const FALLBACK_LON = 36.817223;
     const FALLBACK_ACCURACY = 500; 
 
+    // ** CACHE VARIABLES (To store fetched data)**
     let currentUserId = null;
     let currentUserProfile = null;
-    let cachedCourses = MOCK_COURSES; // Using mock courses for target selection
+    let cachedCourses = [];
+    let cachedDepartments = []; // NEW: Cache for clinical departments
 
+    // *************************************************************************
+    // *** 2. DOM ELEMENTS & EVENT HANDLERS ***
+    // *************************************************************************
+    
     // DOM Elements
     const geoMessage = document.getElementById('geo-message');
     const checkInButton = document.getElementById('check-in-button');
-    const messageForm = document.getElementById('message-form');
     const sessionTypeSelect = document.getElementById('session-type');
     const attendanceTargetSelect = document.getElementById('attendance-target');
     const adminWelcomeMessage = document.getElementById('admin-welcome-message'); 
@@ -731,16 +721,11 @@
     const passportPreview = document.getElementById('passport-preview');
     const uploadButton = document.getElementById('upload-button');
     const profileStatus = document.getElementById('profile-status');
-
-    // NEW DOM Elements for Profile Logic
     const editProfileButton = document.getElementById('edit-profile-button');
     const saveProfileButton = document.getElementById('save-profile-button');
     const uploadLabel = document.getElementById('upload-label');
-    
 
-    // *************************************************************************
-    // *** 2. UI AND NAVIGATION LOGIC (Tab Hiding/Showing) ***
-    // *************************************************************************
+    // Tab Navigation Logic (No changes needed here)
     const navLinks = document.querySelectorAll('.nav a');
     const tabs = document.querySelectorAll('.tab-content');
 
@@ -752,16 +737,17 @@
         tabs.forEach(tab => tab.classList.remove('active'));
         const activeTab = document.getElementById(tabId);
         if(activeTab) activeTab.classList.add('active');
-        
+            
         // Load data specific to the tab being activated
         if (tabId === 'profile' && currentUserId) loadProfile(currentUserId);
         if (tabId === 'attendance' && currentUserId) {
-            loadAttendance(currentUserId);
-            loadGeoAttendanceHistory(currentUserId); 
+            // Re-run the update to populate the dropdowns using the fresh cached data
             updateTargetSelect();
+            loadGeoAttendanceHistory(currentUserId); 
         }
+        // NOTE: Other data functions (loadExams, loadResources, etc.) still use MOCK data.
         if (tabId === 'cats' && currentUserId) loadExams();
-        if (tabId === 'resources' && currentUserId) loadResources();       
+        if (tabId === 'resources' && currentUserId) loadResources();     
         if (tabId === 'messages' && currentUserId) loadStudentMessages(); 
         if (tabId === 'courses' && currentUserId) loadCourses(); 
         if (tabId === 'dashboard' && currentUserId) {
@@ -788,14 +774,13 @@
     // *************************************************************************
     
     async function loadWelcomeMessage() {
+        // ... (This function already correctly fetches from 'system_settings') ...
         adminWelcomeMessage.textContent = 'Loading message...';
         
-        // --- FIX 1: Corrected key to match Super Admin Portal ('student_welcome') ---
-        // NOTE: Please confirm if your settings table is named 'system_settings' or 'app_settings'.
         const { data, error } = await sb
             .from('system_settings') 
             .select('setting_value')
-            .eq('setting_key', 'student_welcome') // <-- FIX APPLIED
+            .eq('setting_key', 'student_welcome') 
             .single();
 
         if (error || !data) {
@@ -804,27 +789,23 @@
             return;
         }
         
-        // Using innerHTML is safer here since the Super Admin sends rich/HTML content.
         adminWelcomeMessage.innerHTML = data.setting_value || 'Welcome to the NCHSM Student Dashboard!';
     }
     
     async function loadDashboardMetrics(userId) {
-        // --- 1. Load Active Courses Count ---
+        // --- 1. Load Active Courses Count (Now uses live cache) ---
         document.getElementById('dashboard-active-courses').textContent = cachedCourses.length;
 
-        // --- 2. Load Attendance Rate (MOCK) ---
-        // TODO: Replace with real calculation using a PostgreSQL function
+        // --- 2. Load Attendance Rate (MOCK - requires a custom PG function) ---
         const attendanceRate = '94'; 
         document.getElementById('dashboard-attendance-rate').textContent = `${attendanceRate}%`;
 
-        // --- 3. Load Upcoming Exam (MOCK) ---
-        // TODO: Replace with real query to 'exams' table for nearest date
+        // --- 3. Load Upcoming Exam (MOCK - requires 'exams' table query) ---
         const mockExamDate = new Date();
         mockExamDate.setDate(mockExamDate.getDate() + 5); 
         document.getElementById('dashboard-upcoming-exam').textContent = `${mockExamDate.toLocaleDateString()} (Anatomy)`;
 
-        // --- 4. Load New Resources (MOCK) ---
-        // TODO: Replace with real query to 'resources' table
+        // --- 4. Load New Resources (MOCK - requires 'resources' table query) ---
         document.getElementById('dashboard-new-resources').textContent = '3'; 
 
         // --- 5. Conditional Action Required Section ---
@@ -832,13 +813,10 @@
         const actionsTitleEl = document.getElementById('actions-title');
         const passportCard = document.getElementById('action-passport');
 
-        // Check if passport is missing
         let profileIncomplete = !currentUserProfile?.passport_url; 
         
-        // Hide/Show Passport Action Card
         passportCard.style.display = profileIncomplete ? 'block' : 'none';
         
-        // Hide/Show 'Action Required' title if no actions
         if (!profileIncomplete) {
              actionsTitleEl.style.display = 'none';
              actionRequiredEl.style.display = 'none';
@@ -848,27 +826,52 @@
         }
     }
     
-    // --- REMAINDER OF JAVASCRIPT CODE ---
-
     // *************************************************************************
     // *** 4. AUTHENTICATION AND PROFILE MANAGEMENT ***
     // *************************************************************************
 
-    async function checkAuthAndLoad() {
+    // Function to load all necessary target data and check auth
+    async function loadInitialDataAndCheckAuth() {
+        // ** NEW: Load Courses and Departments first **
+        await loadAllAttendanceTargets(); 
+
         const { data: { user } } = await sb.auth.getUser();
 
         if (user) {
             currentUserId = user.id;
-            // Load user profile and initial dashboard data
             await loadProfile(currentUserId); 
-            showTab('dashboard');
+            // Only show dashboard once all initial data is loaded
+            showTab('dashboard'); 
         } else {
-            // No user, redirect to login page
             window.location.href = 'login.html'; 
         }
     }
 
+    async function loadAllAttendanceTargets() {
+        console.log('Loading attendance targets from Supabase...');
+        
+        // --- FIX 1: Fetch Courses (Already partially done, now structured) ---
+        const { data: courses, error: courseError } = await sb.from('courses').select('id, name');
+        if (courseError) {
+            console.error('Error loading courses:', courseError.message);
+        } else {
+            cachedCourses = courses || [];
+            console.log(`Loaded ${cachedCourses.length} courses.`);
+        }
+
+        // --- FIX 2: Fetch Clinical Departments/Rotations ---
+        // Assuming your clinical departments/rotations are in a table named 'clinical_departments'
+        const { data: departments, error: deptError } = await sb.from('clinical_departments').select('id, name');
+        if (deptError) {
+            console.error('Error loading clinical departments:', deptError.message);
+        } else {
+            cachedDepartments = departments || [];
+            console.log(`Loaded ${cachedDepartments.length} clinical departments.`);
+        }
+    }
+
     async function loadProfile(userId) {
+        // ... (No changes needed, this already correctly fetches profile data) ...
         profileStatus.textContent = 'Loading profile...';
         
         const { data: profile, error } = await sb
@@ -895,19 +898,18 @@
         
         document.getElementById('passport-preview').alt = profile.full_name || 'Passport Photo';
 
-        // Update welcome message on the header
         document.querySelector('header h1').textContent = `Welcome, ${profile.first_name || 'Student'}!`;
 
         profileStatus.textContent = '';
-        toggleProfileEdit(false); // Reset to read-only state
-        // Show upload elements if not complete
+        toggleProfileEdit(false); 
         if (!profile.passport_url) {
             uploadLabel.style.display = 'inline-block';
-            passportFileInput.style.display = 'none'; // Still hidden, triggered by label
+            passportFileInput.style.display = 'none'; 
         }
     }
     
     function toggleProfileEdit(enable) {
+        // ... (No changes needed, this is UI logic) ...
         const fields = ['profile-name', 'profile-phone'];
         fields.forEach(id => {
             const input = document.getElementById(id);
@@ -918,13 +920,12 @@
         saveProfileButton.style.display = enable ? 'block' : 'none';
         uploadLabel.style.display = enable ? 'inline-block' : 'none'; 
         
-        // Show file input only when editing if a file is already selected, otherwise the label handles it
         if (enable && !passportFileInput.files[0]) {
              document.getElementById('upload-button').style.display = 'none';
         }
     }
     
-    // Event Listeners for Profile Actions
+    // Event Listeners for Profile Actions (No changes needed)
     editProfileButton.addEventListener('click', () => toggleProfileEdit(true));
     
     profileForm.addEventListener('submit', async (e) => {
@@ -947,7 +948,6 @@
             profileStatus.textContent = `Error saving profile: ${error.message}`;
         } else {
             profileStatus.textContent = 'Profile updated successfully!';
-            // Reload profile data and switch back to read-only
             loadProfile(currentUserId); 
         }
     });
@@ -956,8 +956,8 @@
         const file = passportFileInput.files[0];
         if (file) {
             passportPreview.src = URL.createObjectURL(file);
-            uploadButton.style.display = 'block'; // Show save button when a file is selected
-            uploadLabel.style.display = 'none'; // Hide change label
+            uploadButton.style.display = 'block'; 
+            uploadLabel.style.display = 'none'; 
         }
     });
 
@@ -998,10 +998,10 @@
             profileStatus.textContent = `Database update failed: ${updateError.message}`;
         } else {
             profileStatus.textContent = 'Photo uploaded and saved successfully!';
-            passportFileInput.value = ''; // Clear file input
+            passportFileInput.value = ''; 
             uploadButton.style.display = 'none';
             uploadLabel.style.display = 'inline-block';
-            loadProfile(currentUserId); // Reload profile to update UI
+            loadProfile(currentUserId); 
         }
         uploadButton.disabled = false;
     });
@@ -1017,13 +1017,15 @@
         let targetList = [];
         let label = 'Rotation/Course:';
 
+        // --- FIX 3: Use cachedDepartments instead of MOCK_HOSPITAL_DEPARTMENTS ---
         if (sessionType === 'Clinical' || sessionType === 'Call') {
-            targetList = MOCK_HOSPITAL_DEPARTMENTS.map(d => ({ 
+            targetList = cachedDepartments.map(d => ({ 
                 id: d.id, 
                 name: d.name, 
                 text: `${d.name} (${sessionType})` 
             }));
             label = 'Department/Area:';
+        // --- FIX 4: Use cachedCourses instead of MOCK_COURSES ---
         } else if (sessionType === 'Class' || sessionType === 'Virtual') {
             targetList = cachedCourses.map(c => ({ 
                 id: c.id, 
@@ -1040,7 +1042,6 @@
         } else {
             targetList.forEach(target => {
                 const option = document.createElement('option');
-                // Use a pipe '|' to safely combine ID and Name for retrieval in geoCheckIn
                 option.value = `${target.id}|${target.name}`; 
                 option.textContent = target.text;
                 attendanceTargetSelect.appendChild(option);
@@ -1049,10 +1050,8 @@
         geoMessage.textContent = 'Select a Session Type and then a specific Rotation or Course to check in at your current GPS location and time.';
     }
 
-    // *** FIX 2: Corrected geoCheckIn function to prevent UUID error ***
     async function geoCheckIn() {
-        // This function requires the RLS INSERT policy to be set on the 'geo_attendance_logs' table.
-
+        // ... (No changes needed, this function is already corrected to handle UUIDs) ...
         const sessionType = sessionTypeSelect.value;
         const targetSelect = attendanceTargetSelect.value;
         const checkInTime = new Date().toISOString();
@@ -1068,15 +1067,11 @@
 
         const [targetId, targetName] = targetSelect.split('|');
         
-        // --- Conditional Mapping for UUID Fix ---
         let courseId = null; 
         
         if (sessionType === 'Class' || sessionType === 'Virtual') {
-            // Courses use UUIDs, this value is safe for the course_id column.
             courseId = targetId; 
         } 
-        // For Clinical/Call (where targetId is the mock numeric '1', '2', etc.), 
-        // courseId remains null, preventing the UUID error.
 
         // 1. Get Location
         const getLocation = () => new Promise((resolve, reject) => {
@@ -1113,7 +1108,6 @@
                 }
             }
             
-            // Final Location Name to Save: Combine the target name and geo-location
             const finalLocationName = `${targetName} @ ${location.friendly}`;
 
             // 3. Insert Attendance Log into 'geo_attendance_logs'
@@ -1123,17 +1117,12 @@
                     student_id: currentUserId,
                     check_in_time: checkInTime,
                     session_type: sessionType,
-                    // Use course_id only for UUIDs (Class/Virtual)
                     course_id: courseId, 
-                    
-                    // The friendly location name now includes the target name/department name.
                     location_friendly_name: finalLocationName, 
-
                     latitude: location.lat,
                     longitude: location.lon,
                     accuracy_m: location.acc,
                     is_verified: false,
-                    // Store the numeric ID or UUID in notes for reference if needed
                     notes: `Checked in for Target ID: ${targetId}` 
                 });
 
@@ -1142,7 +1131,6 @@
                 geoMessage.textContent = `Check-in failed: Error: ${error.message}`;
             } else {
                 geoMessage.textContent = `Check-in successful! Logged at ${new Date(checkInTime).toLocaleTimeString()} for ${targetName} near ${location.friendly}.`;
-                // Refresh history table
                 loadGeoAttendanceHistory(currentUserId);
             }
 
@@ -1154,13 +1142,12 @@
         }
     }
 
-    // *** FIX: Corrected loadGeoAttendanceHistory function ***
     async function loadGeoAttendanceHistory(userId) {
+        // ... (No changes needed, this function is already corrected to handle 400s) ...
         const tableBody = document.getElementById('geo-attendance-history');
         tableBody.innerHTML = '<tr><td colspan="5">Loading geo check-in history...</td></tr>';
 
         try {
-            // FIX for 400 Bad Request: Use a clean, comma-separated select list.
             const { data: logs, error } = await sb
                 .from('geo_attendance_logs')
                 .select('check_in_time, session_type, location_friendly_name, accuracy_m, is_verified')
@@ -1178,8 +1165,7 @@
             }
 
             logs.forEach(log => {
-                // FIX for TypeError: Cannot read properties of undefined (reading 'toFixed')
-                const accuracyText = (log.accuracy_m || 0).toFixed(2) + 'm'; // Safe null check
+                const accuracyText = (log.accuracy_m || 0).toFixed(2) + 'm'; 
                 
                 const verificationStatus = log.is_verified 
                     ? '<span style="color: var(--color-secondary); font-weight: 600;">Verified</span>' 
@@ -1204,33 +1190,44 @@
     }
 
 
-    // MOCK FUNCTIONS (You will need to implement these with real data later)
+    // *************************************************************************
+    // *** 6. MOCK FUNCTIONS (UPDATED TO USE CACHED/LIVE DATA) ***
+    // *************************************************************************
+    
+    // Uses the live data loaded into cachedCourses
+    async function loadCourses() {
+        if (cachedCourses.length > 0) {
+            const tableBody = document.getElementById('courses-table');
+            tableBody.innerHTML = cachedCourses.map(c => 
+                `<tr><td>${c.name}</td><td>Active</td></tr>`
+            ).join('');
+        } else {
+            document.getElementById('courses-table').innerHTML = '<tr><td colspan="2">No courses found.</td></tr>';
+        }
+    }
+    
+    // REMAINDER ARE MOCK, PENDING NEW SUPABASE TABLE IMPLEMENTATION
     async function loadAttendance() {
         document.getElementById('attendance-table').innerHTML = '<tr><td colspan="4">No historical attendance records found. (MOCK)</td></tr>';
     }
-    async function loadCourses() {
-           document.getElementById('courses-table').innerHTML = cachedCourses.map(c => `<tr><td>${c.name}</td><td>Active</td></tr>`).join('');
-    }
     async function loadExams() {
-           document.getElementById('exams-table').innerHTML = '<tr><td colspan="3">No upcoming exams scheduled. (MOCK)</td></tr>';
+            document.getElementById('exams-table').innerHTML = '<tr><td colspan="3">No upcoming exams scheduled. (MOCK)</td></tr>';
     }
     async function loadResources() {
-           document.getElementById('resources-list').innerHTML = '<p>No resources available for your program at this time. (MOCK)</p>';
+            document.getElementById('resources-list').innerHTML = '<p>No resources available for your program at this time. (MOCK)</p>';
     }
     async function loadStudentMessages() {
-           document.getElementById('messages-list').innerHTML = '<h2>Recent Admin Messages</h2><p>No new messages. (MOCK)</p>';
+            document.getElementById('messages-list').innerHTML = '<h2>Recent Admin Messages</h2><p>No new messages. (MOCK)</p>';
     }
 
     // *************************************************************************
-    // *** 6. INITIALIZATION ***
+    // *** 7. INITIALIZATION ***
     // *************************************************************************
     
-    // Add event listeners for attendance controls (moved here for clarity)
     sessionTypeSelect.addEventListener('change', updateTargetSelect);
     checkInButton.addEventListener('click', geoCheckIn);
 
-    document.addEventListener('DOMContentLoaded', checkAuthAndLoad);
+    // FIX: Changed checkAuthAndLoad to loadInitialDataAndCheckAuth
+    document.addEventListener('DOMContentLoaded', loadInitialDataAndCheckAuth); 
 
 </script>
-</body>
-</html>
