@@ -681,7 +681,7 @@
         </main>
     </div>
 
-    <script>
+   <script>
     // *************************************************************************
     // *** 1. CONFIGURATION: UPDATE THESE VALUES ***
     // *************************************************************************
@@ -757,11 +757,11 @@
         if (tabId === 'profile' && currentUserId) loadProfile(currentUserId);
         if (tabId === 'attendance' && currentUserId) {
             loadAttendance(currentUserId);
-            loadGeoAttendanceHistory(currentUserId); // FIX: Ensure this is called
+            loadGeoAttendanceHistory(currentUserId); 
             updateTargetSelect();
         }
         if (tabId === 'cats' && currentUserId) loadExams();
-        if (tabId === 'resources' && currentUserId) loadResources();     
+        if (tabId === 'resources' && currentUserId) loadResources();       
         if (tabId === 'messages' && currentUserId) loadStudentMessages(); 
         if (tabId === 'courses' && currentUserId) loadCourses(); 
         if (tabId === 'dashboard' && currentUserId) {
@@ -789,11 +789,13 @@
     
     async function loadWelcomeMessage() {
         adminWelcomeMessage.textContent = 'Loading message...';
-        // This is the key: it pulls the message updated by the Superadmin
+        
+        // --- FIX 1: Corrected key to match Super Admin Portal ('student_welcome') ---
+        // NOTE: Please confirm if your settings table is named 'system_settings' or 'app_settings'.
         const { data, error } = await sb
-            .from('system_settings')
+            .from('system_settings') 
             .select('setting_value')
-            .eq('setting_key', 'welcome_message')
+            .eq('setting_key', 'student_welcome') // <-- FIX APPLIED
             .single();
 
         if (error || !data) {
@@ -801,8 +803,9 @@
             adminWelcomeMessage.textContent = 'The system message is currently unavailable. Please check back later.';
             return;
         }
-
-        adminWelcomeMessage.textContent = data.setting_value || 'Welcome to the NCHSM Student Dashboard!';
+        
+        // Using innerHTML is safer here since the Super Admin sends rich/HTML content.
+        adminWelcomeMessage.innerHTML = data.setting_value || 'Welcome to the NCHSM Student Dashboard!';
     }
     
     async function loadDashboardMetrics(userId) {
@@ -1046,7 +1049,7 @@
         geoMessage.textContent = 'Select a Session Type and then a specific Rotation or Course to check in at your current GPS location and time.';
     }
 
-    // *** FIX: Corrected and fleshed-out geoCheckIn function ***
+    // *** FIX 2: Corrected geoCheckIn function to prevent UUID error ***
     async function geoCheckIn() {
         // This function requires the RLS INSERT policy to be set on the 'geo_attendance_logs' table.
 
@@ -1062,6 +1065,18 @@
 
         button.disabled = true;
         geoMessage.textContent = 'Attempting to get location and check in...';
+
+        const [targetId, targetName] = targetSelect.split('|');
+        
+        // --- Conditional Mapping for UUID Fix ---
+        let courseId = null; 
+        
+        if (sessionType === 'Class' || sessionType === 'Virtual') {
+            // Courses use UUIDs, this value is safe for the course_id column.
+            courseId = targetId; 
+        } 
+        // For Clinical/Call (where targetId is the mock numeric '1', '2', etc.), 
+        // courseId remains null, preventing the UUID error.
 
         // 1. Get Location
         const getLocation = () => new Promise((resolve, reject) => {
@@ -1098,8 +1113,8 @@
                 }
             }
             
-            // Split target string to get ID and Name
-            const [targetId, targetName] = targetSelect.split('|');
+            // Final Location Name to Save: Combine the target name and geo-location
+            const finalLocationName = `${targetName} @ ${location.friendly}`;
 
             // 3. Insert Attendance Log into 'geo_attendance_logs'
             const { error } = await sb
@@ -1108,21 +1123,25 @@
                     student_id: currentUserId,
                     check_in_time: checkInTime,
                     session_type: sessionType,
-                    target_id: targetId,
-                    target_name: targetName,
+                    // Use course_id only for UUIDs (Class/Virtual)
+                    course_id: courseId, 
+                    
+                    // The friendly location name now includes the target name/department name.
+                    location_friendly_name: finalLocationName, 
+
                     latitude: location.lat,
                     longitude: location.lon,
                     accuracy_m: location.acc,
-                    location_friendly_name: location.friendly,
                     is_verified: false,
-                    notes: `Checked in via dashboard for ${sessionType}`
+                    // Store the numeric ID or UUID in notes for reference if needed
+                    notes: `Checked in for Target ID: ${targetId}` 
                 });
 
             if (error) {
                 console.error("Check-in failed:", error);
                 geoMessage.textContent = `Check-in failed: Error: ${error.message}`;
             } else {
-                geoMessage.textContent = `Check-in successful! Logged at ${new Date(checkInTime).toLocaleTimeString()} near ${location.friendly}.`;
+                geoMessage.textContent = `Check-in successful! Logged at ${new Date(checkInTime).toLocaleTimeString()} for ${targetName} near ${location.friendly}.`;
                 // Refresh history table
                 loadGeoAttendanceHistory(currentUserId);
             }
@@ -1190,24 +1209,28 @@
         document.getElementById('attendance-table').innerHTML = '<tr><td colspan="4">No historical attendance records found. (MOCK)</td></tr>';
     }
     async function loadCourses() {
-         document.getElementById('courses-table').innerHTML = cachedCourses.map(c => `<tr><td>${c.name}</td><td>Active</td></tr>`).join('');
+           document.getElementById('courses-table').innerHTML = cachedCourses.map(c => `<tr><td>${c.name}</td><td>Active</td></tr>`).join('');
     }
     async function loadExams() {
-         document.getElementById('exams-table').innerHTML = '<tr><td colspan="3">No upcoming exams scheduled. (MOCK)</td></tr>';
+           document.getElementById('exams-table').innerHTML = '<tr><td colspan="3">No upcoming exams scheduled. (MOCK)</td></tr>';
     }
     async function loadResources() {
-         document.getElementById('resources-list').innerHTML = '<p>No resources available for your program at this time. (MOCK)</p>';
+           document.getElementById('resources-list').innerHTML = '<p>No resources available for your program at this time. (MOCK)</p>';
     }
     async function loadStudentMessages() {
-         document.getElementById('messages-list').innerHTML = '<h2>Recent Admin Messages</h2><p>No new messages. (MOCK)</p>';
+           document.getElementById('messages-list').innerHTML = '<h2>Recent Admin Messages</h2><p>No new messages. (MOCK)</p>';
     }
 
     // *************************************************************************
     // *** 6. INITIALIZATION ***
     // *************************************************************************
+    
+    // Add event listeners for attendance controls (moved here for clarity)
+    sessionTypeSelect.addEventListener('change', updateTargetSelect);
+    checkInButton.addEventListener('click', geoCheckIn);
 
     document.addEventListener('DOMContentLoaded', checkAuthAndLoad);
 
-    </script>
+</script>
 </body>
 </html>
