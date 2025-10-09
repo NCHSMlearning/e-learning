@@ -685,32 +685,27 @@
     // *************************************************************************
     // *** 1. CONFIGURATION & INITIALIZATION ***
     // *************************************************************************
-    
-    // ** SUPABASE CONFIGURATION **
+
     const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Ppk';
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // ** LOCATIONIQ CONFIGURATION (Geocoding API) **
     const LOCATIONIQ_API_KEY = 'pk.cbe61eae35ecbe1d1d682c347d81381c'; 
     const LOCATIONIQ_API_URL = 'https://us1.locationiq.com/v1/reverse.php';
 
-    // ** FALLBACK LOCATION (Used if user denies GPS permission) **
-    const FALLBACK_LAT = -1.286389; // Nairobi, Kenya
+    const FALLBACK_LAT = -1.286389; // Nairobi
     const FALLBACK_LON = 36.817223;
     const FALLBACK_ACCURACY = 500; 
 
-    // ** CACHE VARIABLES (To store fetched data)**
     let currentUserId = null;
     let currentUserProfile = null;
     let cachedCourses = [];
-    let cachedDepartments = []; // NEW: Cache for clinical departments
+    let cachedDepartments = [];
 
     // *************************************************************************
     // *** 2. DOM ELEMENTS & EVENT HANDLERS ***
     // *************************************************************************
-    
-    // DOM Elements
+
     const geoMessage = document.getElementById('geo-message');
     const checkInButton = document.getElementById('check-in-button');
     const sessionTypeSelect = document.getElementById('session-type');
@@ -725,7 +720,6 @@
     const saveProfileButton = document.getElementById('save-profile-button');
     const uploadLabel = document.getElementById('upload-label');
 
-    // Tab Navigation Logic (No changes needed here)
     const navLinks = document.querySelectorAll('.nav a');
     const tabs = document.querySelectorAll('.tab-content');
 
@@ -738,14 +732,11 @@
         const activeTab = document.getElementById(tabId);
         if(activeTab) activeTab.classList.add('active');
             
-        // Load data specific to the tab being activated
         if (tabId === 'profile' && currentUserId) loadProfile(currentUserId);
         if (tabId === 'attendance' && currentUserId) {
-            // Re-run the update to populate the dropdowns using the fresh cached data
             updateTargetSelect();
             loadGeoAttendanceHistory(currentUserId); 
         }
-        // NOTE: Other data functions (loadExams, loadResources, etc.) still use MOCK data.
         if (tabId === 'cats' && currentUserId) loadExams();
         if (tabId === 'resources' && currentUserId) loadResources();     
         if (tabId === 'messages' && currentUserId) loadStudentMessages(); 
@@ -772,11 +763,9 @@
     // *************************************************************************
     // *** 3. CORE DATA AND DASHBOARD FUNCTIONS ***
     // *************************************************************************
-    
+
     async function loadWelcomeMessage() {
-        // ... (This function already correctly fetches from 'system_settings') ...
         adminWelcomeMessage.textContent = 'Loading message...';
-        
         const { data, error } = await sb
             .from('system_settings') 
             .select('setting_value')
@@ -793,22 +782,16 @@
     }
     
     async function loadDashboardMetrics(userId) {
-        // --- 1. Load Active Courses Count (Now uses live cache) ---
         document.getElementById('dashboard-active-courses').textContent = cachedCourses.length;
-
-        // --- 2. Load Attendance Rate (MOCK - requires a custom PG function) ---
         const attendanceRate = '94'; 
         document.getElementById('dashboard-attendance-rate').textContent = `${attendanceRate}%`;
 
-        // --- 3. Load Upcoming Exam (MOCK - requires 'exams' table query) ---
         const mockExamDate = new Date();
         mockExamDate.setDate(mockExamDate.getDate() + 5); 
         document.getElementById('dashboard-upcoming-exam').textContent = `${mockExamDate.toLocaleDateString()} (Anatomy)`;
 
-        // --- 4. Load New Resources (MOCK - requires 'resources' table query) ---
         document.getElementById('dashboard-new-resources').textContent = '3'; 
 
-        // --- 5. Conditional Action Required Section ---
         const actionRequiredEl = document.getElementById('dashboard-actions');
         const actionsTitleEl = document.getElementById('actions-title');
         const passportCard = document.getElementById('action-passport');
@@ -825,22 +808,18 @@
              actionRequiredEl.style.display = 'flex';
         }
     }
-    
+
     // *************************************************************************
     // *** 4. AUTHENTICATION AND PROFILE MANAGEMENT ***
     // *************************************************************************
 
-    // Function to load all necessary target data and check auth
     async function loadInitialDataAndCheckAuth() {
-        // ** NEW: Load Courses and Departments first **
         await loadAllAttendanceTargets(); 
-
         const { data: { user } } = await sb.auth.getUser();
 
         if (user) {
             currentUserId = user.id;
             await loadProfile(currentUserId); 
-            // Only show dashboard once all initial data is loaded
             showTab('dashboard'); 
         } else {
             window.location.href = 'login.html'; 
@@ -849,8 +828,6 @@
 
     async function loadAllAttendanceTargets() {
         console.log('Loading attendance targets from Supabase...');
-        
-        // --- FIX 1: Fetch Courses (Already partially done, now structured) ---
         const { data: courses, error: courseError } = await sb.from('courses').select('id, name');
         if (courseError) {
             console.error('Error loading courses:', courseError.message);
@@ -859,8 +836,6 @@
             console.log(`Loaded ${cachedCourses.length} courses.`);
         }
 
-        // --- FIX 2: Fetch Clinical Departments/Rotations ---
-        // Assuming your clinical departments/rotations are in a table named 'clinical_departments'
         const { data: departments, error: deptError } = await sb.from('clinical_departments').select('id, name');
         if (deptError) {
             console.error('Error loading clinical departments:', deptError.message);
@@ -871,9 +846,7 @@
     }
 
     async function loadProfile(userId) {
-        // ... (No changes needed, this already correctly fetches profile data) ...
         profileStatus.textContent = 'Loading profile...';
-        
         const { data: profile, error } = await sb
             .from('profiles')
             .select('*')
@@ -890,26 +863,26 @@
         document.getElementById('profile-name').value = profile.full_name || 'N/A';
         document.getElementById('profile-email').value = profile.email || 'N/A';
         document.getElementById('profile-phone').value = profile.phone || 'N/A';
-        document.getElementById('profile-program').value = profile.program_name || 'N/A';
-        
+        document.getElementById('profile-program').value = profile.program || 'N/A';
+
         document.getElementById('passport-preview').src = profile.passport_url 
             ? sb.storage.from('passports').getPublicUrl(profile.passport_url).data.publicUrl
             : 'https://via.placeholder.com/150x150?text=NO+PHOTO';
-        
         document.getElementById('passport-preview').alt = profile.full_name || 'Passport Photo';
 
-        document.querySelector('header h1').textContent = `Welcome, ${profile.first_name || 'Student'}!`;
+        const firstName = profile.full_name ? profile.full_name.split(' ')[0] : 'Student';
+        document.querySelector('header h1').textContent = `Welcome, ${firstName}!`;
 
         profileStatus.textContent = '';
-        toggleProfileEdit(false); 
+        toggleProfileEdit(false);
+
         if (!profile.passport_url) {
             uploadLabel.style.display = 'inline-block';
             passportFileInput.style.display = 'none'; 
         }
     }
-    
+
     function toggleProfileEdit(enable) {
-        // ... (No changes needed, this is UI logic) ...
         const fields = ['profile-name', 'profile-phone'];
         fields.forEach(id => {
             const input = document.getElementById(id);
@@ -924,8 +897,7 @@
              document.getElementById('upload-button').style.display = 'none';
         }
     }
-    
-    // Event Listeners for Profile Actions (No changes needed)
+
     editProfileButton.addEventListener('click', () => toggleProfileEdit(true));
     
     profileForm.addEventListener('submit', async (e) => {
@@ -974,13 +946,9 @@
         const fileExt = file.name.split('.').pop();
         const filePath = `${currentUserId}.${fileExt}`;
 
-        // 1. Upload to Storage
         const { error: uploadError } = await sb.storage
             .from('passports')
-            .upload(filePath, file, {
-                cacheControl: '3600',
-                upsert: true
-            });
+            .upload(filePath, file, { cacheControl: '3600', upsert: true });
 
         if (uploadError) {
             profileStatus.textContent = `Upload failed: ${uploadError.message}`;
@@ -988,7 +956,6 @@
             return;
         }
         
-        // 2. Update profile table with the new URL path
         const { error: updateError } = await sb
             .from('profiles')
             .update({ passport_url: filePath, updated_at: new Date().toISOString() })
@@ -1017,21 +984,11 @@
         let targetList = [];
         let label = 'Rotation/Course:';
 
-        // --- FIX 3: Use cachedDepartments instead of MOCK_HOSPITAL_DEPARTMENTS ---
         if (sessionType === 'Clinical' || sessionType === 'Call') {
-            targetList = cachedDepartments.map(d => ({ 
-                id: d.id, 
-                name: d.name, 
-                text: `${d.name} (${sessionType})` 
-            }));
+            targetList = cachedDepartments.map(d => ({ id: d.id, name: d.name, text: `${d.name} (${sessionType})` }));
             label = 'Department/Area:';
-        // --- FIX 4: Use cachedCourses instead of MOCK_COURSES ---
         } else if (sessionType === 'Class' || sessionType === 'Virtual') {
-            targetList = cachedCourses.map(c => ({ 
-                id: c.id, 
-                name: c.name, 
-                text: `${c.name} (${sessionType})` 
-            }));
+            targetList = cachedCourses.map(c => ({ id: c.id, name: c.name, text: `${c.name} (${sessionType})` }));
             label = 'Course/Subject:';
         }
 
@@ -1051,7 +1008,6 @@
     }
 
     async function geoCheckIn() {
-        // ... (No changes needed, this function is already corrected to handle UUIDs) ...
         const sessionType = sessionTypeSelect.value;
         const targetSelect = attendanceTargetSelect.value;
         const checkInTime = new Date().toISOString();
@@ -1066,29 +1022,15 @@
         geoMessage.textContent = 'Attempting to get location and check in...';
 
         const [targetId, targetName] = targetSelect.split('|');
-        
-        let courseId = null; 
-        
-        if (sessionType === 'Class' || sessionType === 'Virtual') {
-            courseId = targetId; 
-        } 
+        let courseId = (sessionType === 'Class' || sessionType === 'Virtual') ? targetId : null;
 
-        // 1. Get Location
         const getLocation = () => new Promise((resolve, reject) => {
             if (!navigator.geolocation) {
                 return resolve({ lat: FALLBACK_LAT, lon: FALLBACK_LON, acc: FALLBACK_ACCURACY, friendly: 'Fallback Location (Geolocation Disabled)' });
             }
             navigator.geolocation.getCurrentPosition(
-                (pos) => resolve({ 
-                    lat: pos.coords.latitude, 
-                    lon: pos.coords.longitude, 
-                    acc: pos.coords.accuracy, 
-                    friendly: null 
-                }),
-                (err) => {
-                    console.warn(`Geolocation error (${err.code}): ${err.message}. Using fallback.`);
-                    resolve({ lat: FALLBACK_LAT, lon: FALLBACK_LON, acc: FALLBACK_ACCURACY, friendly: 'Fallback Location (GPS Error)' });
-                },
+                (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude, acc: pos.coords.accuracy, friendly: null }),
+                (err) => resolve({ lat: FALLBACK_LAT, lon: FALLBACK_LON, acc: FALLBACK_ACCURACY, friendly: 'Fallback Location (GPS Error)' }),
                 { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
             );
         });
@@ -1096,7 +1038,6 @@
         try {
             let location = await getLocation();
 
-            // 2. Reverse Geocode (if necessary)
             if (location.friendly === null) {
                 const geocodeUrl = `${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${location.lat}&lon=${location.lon}&format=json`;
                 const response = await fetch(geocodeUrl);
@@ -1110,21 +1051,18 @@
             
             const finalLocationName = `${targetName} @ ${location.friendly}`;
 
-            // 3. Insert Attendance Log into 'geo_attendance_logs'
-            const { error } = await sb
-                .from('geo_attendance_logs')
-                .insert({
-                    student_id: currentUserId,
-                    check_in_time: checkInTime,
-                    session_type: sessionType,
-                    course_id: courseId, 
-                    location_friendly_name: finalLocationName, 
-                    latitude: location.lat,
-                    longitude: location.lon,
-                    accuracy_m: location.acc,
-                    is_verified: false,
-                    notes: `Checked in for Target ID: ${targetId}` 
-                });
+            const { error } = await sb.from('geo_attendance_logs').insert({
+                student_id: currentUserId,
+                check_in_time: checkInTime,
+                session_type: sessionType,
+                course_id: courseId, 
+                location_friendly_name: finalLocationName, 
+                latitude: location.lat,
+                longitude: location.lon,
+                accuracy_m: location.acc,
+                is_verified: false,
+                notes: `Checked in for Target ID: ${targetId}` 
+            });
 
             if (error) {
                 console.error("Check-in failed:", error);
@@ -1143,7 +1081,6 @@
     }
 
     async function loadGeoAttendanceHistory(userId) {
-        // ... (No changes needed, this function is already corrected to handle 400s) ...
         const tableBody = document.getElementById('geo-attendance-history');
         tableBody.innerHTML = '<tr><td colspan="5">Loading geo check-in history...</td></tr>';
 
@@ -1158,7 +1095,6 @@
             if (error) throw error;
 
             tableBody.innerHTML = '';
-
             if (!logs || logs.length === 0) {
                 tableBody.innerHTML = '<tr><td colspan="5">No geo check-in history found.</td></tr>';
                 return;
@@ -1166,7 +1102,6 @@
 
             logs.forEach(log => {
                 const accuracyText = (log.accuracy_m || 0).toFixed(2) + 'm'; 
-                
                 const verificationStatus = log.is_verified 
                     ? '<span style="color: var(--color-secondary); font-weight: 600;">Verified</span>' 
                     : '<span style="color: var(--color-info); font-weight: 600;">Pending</span>';
@@ -1189,47 +1124,37 @@
         }
     }
 
+    // *************************************************************************
+    // *** 6. MOCK FUNCTIONS ***
+    // *************************************************************************
 
-    // *************************************************************************
-    // *** 6. MOCK FUNCTIONS (UPDATED TO USE CACHED/LIVE DATA) ***
-    // *************************************************************************
-    
-    // Uses the live data loaded into cachedCourses
     async function loadCourses() {
         if (cachedCourses.length > 0) {
             const tableBody = document.getElementById('courses-table');
-            tableBody.innerHTML = cachedCourses.map(c => 
-                `<tr><td>${c.name}</td><td>Active</td></tr>`
-            ).join('');
+            tableBody.innerHTML = cachedCourses.map(c => `<tr><td>${c.name}</td><td>Active</td></tr>`).join('');
         } else {
             document.getElementById('courses-table').innerHTML = '<tr><td colspan="2">No courses found.</td></tr>';
         }
     }
-    
-    // REMAINDER ARE MOCK, PENDING NEW SUPABASE TABLE IMPLEMENTATION
+
     async function loadAttendance() {
         document.getElementById('attendance-table').innerHTML = '<tr><td colspan="4">No historical attendance records found. (MOCK)</td></tr>';
     }
     async function loadExams() {
-            document.getElementById('exams-table').innerHTML = '<tr><td colspan="3">No upcoming exams scheduled. (MOCK)</td></tr>';
+        document.getElementById('exams-table').innerHTML = '<tr><td colspan="3">No upcoming exams scheduled. (MOCK)</td></tr>';
     }
     async function loadResources() {
-            document.getElementById('resources-list').innerHTML = '<p>No resources available for your program at this time. (MOCK)</p>';
+        document.getElementById('resources-list').innerHTML = '<p>No resources available for your program at this time. (MOCK)</p>';
     }
     async function loadStudentMessages() {
-            document.getElementById('messages-list').innerHTML = '<h2>Recent Admin Messages</h2><p>No new messages. (MOCK)</p>';
+        document.getElementById('messages-list').innerHTML = '<h2>Recent Admin Messages</h2><p>No new messages. (MOCK)</p>';
     }
 
     // *************************************************************************
     // *** 7. INITIALIZATION ***
     // *************************************************************************
-    
+
     sessionTypeSelect.addEventListener('change', updateTargetSelect);
     checkInButton.addEventListener('click', geoCheckIn);
-
-    // FIX: Changed checkAuthAndLoad to loadInitialDataAndCheckAuth
     document.addEventListener('DOMContentLoaded', loadInitialDataAndCheckAuth); 
-
 </script>
-</body>
-</html>
