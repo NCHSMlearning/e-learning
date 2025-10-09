@@ -683,7 +683,7 @@
 
     // ** LOCATIONIQ CONFIGURATION (Geocoding API) - REPLACE KEY WITH YOUR OWN! **
     // Get a free key from locationiq.com
-    const LOCATIONIQ_API_KEY = 'YOUR_LOCATIONIQ_API_KEY_HERE'; // <--- MUST BE REPLACED
+    const LOCATIONIQ_API_KEY = 'pk.cbe61eae35ecbe1d1d682c347d81381c'; // <--- MUST BE REPLACED
     const LOCATIONIQ_API_URL = 'https://us1.locationiq.com/v1/reverse.php';
 
     // ** STATIC MOCK DATA (REPLACE WITH REAL SUPABASE TABLES) **
@@ -764,11 +764,12 @@
     }
 
     // *************************************************************************
-    // *** 3. CORE DATA FUNCTIONS ***
+    // *** 3. CORE DATA AND DASHBOARD FUNCTIONS ***
     // *************************************************************************
     
     async function loadWelcomeMessage() {
         adminWelcomeMessage.textContent = 'Loading message...';
+        // This is the key: it pulls the message updated by the Superadmin
         const { data, error } = await sb
             .from('system_settings')
             .select('setting_value')
@@ -789,18 +790,18 @@
         document.getElementById('dashboard-active-courses').textContent = cachedCourses.length;
 
         // --- 2. Load Attendance Rate (MOCK) ---
-        // REPLACE with logic: calculate (Days Present / Total Days) * 100 for last 30 days
+        // TODO: Replace with real calculation using a PostgreSQL function
         const attendanceRate = '94'; 
         document.getElementById('dashboard-attendance-rate').textContent = `${attendanceRate}%`;
 
         // --- 3. Load Upcoming Exam (MOCK) ---
-        // REPLACE with real query to 'exams' table for nearest date
+        // TODO: Replace with real query to 'exams' table for nearest date
         const mockExamDate = new Date();
         mockExamDate.setDate(mockExamDate.getDate() + 5); 
         document.getElementById('dashboard-upcoming-exam').textContent = `${mockExamDate.toLocaleDateString()} (Anatomy)`;
 
         // --- 4. Load New Resources (MOCK) ---
-        // REPLACE with real query to 'resources' table
+        // TODO: Replace with real query to 'resources' table
         document.getElementById('dashboard-new-resources').textContent = '3'; 
 
         // --- 5. Conditional Action Required Section ---
@@ -808,18 +809,16 @@
         const actionsTitleEl = document.getElementById('actions-title');
         const passportCard = document.getElementById('action-passport');
 
-        // Check if passport is missing (uses currentUserProfile loaded by loadProfile)
+        // Check if passport is missing
         let profileIncomplete = !currentUserProfile?.passport_url; 
         
         if (profileIncomplete) {
-            // Ensure the passport action card is shown if the profile is incomplete
             if (passportCard) passportCard.style.display = 'block'; 
         } else {
-            // Hide the passport action card if the profile is complete
             if (passportCard) passportCard.style.display = 'none';
         }
 
-        // Check if any action cards are visible (MOCK: just check the list child count)
+        // Check if any action cards are visible (MOCK: based on the current structure)
         const visibleActions = Array.from(actionRequiredEl.children).filter(el => el.style.display !== 'none');
 
         if (visibleActions.length > 0) {
@@ -934,7 +933,6 @@
 
         try {
             // 1. Upload to Supabase Storage Bucket ('avatars')
-            // NOTE: Ensure the 'avatars' bucket exists in Supabase Storage and RLS is set up.
             const { error: uploadError } = await sb.storage
                 .from('avatars') 
                 .upload(filePath, file, { 
@@ -962,6 +960,9 @@
             profileStatus.textContent = 'Passport photo uploaded and saved successfully!';
             profileStatus.style.color = 'var(--color-secondary)';
             
+            // Update the dashboard actions
+            loadDashboardMetrics(currentUserId);
+            
         } catch (error) {
             console.error('Photo upload failed:', error);
             profileStatus.textContent = `Photo upload failed: ${error.message}. Check Supabase Storage/RLS settings.`;
@@ -972,6 +973,7 @@
     });
 
     async function loadCourses(cacheOnly = false) {
+        // TODO: Update this query to only load courses the student is enrolled in
         const { data, error } = await sb.from('courses').select('course_name, status').limit(10);
         
         if (error) {
@@ -1039,18 +1041,21 @@
 
     // *** PLACEHOLDER FUNCTIONS ***
     async function loadExams() {
+        // This function needs to be filled with logic to fetch exam data
         const table = document.getElementById('exams-table');
-        table.innerHTML = `<tr><td colspan="3">CATS/Exams data loading...</td></tr>`;
+        table.innerHTML = `<tr><td colspan="3">No upcoming CATS/Exams found.</td></tr>`;
     }
 
     async function loadResources() {
+        // This function needs to be filled with logic to fetch learning resources
         const list = document.getElementById('resources-list');
-        list.innerHTML = `<p>Loading learning resources...</p>`;
+        list.innerHTML = `<p>No learning resources found for your program.</p>`;
     }
 
     async function loadStudentMessages() {
+        // This function needs to be filled with logic to fetch messages from admin/instructors
         const list = document.getElementById('messages-list');
-        list.innerHTML = `<p>Loading your messages...</p>`;
+        list.innerHTML = `<p>No new messages.</p>`;
     }
 
 
@@ -1099,12 +1104,11 @@
                 });
             }
             
-            geoMessage.textContent = 'Requesting high-accuracy location... Please grant permission.';
+            geoMessage.textContent = '1. Requesting high-accuracy location... Please grant permission.';
 
             // Real Geolocation API call with options for high accuracy
             navigator.geolocation.getCurrentPosition(
                 (position) => {
-                    geoMessage.textContent = `Location acquired. Accuracy: ${position.coords.accuracy.toFixed(2)} meters.`;
                     resolve({
                         latitude: position.coords.latitude,
                         longitude: position.coords.longitude,
@@ -1178,7 +1182,7 @@
         }
 
         const submissionTime = new Date().toISOString(); 
-        geoMessage.textContent = `Acquiring GPS location for ${selectedTarget} at current time...`;
+        geoMessage.textContent = `1. Acquiring GPS location for ${selectedTarget}...`;
 
         geoMessage.style.color = 'var(--color-primary)';
         checkInButton.disabled = true;
@@ -1186,13 +1190,15 @@
         try {
             const { latitude, longitude, accuracy_meters } = await getLocationAndAddress(); 
             
-            geoMessage.textContent = `Location acquired. Looking up address...`;
+            // Step 2: Reverse Geocode (Get the address)
+            geoMessage.textContent = `2. Location acquired (Accuracy: ${accuracy_meters.toFixed(1)}m). Looking up address...`;
 
             const address = await reverseGeocode(latitude, longitude); 
             
-            geoMessage.textContent = `Submitting record for ${selectedTarget} at ${address}...`;
+            // Display the successful address to the user!
+            geoMessage.textContent = `3. Submitting check-in for ${selectedTarget} at: ${address}...`;
 
-            // 1. Insert into the geo_attendance_logs table
+            // 3. Insert into the geo_attendance_logs table
             const { error: geoError } = await sb
                 .from('geo_attendance_logs')
                 .insert({
@@ -1202,11 +1208,11 @@
                     latitude: latitude,
                     longitude: longitude,
                     accuracy_meters: accuracy_meters,
-                    address_snapshot: address,
+                    address_snapshot: address, // Store the friendly address
                     is_verified: false
                 });
 
-            // 2. Insert/Update the main attendance table
+            // 4. Insert/Update the main attendance table
             const { error: attendanceError } = await sb
                 .from('attendance')
                 .insert({
@@ -1219,7 +1225,7 @@
 
             if (geoError || attendanceError) throw new Error(geoError?.message || attendanceError?.message);
 
-            geoMessage.textContent = 'Check-in successful! Record submitted for administration review.';
+            geoMessage.textContent = `Check-in successful! You are checked into ${selectedTarget} at ${address}. Record submitted for administration review.`;
             geoMessage.style.color = 'var(--color-secondary)';
             loadGeoAttendanceHistory(currentUserId);
             loadAttendance(currentUserId);
@@ -1247,12 +1253,13 @@
 
         currentUserId = user.id;
         
-        // Load initial data and cache courses first
+        // Step 1: Cache course list
         await loadCourses(true);
-        // Load profile next, which populates user details and then calls: loadAttendance/loadGeoAttendanceHistory
+        
+        // Step 2: Load user profile (populates name, profile photo URL, and calls other loaders)
         await loadProfile(currentUserId); 
         
-        // Final dashboard content based on loaded profile/courses
+        // Step 3: Final data setup
         updateTargetSelect();
         loadWelcomeMessage(); 
         loadDashboardMetrics(currentUserId); 
