@@ -9,12 +9,7 @@
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"></noscript>
     
     <style>
-        /*
-         * (The original CSS styles you provided are excellent and complete.
-         * For brevity in this response, I'll assume the CSS block is here
-         * and proceed directly to the JavaScript.)
-         */
-        
+        /* (CSS code remains identical for brevity, assuming it's included) */
         /* Global Reset and Ultra Modern Typography */
         :root {
             --color-dark: #1F2937;
@@ -63,8 +58,6 @@
         .sidebar-header img {
             width: 70px;
             margin-bottom: 15px;
-            /* Placeholder path - adjust if necessary */
-            /* src="images/Logo_NCHSM.png" */
             filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.1));
         }
         .sidebar-header h2 {
@@ -575,7 +568,7 @@
                 <form id="profile-form">
                     
                     <div class="profile-media">
-                        <img id="passport-preview" src="https://via.placeholder.com/150x150?text=NO+PHOTO" alt="Passport Photo">
+                        <img id="passport-preview" src="https://placehold.co/150x150?text=NO+PHOTO" alt="Passport Photo">
                         <input type="file" id="passport-file-input" accept="image/jpeg,image/png" style="display: none;">
                         <label for="passport-file-input" class="file-upload-label" id="upload-label">Change Photo</label>
                         <button type="button" id="upload-button" class="profile-button" style="margin-top: 15px; display: none;">Save Photo</button>
@@ -656,7 +649,7 @@
                 <table>
                     <thead><tr><th>Time</th><th>Session Type</th><th>Location (Friendly Name)</th><th>Accuracy (m)</th><th>Verified by Admin</th></tr></thead>
                     <tbody id="geo-attendance-history">
-                        <tr><td colspan="5">Loading geo check-in history...</td></tr>
+                        <tr><td colspan="5">Loading geo check-in history...</td></td></tr>
                     </tbody>
                 </table>
             </section>
@@ -699,7 +692,7 @@
     const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Ppk';
 
-    // Initialize Supabase client with full auth persistence
+    // Initialize Supabase client
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
         auth: {
             persistSession: true,
@@ -712,15 +705,9 @@
     const LOCATIONIQ_API_KEY = 'pk.cbe61eae35ecbe1d1d682c347d81381c';
     const LOCATIONIQ_API_URL = 'https://us1.locationiq.com/v1/reverse.php';
 
-    // Mock/Fallback location for testing if Geo-API fails (e.g., NCHSM main campus)
-    const FALLBACK_LAT = -1.286389; 
-    const FALLBACK_LON = 36.817223;
-    const FALLBACK_ACCURACY = 500;
-
     let currentUserId = null;
     let currentUserProfile = null;
     let cachedCourses = [];
-    let cachedDepartments = [];
     let cachedRotations = [];
 
     // *************************************************************************
@@ -745,9 +732,10 @@
     const navLinks = document.querySelectorAll('.nav a');
     const tabs = document.querySelectorAll('.tab-content');
 
+    // ** showTab function (Globally accessible) **
     function showTab(tabId) {
         navLinks.forEach(l => l.classList.remove('active'));
-        const activeLink = document.querySelector(.nav a[data-tab="${tabId}"]);
+        const activeLink = document.querySelector(`.nav a[data-tab="${tabId}"]`);
         if(activeLink) activeLink.classList.add('active');
 
         tabs.forEach(tab => tab.classList.remove('active'));
@@ -787,14 +775,11 @@
         uploadLabel.style.display = 'block';
     });
 
-    // Handle profile form submission
     profileForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         await updateProfile();
         
-        // After save, return to read-only mode
         document.querySelectorAll('#profile-form input').forEach(field => {
-             // Only make editable fields readonly again
             if (field.id !== 'profile-email' && field.id !== 'profile-program') {
                 field.readOnly = true;
             }
@@ -804,25 +789,22 @@
         uploadLabel.style.display = 'none';
     });
     
-    // Handle Passport file selection
     passportFileInput.addEventListener('change', (e) => {
         if (e.target.files.length > 0) {
             const file = e.target.files[0];
             const reader = new FileReader();
             reader.onload = (e) => {
                 passportPreview.src = e.target.result;
-                uploadButton.style.display = 'block'; // Show save button when a new file is selected
+                uploadButton.style.display = 'block';
             };
             reader.readAsDataURL(file);
         }
     });
 
-    // Handle Photo upload
     uploadButton.addEventListener('click', uploadPassportPhoto);
     messageForm.addEventListener('submit', submitMessage);
 
     async function logout() {
-        // Remove all active real-time subscriptions
         sb.realtime.channels.forEach(channel => sb.removeChannel(channel));
         await sb.auth.signOut();
         window.location.href = "login.html";
@@ -835,6 +817,7 @@
     async function loadWelcomeMessage() {
         adminWelcomeMessage.textContent = 'Loading message...';
         try {
+            // Fetches the system-wide welcome message set by the admin
             const { data, error } = await sb
                 .from('system_settings')
                 .select('setting_value')
@@ -842,45 +825,60 @@
                 .single();
 
             if (error || !data) {
-                console.warn("Could not load welcome message:", error?.message || 'No data');
-                adminWelcomeMessage.textContent = 'The system message is currently unavailable. Please check back later.';
+                adminWelcomeMessage.textContent = 'The system message is currently unavailable.';
                 return;
             }
             
             adminWelcomeMessage.innerHTML = data.setting_value || 'Welcome to the NCHSM Student Dashboard!';
         } catch (e) {
              adminWelcomeMessage.textContent = 'Error loading system message.';
-             console.error('Welcome message fetch error:', e);
         }
     }
     
     async function loadDashboardMetrics(userId) {
-        // Mock Data Loading (Replace with real Supabase calls if tables exist)
+        // 1. Active Courses
         document.getElementById('dashboard-active-courses').textContent = cachedCourses.length;
         
-        // This is a placeholder value. A real implementation needs a function 
-        // that aggregates attendance logs.
-        const attendanceRate = '94';
-        document.getElementById('dashboard-attendance-rate').textContent = ${attendanceRate}%;
+        // 2. Attendance Rate (Requires complex aggregation query)
+        // Placeholder for real logic (e.g., calling an RPC function or View)
+        // Example RPC: 
+        /* const { data: rateData } = await sb.rpc('get_attendance_rate', { user_id_in: userId });
+        const attendanceRate = rateData || 0;
+        */
+        const attendanceRate = '94'; 
+        document.getElementById('dashboard-attendance-rate').textContent = `${attendanceRate}%`;
 
-        // Mock Upcoming Exam
-        const mockExamDate = new Date();
-        mockExamDate.setDate(mockExamDate.getDate() + 5);
-        document.getElementById('dashboard-upcoming-exam').textContent = ${mockExamDate.toLocaleDateString('en-US')} (Anatomy);
+        // 3. Upcoming Exam (Fetches real data)
+        try {
+            const { data: exams, error: examError } = await sb
+                .from('exams')
+                .select('name, date')
+                .eq('program', currentUserProfile.program) // Filter by student's program
+                .gt('date', new Date().toISOString()) // Date greater than now (upcoming)
+                .order('date', { ascending: true })
+                .limit(1);
 
-        document.getElementById('dashboard-new-resources').textContent = '3';
+            if (examError || exams.length === 0) {
+                 document.getElementById('dashboard-upcoming-exam').textContent = 'None Scheduled';
+            } else {
+                 const exam = exams[0];
+                 document.getElementById('dashboard-upcoming-exam').textContent = `${new Date(exam.date).toLocaleDateString('en-US')} (${exam.name.split(' ')[0]})`;
+            }
+        } catch (e) {
+             document.getElementById('dashboard-upcoming-exam').textContent = 'Error';
+             console.error('Error loading upcoming exam:', e);
+        }
 
-        // Action Required Logic (Based on Profile completion)
+
+        // 4. Action Required Logic (Passport Photo)
         const actionRequiredEl = document.getElementById('dashboard-actions');
         const actionsTitleEl = document.getElementById('actions-title');
         const passportCard = document.getElementById('action-passport');
 
-        // Check if the passport URL field is empty
         let profileIncomplete = !currentUserProfile?.passport_url;
         
         passportCard.style.display = profileIncomplete ? 'block' : 'none';
         
-        // Hide the action section if no actions are required
         if (!profileIncomplete) {
              actionsTitleEl.style.display = 'none';
              actionRequiredEl.style.display = 'none';
@@ -890,15 +888,16 @@
         }
     }
 
-    // Load list of all courses and clinical rotations for the attendance dropdowns
+    // ** Fetches real courses and rotations from Admin tables **
     async function loadAllAttendanceTargets() {
-        // NOTE: This assumes you have 'courses' and 'clinical_rotations' tables
         try {
+            // Fetch all available courses
             const { data: coursesData, error: coursesError } = await sb
                 .from('courses')
                 .select('id, name')
                 .order('name');
                 
+            // Fetch all available clinical rotations
             const { data: rotationsData, error: rotationsError } = await sb
                 .from('clinical_rotations')
                 .select('id, name')
@@ -915,10 +914,9 @@
         }
     }
     
-    // Updates the second dropdown based on the first (Session Type)
     function updateTargetSelect() {
         const type = sessionTypeSelect.value;
-        attendanceTargetSelect.innerHTML = ''; // Clear previous options
+        attendanceTargetSelect.innerHTML = '';
         let targets = [];
         let labelText = 'Rotation/Course:';
 
@@ -943,7 +941,7 @@
 
         targets.forEach(target => {
             const option = document.createElement('option');
-            option.value = target.id; // Assuming ID is the value
+            option.value = target.id;
             option.textContent = target.name;
             attendanceTargetSelect.appendChild(option);
         });
@@ -952,47 +950,31 @@
 
 
     // *************************************************************************
-    // *** 4. AUTHENTICATION AND PROFILE MANAGEMENT (CRITICAL SECTION) ***
+    // *** 4. AUTHENTICATION AND PROFILE MANAGEMENT ***
     // *************************************************************************
 
     async function loadInitialDataAndCheckAuth() {
-        // 1. Load targets for the attendance tab first
         await loadAllAttendanceTargets();
         
-        // 2. Check for an active user session
         const { data: { user }, error } = await sb.auth.getUser();
 
-        if (error) {
-            console.error("Error fetching user session:", error);
+        if (error || !user) {
             window.location.href = 'login.html';
             return;
         }
 
-        // 3. Handle Authentication Result
-        if (user) {
-            currentUserId = user.id;
-            
-            // This is the core data load and authorization gate
-            const authCheckPassed = await loadProfile(currentUserId);
-            
-            if (authCheckPassed) {
-                 // If authenticated AND approved, show dashboard
-                showTab('dashboard');
-            }
-             // NOTE: If authCheckPassed is false, loadProfile handled the redirect/sign out.
-             
-        } else {
-            // If no user session is found, redirect to login
-            window.location.href = 'login.html';
+        currentUserId = user.id;
+        const authCheckPassed = await loadProfile(currentUserId);
+        
+        if (authCheckPassed) {
+            showTab('dashboard');
         }
     }
 
-    // ** MODIFIED loadProfile function with the 'approved' check **
     async function loadProfile(userId) {
         profileStatus.textContent = 'Loading profile details...';
         
         try {
-            // Fetch profile data AND join the auth.users table to get the 'approved' flag
             const { data, error } = await sb
                 .from('profiles')
                 .select(`
@@ -1008,29 +990,21 @@
                 .single();
 
             if (error || !data) {
-                console.error("Error loading profile:", error?.message || 'No profile data found');
-                profileStatus.textContent = 'Failed to load profile. Please contact IT.';
+                profileStatus.textContent = 'Failed to load profile. Contact IT.';
                 await sb.auth.signOut();
                 window.location.href = 'login.html';
                 return false;
             }
             
-            // *** CRITICAL AUTHORIZATION CHECK ***
             const isApproved = data.auth_user?.approved;
             
             if (isApproved !== true) {
-                console.warn("User is authenticated but NOT approved. Redirecting.");
-                profileStatus.textContent = 'Your account is pending administrator approval.';
-                
-                // Alert and redirect
                 alert("Your account is pending administrator approval. You will be logged out now.");
                 await sb.auth.signOut(); 
                 window.location.href = 'login.html';
-                return false; // Authorization failed
+                return false;
             }
-            // **********************************
 
-            // If approved, proceed to load data
             currentUserProfile = {
                 ...data,
                 email: data.auth_user.email,
@@ -1038,29 +1012,23 @@
             };
             
             profileStatus.textContent = 'Profile loaded successfully.';
-
-            // Populate form fields
             document.getElementById('profile-name').value = data.full_name || '';
             document.getElementById('profile-email').value = data.auth_user.email || '';
             document.getElementById('profile-phone').value = data.phone || '';
             document.getElementById('profile-program').value = data.program || '';
 
-            // Update dashboard header
-            document.querySelector('header h1').textContent = Welcome, ${data.full_name?.split(' ')[0] || 'Student'}!;
+            document.querySelector('header h1').textContent = `Welcome, ${data.full_name?.split(' ')[0] || 'Student'}!`;
 
-            // Load passport photo
             if (data.passport_url) {
                 const { data: fileData } = sb.storage.from('passport_photos').getPublicUrl(data.passport_url);
                 passportPreview.src = fileData.publicUrl;
-                document.getElementById('action-passport').style.display = 'none'; // Hide passport action
+                document.getElementById('action-passport').style.display = 'none';
             } else {
-                 passportPreview.src = "https://via.placeholder.com/150x150?text=NO+PHOTO";
-                 document.getElementById('action-passport').style.display = 'block'; // Show passport action
+                 passportPreview.src = "https://placehold.co/150x150?text=NO+PHOTO";
+                 document.getElementById('action-passport').style.display = 'block';
             }
             
-            // Set fields to read-only initially
             document.querySelectorAll('#profile-form input').forEach(field => {
-                // Keep email and program readonly always
                 if (field.id === 'profile-email' || field.id === 'profile-program') {
                     field.readOnly = true;
                 } else {
@@ -1068,7 +1036,7 @@
                 }
             });
 
-            return true; // Authorization succeeded
+            return true;
 
         } catch (e) {
             console.error("An unexpected error occurred in loadProfile:", e);
@@ -1082,7 +1050,6 @@
     async function updateProfile() {
         const fullName = document.getElementById('profile-name').value.trim();
         const phone = document.getElementById('profile-phone').value.trim();
-        
         profileStatus.textContent = 'Saving changes...';
 
         try {
@@ -1094,11 +1061,10 @@
             if (error) throw error;
 
             profileStatus.textContent = 'Profile updated successfully!';
-            // Reload profile data to update currentUserProfile global variable
             await loadProfile(currentUserId); 
 
         } catch (error) {
-            profileStatus.textContent = Update failed: ${error.message};
+            profileStatus.textContent = `Update failed: ${error.message}`;
             console.error('Update Profile Error:', error);
         }
     }
@@ -1111,20 +1077,18 @@
         uploadButton.disabled = true;
 
         const fileExt = file.name.split('.').pop();
-        const filePath = ${currentUserId}.${fileExt};
+        const filePath = `${currentUserId}.${fileExt}`;
 
         try {
-            // 1. Upload file to Supabase Storage
             const { error: uploadError } = await sb.storage
                 .from('passport_photos')
                 .upload(filePath, file, {
                     cacheControl: '3600',
-                    upsert: true // Overwrite existing file
+                    upsert: true
                 });
 
             if (uploadError) throw uploadError;
 
-            // 2. Update the 'profiles' table with the new file path
             const { error: updateError } = await sb
                 .from('profiles')
                 .update({ passport_url: filePath })
@@ -1133,14 +1097,11 @@
             if (updateError) throw updateError;
 
             profileStatus.textContent = 'Photo uploaded and profile updated successfully!';
-            
-            // Reload profile to update UI
             await loadProfile(currentUserId);
             uploadButton.style.display = 'none';
 
         } catch (error) {
-            profileStatus.textContent = Photo upload failed: ${error.message};
-            console.error('Photo Upload Error:', error);
+            profileStatus.textContent = `Photo upload failed: ${error.message}`;
         } finally {
             uploadButton.disabled = false;
         }
@@ -1151,22 +1112,18 @@
     // *** 5. ATTENDANCE FUNCTIONS ***
     // *************************************************************************
     
-    // Reverse Geocoding API call
     async function getFriendlyLocation(lat, lon) {
-        const url = ${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${lat}&lon=${lon}&format=json;
+        const url = `${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${lat}&lon=${lon}&format=json`;
         try {
             const response = await fetch(url);
             const data = await response.json();
-            // Use address components to create a friendly name
             const display_name = data.address.road || data.address.neighbourhood || data.address.county || data.display_name;
             return display_name;
         } catch (e) {
-            console.error('Reverse geocoding failed:', e);
             return 'Unknown Location';
         }
     }
 
-    // Main Check-in function
     function geoCheckIn() {
         geoMessage.textContent = 'Attempting to get your precise location...';
         checkInButton.disabled = true;
@@ -1179,11 +1136,7 @@
                 error => {
                     handleGeolocationError(error);
                 },
-                {
-                    enableHighAccuracy: true,
-                    timeout: 10000,
-                    maximumAge: 0
-                }
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
             );
         } else {
             geoMessage.textContent = 'Geolocation is not supported by your browser.';
@@ -1197,18 +1150,18 @@
         const sessionType = sessionTypeSelect.value;
         const targetName = attendanceTargetSelect.options[attendanceTargetSelect.selectedIndex].textContent;
 
-        if (!targetId) {
-            geoMessage.textContent = 'Please select a valid Session Type and Target.';
+        if (!targetId || !currentUserId) {
+            geoMessage.textContent = 'Error: Missing user ID or session target.';
             checkInButton.disabled = false;
             return;
         }
 
-        geoMessage.textContent = Location found (Accuracy: ${accuracy.toFixed(1)}m). Checking in...;
+        geoMessage.textContent = `Location found (Accuracy: ${accuracy.toFixed(1)}m). Checking in...`;
 
         const friendlyLocation = await getFriendlyLocation(latitude, longitude);
 
         try {
-            // Insert the attendance log into a 'geo_check_ins' table
+            // Inserts attendance record into the geo_check_ins table
             const { error } = await sb
                 .from('geo_check_ins')
                 .insert([
@@ -1226,11 +1179,11 @@
 
             if (error) throw error;
 
-            geoMessage.textContent = Check-in successful for ${targetName} at ${friendlyLocation}!;
-            loadGeoAttendanceHistory(currentUserId); // Refresh the history table
+            geoMessage.textContent = `Check-in successful for ${targetName} at ${friendlyLocation}!`;
+            loadGeoAttendanceHistory(currentUserId);
 
         } catch (e) {
-            geoMessage.textContent = Check-in failed: ${e.message};
+            geoMessage.textContent = `Check-in failed: ${e.message}`;
             console.error('Check-in error:', e);
         } finally {
             checkInButton.disabled = false;
@@ -1239,6 +1192,7 @@
 
     function handleGeolocationError(error) {
         let message = 'Geolocation failed. ';
+        // ... (Error codes logic remains the same)
         switch (error.code) {
             case error.PERMISSION_DENIED:
                 message += "You must allow location access to check in.";
@@ -1250,17 +1204,16 @@
                 message += "The request to get user location timed out.";
                 break;
             default:
-                message += An unknown error occurred (Code: ${error.code}).;
+                message += `An unknown error occurred (Code: ${error.code}).`;
                 break;
         }
         
-        // Provide a fallback option for IT if needed (for remote/virtual check-ins)
         message += " If you are having issues, please contact IT.";
         geoMessage.textContent = message;
         checkInButton.disabled = false;
     }
     
-    // Load recent geo check-in history
+    // ** Fetches real geo check-in history **
     async function loadGeoAttendanceHistory(userId) {
         const historyTableBody = document.getElementById('geo-attendance-history');
         historyTableBody.innerHTML = '<tr><td colspan="5">Loading geo check-in history...</td></tr>';
@@ -1271,7 +1224,7 @@
                 .select('*')
                 .eq('user_id', userId)
                 .order('created_at', { ascending: false })
-                .limit(10); // Show last 10 records
+                .limit(10);
 
             if (error) throw error;
 
@@ -1290,89 +1243,145 @@
                 row.insertCell().textContent = record.is_verified ? 'Yes' : 'Pending';
             });
         } catch (e) {
-            historyTableBody.innerHTML = <tr><td colspan="5">Error loading history: ${e.message}</td></tr>;
-            console.error('Load Geo History Error:', e);
+            historyTableBody.innerHTML = `<tr><td colspan="5">Error loading history: ${e.message}</td></tr>`;
         }
     }
     
-    // Placeholder function for old/legacy attendance records (if applicable)
+    // Assuming this table exists for older records if needed
     async function loadOldAttendanceRecords(userId) {
-         // This function is for demonstration and assumes another table ('attendance_legacy')
          const tableBody = document.getElementById('attendance-table');
-         tableBody.innerHTML = '<tr><td colspan="4">No legacy attendance records available.</td></tr>';
+         tableBody.innerHTML = '<tr><td colspan="4">Loading legacy records...</td></tr>';
+         
+         try {
+             const { data, error } = await sb
+                 .from('attendance_legacy')
+                 .select('course_name, type, attendance_date, status')
+                 .eq('student_id', userId)
+                 .order('attendance_date', { ascending: false });
+                 
+             if (error) throw error;
+             
+             tableBody.innerHTML = '';
+             if (data.length === 0) {
+                 tableBody.innerHTML = '<tr><td colspan="4">No legacy attendance records available.</td></tr>';
+                 return;
+             }
+             
+             data.forEach(record => {
+                 const row = tableBody.insertRow();
+                 row.insertCell().textContent = record.course_name;
+                 row.insertCell().textContent = record.type;
+                 row.insertCell().textContent = new Date(record.attendance_date).toLocaleDateString();
+                 row.insertCell().textContent = record.status;
+             });
+             
+         } catch (e) {
+             tableBody.innerHTML = `<tr><td colspan="4">Error loading legacy records: ${e.message}</td></tr>`;
+         }
     }
 
 
     // *************************************************************************
-    // *** 6. OTHER TAB FUNCTIONS (MOCK DATA) ***
+    // *** 6. OTHER TAB FUNCTIONS (REAL DATA FETCH) ***
     // *************************************************************************
 
+    // ** Fetches real courses student is enrolled in **
     async function loadCourses() {
         const coursesTableBody = document.getElementById('courses-table');
         coursesTableBody.innerHTML = '<tr><td colspan="2">Loading courses...</td></tr>';
         
-        // Mock data for demonstration
-        const mockCourses = [
-            { name: "Anatomy & Physiology 101", status: "Active" },
-            { name: "Clinical Skills Lab 202", status: "Active" },
-            { name: "Medical Ethics 301", status: "status: "Completed" }
-        ];
+        try {
+            // Fetches courses based on student's ID, potentially via a joined table (e.g., student_enrollments)
+            const { data, error } = await sb
+                .from('student_enrollments')
+                .select('course_id, course:courses(name), status')
+                .eq('student_id', currentUserId)
+                .order('status', { ascending: false });
 
-        coursesTableBody.innerHTML = '';
-        mockCourses.forEach(course => {
-            const row = coursesTableBody.insertRow();
-            row.insertCell().textContent = course.name;
-            row.insertCell().textContent = course.status;
-        });
-        
-        // Update the cached list of courses
-        cachedCourses = mockCourses;
+            if (error) throw error;
+
+            coursesTableBody.innerHTML = '';
+            if (data.length === 0) {
+                coursesTableBody.innerHTML = '<tr><td colspan="2">You are not currently enrolled in any courses.</td></tr>';
+                return;
+            }
+
+            data.forEach(record => {
+                const row = coursesTableBody.insertRow();
+                row.insertCell().textContent = record.course?.name || 'N/A';
+                row.insertCell().textContent = record.status;
+            });
+            
+        } catch (e) {
+            coursesTableBody.innerHTML = `<tr><td colspan="2">Error loading courses: ${e.message}</td></tr>`;
+        }
     }
 
+    // ** Fetches real exams **
     async function loadExams() {
         const examsTableBody = document.getElementById('exams-table');
         examsTableBody.innerHTML = '<tr><td colspan="3">Loading exam schedule...</td></tr>';
         
-        // Mock data
-        const mockExams = [
-            { name: "Mid-Term (A&P 101)", date: "2025-10-15", status: "Upcoming" },
-            { name: "Final CAT (Ethics)", date: "2025-11-01", status: "Scheduled" },
-            { name: "OSCE Skills Test", date: "2025-09-20", status: "Completed" }
-        ];
+        try {
+            const { data, error } = await sb
+                .from('exams')
+                .select('name, date, status')
+                .eq('program', currentUserProfile.program) // Filter by student's program
+                .order('date', { ascending: true });
 
-        examsTableBody.innerHTML = '';
-        mockExams.forEach(exam => {
-            const row = examsTableBody.insertRow();
-            row.insertCell().textContent = exam.name;
-            row.insertCell().textContent = new Date(exam.date).toLocaleDateString('en-US');
-            row.insertCell().textContent = exam.status;
-        });
+            if (error) throw error;
+
+            examsTableBody.innerHTML = '';
+            if (data.length === 0) {
+                examsTableBody.innerHTML = '<tr><td colspan="3">No exams are currently scheduled for your program.</td></tr>';
+                return;
+            }
+
+            data.forEach(exam => {
+                const row = examsTableBody.insertRow();
+                row.insertCell().textContent = exam.name;
+                row.insertCell().textContent = new Date(exam.date).toLocaleDateString('en-US');
+                row.insertCell().textContent = exam.status;
+            });
+            
+        } catch (e) {
+            examsTableBody.innerHTML = `<tr><td colspan="3">Error loading exams: ${e.message}</td></tr>`;
+        }
     }
 
+    // ** Fetches real resources **
     async function loadResources() {
          const resourcesList = document.getElementById('resources-list');
          resourcesList.innerHTML = 'Loading resources...';
 
-         // Filter by the student's program for a personalized list
          const studentProgram = currentUserProfile?.program || 'General';
          
-         // Mock resource data
-         const mockResources = [
-             { name: "A&P Unit 3 Handout", link: "#", program: "General", date: "2025-10-01" },
-             { name: "Clinical Skills Video Library", link: "#", program: "Clinical", date: "2025-09-25" },
-             { name: "Program Orientation Guide", link: "#", program: "General", date: "2025-09-01" }
-         ];
+         try {
+             const { data, error } = await sb
+                 .from('resources')
+                 .select('name, link, program, updated_at')
+                 .or(`program.eq.${studentProgram},program.eq.General`) // Filters by student's program OR 'General'
+                 .order('updated_at', { ascending: false });
 
-         const filteredResources = mockResources.filter(r => r.program === 'General' || r.program === studentProgram);
+             if (error) throw error;
 
-         resourcesList.innerHTML = filteredResources.map(r => `
-             <div class="card" style="margin-bottom: 15px; cursor: pointer; border-left-color: #3B82F6;" onclick="window.open('${r.link}', '_blank')">
-                 <h3>${r.name}</h3>
-                 <small>Posted: ${new Date(r.date).toLocaleDateString()} | Program: ${r.program}</small>
-             </div>
-         `).join('');
+             if (data.length === 0) {
+                  resourcesList.innerHTML = '<p style="font-style: italic;">No resources are currently available for your program.</p>';
+                  return;
+             }
+
+             resourcesList.innerHTML = data.map(r => `
+                 <div class="card" style="margin-bottom: 15px; cursor: pointer; border-left-color: #3B82F6;" onclick="window.open('${r.link}', '_blank')">
+                     <h3>${r.name}</h3>
+                     <small>Posted: ${new Date(r.updated_at).toLocaleDateString()} | Program: ${r.program}</small>
+                 </div>
+             `).join('');
+         } catch (e) {
+             resourcesList.innerHTML = `<p style="color: red;">Failed to load resources: ${e.message}</p>`;
+         }
     }
 
+    // Message submission (Already using Supabase)
     async function submitMessage(e) {
         e.preventDefault();
         const messageBody = document.getElementById('student-message-body');
@@ -1397,17 +1406,17 @@
             if (error) throw error;
 
             messageStatus.textContent = 'Message sent successfully! You will receive a response soon.';
-            messageBody.value = ''; // Clear the textarea
-            loadStudentMessages(); // Refresh message list
+            messageBody.value = '';
+            loadStudentMessages();
 
         } catch (error) {
-            messageStatus.textContent = Error sending message: ${error.message};
-            console.error('Message Send Error:', error);
+            messageStatus.textContent = `Error sending message: ${error.message}`;
         } finally {
             messageForm.querySelector('button').disabled = false;
         }
     }
 
+    // Load student's message history (Already using Supabase)
     async function loadStudentMessages() {
         const messagesList = document.getElementById('messages-list');
         messagesList.innerHTML = 'Loading messages...';
@@ -1448,8 +1457,7 @@
             });
 
         } catch (error) {
-             messagesList.innerHTML = <p style="color: red;">Failed to load messages: ${error.message}</p>;
-             console.error('Load Messages Error:', error);
+             messagesList.innerHTML = `<p style="color: red;">Failed to load messages: ${error.message}</p>`;
         }
     }
 
@@ -1458,7 +1466,6 @@
     // *** 7. INITIALIZATION ***
     // *************************************************************************
     
-    // Start the application lifecycle when the DOM is fully loaded
     document.addEventListener('DOMContentLoaded', loadInitialDataAndCheckAuth);
     
     </script>
