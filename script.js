@@ -1,286 +1,967 @@
-// ---------------- SUPABASE INIT ----------------
+/***********************************
+ * JavaScript Functionality
+ ***********************************/
+
+// !!! IMPORTANT: CHECK YOUR KEYS AND URL !!!
 const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const RESOURCES_BUCKET = 'resources';
+const IP_API_URL = 'https://api.ipify.org?format=json';
 
-// ---------------- HELPERS ----------------
+// NOTE: Verify this token is correct and allows geocoding. (Security Risk: Move to Edge Function)
+const MAPBOX_ACCESS_TOKEN = 'pk.cbe61eae35ecbe1d1d682c347d81381c'; 
+const DEVICE_ID_KEY = 'nchsm_device_id';
+
+let currentUserProfile = null;
+let attendanceMap = null;
+
+/*******************************************************
+ * 1. CORE UTILITY FUNCTIONS
+ *******************************************************/
 function $(id){ return document.getElementById(id); }
-function escapeHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
-function setActiveNav(el){ document.querySelectorAll('.nav a').forEach(a=>a.classList.remove('active')); if(el) el.classList.add('active'); }
+function escapeHtml(s){ return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
-// ---------------- SHOW SECTION ----------------
-function showSection(id,el){
-    document.querySelectorAll('.tab-content').forEach(s=>s.classList.remove('active'));
-    const sec=$(id); if(sec) sec.classList.add('active');
-    setActiveNav(el);
-    switch(id){
-        case'dashboard': if($('#dashboard')) loadDashboard(); break;
-        case'users': if($('#users')) loadUsers(); break;
-        case'students': if($('#students')) loadStudents(); break;
-        case'courses': if($('#courses')) { loadCourses(); populateCourseSelects(); } break;
-        case'attendance': if($('#attendance')) { loadAttendance(); populateStudentSelect(); populateCourseSelects(); setAttendanceLocationByIP(); } break;
-        case'exams': if($('#exams')) { loadExams(); populateCourseSelects(); } break;
-        case'messages': if($('#messages')) loadMessages(); break;
-        case'resources': if($('#resources')) loadResources(); break;
-        case'pending': if($('#pending')) loadPending(); break;
+/**
+ * @param {string} message 
+ * @param {'success'|'error'} type 
+ */
+function showFeedback(message, type = 'success') {
+    const prefix = type === 'success' ? '✅ Success: ' : '❌ Error: ';
+    alert(prefix + message);
+}
+
+/**
+ * @param {HTMLButtonElement} button 
+ * @param {boolean} isLoading 
+ * @param {string} originalText 
+ */
+function setButtonLoading(button, isLoading, originalText = 'Submit') {
+    button.disabled = isLoading;
+    button.textContent = isLoading ? 'Processing...' : originalText;
+    button.style.opacity = isLoading ? 0.7 : 1;
+}
+
+/**
+ * Generic data fetching utility using Supabase
+ */
+async function fetchData(tableName, selectQuery = '*', filters = {}, order = 'created_at', ascending = false) {
+    let query = sb.from(tableName).select(selectQuery);
+
+    // Apply filters
+    for (const key in filters) {
+        if (filters[key] !== undefined) {
+            query = query.eq(key, filters[key]);
+        }
+    }
+    
+    // Apply ordering
+    query = query.order(order, { ascending });
+
+    const { data, error } = await query;
+    if (error) {
+        console.error(`Error loading ${tableName}:`, error);
+        return { data: null, error };
+    }
+    return { data, error: null };
+}
+
+/**
+ * Utility to populate select/dropdown elements
+ */
+function populateSelect(selectElement, data, valueKey, textKey, defaultText) {
+    selectElement.innerHTML = `<option value="">-- ${defaultText} --</option>`;
+    data?.forEach(item => {
+        const text = item[textKey] || item[valueKey];
+        selectElement.innerHTML += `<option value="${item[valueKey]}">${escapeHtml(text)}</option>`;
+    });
+}
+
+function generateUUID() {
+    return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+        (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+    );
+}
+
+function getDeviceId() {
+    let deviceId = localStorage.getItem(DEVICE_ID_KEY);
+    if (!deviceId) {
+        deviceId = generateUUID();
+        localStorage.setItem(DEVICE_ID_KEY, deviceId);
+    }
+    return deviceId;
+}
+
+async function getIPAddress() {
+    try {
+        const response = await fetch(IP_API_URL);
+        const data = await response.json();
+        return data.ip;
+    } catch (error) {
+        console.error('IP fetch failed:', error);
+        return null;
     }
 }
 
-// ---------------- AUTH CHECK ----------------
-(async function checkAuth() {
-    const { data: { user } } = await sb.auth.getUser();
-    if(!user){ window.location.href = '/login.html'; }
-    else if($('#sessionInfo')) $('sessionInfo').innerText = `Signed in as ${user.email}`;
-})();
-
-// ---------------- LOGOUT ----------------
-async function logout() {
-    const { error } = await sb.auth.signOut();
-    if(error){ alert('Logout failed: '+error.message); return; }
-    window.location.href = '/login.html';
+async function reverseGeocode(lat, lng) {
+    const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${MAPBOX_ACCESS_TOKEN}&limit=1`;
+    try {
+        const response = await fetch(url);
+        const data = await response.json();
+        if (data.features && data.features.length > 0) {
+            return data.features[0].place_name; 
+        }
+        return 'Reverse Geocoding Failed';
+    } catch (error) {
+        console.error('Reverse Geocoding Error:', error);
+        return 'Geocoding API Network Error';
+    }
 }
 
-// ---------------- SIDEBAR NAVIGATION ----------------
-document.querySelectorAll('.nav a').forEach(link => {
+function getGeoLocation() {
+    return new Promise((resolve, reject) => {
+        if (!navigator.geolocation) {
+            reject(new Error('Geolocation is not supported by your browser.'));
+            return;
+        }
+        navigator.geolocation.getCurrentPosition(
+            (position) => resolve(position.coords),
+            (error) => reject(new Error(error.message)),
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        );
+    });
+}
+
+// Tab switching logic
+const navLinks = document.querySelectorAll('.nav a');
+const tabs = document.querySelectorAll('.tab-content');
+navLinks.forEach(link => {
     link.addEventListener('click', e => {
         e.preventDefault();
-        showSection(link.dataset.tab, link);
+        navLinks.forEach(l => l.classList.remove('active'));
+        link.classList.add('active');
+        tabs.forEach(tab => tab.classList.remove('active'));
+        const tabId = link.dataset.tab;
+        document.getElementById(tabId).classList.add('active');
+        loadSectionData(tabId);
     });
 });
 
-// ---------------- DASHBOARD ----------------
-async function loadDashboard(){
-    if(!$('#dashboard')) return;
-    const { data: users } = await sb.from('profiles').select('*');
-    if(!users) return;
-    const totalUsers = users.length;
-    const totalAdmins = users.filter(u=>u.role==='admin').length;
-    const totalStudents = users.filter(u=>u.role==='student').length;
-    const totalPending = users.filter(u=>!u.approved).length;
-    if($('#totalUsers')) $('totalUsers').innerText = totalUsers;
-    if($('#totalAdmins')) $('totalAdmins').innerText = totalAdmins;
-    if($('#totalStudents')) $('totalStudents').innerText = totalStudents;
-    if($('#totalPending')) $('totalPending').innerText = totalPending;
+function showTab(tabId) {
+    navLinks.forEach(l => l.classList.remove('active'));
+    const activeLink = document.querySelector(`.nav a[data-tab="${tabId}"]`);
+    if (activeLink) activeLink.classList.add('active');
+    tabs.forEach(tab => tab.classList.remove('active'));
+    document.getElementById(tabId).classList.add('active');
+    loadSectionData(tabId);
 }
 
-// ---------------- USERS ----------------
-async function loadUsers(){
-    const table=$('usersTable'); if(!table) return;
-    const {data:users} = await sb.from('profiles').select('*').order('created_at',{ascending:false});
-    table.innerHTML='';
-    users?.forEach(u=>{
-        const tr=document.createElement('tr');
-        tr.innerHTML = `<td>${escapeHtml(u.full_name)}</td><td>${escapeHtml(u.email)}</td><td>${escapeHtml(u.phone)}</td>
-        <td>${escapeHtml(u.role)}</td>
-        <td>${u.approved?'Yes':'No'}</td>
-        <td class="flex">
-          ${!u.approved?`<button class="btn btn-approve" onclick="approveUser('${u.id}')">Approve</button>`:''}
-          <button class="btn btn-delete" onclick="deleteUser('${u.id}')">Delete</button>
-        </td>`;
-        table.appendChild(tr);
-    });
-}
-
-async function approveUser(id){ await sb.from('profiles').update({approved:true}).eq('id',id); loadUsers(); loadDashboard(); }
-async function deleteUser(id){ if(confirm('Delete this user?')){ await sb.from('profiles').delete().eq('id',id); loadUsers(); loadDashboard(); } }
-
-if($('#addUserForm')) $('addUserForm').addEventListener('submit', async e=>{
-    e.preventDefault();
-    const full_name=$('new_full_name').value,email=$('new_email').value,phone=$('new_phone').value,password=$('new_password').value,role=$('new_role').value;
-    const {data,error}=await sb.auth.admin.createUser({email,password,phone,role,app_metadata:{role}});
-    if(error){ alert(error.message); return; }
-    await sb.from('profiles').insert([{id:data.user.id,full_name,email,phone,role,approved:true}]);
-    $('addUserForm').reset(); loadUsers(); loadDashboard();
-});
-
-// ---------------- STUDENTS ----------------
-async function loadStudents(){
-    const table=$('studentsTable'); if(!table) return;
-    const {data:students}=await sb.from('profiles').select('*').eq('role','student').order('created_at',{ascending:false});
-    table.innerHTML='';
-    students?.forEach(s=>{
-        const tr=document.createElement('tr');
-        tr.innerHTML=`<td>${escapeHtml(s.full_name)}</td><td>${escapeHtml(s.email)}</td><td>${escapeHtml(s.phone)}</td>
-        <td>${s.approved?'Active':'Pending'}</td>
-        <td class="flex"><button class="btn btn-delete" onclick="deleteUser('${s.id}')">Delete</button></td>`;
-        table.appendChild(tr);
-    });
-}
-
-// ---------------- COURSES ----------------
-async function loadCourses(){
-    const table=$('coursesTable'); if(!table) return;
-    const {data:courses}=await sb.from('courses').select('*').order('created_at',{ascending:false});
-    table.innerHTML='';
-    courses?.forEach(c=>{
-        const tr=document.createElement('tr');
-        tr.innerHTML=`<td>${escapeHtml(c.course_name)}</td>
-        <td class="flex"><button class="btn btn-edit" onclick="editCourse('${c.id}')">Edit</button>
-        <button class="btn btn-delete" onclick="deleteCourse('${c.id}')">Delete</button></td>`;
-        table.appendChild(tr);
-    });
-}
-
-async function deleteCourse(id){ if(confirm('Delete course?')){ await sb.from('courses').delete().eq('id',id); loadCourses(); } }
-if($('#addCourseForm')) $('addCourseForm').addEventListener('submit', async e=>{
-    e.preventDefault();
-    const course_name=$('course_name').value,course_description=$('course_description').value;
-    await sb.from('courses').insert([{course_name,description:course_description}]);
-    $('addCourseForm').reset(); loadCourses(); populateCourseSelects();
-});
-
-async function populateCourseSelects(){
-    const {data:courses}=await sb.from('courses').select('*').order('created_at',{ascending:true});
-    const selects=['att_course_id','exam_course_id'];
-    selects.forEach(id=>{
-        const sel=$(id); if(!sel) return; sel.innerHTML='';
-        courses?.forEach(c=>{ const opt=document.createElement('option'); opt.value=c.id; opt.innerText=c.course_name; sel.appendChild(opt); });
-    });
-}
-
-// ---------------- ATTENDANCE ----------------
-async function loadAttendance(){
-    const table=$('attendanceTable'); if(!table) return;
-    const {data:att}=await sb.from('attendance').select('*,profiles(full_name),courses(course_name)').order('created_at',{ascending:false});
-    table.innerHTML='';
-    att?.forEach(a=>{
-        const tr=document.createElement('tr');
-        tr.innerHTML=`<td>${escapeHtml(a.profiles?.full_name)}</td><td>${escapeHtml(a.session_type)}</td><td>${escapeHtml(a.courses?.course_name)}</td>
-        <td>${escapeHtml(a.location)} / ${escapeHtml(a.time)}</td><td>${escapeHtml(a.date)}</td>
-        <td class="flex"><button class="btn btn-delete" onclick="deleteAttendance('${a.id}')">Delete</button></td>`;
-        table.appendChild(tr);
-    });
-}
-
-async function deleteAttendance(id){ if(confirm('Delete attendance?')){ await sb.from('attendance').delete().eq('id',id); loadAttendance(); } }
-async function populateStudentSelect(){
-    const sel=$('att_student_id'); if(!sel) return;
-    const {data:students}=await sb.from('profiles').select('*').eq('role','student');
-    sel.innerHTML='';
-    students?.forEach(s=>{ const opt=document.createElement('option'); opt.value=s.id; opt.innerText=s.full_name; sel.appendChild(opt); });
-}
-if($('#addAttendanceForm')) $('addAttendanceForm').addEventListener('submit', async e=>{
-    e.preventDefault();
-    const student_id=$('att_student_id').value,session_type=$('att_session_type').value,course_id=$('att_course_id').value,
-          location=$('att_location').value,date=$('att_date').value,time=$('att_time').value;
-    await sb.from('attendance').insert([{student_id,session_type,course_id,location,date,time}]);
-    $('addAttendanceForm').reset(); loadAttendance();
-});
-
-// ---------- AUTO LOCATION BY IP ----------
-async function setAttendanceLocationByIP(){
-    const input = $('att_location'); if(!input) return;
-    try{
-        const res = await fetch('https://ipapi.co/json/');
-        const data = await res.json();
-        input.value = `${data.city}, ${data.region}, ${data.country_name}`;
-    } catch(err){
-        console.warn('Could not fetch location:', err);
+async function loadSectionData(tabId) {
+    switch(tabId) {
+        case 'dashboard': loadDashboardData(); break;
+        case 'users': loadAllUsers(); break;
+        case 'pending': loadPendingApprovals(); break;
+        case 'enroll': loadStudents(); break; // Loads students table in the new enroll section
+        case 'courses': loadCourses(); break;
+        case 'attendance': loadAttendance(); populateAttendanceSelects(); break;
+        case 'cats': loadExams(); populateAttendanceSelects(); break;
+        case 'messages': loadMessages(); break;
+        case 'calendar': $('calendar').innerHTML = '<p>Simple calendar placeholder - Exam and Clinical dates will show here. (Integration coming soon)</p>'; break;
+        case 'resources': loadResources(); break;
     }
 }
 
-// ---------------- EXAMS ----------------
-async function loadExams(){
-    const table=$('examsTable'); if(!table) return;
-    const {data:exams}=await sb.from('exams').select('*,courses(course_name)').order('date',{ascending:true});
-    table.innerHTML='';
-    exams?.forEach(e=>{
-        const tr=document.createElement('tr');
-        tr.innerHTML=`<td>${escapeHtml(e.courses?.course_name)}</td><td>${escapeHtml(e.title)}</td><td>${escapeHtml(e.date)}</td><td>${escapeHtml(e.status)}</td>
-        <td class="flex"><button class="btn btn-delete" onclick="deleteExam('${e.id}')">Delete</button></td>`;
-        table.appendChild(tr);
+// --- Session / Init ---
+async function initSession() {
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) {
+        window.location.href = "login.html";
+        return;
+    }
+
+    const { data: profile } = await sb.from('profiles').select('*').eq('id', user.id).single();
+    if (profile) {
+        currentUserProfile = profile;
+        if (currentUserProfile.role !== 'superadmin') {
+            // Redirect non-superadmins
+            window.location.href = "admin.html"; 
+            return;
+        }
+        // Update header with name if available
+        document.querySelector('header h1').textContent = `Welcome, ${profile.full_name || 'Super Admin'}!`;
+    } else {
+        window.location.href = "login.html";
+        return;
+    }
+    
+    loadSectionData('dashboard');
+    populateAttendanceSelects();
+}
+
+// Logout
+async function logout() {
+    await sb.auth.signOut();
+    localStorage.removeItem("loggedInUser");
+    window.location.href = "login.html";
+}
+
+/*******************
+ * Dashboard Data
+ *******************/
+async function loadDashboardData() {
+    const { count: allUsersCount } = await sb.from('profiles').select('id', { count: 'exact' });
+    $('totalUsers').textContent = allUsersCount || 0;
+    const { count: pendingCount } = await sb.from('profiles').select('id', { count: 'exact' }).eq('approved', false);
+    $('pendingApprovals').textContent = pendingCount || 0;
+    const { count: studentsCount } = await sb.from('profiles').select('id', { count: 'exact' }).eq('role', 'student');
+    $('totalStudents').textContent = studentsCount || 0;
+    const today = new Date().toISOString().slice(0, 10);
+    const { data: checkinData } = await sb.from('geo_attendance_logs').select('id').gte('check_in_time', today);
+    $('todayCheckins').textContent = checkinData?.length || 0;
+}
+
+/*******************************************************
+ * 2. Users/Enroll Tab (Approvals Logic)
+ *******************************************************/
+async function loadAllUsers() {
+    const tbody = $('users-table');
+    tbody.innerHTML = '<tr><td colspan="7">Loading all users...</td></tr>';
+    
+    const { data: users, error } = await fetchData('profiles', '*', {}, 'full_name', true);
+
+    if (error) {
+        tbody.innerHTML = `<tr><td colspan="7">Error loading users: ${error.message}</td></tr>`;
+        return;
+    }
+    
+    tbody.innerHTML = '';
+    users.forEach(u => {
+        const roleOptions = ['student', 'admin', 'superadmin']
+            .map(role => `<option value="${role}" ${u.role === role ? 'selected' : ''}>${role}</option>`).join('');
+        
+        const statusText = u.approved ? 'Approved' : 'Pending';
+
+        tbody.innerHTML += `<tr>
+            <td>${escapeHtml(u.id.substring(0, 8))}...</td>
+            <td>${escapeHtml(u.full_name)}</td>
+            <td>${escapeHtml(u.email)}</td>
+            <td>
+                <select class="btn" onchange="updateUserRole('${u.id}', this.value)" ${u.role === 'superadmin' ? 'disabled' : ''}>
+                    ${roleOptions}
+                </select>
+            </td>
+            <td>${escapeHtml(u.program_type || 'N/A')}</td>
+            <td>${statusText}</td>
+            <td>
+                ${!u.approved ? `<button class="btn btn-approve" onclick="approveUser('${u.id}')">Approve</button>` : ''}
+                <button class="btn btn-delete" onclick="deleteProfile('${u.id}')">Delete</button>
+            </td>
+        </tr>`;
     });
 }
-async function deleteExam(id){ if(confirm('Delete exam?')){ await sb.from('exams').delete().eq('id',id); loadExams(); } }
-if($('#addExamForm')) $('addExamForm').addEventListener('submit', async e=>{
+
+async function loadPendingApprovals() {
+    const tbody = $('pending-table');
+    tbody.innerHTML = '<tr><td colspan="6">Loading pending users...</td></tr>';
+    
+    const { data: pending, error } = await fetchData('profiles', '*', { approved: false }, 'created_at', true);
+
+    if (error) {
+        tbody.innerHTML = `<tr><td colspan="6">Error loading pending list: ${error.message}</td></tr>`;
+        return;
+    }
+    
+    tbody.innerHTML = '';
+    if (pending.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6">No pending approvals!</td></tr>`;
+        return;
+    }
+    
+    pending.forEach(p => {
+        const registeredDate = new Date(p.created_at).toLocaleDateString();
+        tbody.innerHTML += `<tr>
+            <td>${escapeHtml(p.full_name)}</td>
+            <td>${escapeHtml(p.email)}</td>
+            <td>${escapeHtml(p.role)}</td>
+            <td>${escapeHtml(p.program_type || 'N/A')}</td>
+            <td>${registeredDate}</td>
+            <td>
+                <button class="btn btn-approve" onclick="approveUser('${p.id}')">Approve</button>
+                <button class="btn btn-reject" onclick="deleteProfile('${p.id}')">Reject & Delete</button>
+            </td>
+        </tr>`;
+    });
+}
+
+// Loads ONLY students for the dedicated table inside the 'Enroll Accounts' tab
+async function loadStudents() {
+    const tbody = $('students-table');
+    tbody.innerHTML = '<tr><td colspan="7">Loading students...</td></tr>';
+    
+    const { data: students, error } = await fetchData('profiles', '*', { role: 'student' }, 'full_name', true);
+
+    if (error) {
+        tbody.innerHTML = `<tr><td colspan="7">Error loading students: ${error.message}</td></tr>`;
+        return;
+    }
+    
+    tbody.innerHTML = '';
+    students.forEach(s => {
+        tbody.innerHTML += `<tr>
+            <td>${escapeHtml(s.id.substring(0, 8))}...</td>
+            <td>${escapeHtml(s.full_name)}</td>
+            <td>${escapeHtml(s.email)}</td>
+            <td>${escapeHtml(s.program_type || 'N/A')}</td>
+            <td>${escapeHtml(s.phone)}</td>
+            <td>${s.approved ? 'Approved' : 'Pending'}</td>
+            <td><button class="btn btn-delete" onclick="deleteProfile('${s.id}')">Delete</button></td>
+        </tr>`;
+    });
+}
+
+async function approveUser(userId) {
+    if (!confirm('Are you sure you want to approve this user?')) return;
+
+    const { error } = await sb.from('profiles')
+        .update({ approved: true })
+        .eq('id', userId);
+
+    if (error) {
+        showFeedback(`Failed to approve user: ${error.message}`, 'error');
+    } else {
+        showFeedback('User approved successfully!');
+        loadPendingApprovals(); // Reload pending list
+        loadAllUsers(); // Reload all users table
+        loadDashboardData(); // Update dashboard counts
+    }
+}
+
+async function updateUserRole(userId, newRole) {
+    if (!confirm(`Are you sure you want to change this user's role to ${newRole}?`)) return;
+
+    const { error } = await sb.from('profiles')
+        .update({ role: newRole })
+        .eq('id', userId);
+
+    if (error) {
+        showFeedback(`Failed to update role: ${error.message}`, 'error');
+    } else {
+        showFeedback(`User role updated to ${newRole} successfully!`);
+        loadAllUsers(); // Reload to reflect changes
+    }
+}
+
+async function deleteProfile(userId) {
+    if (!confirm('WARNING: Deleting the profile is an irreversible action. Are you absolutely sure?')) return;
+
+    // 1. Delete the profile record
+    const { error: profileError } = await sb.from('profiles').delete().eq('id', userId);
+
+    if (profileError) {
+        showFeedback(`Failed to delete profile: ${profileError.message}`, 'error');
+        return;
+    }
+    
+    // 2. IMPORTANT: Delete the corresponding user from Auth (this requires a service role key in a secure environment)
+    // NOTE: For client-side code, we rely on RLS to limit what users can delete. 
+    // This action is typically performed server-side or via an Admin API for full Auth deletion.
+    // Assuming your RLS policy on 'profiles' handles the cascade delete or a Trigger handles Auth deletion.
+    
+    showFeedback('User profile deleted successfully! (Note: Auth user deletion may require server-side action)', 'success');
+    loadAllUsers(); 
+    loadPendingApprovals();
+    loadStudents();
+    loadDashboardData();
+}
+
+// New form listener for enrolling both Students AND Admins
+$('add-account-form').addEventListener('submit', async e => {
     e.preventDefault();
-    const course_id=$('exam_course_id').value,title=$('exam_title').value,date=$('exam_date').value,status=$('exam_status').value;
-    await sb.from('exams').insert([{course_id,title,date,status}]); $('addExamForm').reset(); loadExams();
+    const submitButton = e.submitter;
+    const originalText = submitButton.textContent;
+    setButtonLoading(submitButton, true, originalText);
+
+    const name = $('account-name').value.trim();
+    const email = $('account-email').value.trim();
+    const password = $('account-password').value.trim();
+    const role = $('account-role').value;
+    const phone = $('account-phone').value.trim();
+    const program_type = $('account-program').value;
+    const approved = true; // Super Admin enrollment auto-approves
+
+    // 1. Create the Auth User
+    const { data: { user }, error: authError } = await sb.auth.signUp({
+        email: email,
+        password: password,
+        options: {
+            data: { full_name: name, role: role, phone: phone, program_type: program_type, approved: approved }
+        }
+    });
+
+    if (authError) {
+        showFeedback(`Account Enrollment Error: ${authError.message}`, 'error');
+        setButtonLoading(submitButton, false, originalText);
+        return;
+    }
+    
+    // 2. Insert Profile (If successful, a trigger/RLS should handle the profile insertion, but here's a safety net/direct approach if needed)
+    // NOTE: Assuming your database setup uses a trigger to automatically create the profile on sign-up, this step may be redundant.
+    if (user && user.id) {
+        // Clear form
+        e.target.reset();
+        showFeedback(`New ${role.toUpperCase()} account successfully enrolled and approved!`, 'success');
+        loadStudents(); 
+        loadAllUsers();
+        loadDashboardData();
+    } else {
+        showFeedback('Enrollment succeeded but Auth user object was not returned. Please check the logs.', 'error');
+    }
+
+    setButtonLoading(submitButton, false, originalText);
 });
 
-// ---------------- MESSAGES ----------------
-async function loadMessages(){
-    const table=$('messagesTable'); if(!table) return;
-    const {data:msgs}=await sb.from('messages').select('*,profiles_from:sender(*),profiles_to:recipient(*)').order('created_at',{ascending:false});
-    table.innerHTML='';
-    msgs?.forEach(m=>{
-        const tr=document.createElement('tr');
-        tr.innerHTML=`<td>${escapeHtml(m.profiles_from?.full_name)}</td><td>${escapeHtml(m.profiles_to?.full_name)}</td>
-        <td>${escapeHtml(m.message)}</td><td>${escapeHtml(m.created_at)}</td>`;
-        table.appendChild(tr);
+
+/*******************************************************
+ * 3. Courses Tab
+ *******************************************************/
+
+async function loadCourses() {
+    const tbody = $('courses-table');
+    tbody.innerHTML = '<tr><td colspan="3">Loading courses...</td></tr>';
+
+    const { data: courses, error } = await fetchData('courses', '*', {}, 'course_name', true);
+    if (error) {
+        tbody.innerHTML = `<tr><td colspan="3">Error loading courses: ${error.message}</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = '';
+    courses.forEach(c => {
+        tbody.innerHTML += `<tr>
+            <td>${escapeHtml(c.course_name)}</td>
+            <td>${escapeHtml(c.description || 'N/A')}</td>
+            <td>
+                <button class="btn btn-delete" onclick="deleteCourse('${c.id}')">Delete</button>
+            </td>
+        </tr>`;
     });
+    
+    // Also populate course selects for other forms
+    const courseSelects = document.querySelectorAll('#att_course_id, #exam_course_id');
+    courseSelects.forEach(select => populateSelect(select, courses, 'id', 'course_name', 'Select Course'));
 }
-if($('#sendMessageForm')) $('sendMessageForm').addEventListener('submit', async e=>{
+
+$('add-course-form').addEventListener('submit', async e => {
     e.preventDefault();
-    const recipient_email=$('msg_recipient').value,message=$('msg_body').value;
-    const {data:recipient}=await sb.from('profiles').select('*').eq('email',recipient_email).single();
-    if(!recipient){ alert('Recipient not found'); return; }
-    const {data:{user}} = await sb.auth.getUser();
-    await sb.from('messages').insert([{sender:user.id,recipient:recipient.id,message}]);
-    $('sendMessageForm').reset(); loadMessages();
+    const submitButton = e.submitter;
+    const originalText = submitButton.textContent;
+    setButtonLoading(submitButton, true, originalText);
+
+    const course_name = $('course-name').value.trim();
+    const description = $('course-description').value.trim();
+
+    const { error } = await sb.from('courses').insert({ course_name, description });
+
+    if (error) {
+        showFeedback(`Failed to add course: ${error.message}`, 'error');
+    } else {
+        showFeedback('Course added successfully!');
+        e.target.reset();
+        loadCourses();
+    }
+
+    setButtonLoading(submitButton, false, originalText);
 });
 
-// ---------------- RESOURCES ----------------
-async function loadResources(){
-    const table=$('resourcesTable'); if(!table) return;
-    const {data:files,error}=await sb.storage.from(RESOURCES_BUCKET).list('',{limit:100,offset:0});
-    table.innerHTML='';
-    files?.forEach(f=>{
-        const tr=document.createElement('tr');
-        tr.innerHTML=`<td><a href="${sb.storage.from(RESOURCES_BUCKET).getPublicUrl(f.name).data.publicUrl}" target="_blank">${escapeHtml(f.name)}</a></td>
-        <td>${(f.size/1024).toFixed(1)} KB</td>
-        <td class="flex"><button class="btn btn-delete" onclick="deleteResource('${f.name}')">Delete</button></td>`;
-        table.appendChild(tr);
+async function deleteCourse(courseId) {
+    if (!confirm('Are you sure you want to delete this course? This cannot be undone.')) return;
+
+    const { error } = await sb.from('courses').delete().eq('id', courseId);
+
+    if (error) {
+        showFeedback(`Failed to delete course: ${error.message}`, 'error');
+    } else {
+        showFeedback('Course deleted successfully!');
+        loadCourses();
+    }
+}
+
+
+/*******************************************************
+ * 4. Attendance Tab
+ *******************************************************/
+
+// Populate student and course selects
+async function populateAttendanceSelects() {
+    const { data: students } = await fetchData('profiles', 'id, full_name', { role: 'student', approved: true }, 'full_name', true);
+    
+    const attStudentSelect = $('att_student_id');
+    if (students) {
+        populateSelect(attStudentSelect, students, 'id', 'full_name', 'Select Student');
+    }
+    
+    // Courses are loaded in loadCourses and populate the same select element
+}
+
+async function loadAttendance() {
+    const tbody = $('attendance-table');
+    tbody.innerHTML = '<tr><td colspan="6">Loading records...</td></tr>';
+    
+    // Fetch records and join with profiles to get student name
+    const { data: records, error } = await fetchData(
+        'geo_attendance_logs', 
+        '*, profile:student_id(full_name, program_type)', // Join to get profile data
+        {}, 
+        'check_in_time', 
+        false // Descending order (newest first)
+    );
+
+    if (error) {
+        tbody.innerHTML = `<tr><td colspan="6">Error loading attendance: ${error.message}</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = '';
+    records.forEach(r => {
+        const studentName = r.profile?.full_name || 'N/A';
+        const dateTime = new Date(r.check_in_time).toLocaleString();
+        
+        // Determine location string
+        let locationText;
+        let mapButton = '';
+        if (r.latitude && r.longitude) {
+            locationText = `Geo-Log: ${r.location_name || 'Coordinates'}`;
+            mapButton = `<button class="btn btn-map" onclick="showMap('${r.latitude}', '${r.longitude}', '${r.location_name || 'Check-in Location'}', '${studentName}', '${dateTime}')">View Map</button>`;
+        } else {
+            locationText = `Manual: ${r.location_name || 'N/A'}`;
+        }
+        
+        tbody.innerHTML += `<tr>
+            <td>${escapeHtml(studentName)}</td>
+            <td>${escapeHtml(r.session_type || 'N/A')}</td>
+            <td>${locationText}</td>
+            <td>${dateTime}</td>
+            <td>${r.latitude ? 'Yes' : 'No'}</td>
+            <td>
+                ${mapButton}
+                <button class="btn btn-delete" onclick="deleteAttendanceRecord('${r.id}')">Delete</button>
+            </td>
+        </tr>`;
     });
 }
-if($('#uploadResourceBtn')) $('uploadResourceBtn').addEventListener('click', async ()=>{
-    const file=$('resourceFile').files[0]; if(!file){ alert('Select a file'); return; }
-    const title=$('resourceTitle').value||file.name;
-    const {data,error}=await sb.storage.from(RESOURCES_BUCKET).upload(file.name,file,{upsert:true});
-    if(error){ alert(error.message); return; }
-    $('resourceFile').value=''; $('resourceTitle').value=''; loadResources();
+
+function filterAttendanceTable() {
+    const filter = $('attendance-search').value.toUpperCase();
+    const trs = $('attendance-table').getElementsByTagName('tr');
+
+    for (let i = 0; i < trs.length; i++) {
+        const td = trs[i].getElementsByTagName('td')[0]; // Student Name column
+        if (td) {
+            const txtValue = td.textContent || td.innerText;
+            if (txtValue.toUpperCase().indexOf(filter) > -1) {
+                trs[i].style.display = "";
+            } else {
+                trs[i].style.display = "none";
+            }
+        }       
+    }
+}
+
+// Handler for Super Admin manual check-in
+$('manual-attendance-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const submitButton = e.submitter;
+    const originalText = submitButton.textContent;
+    setButtonLoading(submitButton, true, originalText);
+
+    const student_id = $('att_student_id').value;
+    const session_type = $('att_session_type').value;
+    const course_id = $('att_course_id').value || null;
+    const location_name = $('att_location').value.trim() || 'Manual Entry';
+    const date = $('att_date').value;
+    const time = $('att_time').value;
+    
+    // Combine date and time for the timestamp
+    const check_in_time = time ? `${date}T${time}:00.000Z` : `${date}T00:00:00.000Z`;
+    
+    const record = {
+        student_id,
+        session_type,
+        course_id,
+        location_name,
+        check_in_time,
+        ip_address: await getIPAddress(),
+        device_id: getDeviceId(),
+        // No latitude/longitude for manual entries unless explicitly added
+    };
+
+    const { error } = await sb.from('geo_attendance_logs').insert([record]);
+
+    if (error) {
+        showFeedback(`Manual Mark Error: ${error.message}`, 'error');
+    } else {
+        showFeedback('Manual attendance marked successfully!', 'success');
+        e.target.reset();
+        loadAttendance();
+        loadDashboardData();
+    }
+    setButtonLoading(submitButton, false, originalText);
 });
-async function deleteResource(name){ if(confirm('Delete resource?')){ await sb.storage.from(RESOURCES_BUCKET).remove([name]); loadResources(); } }
 
-// ---------------- PENDING ----------------
-async function loadPending(){
-    const table=$('pendingTable'); if(!table) return;
-    const {data:users}=await sb.from('profiles').select('*').eq('approved',false);
-    table.innerHTML='';
-    users?.forEach(u=>{
-        const tr=document.createElement('tr');
-        tr.innerHTML=`<td>${escapeHtml(u.full_name)}</td><td>${escapeHtml(u.email)}</td>
-        <td class="flex"><button class="btn btn-approve" onclick="approveUser('${u.id}')">Approve</button>
-        <button class="btn btn-delete" onclick="deleteUser('${u.id}')">Delete</button></td>`;
-        table.appendChild(tr);
+// Handler for Super Admin geo check-in
+async function markMyAttendance() {
+    const button = document.querySelector('.btn-attendance');
+    const originalText = button.textContent;
+    setButtonLoading(button, true, 'Getting Location...');
+    
+    try {
+        const coords = await getGeoLocation();
+        const { latitude, longitude, accuracy } = coords;
+        
+        // Reverse geocode the location (optional but helpful)
+        const location_name = await reverseGeocode(latitude, longitude);
+
+        const record = {
+            student_id: currentUserProfile.id,
+            session_type: 'office', // Default for Admin geo-log
+            location_name,
+            latitude,
+            longitude,
+            accuracy,
+            check_in_time: new Date().toISOString(),
+            ip_address: await getIPAddress(),
+            device_id: getDeviceId(),
+        };
+
+        const { error } = await sb.from('geo_attendance_logs').insert([record]);
+
+        if (error) {
+            showFeedback(`Geo-Log Error: ${error.message}`, 'error');
+        } else {
+            showFeedback(`Your location successfully logged at: ${location_name}`, 'success');
+            loadAttendance();
+            loadDashboardData();
+        }
+        
+    } catch (error) {
+        showFeedback(`Failed to get location: ${error.message}`, 'error');
+    }
+
+    setButtonLoading(button, false, originalText);
+}
+
+async function deleteAttendanceRecord(recordId) {
+    if (!confirm('Are you sure you want to delete this attendance record?')) return;
+
+    const { error } = await sb.from('geo_attendance_logs').delete().eq('id', recordId);
+
+    if (error) {
+        showFeedback(`Failed to delete record: ${error.message}`, 'error');
+    } else {
+        showFeedback('Attendance record deleted successfully!');
+        loadAttendance();
+        loadDashboardData();
+    }
+}
+
+function showMap(lat, lng, locationName, studentName, dateTime) {
+    const modal = $('mapModal');
+    modal.style.display = 'flex'; // Use flex to center
+
+    $('mapInfo').innerHTML = `**Student:** ${studentName} | **Time:** ${dateTime} | **Location:** ${locationName}`;
+
+    // Initialize map if it doesn't exist
+    if (attendanceMap) {
+        attendanceMap.remove();
+    }
+    
+    const mapElement = $('attendanceMap');
+    // Ensure the map container is visible before initializing
+    mapElement.style.visibility = 'visible'; 
+    
+    attendanceMap = L.map('attendanceMap').setView([lat, lng], 16);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(attendanceMap);
+
+    // Add a marker to the map
+    L.marker([lat, lng])
+        .addTo(attendanceMap)
+        .bindPopup(`<b>${studentName}</b><br>${locationName}`).openPopup();
+        
+    // Invalidate size to ensure the map renders correctly within the modal
+    setTimeout(() => {
+        attendanceMap.invalidateSize();
+    }, 100);
+}
+
+
+/*******************************************************
+ * 5. CATS / Exams Tab
+ *******************************************************/
+
+async function loadExams() {
+    const tbody = $('exams-table');
+    tbody.innerHTML = '<tr><td colspan="6">Loading exams...</td></tr>';
+    
+    // Fetch records and join with courses to get course name
+    const { data: exams, error } = await fetchData(
+        'cats_exams', 
+        '*, course:course_id(course_name)', 
+        {}, 
+        'exam_date', 
+        false // Descending order (newest first)
+    );
+
+    if (error) {
+        tbody.innerHTML = `<tr><td colspan="6">Error loading exams: ${error.message}</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = '';
+    exams.forEach(e => {
+        const courseName = e.course?.course_name || 'N/A';
+        const examDate = new Date(e.exam_date).toLocaleDateString();
+        
+        tbody.innerHTML += `<tr>
+            <td>${escapeHtml(e.program_type)}</td>
+            <td>${escapeHtml(courseName)}</td>
+            <td>${escapeHtml(e.exam_title)}</td>
+            <td>${examDate}</td>
+            <td>${escapeHtml(e.exam_status)}</td>
+            <td>
+                <button class="btn btn-delete" onclick="deleteExam('${e.id}')">Delete</button>
+            </td>
+        </tr>`;
     });
 }
 
-// ---------------- AUTO REFRESH ----------------
-const AUTO_REFRESH_INTERVAL = 10000; // 10s
-async function refreshAllData() {
-    if ($('#dashboard')) loadDashboard();
-    if ($('#users')) loadUsers();
-    if ($('#students')) loadStudents();
-    if ($('#courses')) loadCourses();
-    if ($('#attendance')) loadAttendance();
-    if ($('#exams')) loadExams();
-    if ($('#messages')) loadMessages();
-    if ($('#resources')) loadResources();
-    if ($('#pending')) loadPending();
-}
-setInterval(refreshAllData, AUTO_REFRESH_INTERVAL);
+$('add-exam-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const submitButton = e.submitter;
+    const originalText = submitButton.textContent;
+    setButtonLoading(submitButton, true, originalText);
 
-// ---------------- INIT ----------------
-(async function init(){
-    if($('#dashboard')) loadDashboard();
-    if($('#users')) loadUsers();
-    if($('#students')) loadStudents();
-    if($('#courses')) { loadCourses(); populateCourseSelects(); }
-    if($('#attendance')) { loadAttendance(); populateStudentSelect(); populateCourseSelects(); setAttendanceLocationByIP(); }
-    if($('#exams')) loadExams();
-    if($('#messages')) loadMessages();
-    if($('#resources')) loadResources();
-    if($('#pending')) loadPending();
-})();
+    const exam_program = $('exam_program').value;
+    const course_id = $('exam_course_id').value;
+    const exam_title = $('exam_title').value.trim();
+    const exam_date = $('exam_date').value;
+    const exam_status = $('exam_status').value;
+    
+    const { error } = await sb.from('cats_exams').insert([{ 
+        program_type: exam_program,
+        course_id: course_id,
+        exam_title: exam_title,
+        exam_date: exam_date,
+        exam_status: exam_status
+    }]);
+
+    if (error) {
+        showFeedback(`Failed to add exam: ${error.message}`, 'error');
+    } else {
+        showFeedback('Exam added successfully!', 'success');
+        e.target.reset();
+        loadExams();
+    }
+
+    setButtonLoading(submitButton, false, originalText);
+});
+
+async function deleteExam(examId) {
+    if (!confirm('Are you sure you want to delete this exam/CAT?')) return;
+
+    const { error } = await sb.from('cats_exams').delete().eq('id', examId);
+
+    if (error) {
+        showFeedback(`Failed to delete exam: ${error.message}`, 'error');
+    } else {
+        showFeedback('Exam deleted successfully!');
+        loadExams();
+    }
+}
+
+
+/*******************************************************
+ * 6. Messages Tab
+ *******************************************************/
+
+async function loadMessages() {
+    const tbody = $('messages-table');
+    tbody.innerHTML = '<tr><td colspan="3">Loading messages...</td></tr>';
+
+    const { data: messages, error } = await fetchData('messages', '*', {}, 'created_at', false);
+
+    if (error) {
+        tbody.innerHTML = `<tr><td colspan="3">Error loading messages: ${error.message}</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = '';
+    messages.forEach(m => {
+        const messageDate = new Date(m.created_at).toLocaleString();
+        tbody.innerHTML += `<tr>
+            <td>${escapeHtml(m.program_type)}</td>
+            <td>${escapeHtml(m.message_body.substring(0, 100))}...</td>
+            <td>${messageDate}</td>
+        </tr>`;
+    });
+}
+
+$('send-message-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const submitButton = e.submitter;
+    const originalText = submitButton.textContent;
+    setButtonLoading(submitButton, true, originalText);
+
+    const program_type = $('msg_program').value;
+    const message_body = $('msg_body').value.trim();
+    
+    if (!program_type || !message_body) {
+        showFeedback('Please select a program and enter a message.', 'error');
+        setButtonLoading(submitButton, false, originalText);
+        return;
+    }
+
+    const { error } = await sb.from('messages').insert([{ 
+        sender_id: currentUserProfile.id,
+        program_type: program_type,
+        message_body: message_body,
+    }]);
+
+    if (error) {
+        showFeedback(`Failed to send message: ${error.message}`, 'error');
+    } else {
+        showFeedback(`Message sent to ${program_type} students successfully!`, 'success');
+        e.target.reset();
+        loadMessages();
+    }
+
+    setButtonLoading(submitButton, false, originalText);
+});
+
+
+/*******************************************************
+ * 7. Resources Tab
+ *******************************************************/
+
+async function loadResources() {
+    const tbody = $('resources-list');
+    tbody.innerHTML = '<tr><td colspan="5">Loading resources...</td></tr>';
+
+    const { data: resources, error } = await fetchData('resources', '*', {}, 'created_at', false);
+
+    if (error) {
+        tbody.innerHTML = `<tr><td colspan="5">Error loading resources: ${error.message}</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = '';
+    resources.forEach(r => {
+        const uploadDate = new Date(r.created_at).toLocaleDateString();
+        // Assuming file_url is generated upon upload
+        const fileNameLink = `<a href="${r.file_url}" target="_blank" rel="noopener noreferrer">${escapeHtml(r.file_title || r.file_name)}</a>`;
+        
+        tbody.innerHTML += `<tr>
+            <td>${escapeHtml(r.program_type)}</td>
+            <td>${fileNameLink}</td>
+            <td>${escapeHtml(r.uploaded_by_name || 'Admin')}</td>
+            <td>${uploadDate}</td>
+            <td>
+                <button class="btn btn-delete" onclick="deleteResource('${r.id}', '${r.file_name}')">Delete</button>
+            </td>
+        </tr>`;
+    });
+}
+
+
+async function uploadResource() {
+    const submitButton = document.querySelector('#upload-resource-form button');
+    const originalText = submitButton.textContent;
+    setButtonLoading(submitButton, true, originalText);
+    
+    const fileInput = $('resourceFile');
+    const program_type = $('resource_program').value;
+    const file_title = $('resourceTitle').value.trim();
+
+    if (!fileInput.files.length || !program_type || !file_title) {
+        showFeedback('Please select a program, enter a title, and select a file.', 'error');
+        setButtonLoading(submitButton, false, originalText);
+        return;
+    }
+
+    const file = fileInput.files[0];
+    const fileName = `${Date.now()}-${file.name}`;
+    const filePath = `${program_type}/${fileName}`;
+
+    // 1. Upload to Supabase Storage
+    const { data: uploadData, error: uploadError } = await sb.storage
+        .from(RESOURCES_BUCKET)
+        .upload(filePath, file);
+
+    if (uploadError) {
+        showFeedback(`Upload Error: ${uploadError.message}`, 'error');
+        setButtonLoading(submitButton, false, originalText);
+        return;
+    }
+    
+    // Get the public URL
+    const { data: { publicUrl } } = sb.storage.from(RESOURCES_BUCKET).getPublicUrl(filePath);
+
+    // 2. Insert record into resources table
+    const { error: insertError } = await sb.from('resources').insert([{
+        program_type: program_type,
+        file_name: fileName,
+        file_title: file_title,
+        file_url: publicUrl,
+        uploaded_by_id: currentUserProfile.id,
+        uploaded_by_name: currentUserProfile.full_name || 'Super Admin'
+    }]);
+
+    if (insertError) {
+        showFeedback(`Database Insert Error: ${insertError.message}`, 'error');
+        // NOTE: In a real app, you would also try to delete the uploaded file here if the DB insert fails
+    } else {
+        showFeedback('Resource uploaded and recorded successfully!', 'success');
+        $('upload-resource-form').reset();
+        loadResources();
+    }
+
+    setButtonLoading(submitButton, false, originalText);
+}
+
+async function deleteResource(resourceId, fileName) {
+    if (!confirm('Are you sure you want to delete this resource and remove the file from storage?')) return;
+
+    // 1. Get resource details to construct storage path (assuming resource_name = program_type/fileName)
+    const { data: resource, error: fetchError } = await sb.from('resources').select('program_type').eq('id', resourceId).single();
+    if (fetchError) {
+        showFeedback(`Failed to find resource details: ${fetchError.message}`, 'error');
+        return;
+    }
+    
+    const filePath = `${resource.program_type}/${fileName}`;
+
+    // 2. Delete file from Storage
+    const { error: storageError } = await sb.storage.from(RESOURCES_BUCKET).remove([filePath]);
+
+    if (storageError) {
+        // Log the error but continue to try and delete the DB record
+        console.error('Storage Deletion Failed:', storageError);
+    }
+    
+    // 3. Delete record from resources table
+    const { error: dbError } = await sb.from('resources').delete().eq('id', resourceId);
+
+    if (dbError) {
+        showFeedback(`Failed to delete resource record: ${dbError.message}`, 'error');
+    } else {
+        showFeedback('Resource deleted successfully from both database and storage!', 'success');
+        loadResources();
+    }
+}
+
+
+// --- Initialization ---
+document.addEventListener('DOMContentLoaded', initSession);
