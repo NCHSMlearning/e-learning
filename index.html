@@ -4,811 +4,471 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NCHSM Student Portal</title>
-    <!-- Supabase JS Library -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    
-    <!-- Google Fonts: Inter for modern UI -->
-    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
-    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"></noscript>
-    
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* Global Styles & Variables */
-        :root {
-            --color-primary: #1D4ED8; /* Darker Blue for emphasis */
-            --color-secondary: #059669; /* Darker Green for success */
-            --color-warning: #D97706; /* Orange for warnings */
-            --color-dark: #1F2937; 
-            --color-text-light: #6B7280;
-            --color-background: #F9FAFB;
-            --color-card-bg: #FFFFFF;
-            --color-sidebar: #0F172A; 
-            --border-radius: 12px;
-            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+        /*
+        * CRITICAL FIX: Only show the active tab content
+        */
+        .tab-content {
+            display: none;
         }
-
-        body {
-            margin: 0;
-            font-family: 'Inter', sans-serif;
-            background-color: var(--color-background);
-            color: var(--color-dark);
-            -webkit-font-smoothing: antialiased;
-        }
-        .container {
-            display: flex;
-            min-height: 100vh;
-        }
-
-        /* 1. Sidebar */
-        .sidebar {
-            width: 250px;
-            background-color: var(--color-sidebar);
-            color: white;
-            display: flex;
-            flex-direction: column;
-            padding: 30px 20px;
-            box-shadow: var(--shadow-lg);
-            z-index: 10;
-        }
-        .sidebar-header {
-            text-align: center;
-            margin-bottom: 40px;
-            padding-bottom: 20px;
-            border-bottom: 1px solid #374151;
-        }
-        .sidebar-header img {
-            width: 60px;
-            margin-bottom: 15px;
-            filter: invert(1); /* Ensure logo is visible on dark background */
-        }
-        .sidebar-header h2 {
-            font-weight: 700;
-            font-size: 1.1rem;
-            color: white;
-            letter-spacing: 0.5px;
-        }
-        .nav { 
-            list-style: none; padding: 0; flex-grow: 1; 
-        }
-        .nav a { 
-            color: #D1D5DB; 
-            text-decoration: none; 
-            padding: 12px 15px; 
-            border-radius: 8px; 
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            transition: all 0.2s ease-in-out; 
-            font-weight: 500;
-            margin-bottom: 8px;
-        }
-        .nav a:hover { 
-            background-color: #1F2937;
-            color: white;
-        }
-        .nav a.active { 
-            background-color: var(--color-primary); 
-            color: white; 
-            font-weight: 600;
-            box-shadow: 0 4px 6px -1px rgba(29, 78, 216, 0.3);
-        }
-        .logout a { 
-            /* ... (omitted CSS for brevity) ... */
-            background-color: #EF4444; 
-        }
-        .logout a:hover { 
-            background-color: #DC2626; 
-        }
-
-        /* 2. Main Content Area */
-        .main { 
-            flex: 1; 
-            padding: 40px; 
-            overflow-y: auto; 
-        }
-        header h1 { 
-            margin: 0; 
-            font-size: 2.2rem; 
-            font-weight: 700;
-        }
-        .subtitle { 
-            color: var(--color-text-light); 
-            margin-top: 5px;
-            margin-bottom: 30px; 
-        }
-
-        /* 3. Cards (Attendance/Stats) */
-        .cards { 
-            display: grid; 
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); 
-            gap: 25px; 
-            margin-bottom: 40px; 
-        }
-        .card { 
-            background-color: var(--color-card-bg); 
-            padding: 25px; 
-            border-radius: var(--border-radius); 
-            box-shadow: var(--shadow-md); 
-            border-left: 5px solid var(--color-primary);
-            transition: transform 0.2s;
-        }
-        .card:hover {
-            transform: translateY(-3px);
-            box-shadow: var(--shadow-lg);
-        }
-        .card h3 { 
-            color: var(--color-text-light);
-            text-transform: uppercase;
-        }
-        .card-value {
-            font-size: 2.2rem;
-            font-weight: 800;
-        }
-
-        /* 4. Attendance Action Area */
-        #attendance-check {
-            background-color: var(--color-card-bg);
-            padding: 30px;
-            border-radius: var(--border-radius);
-            box-shadow: var(--shadow-lg);
-            margin-bottom: 40px;
-            border-top: 4px solid var(--color-secondary);
-        }
-        .action-button {
-            padding: 15px 30px;
-            font-size: 1.1rem;
-            font-weight: 600;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: background-color 0.2s, opacity 0.2s;
-            width: 100%;
-            margin-top: 15px;
-        }
-        .action-button:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-        }
-        #check-in-btn {
-            background-color: var(--color-primary);
-        }
-        #check-in-btn:not(:disabled):hover {
-            background-color: #1E40AF;
-        }
-        #check-out-btn {
-            background-color: var(--color-warning); 
-        }
-        #check-out-btn:not(:disabled):hover {
-            background-color: #B45309;
-        }
-
-        /* 5. Welcome Banner Styling (To match screenshot) */
-        #welcome {
-            /* Adjust padding to pull content up under the header visually */
-            padding-top: 0; 
-        }
-        .welcome-banner-container {
-            margin: -40px -40px 0 -40px; /* Pull banner to edges of main content */
-            height: 120px;
-            overflow: hidden;
-            border-radius: var(--border-radius) var(--border-radius) 0 0;
-            position: relative;
-        }
-        .welcome-content-card {
-            background-color: var(--color-card-bg); 
-            padding: 30px; 
-            border-radius: 0 0 var(--border-radius) var(--border-radius); 
-            box-shadow: var(--shadow-lg);
-            margin-top: 0;
-        }
-        .welcome-banner-header svg {
-            width: 100%;
-            height: 100%;
+        .tab-content.active {
             display: block;
         }
 
-        /* General List Styling in Welcome tab */
-        #welcome ul {
-            list-style-type: none;
-            padding-left: 0;
-            margin: 15px 0 25px 0;
-        }
-        #welcome li {
-            padding-left: 1.5em;
-            text-indent: -1.5em;
-            margin-bottom: 10px;
-        }
-        #welcome li::before {
-            content: "•";
-            color: var(--color-primary); 
-            font-weight: bold;
-            display: inline-block;
-            width: 1.5em;
+        /* Set Inter font */
+        body {
+            font-family: 'Inter', sans-serif;
+            min-height: 100vh;
         }
 
-        /* Responsive adjustments */
-        @media (max-width: 768px) {
-            .container { flex-direction: column; }
-            .sidebar { width: 100%; padding: 20px 0; height: auto; }
-            /* ... (omitted responsive CSS for brevity) ... */
-            .main { padding: 20px; }
-            .cards { grid-template-columns: 1fr; }
-            .welcome-banner-container { margin: -20px -20px 0 -20px; } /* Adjust for mobile padding */
+        /* Sidebar link styling */
+        .nav-link {
+            transition: all 0.2s ease-in-out;
+            padding: 0.75rem 1rem;
+            display: flex;
+            align-items: center;
+            border-radius: 0.5rem;
+        }
+        .nav-link:hover {
+            background-color: #374151; /* Darker gray on hover */
+        }
+        .nav-link.active {
+            background-color: #10b981; /* Green for active link */
+            color: #ffffff;
+            font-weight: 600;
         }
     </style>
 </head>
-<body>
-    <div class="container">
-        <!-- Sidebar Navigation (Admin-like structure, student-focused) -->
-        <aside class="sidebar">
-            <div class="sidebar-header">
-                <img src="https://placehold.co/60x60/ffffff/0F172A?text=NCHSM" alt="Logo">
-                <h2>STUDENT PORTAL</h2>
+<body class="bg-gray-100">
+
+    <div id="app-container" class="flex">
+
+        <!-- Sidebar Navigation -->
+        <aside id="sidebar" class="w-64 bg-gray-800 text-gray-200 space-y-6 py-7 px-2 fixed inset-y-0 left-0 transform -translate-x-full lg:relative lg:translate-x-0 transition duration-200 ease-in-out z-50">
+
+            <!-- Sidebar Header -->
+            <div class="sidebar-header px-4 flex items-center mb-10">
+                <div class="text-3xl font-extrabold text-green-400">
+                    &#x1F393; NCHSM
+                </div>
+                <h2 class="text-xl font-semibold ml-3 text-white">Student</h2>
             </div>
-            <ul class="nav">
-                <!-- New Welcome tab is now the default view -->
-                <li><a href="#" data-tab="welcome" class="active">Welcome/Getting Started</a></li> 
-                
-                <!-- Student-centric mapping of Admin Navigation -->
-                <li><a href="#" data-tab="dashboard">Dashboard</a></li>
-                <li><a href="#" data-tab="profile">My Profile</a></li>
-                <li><a href="#" data-tab="grades">My Grades & Reports</a></li>
-                <li><a href="#" data-tab="courses">My Enrollment & Courses</a></li>
-                <li><a href="#" data-tab="course-details">Course Details</a></li>
-                <li><a href="#" data-tab="attendance">Attendance Logs</a></li>
-                <li><a href="#" data-tab="cats-exams">CATs/Exams</a></li>
-                <li><a href="#" data-tab="messages">Message Admin</a></li>
-                <li><a href="#" data-tab="calendar">Academic Calendar</a></li>
-                <li><a href="#" data-tab="resources">Learning Resources</a></li>
-                <li><a href="#" data-tab="announcements">Announcements</a></li>
-            </ul>
-            <div class="logout"><a href="#" onclick="logout()">Logout</a></div>
+
+            <!-- Navigation Links -->
+            <nav class="flex flex-col space-y-1">
+                <a href="#" data-tab="welcome" class="nav-link active">
+                    <span class="mr-3">&#x1F3E0;</span>
+                    Welcome/Getting Started
+                </a>
+                <a href="#" data-tab="dashboard" class="nav-link text-gray-400 hover:text-white">
+                    <span class="mr-3">&#x1F4C8;</span>
+                    Dashboard
+                </a>
+                <a href="#" data-tab="profile" class="nav-link text-gray-400 hover:text-white">
+                    <span class="mr-3">&#x1F464;</span>
+                    My Profile
+                </a>
+                <a href="#" data-tab="grades" class="nav-link text-gray-400 hover:text-white">
+                    <span class="mr-3">&#x1F4DD;</span>
+                    Grades & Reports
+                </a>
+                <a href="#" data-tab="attendance" class="nav-link text-gray-400 hover:text-white">
+                    <span class="mr-3">&#x23F0;</span>
+                    Attendance Logs
+                </a>
+                <a href="#" data-tab="announcements" class="nav-link text-gray-400 hover:text-white">
+                    <span class="mr-3">&#x1F4E3;</span>
+                    Announcements
+                </a>
+                <a href="#" data-tab="messages" class="nav-link text-gray-400 hover:text-white">
+                    <span class="mr-3">&#x1F4E8;</span>
+                    Message Admin
+                </a>
+                 <!-- Placeholder Tabs -->
+                <a href="#" data-tab="courses" class="nav-link text-gray-400 hover:text-white mt-2">
+                    <span class="mr-3">&#x1F4D6;</span>
+                    My Enrollment & Courses
+                </a>
+                <a href="#" data-tab="cats-exams" class="nav-link text-gray-400 hover:text-white mt-2">
+                    <span class="mr-3">&#x1F5D2;</span>
+                    CATs/Exams
+                </a>
+                <a href="#" data-tab="academic-calendar" class="nav-link text-gray-400 hover:text-white mt-2">
+                    <span class="mr-3">&#x1F4C5;</span>
+                    Academic Calendar
+                </a>
+                <a href="#" data-tab="learning-resources" class="nav-link text-gray-400 hover:text-white mt-2">
+                    <span class="mr-3">&#x1F4A1;</span>
+                    Learning Resources
+                </a>
+                <!-- Logout/Spacer -->
+                <a href="#" id="logout-link" class="nav-link bg-red-600 hover:bg-red-700 text-white mt-4 justify-center">
+                    <span class="mr-2">&#x274C;</span>
+                    Logout
+                </a>
+            </nav>
+
         </aside>
 
         <!-- Main Content Area -->
-        <main class="main">
-            <header>
-                <h1>Welcome, <span id="student-name">Student</span>!</h1>
-                <p class="subtitle">Your personalized activity dashboard and tools.</p>
+        <div class="flex-1 lg:ml-64">
+            
+            <!-- Mobile Header/Toggle -->
+            <header class="flex justify-between items-center bg-white shadow p-4 lg:hidden sticky top-0 z-40">
+                <button id="menu-toggle" class="text-gray-600 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500 rounded-lg p-2 transition duration-150 ease-in-out">
+                    <!-- Hamburger Icon -->
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                </button>
+                <h1 class="text-xl font-bold text-gray-800">Student Portal</h1>
+                <div class="w-6 h-6"></div> <!-- Spacer -->
             </header>
-            
-            <!-- 1. Welcome/Getting Started Tab (New Default View) -->
-            <section id="welcome" class="tab-content active">
-                <div class="welcome-banner-container">
-                    <!-- SVG for a stylized banner matching the screenshot concept -->
-                    <svg class="welcome-banner-header" viewBox="0 0 500 120" preserveAspectRatio="none">
-                        <defs>
-                            <linearGradient id="skyGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                                <stop offset="0%" style="stop-color:#A9D7E8;stop-opacity:1" />
-                                <stop offset="100%" style="stop-color:#8BBCE8;stop-opacity:1" />
-                            </linearGradient>
-                        </defs>
-                        <rect x="0" y="0" width="500" height="120" fill="url(#skyGradient)"/>
-                        <!-- Simple Pencils and Note Visual -->
-                        <rect x="15" y="10" width="80" height="80" fill="#fff" rx="8" ry="8" opacity="0.8"/>
-                        <!-- Pencil 1 (Yellow) -->
-                        <polygon points="10,0 20,10 100,0 90,0" fill="#FBBF24" transform="rotate(-15 70 30)" />
-                        <circle cx="20" cy="5" r="5" fill="#EF4444" transform="rotate(-15 70 30)"/> 
-                        <!-- Pencil 2 (Pink) -->
-                        <polygon points="20,10 30,20 110,10 100,0" fill="#FBCFE8" transform="rotate(5 70 30)" />
-                        <circle cx="30" cy="15" r="5" fill="#EC4899" transform="rotate(5 70 30)"/>
-                    </svg>
-                </div>
-                <div class="welcome-content-card">
-                    <p>
-                        <strong style="font-size: 1.2rem;">Dear Student,</strong>
-                    </p>
-                    <p style="margin-bottom: 25px;">
-                        Welcome to the KeMU Learning Centre a.k.a the **Digital Campus**.
-                    </p>
 
-                    <p style="margin-bottom: 25px;">
-                        In this guiding course, we provide information and content to all KeMU students on how to use our learning management system (Canvas) in class and assessment in order to get the best classroom experience possible.
-                    </p>
+            <main class="p-6 md:p-10">
+                <h1 class="text-3xl font-bold text-gray-900 mb-2">Welcome, <span id="student-name">Student</span>!</h1>
+                <p class="text-lg text-gray-500 mb-8">Your academic resources and tools.</p>
 
-                    <p style="font-weight: 600; margin-bottom: 10px;">
-                        We will tell you everything you need to know about using Canvas to:
-                    </p>
-                    <ul>
-                        <li>Organize all of the learning material your lecturer has created</li>
-                        <li>Keep track of the work you are assigned by your lecturer.</li>
-                        <li>Provide feedback to your lecturer and classmates.</li>
-                        <li>Monitor your grades.</li>
-                        <li>Help you stay in touch with other members of your class.</li>
-                    </ul>
+                <!-- 1. Welcome/Getting Started Tab (Active by default) -->
+                <section id="welcome" class="tab-content active space-y-6">
+                    <!-- Dynamic Welcome/Announcement Message (Placeholder structure) -->
+                    <div class="bg-blue-600 text-white p-6 rounded-xl shadow-lg flex items-center gap-4">
+                         <span class="text-3xl">&#x1F4E3;</span>
+                        <h2 class="text-2xl font-bold" id="welcome-subject">THE OFFICIAL ANNOUNCMENT IS HERE</h2>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl shadow-lg space-y-4" id="welcome-body">
+                        <!-- Content goes here (Admin-editable text) -->
+                        <h3 class="text-xl font-semibold text-gray-800 mb-4">Getting Started</h3>
+                        <p class="text-gray-700">Use the navigation bar on the left to access your profile, grades, attendance, and communication tools. Please check the Announcements tab regularly for important updates.</p>
+                        <p class="text-gray-700">This content is dynamically updated by the Super Admin.</p>
+                    </div>
+                </section>
 
-                    <p style="margin-top: 30px; border-top: 1px dotted #E5E7EB; padding-top: 20px;">
-                        <span style="color: #FBBF24; font-size: 1.2em;">&#x2600;</span> The course is organized into **Modules** with each module focusing on one Canvas tool. You may move through the Modules in order or, you can open only the Modules you would like to learn more about.
-                    </p>
-                    <p>
-                        <span style="color: #6B7280; font-size: 1.2em;">&#x1F467;</span> For our more visual learners, we have also prepared **video tutorials** in a separate module for those who may wish to watch.
-                    </p>
-                    <p>
-                        <span style="color: #3B82F6; font-size: 1.2em;">&#x1F4C6;</span> The course also contains important scheduled dates in the **University Academic Calendar**, so that you can get timely notifications of upcoming events on your
-                    </p>
-                </div>
-            </section>
+                <!-- 2. Dashboard Tab (Includes Geo-Attendance Check) -->
+                <section id="dashboard" class="tab-content">
+                    <h2 class="text-2xl font-semibold text-gray-800 mb-6">Dashboard Overview & Daily Check-In</h2>
+
+                    <!-- Attendance Check-In Widget -->
+                    <div class="bg-white p-6 rounded-xl shadow-lg border-l-4 border-yellow-500 mb-8">
+                        <h3 class="text-xl font-semibold text-gray-800 mb-4">Daily Geo-Attendance Check</h3>
+                        <div class="space-y-4">
+                            <!-- Step 1: Session Type -->
+                            <div>
+                                <label for="session-type" class="block text-sm font-medium text-gray-700 mb-1">1. Select Session Type</label>
+                                <select id="session-type" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" required>
+                                    <option value="">-- Choose Type --</option>
+                                    <option value="on-class">On Class Session</option>
+                                    <option value="clinicals">Clinicals Session</option>
+                                </select>
+                            </div>
+
+                            <!-- Step 2: Session Detail (Conditionally Hidden/Shown by JS) -->
+                            <div id="session-detail-container" class="hidden">
+                                <label for="session-detail" class="block text-sm font-medium text-gray-700 mb-1">2. Select Lesson/Rotation</label>
+                                <select id="session-detail" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" disabled required>
+                                    <!-- Options populated by JS -->
+                                </select>
+                            </div>
+
+                            <button id="check-in-button" class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-4 rounded-lg transition duration-150 disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>
+                                Check In Now
+                            </button>
+                            <p id="check-in-status" class="text-sm text-gray-600 mt-2 text-center">Please select the session type and detail to enable check-in.</p>
+                        </div>
+                    </div>
+
+                    <!-- Other Dashboard Stats -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div class="bg-white p-6 rounded-xl shadow-lg border-l-4 border-green-500">
+                            <p class="text-sm font-medium text-gray-500">Current GPA</p>
+                            <p class="text-3xl font-extrabold text-gray-900 mt-1">3.85</p>
+                        </div>
+                        <div class="bg-white p-6 rounded-xl shadow-lg border-l-4 border-blue-500">
+                            <p class="text-sm font-medium text-gray-500">Attendance Rate</p>
+                            <p class="text-3xl font-extrabold text-gray-900 mt-1">94%</p>
+                        </div>
+                        <div class="bg-white p-6 rounded-xl shadow-lg border-l-4 border-indigo-500">
+                            <p class="text-sm font-medium text-gray-500">Unread Messages</p>
+                            <p class="text-3xl font-extrabold text-gray-900 mt-1">3</p>
+                        </div>
+                    </div>
+                </section>
 
 
-            <!-- 2. Dashboard Tab -->
-            <section id="dashboard" class="tab-content">
+                <!-- 3. Profile Tab -->
+                <section id="profile" class="tab-content">
+                    <h2 class="text-2xl font-semibold text-gray-800 mb-4">My Profile</h2>
+                    <div class="bg-white p-6 rounded-xl shadow-lg space-y-3">
+                        <p><strong>Full Name:</strong> <span class="text-gray-700">Loading...</span></p>
+                        <p><strong>Email:</strong> <span class="text-gray-700">Loading...</span></p>
+                        <p><strong>Student ID:</strong> <span class="text-gray-700">Loading...</span></p>
+                        <p><strong>Program:</strong> <span class="text-gray-700">Loading...</span></p>
+                        <p><strong>Phone:</strong> <span class="text-gray-700">Loading...</span></p>
+                        <p><strong>Account Status:</strong> <span class="text-green-600 font-semibold">Loading...</span></p>
+                    </div>
+                </section>
+
+                <!-- 4. Grades & Reports Tab -->
+                <section id="grades" class="tab-content">
+                    <h2 class="text-2xl font-semibold text-gray-800 mb-4">My Grades & Reports</h2>
+                    <div class="p-8 border-2 border-dashed border-gray-300 rounded-xl text-center text-gray-500 bg-gray-50">
+                        <p class="text-lg">My Grades & Reports</p>
+                        <p>This tab is where you would view detailed grades for all modules, and download official academic reports. (Under Construction)</p>
+                    </div>
+                </section>
+
+                <!-- 5. Attendance Logs Tab -->
+                <section id="attendance" class="tab-content">
+                    <h2 class="text-2xl font-semibold text-gray-800 mb-4">Your Attendance History</h2>
+                    <div class="bg-white p-6 rounded-xl shadow-lg overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead>
+                                <tr class="bg-gray-50">
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Check-In Time</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Check-Out Time</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Session</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200" id="attendance-table">
+                                <tr><td colspan="5" class="px-6 py-4 text-center text-gray-500">Loading your attendance logs...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
                 
-                <h2>Daily Geo-Attendance Check</h2>
-                <div class="subtitle" id="location-warning" style="color:var(--color-warning);">
-                    &#9888; Please ensure your device's **Location Services are ON** and permission is granted to this page for check-in to work.
-                </div>
-                <div id="attendance-check">
-                    <p style="font-weight: 600; margin-bottom: 15px; text-align: center;">Your current status: <span id="current-attendance-status" style="color: var(--color-primary);">Loading...</span></p>
-
-                    <button id="check-in-btn" class="action-button">Check-In Now</button>
-                    <button id="check-out-btn" class="action-button" disabled>Check-Out Now</button>
-                    
-                    <p id="status-message"></p>
-                    <p style="font-size: 0.9rem; color: #9CA3AF; margin-top: 15px; text-align: center;">*Location services must be enabled and accurate for attendance verification.</p>
-                </div>
-
-                <h2>Your Statistics</h2>
-                <div class="cards">
-                    <div class="card">
-                        <h3>Program Type</h3>
-                        <p class="card-value" id="program-type">...</p>
+                <!-- 6. Announcements Tab -->
+                <section id="announcements" class="tab-content">
+                    <h2 class="text-2xl font-semibold text-gray-800 mb-4">Program Announcements</h2>
+                    <div class="bg-white p-6 rounded-xl shadow-lg space-y-4">
+                        <p class="text-gray-500">Important notices sent by the administration regarding your program or the entire university.</p>
+                        <p class="text-gray-500">Loading announcements...</p>
                     </div>
-                    <div class="card">
-                        <h3>Total Check-ins (Month)</h3>
-                        <p class="card-value" id="monthly-checkins">...</p>
+                </section>
+
+                <!-- 7. Message Admin Tab -->
+                <section id="messages" class="tab-content">
+                    <h2 class="text-2xl font-semibold text-gray-800 mb-4">Send Message to Administration</h2>
+                    <div class="bg-white p-6 rounded-xl shadow-lg">
+                        <form id="messages-form" class="space-y-4">
+                            <textarea id="message-body" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 resize-y" rows="6" placeholder="Use this form to send a private inquiry or report an issue directly to the admin team." required></textarea>
+                            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-150">
+                                Send Message
+                            </button>
+                            <p id="message-status" class="text-sm text-gray-500 mt-2"></p>
+                        </form>
                     </div>
-                    <div class="card">
-                        <h3>Announcements (2 Weeks)</h3>
-                        <p class="card-value" id="unread-announcements">...</p>
+                </section>
+
+                <!-- 8. Courses Tab -->
+                <section id="courses" class="tab-content">
+                    <h2 class="text-2xl font-semibold text-gray-800 mb-4">My Enrollment & Courses</h2>
+                    <div class="p-8 border-2 border-dashed border-gray-300 rounded-xl text-center text-gray-500 bg-gray-50">
+                        <p>This tab would show your full history of enrolled programs and the modules registered for the current term. (Under Construction)</p>
                     </div>
-                </div>
-            </section>
+                </section>
 
-            <!-- 3. Profile Tab -->
-            <section id="profile" class="tab-content">
-                <h2>My Profile</h2>
-                <div id="profile-details" class="welcome-content-card">
-                    <p><strong>Full Name:</strong> <span id="p-full-name">Loading...</span></p>
-                    <p><strong>Email:</strong> <span id="p-email">Loading...</span></p>
-                    <p><strong>Student ID:</strong> <span id="p-student-id">Loading...</span></p>
-                    <p><strong>Program:</strong> <span id="p-program">Loading...</span></p>
-                    <p><strong>Phone:</strong> <span id="p-phone">Loading...</span></p>
-                    <p><strong>Account Status:</strong> <span id="p-status">Loading...</span></p>
-                </div>
-            </section>
-            
-            <!-- 4. Grades Tab (Placeholder) -->
-            <section id="grades" class="tab-content">
-                <h2>My Grades & Reports</h2>
-                <div class="construction-box">
-                    <p>This tab is where you would view detailed grades for all modules, and download official academic reports. (Under Construction)</p>
-                </div>
-            </section>
-            
-            <!-- 5. Enrollment Tab (Placeholder) -->
-            <section id="courses" class="tab-content">
-                <h2>My Enrollment & Courses</h2>
-                <div class="construction-box">
-                    <p>This tab would show your full history of enrolled programs and the modules registered for the current term. (Under Construction)</p>
-                </div>
-            </section>
+                <!-- 9. CATs/Exams Tab -->
+                <section id="cats-exams" class="tab-content">
+                    <h2 class="text-2xl font-semibold text-gray-800 mb-4">CATs/Exams</h2>
+                    <div class="p-8 border-2 border-dashed border-gray-300 rounded-xl text-center text-gray-500 bg-gray-50">
+                        <p>Schedules and results for CATs and Exams. (Under Construction)</p>
+                    </div>
+                </section>
 
-            <!-- 6. Course Details Tab (Placeholder) -->
-            <section id="course-details" class="tab-content">
-                <h2>Course Details</h2>
-                <div class="construction-box">
-                    <p>This tab would provide specific reading lists, lecture notes, and assignment details for selected courses. (Under Construction)</p>
-                </div>
-            </section>
-            
-            <!-- 7. Attendance Logs Tab -->
-            <section id="attendance" class="tab-content">
-                <h2>Your Attendance History</h2>
-                <p class="subtitle">Review your past geo-location check-in and check-out logs.</p>
-                <table style="margin-top: 20px;">
-                    <thead><tr><th>Date</th><th>Check-In Time</th><th>Check-Out Time</th><th>Status</th><th>Location Verified</th></tr></thead>
-                    <tbody id="attendance-table">
-                        <tr><td colspan="5">Loading your attendance logs...</td></tr>
-                    </tbody>
-                </table>
-            </section>
+                <!-- 10. Academic Calendar Tab -->
+                <section id="academic-calendar" class="tab-content">
+                    <h2 class="text-2xl font-semibold text-gray-800 mb-4">Academic Calendar</h2>
+                    <div class="p-8 border-2 border-dashed border-gray-300 rounded-xl text-center text-gray-500 bg-gray-50">
+                        <p>University academic calendar. (Under Construction)</p>
+                    </div>
+                </section>
 
-            <!-- 8. CATs/Exams Tab (Placeholder) -->
-            <section id="cats-exams" class="tab-content">
-                <h2>CATs & Exam Schedules/Results</h2>
-                <div class="construction-box">
-                    <p>This tab would show the schedule for upcoming CATs and final exams, and your results once published. (Under Construction)</p>
-                </div>
-            </section>
+                <!-- 11. Learning Resources Tab -->
+                <section id="learning-resources" class="tab-content">
+                    <h2 class="text-2xl font-semibold text-gray-800 mb-4">Learning Resources</h2>
+                    <div class="p-8 border-2 border-dashed border-gray-300 rounded-xl text-center text-gray-500 bg-gray-50">
+                        <p>Links to student resources. (Under Construction)</p>
+                    </div>
+                </section>
+            </main>
+        </div>
 
-            <!-- 9. Message Admin Tab (Communication TO Admin) -->
-            <section id="messages" class="tab-content">
-                <h2>Send Message to Administration</h2>
-                <form id="messages-form" class="welcome-content-card">
-                    <p style="font-size: 0.9rem; color: var(--color-text-light);">Use this form to send a private inquiry or report an issue directly to the admin team.</p>
-                    <textarea id="message-body" placeholder="Write your message here..." required></textarea>
-                    <button type="submit">Send Message</button>
-                    <p id="message-status"></p>
-                </form>
-            </section>
-
-            <!-- 10. Academic Calendar Tab (Placeholder) -->
-            <section id="calendar" class="tab-content">
-                <h2>Academic Calendar</h2>
-                <div class="construction-box">
-                    <p>This tab would display the university's annual calendar with important academic dates (registration, breaks, deadlines). (Under Construction)</p>
-                </div>
-            </section>
-            
-            <!-- 11. Learning Resources Tab (Placeholder) -->
-            <section id="resources" class="tab-content">
-                <h2>Learning Resources</h2>
-                <div class="construction-box">
-                    <p>This tab would link to shared drives, official student handbooks, and other necessary documents. (Under Construction)</p>
-                </div>
-            </section>
-            
-            <!-- 12. Announcements Tab (Communication FROM Admin) -->
-            <section id="announcements" class="tab-content">
-                <h2>Program Announcements</h2>
-                <div id="announcements-list" class="welcome-content-card">
-                    <p>Loading announcements...</p>
-                </div>
-            </section>
-        </main>
     </div>
 
+    <!-- Toast Notification / Custom Alert Replacement for Logout -->
+    <div id="toast-message" class="fixed bottom-4 right-4 bg-red-600 text-white p-4 rounded-lg shadow-xl transition-opacity duration-300 opacity-0 z-50">
+        Logging out... Goodbye!
+    </div>
+    <!-- /Toast Notification -->
+
     <script>
-    // *************************************************************************
-    // *** 1. CONFIGURATION: UPDATE THESE VALUES ***
-    // *************************************************************************
-    
-    // ** SUPABASE CONFIGURATION **
-    const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
-    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        // Data for Attendance Dropdowns
+        const courses = [
+            "Anatomy & Physiology I", "Medical Microbiology", "Clinical Pharmacology", "Nursing Ethics & Law", 
+            "Health Informatics", "Biostatistics"
+        ];
+        const clinicals = [
+            "Maternity Rotation", "Medical Ward", "Surgical Ward Male", "Surgical Ward Female", 
+            "Psychiatry Ward", "Paediatric Ward", "Outpatient Department (OPD)"
+        ];
 
-    let currentUserId = null; 
-    let studentProfile = {}; 
-    let currentCheckInLog = null; 
+        // DOM Elements
+        const menuToggle = document.getElementById('menu-toggle');
+        const sidebar = document.getElementById('sidebar');
+        const navLinks = document.querySelectorAll('.nav-link');
+        const tabs = document.querySelectorAll('.tab-content');
+        const logoutLink = document.getElementById('logout-link');
+        const toastMessage = document.getElementById('toast-message');
 
-    // Helper to get CSS variable value (Fixes the 'Unexpected token var' error)
-    const getCssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+        const sessionTypeSelect = document.getElementById('session-type');
+        const sessionDetailContainer = document.getElementById('session-detail-container');
+        const sessionDetailSelect = document.getElementById('session-detail');
+        const checkInButton = document.getElementById('check-in-button');
+        const checkInStatus = document.getElementById('check-in-status');
 
-    // *************************************************************************
-    // *** 2. UI AND NAVIGATION LOGIC ***
-    // *************************************************************************
-    const navLinks = document.querySelectorAll('.nav a');
-    const tabs = document.querySelectorAll('.tab-content');
+        // --- Core Functions ---
 
-    function showTab(tabId) {
-        navLinks.forEach(l => l.classList.remove('active'));
-        const activeLink = document.querySelector(`.nav a[data-tab="${tabId}"]`);
-        if(activeLink) activeLink.classList.add('active');
-
-        tabs.forEach(tab => tab.classList.remove('active'));
-        const activeTab = document.getElementById(tabId);
-        if(activeTab) activeTab.classList.add('active');
-        
-        // Load data only for the tabs that have core functionality implemented
-        if (!currentUserId) return; 
-        
-        if (tabId === 'dashboard') loadDashboardData();
-        if (tabId === 'attendance') loadAttendanceLogs();
-        if (tabId === 'announcements') loadAnnouncements(); 
-        if (tabId === 'profile') displayProfile();
-    }
-
-    // Add listeners to enable switching tabs
-    navLinks.forEach(link => {
-        link.addEventListener('click', e => {
-            e.preventDefault();
-            showTab(link.dataset.tab);
-        });
-    });
-
-    async function logout() {
-        await sb.auth.signOut();
-        // NOTE: Replace "login.html" with your actual login page URL
-        window.location.href = "login.html"; 
-    }
-
-    // *************************************************************************
-    // *** 3. CORE ATTENDANCE AND GEOLOCATION LOGIC ***
-    // *************************************************************************
-    
-    function getGeoLocation() {
-        return new Promise((resolve, reject) => {
-            if (!navigator.geolocation) {
-                reject(new Error("Geolocation is not supported by this browser."));
+        function toggleSidebar() {
+            sidebar.classList.toggle('-translate-x-full');
+            const existingOverlay = document.getElementById('sidebar-overlay');
+            
+            if (!sidebar.classList.contains('-translate-x-full')) {
+                if (!existingOverlay) {
+                    const overlay = document.createElement('div');
+                    overlay.id = 'sidebar-overlay';
+                    overlay.classList.add('fixed', 'inset-0', 'bg-gray-900', 'bg-opacity-50', 'z-40', 'lg:hidden');
+                    overlay.addEventListener('click', toggleSidebar);
+                    document.body.appendChild(overlay);
+                }
             } else {
-                navigator.geolocation.getCurrentPosition(
-                    (position) => {
-                        resolve({
-                            latitude: position.coords.latitude,
-                            longitude: position.coords.longitude,
-                            accuracy_meters: position.coords.accuracy
-                        });
-                    },
-                    (error) => {
-                        reject(new Error(`Geolocation error: ${error.message}. Please ensure location is enabled for this site.`));
-                    },
-                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-                );
+                if (existingOverlay) {
+                    existingOverlay.remove();
+                }
             }
-        });
-    }
-
-    function setStatus(message, isSuccess = false) {
-        const statusEl = document.getElementById('status-message');
-        statusEl.textContent = message;
-        statusEl.style.display = 'block';
-        statusEl.style.backgroundColor = isSuccess ? '#D1FAE5' : '#FEE2E2';
-        statusEl.style.color = isSuccess ? '#065F46' : '#991B1B';
-        if (isSuccess) setTimeout(() => statusEl.style.display = 'none', 5000);
-    }
-    
-    /**
-     * Checks if a user has an active check-in record for today.
-     */
-    async function checkCurrentAttendanceStatus() {
-        const today = new Date().toISOString().split('T')[0];
-        const statusEl = document.getElementById('current-attendance-status');
-
-        const { data, error } = await sb
-            .from('geo_attendance_logs')
-            .select('*')
-            .eq('student_id', currentUserId)
-            .gte('check_in_time', today)
-            .is('check_out_time', null)
-            .limit(1)
-            .single();
-
-        if (error && error.code !== 'PGRST116') {
-            statusEl.textContent = 'Error checking status.';
-            statusEl.style.color = '#EF4444';
-            return;
         }
 
-        if (data) {
-            currentCheckInLog = data;
-            statusEl.textContent = `CHECKED IN at ${new Date(data.check_in_time).toLocaleTimeString()}`;
-            statusEl.style.color = getCssVar('--color-secondary');
-            document.getElementById('check-in-btn').disabled = true;
-            document.getElementById('check-out-btn').disabled = false;
-        } else {
-            currentCheckInLog = null;
-            statusEl.textContent = 'CHECKED OUT or No Check-in Today';
-            statusEl.style.color = getCssVar('--color-primary');
-            document.getElementById('check-in-btn').disabled = false;
-            document.getElementById('check-out-btn').disabled = true;
-        }
-    }
+        function showTab(tabId) {
+            tabs.forEach(tab => tab.classList.remove('active'));
+            const activeTab = document.getElementById(tabId);
+            if(activeTab) activeTab.classList.add('active');
 
-    async function handleCheckIn() {
-        if (!currentUserId) return setStatus("Error: User not identified.", false);
-        document.getElementById('check-in-btn').disabled = true;
-        setStatus("Attempting Geo Check-In...");
-
-        try {
-            const geo = await getGeoLocation();
-            
-            const { error } = await sb
-                .from('geo_attendance_logs')
-                .insert({
-                    student_id: currentUserId,
-                    session_type: studentProfile.program_type || 'General', 
-                    latitude: geo.latitude,
-                    longitude: geo.longitude,
-                    accuracy_meters: geo.accuracy_meters,
-                });
-
-            if (error) throw new Error(error.message);
-
-            setStatus(`Check-In successful at ${new Date().toLocaleTimeString()}! Location logged (Accuracy: ${geo.accuracy_meters.toFixed(2)}m).`, true);
-            loadDashboardData(); 
-
-        } catch (e) {
-            setStatus(`Check-In Failed: ${e.message}`, false);
-            document.getElementById('check-in-btn').disabled = false;
-        }
-    }
-
-    async function handleCheckOut() {
-        if (!currentCheckInLog) return setStatus("Error: No active Check-In found to close.", false);
-        document.getElementById('check-out-btn').disabled = true;
-        setStatus("Attempting Geo Check-Out...");
-        
-        try {
-            const { error } = await sb
-                .from('geo_attendance_logs')
-                .update({ check_out_time: new Date().toISOString() })
-                .eq('id', currentCheckInLog.id);
-
-            if (error) throw new Error(error.message);
-
-            setStatus(`Check-Out successful at ${new Date().toLocaleTimeString()}!`, true);
-            loadDashboardData(); 
-
-        } catch (e) {
-            setStatus(`Check-Out Failed: ${e.message}`, false);
-            document.getElementById('check-out-btn').disabled = false;
-        }
-    }
-
-    // Attach listeners to buttons
-    document.getElementById('check-in-btn').addEventListener('click', handleCheckIn);
-    document.getElementById('check-out-btn').addEventListener('click', handleCheckOut);
-
-    // *************************************************************************
-    // *** 4. DATA LOADING FUNCTIONS ***
-    // *************************************************************************
-
-    async function loadDashboardData() {
-        document.getElementById('student-name').textContent = studentProfile.full_name || 'Student';
-        document.getElementById('program-type').textContent = studentProfile.program_type || 'N/A';
-
-        // Monthly Check-ins
-        const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
-        const { count: monthlyCount, error: countError } = await sb
-            .from('geo_attendance_logs')
-            .select('*', { count: 'exact', head: true })
-            .eq('student_id', currentUserId)
-            .gte('check_in_time', startOfMonth);
-
-        document.getElementById('monthly-checkins').textContent = countError ? 'Error' : monthlyCount || 0;
-        
-        // Announcements Count (Communication FROM Admin)
-        const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
-        const { count: announcementCount, error: announceError } = await sb
-            .from('messages')
-            .select('*', { count: 'exact', head: true })
-            .or(`program_type.eq.ALL,program_type.eq.${studentProfile.program_type}`)
-            .gte('created_at', twoWeeksAgo);
-
-        document.getElementById('unread-announcements').textContent = announceError ? 'Error' : announcementCount || 0;
-
-        checkCurrentAttendanceStatus();
-    }
-
-    async function loadAttendanceLogs() {
-        const { data: logs, error } = await sb
-            .from('geo_attendance_logs')
-            .select('*')
-            .eq('student_id', currentUserId)
-            .order('check_in_time', { ascending: false })
-            .limit(20);
-
-        const table = document.getElementById('attendance-table');
-        if (error) {
-            table.innerHTML = `<tr><td colspan="5" style="color: red;">Error loading logs: ${error.message}</td></tr>`;
-            return;
-        }
-
-        table.innerHTML = (logs || []).map(log => {
-            const date = new Date(log.check_in_time).toLocaleDateString();
-            const checkIn = new Date(log.check_in_time).toLocaleTimeString();
-            const checkOut = log.check_out_time ? new Date(log.check_out_time).toLocaleTimeString() : 'N/A (Open)';
-            const status = log.check_out_time ? 'Completed' : 'Active';
-            const verified = log.is_verified ? 'Yes &#x2705;' : 'Pending/No &#x274C;';
-            return `
-                <tr>
-                    <td>${date}</td>
-                    <td>${checkIn}</td>
-                    <td>${checkOut}</td>
-                    <td>${status}</td>
-                    <td>${verified}</td>
-                </tr>
-            `;
-        }).join('');
-    }
-
-    async function loadAnnouncements() {
-        const container = document.getElementById('announcements-list');
-        container.innerHTML = '<p>Fetching latest announcements...</p>';
-
-        const { data: announcements, error } = await sb
-            .from('messages')
-            .select('body, created_at, program_type')
-            .or(`program_type.eq.ALL,program_type.eq.${studentProfile.program_type}`) 
-            .order('created_at', { ascending: false })
-            .limit(10);
-
-        if (error) {
-            container.innerHTML = `<p style="color:red;">Error loading announcements: ${error.message}</p>`;
-            return;
-        }
-
-        if (announcements.length === 0) {
-            container.innerHTML = '<p>No announcements currently available for your program.</p>';
-            return;
-        }
-
-        container.innerHTML = (announcements || []).map(a => `
-            <div class="announcement-item">
-                <p><strong>${a.program_type === 'ALL' ? 'GLOBAL NOTICE' : studentProfile.program_type + ' Update'}:</strong> ${a.body}</p>
-                <p class="meta">Posted: ${new Date(a.created_at).toLocaleString()}</p>
-            </div>
-        `).join('');
-    }
-
-    function displayProfile() {
-        document.getElementById('p-full-name').textContent = studentProfile.full_name || 'N/A';
-        document.getElementById('p-email').textContent = studentProfile.email || 'N/A';
-        document.getElementById('p-student-id').textContent = studentProfile.student_id || 'N/A';
-        document.getElementById('p-program').textContent = studentProfile.program_type || 'N/A';
-        document.getElementById('p-phone').textContent = studentProfile.phone || 'N/A';
-        document.getElementById('p-status').textContent = studentProfile.status || 'Active';
-    }
-
-    // *************************************************************************
-    // *** 5. MESSAGE TO ADMIN LOGIC (Communication TO Super Admin) ***
-    // *************************************************************************
-    document.getElementById('messages-form').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const body = document.getElementById('message-body').value.trim();
-        const statusElement = document.getElementById('message-status');
-
-        if (!body) return;
-
-        statusElement.textContent = 'Sending message...';
-        statusElement.style.color = getCssVar('--color-primary');
-        
-        const { error } = await sb
-            .from('messages')
-            .insert({
-                sender_id: currentUserId,
-                body: body,
-                program_type: 'TO_ADMIN' 
+            navLinks.forEach(l => {
+                l.classList.remove('active', 'text-white', 'font-semibold');
+                if (l.id !== 'logout-link') {
+                    l.classList.add('text-gray-400', 'hover:text-white');
+                }
             });
-
-        if (error) {
-            console.error('Error sending message:', error);
-            statusElement.textContent = `Error sending message: ${error.message}`;
-            statusElement.style.color = '#EF4444';
-        } else {
-            statusElement.textContent = 'Message successfully sent to the administration!';
-            statusElement.style.color = getCssVar('--color-secondary');
-            document.getElementById('message-body').value = ''; 
-            setTimeout(() => { statusElement.textContent = ''; }, 5000);
+            const activeLink = document.querySelector(`.nav-link[data-tab="${tabId}"]`);
+            if (activeLink) {
+                activeLink.classList.add('active', 'text-white', 'font-semibold');
+                activeLink.classList.remove('text-gray-400', 'hover:text-white');
+            }
         }
-    });
 
-
-    // *************************************************************************
-    // *** 6. INITIALIZATION LOGIC ***
-    // *************************************************************************
-    
-    async function initializeApp() {
-        const { data: { user } } = await sb.auth.getUser();
-
-        if (user) {
-            currentUserId = user.id;
+        function showLogoutToast() {
+            toastMessage.classList.remove('opacity-0');
+            toastMessage.classList.add('opacity-100');
             
-            const { data: profile, error } = await sb
-                .from('profiles')
-                .select('*')
-                .eq('id', user.id)
-                .single();
+            setTimeout(() => {
+                toastMessage.classList.remove('opacity-100');
+                toastMessage.classList.add('opacity-0');
+            }, 2000);
+        }
+
+        // --- Attendance Logic ---
+
+        function updateAttendanceDetail(sessionType) {
+            sessionDetailSelect.innerHTML = '<option value="">-- Choose Lesson/Rotation --</option>';
             
-            if (error || profile.role !== 'student') {
-                alert('Access Denied: Your account role is not set as a Student or profile data is missing.');
-                await logout();
+            if (!sessionType) {
+                sessionDetailContainer.classList.add('hidden');
+                sessionDetailSelect.setAttribute('disabled', 'true');
                 return;
             }
-            
-            studentProfile = profile;
-            
-            loadDashboardData();
-            // Start on the Welcome tab as requested
-            showTab('welcome'); 
 
-        } else {
-            window.location.href = "login.html";
+            const optionsData = sessionType === 'on-class' ? courses : clinicals;
+            optionsData.forEach(item => {
+                const option = document.createElement('option');
+                option.value = item;
+                option.textContent = item;
+                sessionDetailSelect.appendChild(option);
+            });
+
+            sessionDetailContainer.classList.remove('hidden');
+            sessionDetailSelect.removeAttribute('disabled');
+            
+            validateAttendanceForm();
         }
-    }
 
-    initializeApp();
+        function validateAttendanceForm() {
+            const typeSelected = sessionTypeSelect.value !== "";
+            const detailSelected = sessionDetailSelect.value !== "";
+
+            if (typeSelected && detailSelected) {
+                checkInButton.removeAttribute('disabled');
+                checkInButton.classList.remove('disabled:bg-gray-400', 'disabled:cursor-not-allowed');
+                checkInStatus.textContent = `Ready to check in for ${sessionDetailSelect.value}.`;
+            } else {
+                checkInButton.setAttribute('disabled', 'true');
+                checkInButton.classList.add('disabled:bg-gray-400', 'disabled:cursor-not-allowed');
+                checkInStatus.textContent = "Please select the session type and detail to enable check-in.";
+            }
+        }
+
+        // --- Event Listeners ---
+
+        menuToggle.addEventListener('click', toggleSidebar);
+
+        navLinks.forEach(link => {
+            link.addEventListener('click', (e) => {
+                if (link.id === 'logout-link') return;
+
+                e.preventDefault();
+                const tabId = link.getAttribute('data-tab');
+                if (tabId) {
+                    showTab(tabId);
+                }
+
+                if (window.innerWidth < 1024 && !sidebar.classList.contains('-translate-x-full')) {
+                    toggleSidebar();
+                }
+            });
+        });
+
+        logoutLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            showLogoutToast();
+            if (window.innerWidth < 1024 && !sidebar.classList.contains('-translate-x-full')) {
+                toggleSidebar();
+            }
+        });
+
+        // Attendance Form Listeners
+        sessionTypeSelect.addEventListener('change', (e) => {
+            updateAttendanceDetail(e.target.value);
+        });
+
+        sessionDetailSelect.addEventListener('change', validateAttendanceForm);
+
+        checkInButton.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (checkInButton.disabled) return;
+
+            const sessionType = sessionTypeSelect.value === 'on-class' ? 'Class' : 'Clinical';
+            const sessionDetail = sessionDetailSelect.value;
+            const currentTime = new Date().toLocaleTimeString();
+            
+            // In a real application, geolocation and API call would happen here.
+            checkInStatus.textContent = `Check-In successful! Logged for ${sessionType}: ${sessionDetail} at ${currentTime}.`;
+        });
+
+        // Initialize the app
+        document.addEventListener('DOMContentLoaded', () => {
+            showTab('welcome');
+            document.getElementById('student-name').textContent = 'Jane Doe'; 
+        });
     </script>
 </body>
 </html>
