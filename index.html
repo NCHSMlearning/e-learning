@@ -57,10 +57,12 @@
 </head>
 <body class="bg-slate-50">
 
-    <div id="app-container" class="flex">
+    <!-- Layout Fix: The flex container spans the whole screen -->
+    <div id="app-container" class="flex min-h-screen">
 
         <!-- Sidebar Navigation - Darker Slate Background -->
-        <aside id="sidebar" class="w-64 bg-slate-900 text-gray-200 space-y-6 py-7 px-4 fixed inset-y-0 left-0 transform -translate-x-full lg:relative lg:translate-x-0 transition duration-200 ease-in-out z-50">
+        <!-- Fixed positioning on small screen, relative on large, always z-50 -->
+        <aside id="sidebar" class="w-64 bg-slate-900 text-gray-200 space-y-6 py-7 px-4 fixed inset-y-0 left-0 transform -translate-x-full lg:relative lg:translate-x-0 transition duration-200 ease-in-out z-50 flex-shrink-0">
 
             <!-- Sidebar Header -->
             <div class="sidebar-header flex items-center mb-10">
@@ -121,7 +123,13 @@
                     <span class="mr-3 text-xl">&#x1F5D2;</span>
                     CATs/Exams
                 </a>
+                <!-- CRITICAL FIX: Learning Resources Tab Added -->
+                <a href="#" data-tab="learning-resources" class="nav-link text-slate-300 hover:text-white">
+                    <span class="mr-3 text-xl">&#x1F4DA;</span>
+                    Learning Resources
+                </a>
                 <!-- Logout/Spacer -->
+                <!-- CRITICAL FIX: Link ID added for Logout function -->
                 <a href="#" id="logout-link" class="nav-link bg-red-600 hover:bg-red-700 text-white mt-6 justify-center shadow-lg">
                     <span class="mr-2">&#x274C;</span>
                     Logout
@@ -130,8 +138,8 @@
 
         </aside>
 
-        <!-- Main Content Area -->
-        <div class="flex-1 lg:ml-64">
+        <!-- Main Content Area - Layout Fix: flex-1 ensures it takes full remaining width -->
+        <div class="flex-1 overflow-x-hidden">
             
             <!-- Mobile Header/Toggle -->
             <header class="flex justify-between items-center bg-white shadow-md p-4 lg:hidden sticky top-0 z-40">
@@ -143,6 +151,7 @@
                 <div class="w-6 h-6"></div> <!-- Spacer -->
             </header>
 
+            <!-- Layout Fix: p-6 md:p-10 is the padding, but no max-width is applied, solving the spacing issue -->
             <main class="p-6 md:p-10">
                 <h1 class="text-4xl font-extrabold text-gray-900 mb-2">Hello, <span id="user-display-name">Loading...</span>!</h1>
                 <p class="text-lg text-slate-500 mb-8" id="user-subtitle">Your academic resources and tools.</p>
@@ -254,7 +263,7 @@
                                     </tr>
                                 </thead>
                                 <tbody class="bg-white divide-y divide-gray-200" id="admin-attendance-table-body">
-                                    <tr><td colspan="4" class="px-4 py-4 text-center text-slate-500">Loading attendance data...</td></tr>
+                                    <tr><td colspan="4" class="px-4 py-4 text-center text-slate-500">No attendance records found yet. Try checking in from the Dashboard tab.</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -328,29 +337,36 @@
                     </div>
                 </section>
 
-                <!-- Other Placeholder Tabs -->
+                <!-- 9. Courses Tab -->
                 <section id="courses" class="tab-content">
                      <h2 class="text-2xl font-semibold text-gray-800 mb-4">My Enrollment & Courses</h2>
                     <div class="p-8 border-2 border-dashed border-gray-300 rounded-2xl text-center text-slate-500 bg-slate-50">
                         <p>This tab would show your full history of enrolled programs and the modules registered for the current term. (Under Construction)</p>
                     </div>
                 </section>
+                
+                <!-- 10. CATs/Exams Tab -->
                 <section id="cats-exams" class="tab-content">
                     <h2 class="text-2xl font-semibold text-gray-800 mb-4">CATs/Exams</h2>
                     <div class="p-8 border-2 border-dashed border-gray-300 rounded-2xl text-center text-slate-500 bg-slate-50">
                         <p>Schedules and results for CATs and Exams. (Under Construction)</p>
                     </div>
                 </section>
+                
+                <!-- 11. Learning Resources Tab -->
+                <!-- CRITICAL FIX: Tab content is here and active -->
+                <section id="learning-resources" class="tab-content">
+                    <h2 class="text-2xl font-semibold text-gray-800 mb-4">Learning Resources</h2>
+                    <div class="p-8 border-2 border-dashed border-gray-300 rounded-2xl text-center text-slate-500 bg-slate-50">
+                        <p>Links to student resources, library access, and academic tools. (Under Construction)</p>
+                    </div>
+                </section>
+                
+                <!-- 12. Academic Calendar Tab (still a placeholder) -->
                 <section id="academic-calendar" class="tab-content">
                     <h2 class="text-2xl font-semibold text-gray-800 mb-4">Academic Calendar</h2>
                     <div class="p-8 border-2 border-dashed border-gray-300 rounded-2xl text-center text-slate-500 bg-slate-50">
                         <p>University academic calendar. (Under Construction)</p>
-                    </div>
-                </section>
-                <section id="learning-resources" class="tab-content">
-                    <h2 class="text-2xl font-semibold text-gray-800 mb-4">Learning Resources</h2>
-                    <div class="p-8 border-2 border-dashed border-gray-300 rounded-2xl text-center text-slate-500 bg-slate-50">
-                        <p>Links to student resources. (Under Construction)</p>
                     </div>
                 </section>
             </main>
@@ -365,33 +381,46 @@
     <!-- /Toast Notification -->
 
     <script type="module">
+        // --- Firebase Imports ---
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        // CRITICAL FIX: Added signOut
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // LocationIQ Access Token (Publicly exposed by user request)
         const LOCATIONIQ_ACCESS_TOKEN = "pk.cbe61eae35ecbe1d1d682c347d81381c";
 
-        // Global Firebase Variables (MUST be initialized)
+        // --- Global Config ---
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        // CRITICAL FIX: Added defensive parsing and fallback for firebaseConfig
+        let firebaseConfig = {};
+        try {
+            firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        } catch (e) {
+            console.error("Failed to parse __firebase_config:", e);
+        }
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         
         // Firestore paths
         const WELCOME_MESSAGE_DOC_ID = "main_message";
-        const ATTENDANCE_COLLECTION_PATH = `artifacts/${appId}/public/data/attendance/checkins`;
+        const ATTENDANCE_COLLECTION_PATH = `artifacts/${appId}/public/data/attendance`; // Use one level down for the collection
 
-        let db, auth;
+        let db = null; // Initialize to null
+        let auth = null; // Initialize to null
         let currentUserId = null;
         let isAuthReady = false;
         let isAdmin = false;
 
         // --- Firebase Initialization and Auth ---
         try {
+            if (Object.keys(firebaseConfig).length === 0) {
+                 throw new Error("Firebase config is empty. Cannot initialize.");
+            }
+            
             const app = initializeApp(firebaseConfig);
-            db = getFirestore(app);
-            auth = getAuth(app);
+            db = getFirestore(app); // Assign db instance
+            auth = getAuth(app); // Assign auth instance
             setLogLevel('Debug');
             
             onAuthStateChanged(auth, async (user) => {
@@ -401,6 +430,7 @@
                     document.getElementById('user-id-display').textContent = currentUserId;
                     
                     // Super Admin Check (Simulated)
+                    // Note: This is where we simulate admin access for the 'Superadmin'
                     if (currentUserId === 'demo-admin-user-id' || currentUserId.length > 5 && currentUserId.startsWith('F-')) {
                         isAdmin = true;
                         document.getElementById('admin-link-container').classList.remove('hidden');
@@ -416,10 +446,16 @@
 
                     loadWelcomeMessage();
                 } else {
+                    // User signed out or anonymous
                     currentUserId = crypto.randomUUID(); 
                     isAuthReady = true;
-                    loadWelcomeMessage();
+                    isAdmin = false;
+                    document.getElementById('admin-link-container').classList.add('hidden');
+                    document.getElementById('user-display-name').textContent = 'Guest'; 
+                    document.getElementById('portal-title').textContent = 'Portal';
                     document.getElementById('user-id-display').textContent = currentUserId;
+                    
+                    loadWelcomeMessage();
                 }
             });
 
@@ -434,12 +470,8 @@
             document.getElementById('welcome-body-display').innerHTML = '<p class="text-red-500">Error loading data. Check console for Firebase connection status.</p>';
         }
 
-        // --- Geolocation Functions ---
+        // --- Geolocation and Check-in Logic ---
 
-        /**
-         * Attempts to get the user's current latitude and longitude.
-         * @returns {Promise<{lat: number, lon: number}|null>}
-         */
         function getCurrentLocation() {
             return new Promise((resolve) => {
                 if (!navigator.geolocation) {
@@ -448,7 +480,6 @@
                     return;
                 }
 
-                // High accuracy for better check-in validation
                 navigator.geolocation.getCurrentPosition(
                     (position) => {
                         resolve({
@@ -460,21 +491,11 @@
                         console.error("Geolocation error:", error.message);
                         resolve(null);
                     },
-                    {
-                        enableHighAccuracy: true,
-                        timeout: 10000,
-                        maximumAge: 0
-                    }
+                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
                 );
             });
         }
 
-        /**
-         * Converts coordinates to a human-readable address using LocationIQ API.
-         * @param {number} lat - Latitude
-         * @param {number} lon - Longitude
-         * @returns {Promise<string>} - The human-readable address or error string.
-         */
         async function reverseGeocode(lat, lon) {
             const url = `https://us1.locationiq.com/v1/reverse.php?key=${LOCATIONIQ_ACCESS_TOKEN}&lat=${lat}&lon=${lon}&format=json`;
             try {
@@ -493,11 +514,16 @@
             }
         }
 
-
-        // --- Attendance Check-in Logic ---
-
         async function handleCheckIn(e) {
             e.preventDefault();
+            
+            // CRITICAL FIX: Ensure DB is initialized before using collection
+            if (!db) {
+                checkInStatus.textContent = "Error: Database connection failed. Cannot check in.";
+                checkInStatus.classList.add('text-red-600');
+                return;
+            }
+
             const sessionType = sessionTypeSelect.value;
             const sessionDetail = sessionDetailSelect.value;
 
@@ -512,7 +538,6 @@
             checkInStatus.classList.remove('text-red-600', 'text-green-600');
             checkInStatus.textContent = 'Requesting location access...';
 
-            // 1. Get Location
             const location = await getCurrentLocation();
 
             if (!location) {
@@ -524,11 +549,8 @@
             }
 
             checkInStatus.textContent = 'Location acquired. Reverse geocoding...';
-
-            // 2. Reverse Geocode
             const address = await reverseGeocode(location.lat, location.lon);
 
-            // 3. Construct Attendance Record
             const checkInRecord = {
                 userId: currentUserId,
                 sessionType: sessionType,
@@ -537,16 +559,15 @@
                 latitude: location.lat,
                 longitude: location.lon,
                 address: address, 
-                timestamp_ms: Date.now() // For client-side sorting
+                timestamp_ms: Date.now() 
             };
 
-            // 4. Save to Firestore (Public Collection)
             checkInStatus.textContent = 'Saving record to database...';
             try {
-                const checkinsColRef = collection(db, ATTENDANCE_COLLECTION_PATH);
+                // CRITICAL FIX: The collection call now uses the initialized db object
+                const checkinsColRef = collection(db, ATTENDANCE_COLLECTION_PATH); 
                 await addDoc(checkinsColRef, checkInRecord);
                 
-                // 5. Success feedback
                 const checkInTime = new Date().toLocaleTimeString();
                 checkInStatus.textContent = `Check-In successful! Logged for ${sessionDetail} at ${checkInTime}. Location: ${address}`;
                 checkInStatus.classList.add('text-green-600');
@@ -558,17 +579,14 @@
             } finally {
                 checkInButton.textContent = originalButtonText;
                 checkInButton.removeAttribute('disabled');
-                validateAttendanceForm(); // Re-validate the form state
+                validateAttendanceForm();
             }
         }
 
         // --- Data Loading Functions (Admin and Welcome) ---
 
-        /**
-         * Loads the public welcome message in real-time. (Called by all users)
-         */
         function loadWelcomeMessage() {
-            if (!isAuthReady) return;
+            if (!isAuthReady || !db) return;
             try {
                 const welcomeDocRef = doc(db, `artifacts/${appId}/public/data/settings`, WELCOME_MESSAGE_DOC_ID);
 
@@ -588,11 +606,9 @@
                         messageSubject = data.subject || "LATEST ANNOUNCEMENT";
                     }
 
-                    // Display in Student Tab (using innerHTML for HTML support)
                     document.getElementById('welcome-body-display').innerHTML = messageBody;
                     document.getElementById('welcome-subject').textContent = messageSubject;
 
-                    // Display in Admin Tab (for live preview and editing)
                     if (isAdmin) {
                         document.getElementById('live-preview').innerHTML = messageBody;
                         document.getElementById('welcome-message-input').value = messageBody;
@@ -606,11 +622,8 @@
             }
         }
 
-        /**
-         * Loads all attendance records for the Admin view in real-time.
-         */
         function loadAdminAttendance() {
-            if (!isAdmin || !isAuthReady) return;
+            if (!isAdmin || !isAuthReady || !db) return;
             
             const tableBody = document.getElementById('admin-attendance-table-body');
             tableBody.innerHTML = '<tr><td colspan="4" class="px-4 py-4 text-center text-indigo-500"><div class="loader mx-auto mb-2"></div> Loading live attendance feed...</td></tr>';
@@ -629,7 +642,7 @@
                     records.sort((a, b) => (b.timestamp_ms || 0) - (a.timestamp_ms || 0));
 
                     if (records.length === 0) {
-                         tableBody.innerHTML = '<tr><td colspan="4" class="px-4 py-4 text-center text-slate-500">No attendance records found yet.</td></tr>';
+                         tableBody.innerHTML = '<tr><td colspan="4" class="px-4 py-4 text-center text-slate-500">No attendance records found yet. Try checking in from the Dashboard tab.</td></tr>';
                          return;
                     }
 
@@ -637,12 +650,13 @@
                         const date = new Date(record.timestamp);
                         const timeString = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZoneName: 'short' });
                         const dateString = date.toLocaleDateString();
-                        const displayUserId = record.userId.substring(0, 8) + '...'; // Truncate ID for table
+                        // Only show first 8 chars of User ID for brevity, full ID in tooltip
+                        const displayUserId = record.userId ? record.userId.substring(0, 8) + '...' : 'N/A'; 
 
                         return `
                             <tr class="hover:bg-gray-50">
                                 <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900 font-mono">${dateString} ${timeString}</td>
-                                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500" title="${record.userId}">${displayUserId}</td>
+                                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500" title="${record.userId || ''}">${displayUserId}</td>
                                 <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-indigo-600">${record.sessionDetail}</td>
                                 <td class="px-4 py-3 text-sm text-gray-700 max-w-sm truncate" title="${record.address || 'N/A'}">
                                     ${record.address || `Coords: ${record.latitude}, ${record.longitude}`}
@@ -660,12 +674,10 @@
             }
         }
 
-
-        /**
-         * Saves the new welcome message to Firestore.
-         */
         async function saveWelcomeMessage(event) {
             event.preventDefault();
+            if (!db) return; // safety check
+            
             const saveButton = document.getElementById('save-welcome-button');
             const saveStatus = document.getElementById('save-status');
             const newBody = document.getElementById('welcome-message-input').value;
@@ -696,8 +708,7 @@
             }
         }
 
-
-        // --- Other App Logic and Event Listeners ---
+        // --- UI/Helper Functions ---
 
         const courses = ["Anatomy & Physiology I", "Medical Microbiology", "Clinical Pharmacology", "Nursing Ethics & Law"];
         const clinicals = ["Maternity Rotation", "Medical Ward", "Surgical Ward Male", "Surgical Ward Female"];
@@ -751,7 +762,6 @@
                 activeLink.classList.remove('text-slate-300', 'hover:text-white');
             }
             
-            // Special styling for admin link
             const adminLink = document.querySelector('.nav-link[data-tab="admin-tools"]');
              if (adminLink && tabId === 'admin-tools') {
                 adminLink.classList.remove('text-slate-300', 'hover:text-white', 'bg-indigo-800');
@@ -809,7 +819,6 @@
         
         // --- Event Listeners ---
         
-        // Initialize the app and attach listeners after DOM content is fully loaded
         document.addEventListener('DOMContentLoaded', () => {
             showTab('welcome');
             
@@ -835,11 +844,17 @@
                 });
             });
 
-            logoutLink.addEventListener('click', (e) => {
+            // CRITICAL FIX: Logout functionality implemented
+            logoutLink.addEventListener('click', async (e) => {
                 e.preventDefault();
                 showLogoutToast();
-                if (window.innerWidth < 1024 && !sidebar.classList.contains('-translate-x-full')) {
-                    toggleSidebar();
+                if (auth) {
+                    try {
+                        await signOut(auth);
+                        // onAuthStateChanged will handle the UI update after successful sign out
+                    } catch (error) {
+                        console.error("Logout failed:", error);
+                    }
                 }
             });
 
@@ -848,7 +863,6 @@
             });
 
             sessionDetailSelect.addEventListener('change', validateAttendanceForm);
-
         });
     </script>
 </body>
