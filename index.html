@@ -151,7 +151,7 @@
             color: var(--color-info);
         }
 
-        /* 3. Cards */
+        /* 3. Cards (For Dashboard and other areas) */
         .cards { 
             display: grid; 
             grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); 
@@ -510,18 +510,51 @@
             </header>
 
             <section id="dashboard" class="tab-content active">
+                
                 <div id="welcome-banner">
                     <span class="info-icon">&#x2139;</span>
-                    <strong>ADMIN MESSAGE:</strong> <span id="admin-welcome-message">Loading message...</span>
+                    <strong>ADMIN MESSAGE:</strong> 
+                    <span id="admin-welcome-message">Loading message...</span>
                 </div>
+                
+                <h2 style="margin-top: 30px;">Quick Snapshot</h2>
                 <div class="cards">
-                    <div class="card" onclick="showTab('profile')"><h3>My Profile</h3></div>
-                    <div class="card" onclick="showTab('courses')"><h3>My Courses</h3></div>
-                    <div class="card" onclick="showTab('attendance')"><h3>Attendance</h3></div>
-                    <div class="card" onclick="showTab('cats')"><h3>CATS/Exams</h3></div>
+                    <div class="card" onclick="showTab('attendance')">
+                        <h3>Attendance Rate</h3>
+                        <p style="font-size: 2rem; font-weight: 700; color: var(--color-primary);" id="dashboard-attendance-rate">--%</p>
+                        <small>Last 30 days</small>
+                    </div>
+                    <div class="card" onclick="showTab('cats')">
+                        <h3>Upcoming Exam</h3>
+                        <p style="font-size: 1.2rem; font-weight: 600;" id="dashboard-upcoming-exam">Loading...</p>
+                        <small>Next CAT/Exam date</small>
+                    </div>
+                    <div class="card" onclick="showTab('courses')">
+                        <h3>Active Courses</h3>
+                        <p style="font-size: 2rem; font-weight: 700; color: var(--color-secondary);" id="dashboard-active-courses">0</p>
+                        <small>Currently enrolled</small>
+                    </div>
+                    <div class="card" onclick="showTab('resources')">
+                        <h3>New Resources</h3>
+                        <p style="font-size: 2rem; font-weight: 700; color: var(--color-info);" id="dashboard-new-resources">0</p>
+                        <small>Last updated week</small>
+                    </div>
+                </div>
+
+                <h2 id="actions-title" style="margin-top: 30px;">Action Required</h2>
+                <div id="dashboard-actions" style="display: flex; gap: 20px; flex-wrap: wrap;">
+                    <div id="action-passport" class="card" style="flex-basis: 300px; border-left-color: #EF4444; cursor: default;">
+                        <h3>Missing Passport Photo</h3>
+                        <p>Your profile is incomplete. Please upload your passport photo immediately.</p>
+                        <button class="profile-button" onclick="showTab('profile')">Go to Profile</button>
+                    </div>
+                    <div class="card" style="flex-basis: 300px; border-left-color: #FBBF24; cursor: default;">
+                        <h3>Review New Course Material</h3>
+                        <p>New study materials have been posted for Anatomy 101.</p>
+                        <button class="profile-button" onclick="showTab('resources')" style="background-color: #FBBF24;">View Resources</button>
+                    </div>
                 </div>
             </section>
-
             <section id="profile" class="tab-content">
                 <h2>My Profile & Account</h2>
                 <form id="profile-form">
@@ -555,6 +588,7 @@
                     </div>
                 </form>
             </section>
+
             <section id="courses" class="tab-content">
                 <h2>My Courses (Real-Time)</h2>
                 <table>
@@ -648,7 +682,8 @@
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     // ** LOCATIONIQ CONFIGURATION (Geocoding API) - REPLACE KEY WITH YOUR OWN! **
-    const LOCATIONIQ_API_KEY = 'pk.cbe61eae35ecbe1d1d682c347d81381c'; // <--- REPLACE THIS KEY
+    // Get a free key from locationiq.com
+    const LOCATIONIQ_API_KEY = 'YOUR_LOCATIONIQ_API_KEY_HERE'; // <--- MUST BE REPLACED
     const LOCATIONIQ_API_URL = 'https://us1.locationiq.com/v1/reverse.php';
 
     // ** STATIC MOCK DATA (REPLACE WITH REAL SUPABASE TABLES) **
@@ -663,20 +698,19 @@
     // ** FALLBACK LOCATION (Used if user denies GPS permission) **
     const FALLBACK_LAT = -1.286389; // Nairobi, Kenya
     const FALLBACK_LON = 36.817223;
-    const FALLBACK_ACCURACY = 500; // High accuracy is not guaranteed on fallback
+    const FALLBACK_ACCURACY = 500; 
 
     let currentUserId = null;
     let currentUserProfile = null;
     let cachedCourses = []; 
 
+    // DOM Elements
     const geoMessage = document.getElementById('geo-message');
     const checkInButton = document.getElementById('check-in-button');
     const messageForm = document.getElementById('message-form');
     const sessionTypeSelect = document.getElementById('session-type');
     const attendanceTargetSelect = document.getElementById('attendance-target');
     const adminWelcomeMessage = document.getElementById('admin-welcome-message'); 
-    
-    // Profile Elements
     const profileForm = document.getElementById('profile-form');
     const passportFileInput = document.getElementById('passport-file-input');
     const passportPreview = document.getElementById('passport-preview');
@@ -710,7 +744,10 @@
         if (tabId === 'resources' && currentUserId) loadResources();     
         if (tabId === 'messages' && currentUserId) loadStudentMessages(); 
         if (tabId === 'courses' && currentUserId) loadCourses(); 
-        if (tabId === 'dashboard') loadWelcomeMessage();
+        if (tabId === 'dashboard' && currentUserId) {
+            loadWelcomeMessage();
+            loadDashboardMetrics(currentUserId); 
+        }
     }
 
     navLinks.forEach(link => {
@@ -727,7 +764,7 @@
     }
 
     // *************************************************************************
-    // *** 3. CORE DATA FUNCTIONS (Profile and Static Data Loaders) ***
+    // *** 3. CORE DATA FUNCTIONS ***
     // *************************************************************************
     
     async function loadWelcomeMessage() {
@@ -746,12 +783,58 @@
 
         adminWelcomeMessage.textContent = data.setting_value || 'Welcome to the NCHSM Student Dashboard!';
     }
+    
+    async function loadDashboardMetrics(userId) {
+        // --- 1. Load Active Courses Count ---
+        document.getElementById('dashboard-active-courses').textContent = cachedCourses.length;
+
+        // --- 2. Load Attendance Rate (MOCK) ---
+        // REPLACE with logic: calculate (Days Present / Total Days) * 100 for last 30 days
+        const attendanceRate = '94'; 
+        document.getElementById('dashboard-attendance-rate').textContent = `${attendanceRate}%`;
+
+        // --- 3. Load Upcoming Exam (MOCK) ---
+        // REPLACE with real query to 'exams' table for nearest date
+        const mockExamDate = new Date();
+        mockExamDate.setDate(mockExamDate.getDate() + 5); 
+        document.getElementById('dashboard-upcoming-exam').textContent = `${mockExamDate.toLocaleDateString()} (Anatomy)`;
+
+        // --- 4. Load New Resources (MOCK) ---
+        // REPLACE with real query to 'resources' table
+        document.getElementById('dashboard-new-resources').textContent = '3'; 
+
+        // --- 5. Conditional Action Required Section ---
+        const actionRequiredEl = document.getElementById('dashboard-actions');
+        const actionsTitleEl = document.getElementById('actions-title');
+        const passportCard = document.getElementById('action-passport');
+
+        // Check if passport is missing (uses currentUserProfile loaded by loadProfile)
+        let profileIncomplete = !currentUserProfile?.passport_url; 
+        
+        if (profileIncomplete) {
+            // Ensure the passport action card is shown if the profile is incomplete
+            if (passportCard) passportCard.style.display = 'block'; 
+        } else {
+            // Hide the passport action card if the profile is complete
+            if (passportCard) passportCard.style.display = 'none';
+        }
+
+        // Check if any action cards are visible (MOCK: just check the list child count)
+        const visibleActions = Array.from(actionRequiredEl.children).filter(el => el.style.display !== 'none');
+
+        if (visibleActions.length > 0) {
+             actionsTitleEl.style.display = 'block';
+             actionRequiredEl.style.display = 'flex';
+        } else {
+             actionsTitleEl.style.display = 'none';
+             actionRequiredEl.style.display = 'none';
+        }
+    }
 
 
     async function loadProfile(userId) {
         profileStatus.textContent = 'Loading profile data...';
         
-        // Ensure you have RLS SELECT policy allowing the user to view their own profile
         const { data: profile, error: profileError } = await sb
             .from('profiles')
             .select('full_name, email, phone, program_type, passport_url') 
@@ -803,7 +886,6 @@
         const newPhone = document.getElementById('profile-phone').value.trim();
         
         try {
-            // Ensure you have RLS UPDATE policy on 'profiles' table
             const { error } = await sb
                 .from('profiles')
                 .update({ full_name: newName, phone: newPhone })
@@ -848,12 +930,11 @@
         uploadButton.disabled = true;
 
         const fileExt = file.name.split('.').pop();
-        // Uses the current user's ID to ensure a unique path
         const filePath = `${currentUserId}/passport_photo.${fileExt}`; 
 
         try {
             // 1. Upload to Supabase Storage Bucket ('avatars')
-            // Ensure the 'avatars' bucket exists and has the correct RLS policies
+            // NOTE: Ensure the 'avatars' bucket exists in Supabase Storage and RLS is set up.
             const { error: uploadError } = await sb.storage
                 .from('avatars') 
                 .upload(filePath, file, { 
@@ -974,7 +1055,7 @@
 
 
     // *************************************************************************
-    // *** 4. ACCURATE GEOLOCATION AND REVERSE GEOCODING LOGIC ***
+    // *** 4. GEOLOCATION AND REVERSE GEOCODING LOGIC ***
     // *************************************************************************
 
     function updateTargetSelect() {
@@ -1050,15 +1131,19 @@
      * Calls the LocationIQ API to get a human-readable address.
      */
     async function reverseGeocode(lat, lon) {
+        if (LOCATIONIQ_API_KEY === 'YOUR_LOCATIONIQ_API_KEY_HERE') {
+             console.warn("LocationIQ API key is not set. Using mock address.");
+             return `[MOCK ADDRESS]: Lat: ${lat.toFixed(4)}, Lon: ${lon.toFixed(4)}`;
+        }
+        
         const url = `${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${lat}&lon=${lon}&format=json`;
         
         try {
             const response = await fetch(url);
             
             if (!response.ok) {
-                // Check for 401 (Invalid Key) or 404 (Not Found)
-                console.error(`Geocoding API error: ${response.statusText}`);
-                return `Geocoding failed (Status: ${response.status}). Check API key.`;
+                console.error(`Geocoding API error: ${response.statusText}. Check API key or daily limits.`);
+                return `Geocoding failed (Status: ${response.status}).`;
             }
             
             const data = await response.json();
@@ -1122,14 +1207,12 @@
                 });
 
             // 2. Insert/Update the main attendance table
-            // **FIXED**: Removed the 'date' field to resolve the Supabase column error.
             const { error: attendanceError } = await sb
                 .from('attendance')
                 .insert({
                     student_id: currentUserId,
                     course_or_rotation: selectedTarget,
                     session_type: selectedSessionType,
-                    // Supabase will automatically set 'date' if the column is configured with DEFAULT now()::date
                     status: 'Present' 
                 });
 
@@ -1164,11 +1247,15 @@
 
         currentUserId = user.id;
         
-        await loadProfile(currentUserId); 
+        // Load initial data and cache courses first
         await loadCourses(true);
-        updateTargetSelect();
+        // Load profile next, which populates user details and then calls: loadAttendance/loadGeoAttendanceHistory
+        await loadProfile(currentUserId); 
         
+        // Final dashboard content based on loaded profile/courses
+        updateTargetSelect();
         loadWelcomeMessage(); 
+        loadDashboardMetrics(currentUserId); 
     }
     
     // Set up message form submit listener 
