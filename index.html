@@ -276,7 +276,7 @@
                     <div class="profile-details">
                         <div class="form-field">
                             <label for="profile-student-id">Student ID / Reg. No.</label>
-                            <input type="text" id="profile-student-id" readonly>
+                            <input type="text" id="profile-student-id" readonly> 
                         </div>
                         <div class="form-field">
                             <label for="profile-name">Full Name</label>
@@ -447,13 +447,13 @@
         // Load data specific to the tab being activated
         if (tabId === 'profile' && currentUserId) loadProfile(currentUserId);
         if (tabId === 'attendance' && currentUserId) {
-            loadAttendance(currentUserId);
+            // loadAttendance(currentUserId); // MOCK/empty
             loadGeoAttendanceHistory(currentUserId); 
             // Important: Update dropdown with current courses/departments
             updateTargetSelect();
         }
         if (tabId === 'courses' && currentUserId) loadCourses(); 
-        if (tabId === 'resources' && currentUserId) loadResources(); // <--- Now loads from Supabase
+        if (tabId === 'resources' && currentUserId) loadResources(); 
         if (tabId === 'dashboard' && currentUserId) {
             loadWelcomeMessage();
             loadDashboardMetrics(currentUserId); 
@@ -471,7 +471,8 @@
     });
 
     async function logout() {
-        sb.realtime.channels.forEach(channel => sb.removeChannel(channel));
+        // Disconnect from real-time channels gracefully
+        sb.realtime.channels.forEach(channel => sb.removeChannel(channel)); 
         await sb.auth.signOut();
         window.location.href = "login.html"; // Redirect to your login page
     }
@@ -514,31 +515,33 @@
 
         // --- 5. Conditional Action Required Section ---
         const passportCard = document.getElementById('action-passport');
+        // Check if currentUserProfile exists and if it has a passport_url
         let profileIncomplete = !currentUserProfile?.passport_url; 
         
         passportCard.style.display = profileIncomplete ? 'block' : 'none';
     }
     
     // *************************************************************************
-    // *** 4. AUTHENTICATION AND PROFILE MANAGEMENT (UPDATED) ***
+    // *** 4. AUTHENTICATION AND PROFILE MANAGEMENT (SECURE FIX APPLIED) ***
     // *************************************************************************
 
     async function checkAuthAndLoad() {
-        // In a live app, this gets the real user session.
+        // Get the current user session from Supabase Auth
         const { data: { user } } = await sb.auth.getUser();
 
         if (user) {
+            // User is logged in, continue with loading data
             currentUserId = user.id;
+        
+            await loadCourses(); 
+            await loadProfile(currentUserId); 
+            showTab('dashboard');
         } else {
-            // DEMO MODE fallback
-            currentUserId = 'demo-user-123'; 
-            console.warn("Running in DEMO mode with ID:", currentUserId);
+            // 🚨 CRITICAL FIX: Redirect to login page if no user is found
+            console.warn("No active user session found. Redirecting to login.");
+            // Assuming your login page is named login.html
+            window.location.href = "login.html"; 
         }
-
-        // Must load courses and profile before showing the dashboard/attendance tab
-        await loadCourses(); 
-        await loadProfile(currentUserId); 
-        showTab('dashboard');
     }
     
     const profileForm = document.getElementById('profile-form');
@@ -562,10 +565,24 @@
 
         if (error) {
             console.error('Error loading profile:', error);
-            // Handle profile not found gracefully, especially in demo mode
-            if (error.code === 'PGRST116') {
-                profileStatus.textContent = 'Demo Profile Loaded (No database entry found for ID)';
-                currentUserProfile = { first_name: 'Demo', full_name: 'Demo User', email: 'demo@nchsm.edu', program_name: 'Diploma in Nursing', student_id_no: 'NCSM/D/001' };
+            
+            // ** NOTE ON RLS & "N/A" **
+            // If the error code is PGRST116 (No rows found), it means the user's
+            // ID exists in auth.users but not in the profiles table.
+            // If RLS is misconfigured, it will also block the SELECT.
+            
+            if (error.code === 'PGRST116' || error.message.includes('permission denied')) {
+                profileStatus.textContent = 'Profile data missing or restricted. Contact Admin.';
+                
+                // Fallback to a partial profile to prevent other components from failing
+                currentUserProfile = { 
+                    first_name: 'Student', 
+                    full_name: 'Unknown Student', 
+                    email: 'N/A', 
+                    program_name: 'N/A', 
+                    student_id_no: 'N/A',
+                    phone: 'N/A'
+                };
             } else {
                 profileStatus.textContent = 'Error loading profile details.';
                 return;
@@ -575,7 +592,8 @@
             profileStatus.textContent = '';
         }
 
-        // Reflect all profile data in the form fields
+        // Reflect all profile data in the form fields.
+        // ** These lines are correct, assuming your column names are 'student_id_no' and 'program_name' **
         document.getElementById('profile-student-id').value = currentUserProfile.student_id_no || 'N/A';
         document.getElementById('profile-name').value = currentUserProfile.full_name || 'N/A';
         document.getElementById('profile-email').value = currentUserProfile.email || 'N/A';
@@ -585,7 +603,7 @@
         // Handle Passport Photo URL retrieval
         document.getElementById('passport-preview').src = currentUserProfile.passport_url 
             ? sb.storage.from('passports').getPublicUrl(currentUserProfile.passport_url).data.publicUrl
-            : 'https://via.placeholder.com/150x150?text=NO+PHOTO';
+            : 'images/default_avatar.png'; // Use a default image if NO_PHOTO placeholder is not available
         
         document.querySelector('header h1').textContent = `Welcome, ${currentUserProfile.first_name || 'Student'}!`;
 
@@ -691,7 +709,7 @@
 
 
     // *************************************************************************
-    // *** 5. ATTENDANCE LOGIC (CLEANED UP) ***
+    // *** 5. ATTENDANCE LOGIC ***
     // *************************************************************************
 
     function updateTargetSelect() {
@@ -709,7 +727,7 @@
                 text: `${d.name} (Clinical)` 
             }));
             label = 'Department/Area:';
-        // Logic: On Class Session uses real-time loaded courses (NO MOCK DATA)
+        // Logic: On Class Session uses real-time loaded courses
         } else if (sessionType === 'Class') {
             targetList = cachedCourses.map(c => ({ 
                 id: c.id, 
@@ -735,129 +753,7 @@
         geoMessage.innerHTML = `Please select a specific **${label.replace(':', '')}** to check in.`;
     }
 
-    // geoCheckIn and loadGeoAttendanceHistory functions remain the same as the previous version
-    // (Omitted for brevity in this comment block, but included in the full HTML)
-
-    // *************************************************************************
-    // *** 6. SUPABASE DATA LOADING FUNCTIONS ***
-    // *************************************************************************
-
-    async function loadCourses() {
-        const tableBody = document.getElementById('courses-table');
-        tableBody.innerHTML = '<tr><td colspan="2">Loading courses from Supabase...</td></tr>';
-        
-        try {
-            const { data: enrollments, error } = await sb
-                .from('student_courses') 
-                .select(`
-                    course_id,
-                    status,
-                    courses (id, name, code) 
-                `)
-                .eq('student_id', currentUserId);
-
-            if (error) throw error;
-            
-            tableBody.innerHTML = '';
-            
-            if (enrollments && enrollments.length > 0) {
-                // Cache the loaded courses
-                cachedCourses = enrollments
-                    .filter(e => e.courses)
-                    .map(e => ({
-                        id: e.courses.id,
-                        name: e.courses.name,
-                        code: e.courses.code,
-                        status: e.status
-                    }));
-                
-                // Populate the Courses table
-                cachedCourses.forEach(c => {
-                    const row = `
-                        <tr>
-                            <td>${c.code ? c.code + ' - ' : ''}${c.name}</td>
-                            <td>${c.status || 'Active'}</td>
-                        </tr>
-                    `;
-                    tableBody.innerHTML += row;
-                });
-            } else {
-                tableBody.innerHTML = '<tr><td colspan="2">You are currently not enrolled in any courses.</td></tr>';
-                cachedCourses = []; 
-            }
-            
-        } catch (error) {
-            console.error("Failed to load courses:", error);
-            tableBody.innerHTML = `<tr><td colspan="2" style="color: #EF4444;">Error loading courses: ${error.message}. Using fallback.</td></tr>`;
-            cachedCourses = MOCK_COURSES_FALLBACK; 
-        }
-        
-        // Update dashboard and attendance view
-        if (document.getElementById('attendance').classList.contains('active')) {
-            updateTargetSelect();
-        }
-        document.getElementById('dashboard-active-courses').textContent = cachedCourses.length;
-    }
-
-    async function loadResources() {
-        const resourceList = document.getElementById('resources-list');
-        resourceList.innerHTML = 'Loading resources from Supabase...';
-        
-        try {
-            // Assuming a 'resources' table with a 'program' column linked to the student's program_name
-            const program = currentUserProfile?.program_name || 'General'; 
-            
-            const { data: resources, error } = await sb
-                .from('resources')
-                .select('id, title, file_path, upload_date')
-                // Filter by the student's program or general resources (optional refinement)
-                .or(`program.eq.${program},program.eq.General`) 
-                .order('upload_date', { ascending: false });
-
-            if (error) throw error;
-
-            resourceList.innerHTML = '';
-
-            if (resources.length === 0) {
-                resourceList.innerHTML = `<p>No learning resources found for your program (${program}) yet.</p>`;
-                return;
-            }
-            
-            resources.forEach(res => {
-                // Generate a public URL for the file (assuming files are in a storage bucket named 'materials')
-                const publicUrl = sb.storage.from('materials').getPublicUrl(res.file_path).data.publicUrl;
-
-                const item = `
-                    <div class="resource-item">
-                        <div>
-                            <a href="${publicUrl}" target="_blank">${res.title}</a>
-                            <p style="margin: 5px 0 0; font-size: 0.9em; color: #6B7280;">Uploaded: ${new Date(res.upload_date).toLocaleDateString()}</p>
-                        </div>
-                        <span style="font-size: 1.5em;">&#x1F4C4;</span>
-                    </div>
-                `;
-                resourceList.innerHTML += item;
-            });
-            
-        } catch (error) {
-            console.error("Failed to load resources:", error);
-            resourceList.innerHTML = `<p style="color: #EF4444;">Error loading resources: ${error.message}</p>`;
-        }
-    }
-
-
-    // MOCK FUNCTIONS (for tabs not yet fully implemented)
-    async function loadAttendance() {
-        document.getElementById('attendance-table').innerHTML = '';
-    }
-    async function loadExams() {
-         document.getElementById('exams-table').innerHTML = '<tr><td colspan="3">No upcoming exams scheduled. (MOCK)</td></tr>';
-    }
-    async function loadStudentMessages() {
-         document.getElementById('messages-list').innerHTML = '<h2>Recent Admin Messages</h2><p>No new messages. (MOCK)</p>';
-    }
-
-    // ** GeoCheckIn Implementation (Re-added to complete the file) **
+    // GeoCheckIn implementation
     async function geoCheckIn() {
         const sessionType = sessionTypeSelect.value;
         const targetSelect = attendanceTargetSelect.value;
@@ -984,6 +880,127 @@
             tableBody.innerHTML = `<tr><td colspan="5" style="color: #EF4444;">Error loading history: ${error.message}</td></tr>`;
         }
     }
+
+    // *************************************************************************
+    // *** 6. SUPABASE DATA LOADING FUNCTIONS ***
+    // *************************************************************************
+
+    async function loadCourses() {
+        const tableBody = document.getElementById('courses-table');
+        tableBody.innerHTML = '<tr><td colspan="2">Loading courses from Supabase...</td></tr>';
+        
+        try {
+            // This query fetches enrollments and joins the courses table
+            const { data: enrollments, error } = await sb
+                .from('student_courses') 
+                .select(`
+                    course_id,
+                    status,
+                    courses (id, name, code) 
+                `)
+                .eq('student_id', currentUserId);
+
+            if (error) throw error;
+            
+            tableBody.innerHTML = '';
+            
+            if (enrollments && enrollments.length > 0) {
+                // Cache the loaded courses
+                cachedCourses = enrollments
+                    .filter(e => e.courses)
+                    .map(e => ({
+                        id: e.courses.id,
+                        name: e.courses.name,
+                        code: e.courses.code,
+                        status: e.status
+                    }));
+                
+                // Populate the Courses table
+                cachedCourses.forEach(c => {
+                    const row = `
+                        <tr>
+                            <td>${c.code ? c.code + ' - ' : ''}${c.name}</td>
+                            <td>${c.status || 'Active'}</td>
+                        </tr>
+                    `;
+                    tableBody.innerHTML += row;
+                });
+            } else {
+                tableBody.innerHTML = '<tr><td colspan="2">You are currently not enrolled in any courses.</td></tr>';
+                cachedCourses = []; 
+            }
+            
+        } catch (error) {
+            console.error("Failed to load courses:", error);
+            tableBody.innerHTML = `<tr><td colspan="2" style="color: #EF4444;">Error loading courses: ${error.message}. Using fallback.</td></tr>`;
+            cachedCourses = MOCK_COURSES_FALLBACK; 
+        }
+        
+        // Update dashboard and attendance view
+        if (document.getElementById('attendance').classList.contains('active')) {
+            updateTargetSelect();
+        }
+        document.getElementById('dashboard-active-courses').textContent = cachedCourses.length;
+    }
+
+    async function loadResources() {
+        const resourceList = document.getElementById('resources-list');
+        resourceList.innerHTML = 'Loading resources from Supabase...';
+        
+        try {
+            // Get the student's program name from the loaded profile
+            const program = currentUserProfile?.program_name || 'General'; 
+            
+            const { data: resources, error } = await sb
+                .from('resources')
+                .select('id, title, file_path, upload_date')
+                // Filter by the student's program or general resources (optional refinement)
+                .or(`program.eq.${program},program.eq.General`) 
+                .order('upload_date', { ascending: false });
+
+            if (error) throw error;
+
+            resourceList.innerHTML = '';
+
+            if (resources.length === 0) {
+                resourceList.innerHTML = `<p>No learning resources found for your program (${program}) yet.</p>`;
+                return;
+            }
+            
+            resources.forEach(res => {
+                // Generate a public URL for the file (assuming files are in a storage bucket named 'materials')
+                const publicUrl = sb.storage.from('materials').getPublicUrl(res.file_path).data.publicUrl;
+
+                const item = `
+                    <div class="resource-item">
+                        <div>
+                            <a href="${publicUrl}" target="_blank">${res.title}</a>
+                            <p style="margin: 5px 0 0; font-size: 0.9em; color: #6B7280;">Uploaded: ${new Date(res.upload_date).toLocaleDateString()}</p>
+                        </div>
+                        <span style="font-size: 1.5em;">&#x1F4C4;</span>
+                    </div>
+                `;
+                resourceList.innerHTML += item;
+            });
+            
+        } catch (error) {
+            console.error("Failed to load resources:", error);
+            resourceList.innerHTML = `<p style="color: #EF4444;">Error loading resources: ${error.message}</p>`;
+        }
+    }
+
+
+    // MOCK FUNCTIONS (for tabs not yet fully implemented)
+    async function loadAttendance() {
+        document.getElementById('attendance-table').innerHTML = '';
+    }
+    async function loadExams() {
+         document.getElementById('exams-table').innerHTML = '<tr><td colspan="3">No upcoming exams scheduled. (MOCK)</td></tr>';
+    }
+    async function loadStudentMessages() {
+         document.getElementById('messages-list').innerHTML = '<h2>Recent Admin Messages</h2><p>No new messages. (MOCK)</p>';
+    }
+    
 
     // *************************************************************************
     // *** 9. INITIALIZATION ***
