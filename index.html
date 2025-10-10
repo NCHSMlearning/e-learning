@@ -154,6 +154,26 @@
             border: none;
             cursor: pointer;
         }
+        
+        .resource-item {
+            background-color: #fff;
+            border: 1px solid #E2E8F0;
+            border-left: 4px solid #F59E0B;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .resource-item a {
+            color: #4C1D95;
+            font-weight: 600;
+            text-decoration: none;
+        }
+        .resource-item a:hover {
+            text-decoration: underline;
+        }
 
         /* Responsive adjustments */
         @media (max-width: 768px) {
@@ -255,6 +275,10 @@
 
                     <div class="profile-details">
                         <div class="form-field">
+                            <label for="profile-student-id">Student ID / Reg. No.</label>
+                            <input type="text" id="profile-student-id" readonly>
+                        </div>
+                        <div class="form-field">
                             <label for="profile-name">Full Name</label>
                             <input type="text" id="profile-name" readonly required>
                         </div>
@@ -297,15 +321,13 @@
                     <div class="control-group">
                         <label for="session-type">Session Type:</label>
                         <select id="session-type" onchange="updateTargetSelect()">
-                            <option value="Clinical">Clinical Rotation</option>
-                            <option value="Class">Class Session</option>
-                            <option value="Call">On Call</option>
-                            <option value="Virtual">Virtual Session</option>
+                            <option value="Clinical">Clinical Session</option>
+                            <option value="Class">On Class Session</option>
                         </select>
                     </div>
 
                     <div class="control-group" id="target-control-group">
-                        <label for="attendance-target" id="target-label">Rotation/Course:</label>
+                        <label for="attendance-target" id="target-label">Department/Course:</label>
                         <select id="attendance-target">
                             <option>Select Session Type first...</option>
                         </select>
@@ -313,7 +335,7 @@
 
                     <button id="check-in-button" onclick="geoCheckIn()">Check In Now</button>
                     
-                    <p id="geo-message">Select a **Session Type** and then a specific **Rotation or Course** to check in at your current GPS location and time.</p>
+                    <p id="geo-message">Select a **Session Type** and then a specific **Department or Course** to check in at your current GPS location and time.</p>
                 </div>
 
                 <h3 style="color: #4C1D95;">Geo Attendance History (Check-in Logs)</h3>
@@ -336,7 +358,7 @@
             </section>
 
             <section id="resources" class="tab-content">
-                <h2 style="color: #4C1D95;">Learning Resources (Filtered by Program)</h2>
+                <h2 style="color: #4C1D95;">Learning Resources</h2>
                 <div id="resources-list">Loading resources...</div>
             </section>
 
@@ -368,8 +390,7 @@
     const LOCATIONIQ_API_KEY = 'pk.cbe61eae35ecbe1d1d682c347d81381c'; 
     const LOCATIONIQ_API_URL = 'https://us1.locationiq.com/v1/reverse.php';
 
-    // ** STATIC MOCK DATA (Fallback and Clinical Departments) **
-    // 🏥 All specified clinical departments/areas
+    // ** STATIC DATA (Clinical Departments/Areas) **
     const MOCK_HOSPITAL_DEPARTMENTS = [
         { id: '1', name: 'Maternity Department' },
         { id: '2', name: 'Male Surgical' },
@@ -381,17 +402,11 @@
         { id: '8', name: 'ICU' },
         { id: '9', name: 'Outpatient' },
         { id: '10', name: 'Oncology' },
-        { id: '11', name: 'NBU' }, // Neonatal Baby Unit (assuming NBU means this)
+        { id: '11', name: 'NBU' }, 
         { id: '12', name: 'Gynecology' },
         { id: '13', name: 'Community Health' },
     ];
-    // Mock courses, used only as a last-resort fallback if Supabase course load fails
-    const MOCK_COURSES = [
-        { id: '1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d', name: 'Anatomy 101' },
-        { id: '2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e', name: 'Physiology 101' },
-        { id: '3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f', name: 'Clinical Skills' },
-    ];
-
+    
     // ** FALLBACK LOCATION **
     const FALLBACK_LAT = -1.286389; 
     const FALLBACK_LON = 36.817223;
@@ -399,14 +414,19 @@
 
     let currentUserId = null;
     let currentUserProfile = null;
-    // This will hold the courses loaded from Supabase for both the 'My Courses' tab AND the 'Attendance' dropdown
-    let cachedCourses = MOCK_COURSES; 
+    // Holds courses loaded from Supabase. Used by both 'My Courses' and 'Attendance' dropdown.
+    let cachedCourses = []; 
+    // Mock courses, only used as a placeholder if *all* Supabase loading fails
+    const MOCK_COURSES_FALLBACK = [
+        { id: 'fallback-1', name: 'Anatomy Fallback', code: 'ANAT101' },
+    ];
 
     // DOM Elements
     const geoMessage = document.getElementById('geo-message');
     const sessionTypeSelect = document.getElementById('session-type');
     const attendanceTargetSelect = document.getElementById('attendance-target');
     const adminWelcomeMessage = document.getElementById('admin-welcome-message'); 
+    
     // ... other DOM elements
 
     // *************************************************************************
@@ -432,14 +452,14 @@
             // Important: Update dropdown with current courses/departments
             updateTargetSelect();
         }
-        if (tabId === 'courses' && currentUserId) loadCourses(); // <--- Now loads from Supabase
+        if (tabId === 'courses' && currentUserId) loadCourses(); 
+        if (tabId === 'resources' && currentUserId) loadResources(); // <--- Now loads from Supabase
         if (tabId === 'dashboard' && currentUserId) {
             loadWelcomeMessage();
             loadDashboardMetrics(currentUserId); 
         }
         // Mock loaders for other tabs
         if (tabId === 'cats' && currentUserId) loadExams();
-        if (tabId === 'resources' && currentUserId) loadResources();     
         if (tabId === 'messages' && currentUserId) loadStudentMessages(); 
     }
 
@@ -464,13 +484,12 @@
         adminWelcomeMessage.textContent = 'Loading message...';
         
         const { data, error } = await sb
-            .from('system_settings')
+            .from('system_settings') // Assuming a table named 'system_settings'
             .select('setting_value')
             .eq('setting_key', 'welcome_message')
             .single();
 
         if (error || !data || !data.setting_value) {
-            console.warn("Could not load welcome message:", error);
             adminWelcomeMessage.textContent = 'Welcome to the NCHSM Student Dashboard! Stay updated with your studies.';
             return;
         }
@@ -498,280 +517,30 @@
         let profileIncomplete = !currentUserProfile?.passport_url; 
         
         passportCard.style.display = profileIncomplete ? 'block' : 'none';
-        
-        // Minor logic to hide the whole section if no actions are required (e.g., both mock cards hidden)
-        const actionsTitleEl = document.getElementById('actions-title');
-        actionsTitleEl.style.display = 'block'; // Always show for now, as one mock card is always present
     }
     
     // *************************************************************************
-    // *** 4. AUTHENTICATION AND PROFILE MANAGEMENT ***
+    // *** 4. AUTHENTICATION AND PROFILE MANAGEMENT (UPDATED) ***
     // *************************************************************************
 
     async function checkAuthAndLoad() {
-        // Mock auth for demo purposes if not using a real login page, 
-        // otherwise it should retrieve the actual user session.
+        // In a live app, this gets the real user session.
         const { data: { user } } = await sb.auth.getUser();
 
         if (user) {
             currentUserId = user.id;
-            // Load courses immediately to populate dashboard and attendance dropdown
-            await loadCourses(); 
-            await loadProfile(currentUserId); 
-            showTab('dashboard');
         } else {
-            // Fallback for demonstration if no actual login is used:
-            currentUserId = 'demo-user-123'; // Replace with an actual ID from your Supabase 'profiles' table for testing
-            console.warn("No Supabase user session found. Running in DEMO mode with ID:", currentUserId);
-            // In a live app, you'd redirect: window.location.href = 'login.html'; 
-            await loadCourses();
-            await loadProfile(currentUserId); 
-            showTab('dashboard');
+            // DEMO MODE fallback
+            currentUserId = 'demo-user-123'; 
+            console.warn("Running in DEMO mode with ID:", currentUserId);
         }
+
+        // Must load courses and profile before showing the dashboard/attendance tab
+        await loadCourses(); 
+        await loadProfile(currentUserId); 
+        showTab('dashboard');
     }
     
-    // (Profile loading/editing functions omitted for brevity, but they are included below in the final code block)
-
-    // *************************************************************************
-    // *** 5. ATTENDANCE LOGIC ***
-    // *************************************************************************
-
-    function updateTargetSelect() {
-        const sessionType = sessionTypeSelect.value;
-        attendanceTargetSelect.innerHTML = '';
-        
-        let targetList = [];
-        let label = 'Rotation/Course:';
-
-        // Logic: Clinical/Call uses Departments, Class/Virtual uses Courses (from cachedCourses)
-        if (sessionType === 'Clinical' || sessionType === 'Call') {
-            targetList = MOCK_HOSPITAL_DEPARTMENTS.map(d => ({ 
-                id: d.id, 
-                name: d.name, 
-                text: `${d.name} (${sessionType})` 
-            }));
-            label = 'Department/Area:';
-        } else if (sessionType === 'Class' || sessionType === 'Virtual') {
-            targetList = cachedCourses.map(c => ({ 
-                id: c.id, 
-                name: c.name, 
-                // Display the course code if available
-                text: `${c.code ? c.code + ' - ' : ''}${c.name} (${sessionType})` 
-            }));
-            label = 'Course/Subject:';
-        }
-
-        document.getElementById('target-label').textContent = label;
-
-        if (targetList.length === 0) {
-            attendanceTargetSelect.innerHTML = '<option>No targets available.</option>';
-        } else {
-            targetList.forEach(target => {
-                const option = document.createElement('option');
-                option.value = `${target.id}|${target.name}`; 
-                option.textContent = target.text;
-                attendanceTargetSelect.appendChild(option);
-            });
-        }
-        geoMessage.innerHTML = `Please select a specific **${label.replace(':', '')}** to check in.`;
-    }
-
-    async function geoCheckIn() {
-        const sessionType = sessionTypeSelect.value;
-        const targetSelect = attendanceTargetSelect.value;
-        const checkInTime = new Date().toISOString();
-        const button = document.getElementById('check-in-button');
-        
-        if (!sessionType || !targetSelect || targetSelect.includes('Select Session Type first') || targetSelect.includes('No targets available')) {
-            geoMessage.textContent = 'Error: Please select both a Session Type and a valid Rotation/Course.';
-            return;
-        }
-
-        button.disabled = true;
-        geoMessage.textContent = 'Attempting to get location and check in...';
-
-        const getLocation = () => new Promise((resolve, reject) => {
-            if (!navigator.geolocation) {
-                return resolve({ lat: FALLBACK_LAT, lon: FALLBACK_LON, acc: FALLBACK_ACCURACY, friendly: 'Fallback Location (Geolocation Disabled)' });
-            }
-            navigator.geolocation.getCurrentPosition(
-                (pos) => resolve({ 
-                    lat: pos.coords.latitude, 
-                    lon: pos.coords.longitude, 
-                    acc: pos.coords.accuracy, 
-                    friendly: null 
-                }),
-                (err) => {
-                    console.warn(`Geolocation error (${err.code}): ${err.message}. Using fallback.`);
-                    resolve({ lat: FALLBACK_LAT, lon: FALLBACK_LON, acc: FALLBACK_ACCURACY, friendly: 'Fallback Location (GPS Error)' });
-                },
-                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-            );
-        });
-
-        try {
-            let location = await getLocation();
-
-            if (location.friendly === null) {
-                const geocodeUrl = `${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${location.lat}&lon=${location.lon}&format=json`;
-                const response = await fetch(geocodeUrl);
-                if (response.ok) {
-                    const geoData = await response.json();
-                    location.friendly = geoData.display_name || `Lat: ${location.lat.toFixed(4)}, Lon: ${location.lon.toFixed(4)}`;
-                } else {
-                    location.friendly = `Geocoding Failed. Lat: ${location.lat.toFixed(4)}, Lon: ${location.lon.toFixed(4)}`;
-                }
-            }
-            
-            const [targetId, targetName] = targetSelect.split('|');
-
-            const { error } = await sb
-                .from('geo_attendance_logs') // Ensure this table exists in Supabase
-                .insert({
-                    student_id: currentUserId,
-                    check_in_time: checkInTime,
-                    session_type: sessionType,
-                    target_id: targetId,
-                    target_name: targetName,
-                    latitude: location.lat,
-                    longitude: location.lon,
-                    accuracy_m: location.acc,
-                    location_friendly_name: location.friendly,
-                    is_verified: false,
-                    notes: `Checked in via dashboard for ${sessionType}`
-                });
-
-            if (error) {
-                console.error("Check-in failed:", error);
-                geoMessage.textContent = `Check-in failed: Error: ${error.message}`;
-            } else {
-                geoMessage.textContent = `Check-in successful! Logged at ${new Date(checkInTime).toLocaleTimeString()} near ${location.friendly}.`;
-                loadGeoAttendanceHistory(currentUserId);
-            }
-
-        } catch (e) {
-            console.error("GeoCheckIn major failure:", e);
-            geoMessage.textContent = `A critical error occurred during check-in: ${e.message}`;
-        } finally {
-            button.disabled = false;
-        }
-    }
-
-    async function loadGeoAttendanceHistory(userId) {
-        const tableBody = document.getElementById('geo-attendance-history');
-        tableBody.innerHTML = '<tr><td colspan="5">Loading geo check-in history...</td></tr>';
-
-        try {
-            const { data: logs, error } = await sb
-                .from('geo_attendance_logs')
-                .select('check_in_time, session_type, location_friendly_name, accuracy_m, is_verified')
-                .eq('student_id', userId)
-                .order('check_in_time', { ascending: false })
-                .limit(10); 
-
-            if (error) throw error;
-
-            tableBody.innerHTML = '';
-
-            if (!logs || logs.length === 0) {
-                tableBody.innerHTML = '<tr><td colspan="5">No geo check-in history found.</td></tr>';
-                return;
-            }
-
-            logs.forEach(log => {
-                const accuracyText = (log.accuracy_m || 0).toFixed(2) + 'm'; 
-                
-                const verificationStatus = log.is_verified 
-                    ? '<span style="color: #10B981; font-weight: 600;">Verified</span>' 
-                    : '<span style="color: #F59E0B; font-weight: 600;">Pending</span>';
-
-                const row = `
-                    <tr>
-                        <td>${new Date(log.check_in_time).toLocaleString()}</td>
-                        <td>${log.session_type}</td>
-                        <td>${log.location_friendly_name || 'N/A'}</td>
-                        <td>${accuracyText}</td>
-                        <td>${verificationStatus}</td>
-                    </tr>
-                `;
-                tableBody.innerHTML += row;
-            });
-
-        } catch (error) {
-            console.error("Failed to load geo attendance history:", error);
-            tableBody.innerHTML = `<tr><td colspan="5" style="color: #EF4444;">Error loading history: ${error.message}</td></tr>`;
-        }
-    }
-
-
-    // *************************************************************************
-    // *** 6. SUPABASE DATA LOADING FUNCTIONS ***
-    // *************************************************************************
-
-    async function loadCourses() {
-        const tableBody = document.getElementById('courses-table');
-        tableBody.innerHTML = '<tr><td colspan="2">Loading courses from Supabase...</td></tr>';
-        
-        try {
-            // Fetch courses the *current student* is enrolled in
-            const { data: enrollments, error } = await sb
-                .from('student_courses') 
-                .select(`
-                    course_id,
-                    status,
-                    courses (id, name, code) 
-                `)
-                .eq('student_id', currentUserId);
-
-            if (error) throw error;
-            
-            tableBody.innerHTML = '';
-            
-            if (enrollments && enrollments.length > 0) {
-                // Cache the loaded courses for use in the Attendance section dropdown
-                cachedCourses = enrollments
-                    .filter(e => e.courses) // Filter out null course joins
-                    .map(e => ({
-                        id: e.courses.id,
-                        name: e.courses.name,
-                        code: e.courses.code,
-                        status: e.status
-                    }));
-                
-                // Populate the Courses table
-                cachedCourses.forEach(c => {
-                    const row = `
-                        <tr>
-                            <td>${c.code ? c.code + ' - ' : ''}${c.name}</td>
-                            <td>${c.status || 'Active'}</td>
-                        </tr>
-                    `;
-                    tableBody.innerHTML += row;
-                });
-            } else {
-                tableBody.innerHTML = '<tr><td colspan="2">You are currently not enrolled in any courses.</td></tr>';
-                cachedCourses = []; // Empty the cached courses if no enrollment found
-            }
-            
-        } catch (error) {
-            console.error("Failed to load courses:", error);
-            tableBody.innerHTML = `<tr><td colspan="2" style="color: #EF4444;">Error loading courses: ${error.message}</td></tr>`;
-            cachedCourses = MOCK_COURSES; // Fallback to mock data
-        }
-        
-        // Ensure the attendance dropdown uses the most current data when the tab is active
-        if (document.getElementById('attendance').classList.contains('active')) {
-            updateTargetSelect();
-        }
-        // Also update the dashboard metric
-        document.getElementById('dashboard-active-courses').textContent = cachedCourses.length;
-    }
-
-
-    // *************************************************************************
-    // *** 7. PROFILE LOGIC (Supporting Functions) ***
-    // *************************************************************************
-
     const profileForm = document.getElementById('profile-form');
     const passportFileInput = document.getElementById('passport-file-input');
     const passportPreview = document.getElementById('passport-preview');
@@ -784,6 +553,7 @@
     async function loadProfile(userId) {
         profileStatus.textContent = 'Loading profile...';
         
+        // Fetch ALL data from the profiles table for the current user
         const { data: profile, error } = await sb
             .from('profiles')
             .select('*')
@@ -792,10 +562,10 @@
 
         if (error) {
             console.error('Error loading profile:', error);
-            // Check for profile not found (common in demo mode)
+            // Handle profile not found gracefully, especially in demo mode
             if (error.code === 'PGRST116') {
-                profileStatus.textContent = 'Demo Profile Loaded (No database entry)';
-                currentUserProfile = { first_name: 'Demo', full_name: 'Demo User', email: 'demo@nchsm.edu', program_name: 'Diploma in Nursing' };
+                profileStatus.textContent = 'Demo Profile Loaded (No database entry found for ID)';
+                currentUserProfile = { first_name: 'Demo', full_name: 'Demo User', email: 'demo@nchsm.edu', program_name: 'Diploma in Nursing', student_id_no: 'NCSM/D/001' };
             } else {
                 profileStatus.textContent = 'Error loading profile details.';
                 return;
@@ -805,11 +575,14 @@
             profileStatus.textContent = '';
         }
 
+        // Reflect all profile data in the form fields
+        document.getElementById('profile-student-id').value = currentUserProfile.student_id_no || 'N/A';
         document.getElementById('profile-name').value = currentUserProfile.full_name || 'N/A';
         document.getElementById('profile-email').value = currentUserProfile.email || 'N/A';
         document.getElementById('profile-phone').value = currentUserProfile.phone || 'N/A';
         document.getElementById('profile-program').value = currentUserProfile.program_name || 'N/A';
         
+        // Handle Passport Photo URL retrieval
         document.getElementById('passport-preview').src = currentUserProfile.passport_url 
             ? sb.storage.from('passports').getPublicUrl(currentUserProfile.passport_url).data.publicUrl
             : 'https://via.placeholder.com/150x150?text=NO+PHOTO';
@@ -817,13 +590,13 @@
         document.querySelector('header h1').textContent = `Welcome, ${currentUserProfile.first_name || 'Student'}!`;
 
         toggleProfileEdit(false); 
-        // Ensure upload label is visible if no photo is present
         if (!currentUserProfile.passport_url) {
             uploadLabel.style.display = 'block';
         }
     }
     
     function toggleProfileEdit(enable) {
+        // Allow editing of Full Name and Phone Number only
         const fields = ['profile-name', 'profile-phone']; 
         fields.forEach(id => {
             const input = document.getElementById(id);
@@ -833,7 +606,6 @@
         editProfileButton.style.display = enable ? 'none' : 'block';
         saveProfileButton.style.display = enable ? 'block' : 'none';
         
-        // Show upload label during edit, or if the photo is missing
         if (enable || !currentUserProfile?.passport_url) {
             uploadLabel.style.display = 'block';
         } else {
@@ -919,17 +691,298 @@
 
 
     // *************************************************************************
-    // *** 8. MOCK DATA LOADERS (For unimplemented tabs) ***
+    // *** 5. ATTENDANCE LOGIC (CLEANED UP) ***
     // *************************************************************************
-    async function loadAttendance() { /* Stub for future full attendance loading */ }
+
+    function updateTargetSelect() {
+        const sessionType = sessionTypeSelect.value;
+        attendanceTargetSelect.innerHTML = '';
+        
+        let targetList = [];
+        let label = 'Department/Course:';
+
+        // Logic: Clinical Session uses Departments
+        if (sessionType === 'Clinical') {
+            targetList = MOCK_HOSPITAL_DEPARTMENTS.map(d => ({ 
+                id: d.id, 
+                name: d.name, 
+                text: `${d.name} (Clinical)` 
+            }));
+            label = 'Department/Area:';
+        // Logic: On Class Session uses real-time loaded courses (NO MOCK DATA)
+        } else if (sessionType === 'Class') {
+            targetList = cachedCourses.map(c => ({ 
+                id: c.id, 
+                name: c.name, 
+                text: `${c.code ? c.code + ' - ' : ''}${c.name} (Class)` 
+            }));
+            label = 'Course/Subject:';
+        }
+
+        document.getElementById('target-label').textContent = label;
+
+        if (targetList.length === 0) {
+            const message = sessionType === 'Class' ? 'No active courses found. Please check My Courses.' : 'No clinical targets available.';
+            attendanceTargetSelect.innerHTML = `<option>${message}</option>`;
+        } else {
+            targetList.forEach(target => {
+                const option = document.createElement('option');
+                option.value = `${target.id}|${target.name}`; 
+                option.textContent = target.text;
+                attendanceTargetSelect.appendChild(option);
+            });
+        }
+        geoMessage.innerHTML = `Please select a specific **${label.replace(':', '')}** to check in.`;
+    }
+
+    // geoCheckIn and loadGeoAttendanceHistory functions remain the same as the previous version
+    // (Omitted for brevity in this comment block, but included in the full HTML)
+
+    // *************************************************************************
+    // *** 6. SUPABASE DATA LOADING FUNCTIONS ***
+    // *************************************************************************
+
+    async function loadCourses() {
+        const tableBody = document.getElementById('courses-table');
+        tableBody.innerHTML = '<tr><td colspan="2">Loading courses from Supabase...</td></tr>';
+        
+        try {
+            const { data: enrollments, error } = await sb
+                .from('student_courses') 
+                .select(`
+                    course_id,
+                    status,
+                    courses (id, name, code) 
+                `)
+                .eq('student_id', currentUserId);
+
+            if (error) throw error;
+            
+            tableBody.innerHTML = '';
+            
+            if (enrollments && enrollments.length > 0) {
+                // Cache the loaded courses
+                cachedCourses = enrollments
+                    .filter(e => e.courses)
+                    .map(e => ({
+                        id: e.courses.id,
+                        name: e.courses.name,
+                        code: e.courses.code,
+                        status: e.status
+                    }));
+                
+                // Populate the Courses table
+                cachedCourses.forEach(c => {
+                    const row = `
+                        <tr>
+                            <td>${c.code ? c.code + ' - ' : ''}${c.name}</td>
+                            <td>${c.status || 'Active'}</td>
+                        </tr>
+                    `;
+                    tableBody.innerHTML += row;
+                });
+            } else {
+                tableBody.innerHTML = '<tr><td colspan="2">You are currently not enrolled in any courses.</td></tr>';
+                cachedCourses = []; 
+            }
+            
+        } catch (error) {
+            console.error("Failed to load courses:", error);
+            tableBody.innerHTML = `<tr><td colspan="2" style="color: #EF4444;">Error loading courses: ${error.message}. Using fallback.</td></tr>`;
+            cachedCourses = MOCK_COURSES_FALLBACK; 
+        }
+        
+        // Update dashboard and attendance view
+        if (document.getElementById('attendance').classList.contains('active')) {
+            updateTargetSelect();
+        }
+        document.getElementById('dashboard-active-courses').textContent = cachedCourses.length;
+    }
+
+    async function loadResources() {
+        const resourceList = document.getElementById('resources-list');
+        resourceList.innerHTML = 'Loading resources from Supabase...';
+        
+        try {
+            // Assuming a 'resources' table with a 'program' column linked to the student's program_name
+            const program = currentUserProfile?.program_name || 'General'; 
+            
+            const { data: resources, error } = await sb
+                .from('resources')
+                .select('id, title, file_path, upload_date')
+                // Filter by the student's program or general resources (optional refinement)
+                .or(`program.eq.${program},program.eq.General`) 
+                .order('upload_date', { ascending: false });
+
+            if (error) throw error;
+
+            resourceList.innerHTML = '';
+
+            if (resources.length === 0) {
+                resourceList.innerHTML = `<p>No learning resources found for your program (${program}) yet.</p>`;
+                return;
+            }
+            
+            resources.forEach(res => {
+                // Generate a public URL for the file (assuming files are in a storage bucket named 'materials')
+                const publicUrl = sb.storage.from('materials').getPublicUrl(res.file_path).data.publicUrl;
+
+                const item = `
+                    <div class="resource-item">
+                        <div>
+                            <a href="${publicUrl}" target="_blank">${res.title}</a>
+                            <p style="margin: 5px 0 0; font-size: 0.9em; color: #6B7280;">Uploaded: ${new Date(res.upload_date).toLocaleDateString()}</p>
+                        </div>
+                        <span style="font-size: 1.5em;">&#x1F4C4;</span>
+                    </div>
+                `;
+                resourceList.innerHTML += item;
+            });
+            
+        } catch (error) {
+            console.error("Failed to load resources:", error);
+            resourceList.innerHTML = `<p style="color: #EF4444;">Error loading resources: ${error.message}</p>`;
+        }
+    }
+
+
+    // MOCK FUNCTIONS (for tabs not yet fully implemented)
+    async function loadAttendance() {
+        document.getElementById('attendance-table').innerHTML = '';
+    }
     async function loadExams() {
          document.getElementById('exams-table').innerHTML = '<tr><td colspan="3">No upcoming exams scheduled. (MOCK)</td></tr>';
     }
-    async function loadResources() {
-         document.getElementById('resources-list').innerHTML = '<p>No resources available for your program at this time. (MOCK)</p>';
-    }
     async function loadStudentMessages() {
          document.getElementById('messages-list').innerHTML = '<h2>Recent Admin Messages</h2><p>No new messages. (MOCK)</p>';
+    }
+
+    // ** GeoCheckIn Implementation (Re-added to complete the file) **
+    async function geoCheckIn() {
+        const sessionType = sessionTypeSelect.value;
+        const targetSelect = attendanceTargetSelect.value;
+        const checkInTime = new Date().toISOString();
+        const button = document.getElementById('check-in-button');
+        
+        if (!sessionType || !targetSelect || targetSelect.includes('Select Session Type first') || targetSelect.includes('No targets available')) {
+            geoMessage.textContent = 'Error: Please select both a Session Type and a valid Department/Course.';
+            return;
+        }
+
+        button.disabled = true;
+        geoMessage.textContent = 'Attempting to get location and check in...';
+
+        const getLocation = () => new Promise((resolve, reject) => {
+            if (!navigator.geolocation) {
+                return resolve({ lat: FALLBACK_LAT, lon: FALLBACK_LON, acc: FALLBACK_ACCURACY, friendly: 'Fallback Location (Geolocation Disabled)' });
+            }
+            navigator.geolocation.getCurrentPosition(
+                (pos) => resolve({ 
+                    lat: pos.coords.latitude, 
+                    lon: pos.coords.longitude, 
+                    acc: pos.coords.accuracy, 
+                    friendly: null 
+                }),
+                (err) => {
+                    console.warn(`Geolocation error (${err.code}): ${err.message}. Using fallback.`);
+                    resolve({ lat: FALLBACK_LAT, lon: FALLBACK_LON, acc: FALLBACK_ACCURACY, friendly: 'Fallback Location (GPS Error)' });
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
+        });
+
+        try {
+            let location = await getLocation();
+
+            if (location.friendly === null) {
+                const geocodeUrl = `${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${location.lat}&lon=${location.lon}&format=json`;
+                const response = await fetch(geocodeUrl);
+                if (response.ok) {
+                    const geoData = await response.json();
+                    location.friendly = geoData.display_name || `Lat: ${location.lat.toFixed(4)}, Lon: ${location.lon.toFixed(4)}`;
+                } else {
+                    location.friendly = `Geocoding Failed. Lat: ${location.lat.toFixed(4)}, Lon: ${location.lon.toFixed(4)}`;
+                }
+            }
+            
+            const [targetId, targetName] = targetSelect.split('|');
+
+            const { error } = await sb
+                .from('geo_attendance_logs')
+                .insert({
+                    student_id: currentUserId,
+                    check_in_time: checkInTime,
+                    session_type: sessionType === 'Clinical' ? 'Clinical' : 'Class', // Store clean value
+                    target_id: targetId,
+                    target_name: targetName,
+                    latitude: location.lat,
+                    longitude: location.lon,
+                    accuracy_m: location.acc,
+                    location_friendly_name: location.friendly,
+                    is_verified: false,
+                    notes: `Checked in via dashboard for ${sessionType}`
+                });
+
+            if (error) {
+                console.error("Check-in failed:", error);
+                geoMessage.textContent = `Check-in failed: Error: ${error.message}`;
+            } else {
+                geoMessage.textContent = `Check-in successful! Logged at ${new Date(checkInTime).toLocaleTimeString()} near ${location.friendly}.`;
+                loadGeoAttendanceHistory(currentUserId);
+            }
+
+        } catch (e) {
+            console.error("GeoCheckIn major failure:", e);
+            geoMessage.textContent = `A critical error occurred during check-in: ${e.message}`;
+        } finally {
+            button.disabled = false;
+        }
+    }
+
+    async function loadGeoAttendanceHistory(userId) {
+        const tableBody = document.getElementById('geo-attendance-history');
+        tableBody.innerHTML = '<tr><td colspan="5">Loading geo check-in history...</td></tr>';
+
+        try {
+            const { data: logs, error } = await sb
+                .from('geo_attendance_logs')
+                .select('check_in_time, session_type, location_friendly_name, accuracy_m, is_verified')
+                .eq('student_id', userId)
+                .order('check_in_time', { ascending: false })
+                .limit(10); 
+
+            if (error) throw error;
+
+            tableBody.innerHTML = '';
+
+            if (!logs || logs.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="5">No geo check-in history found.</td></tr>';
+                return;
+            }
+
+            logs.forEach(log => {
+                const accuracyText = (log.accuracy_m || 0).toFixed(2) + 'm'; 
+                
+                const verificationStatus = log.is_verified 
+                    ? '<span style="color: #10B981; font-weight: 600;">Verified</span>' 
+                    : '<span style="color: #F59E0B; font-weight: 600;">Pending</span>';
+
+                const row = `
+                    <tr>
+                        <td>${new Date(log.check_in_time).toLocaleString()}</td>
+                        <td>${log.session_type}</td>
+                        <td>${log.location_friendly_name || 'N/A'}</td>
+                        <td>${accuracyText}</td>
+                        <td>${verificationStatus}</td>
+                    </tr>
+                `;
+                tableBody.innerHTML += row;
+            });
+
+        } catch (error) {
+            console.error("Failed to load geo attendance history:", error);
+            tableBody.innerHTML = `<tr><td colspan="5" style="color: #EF4444;">Error loading history: ${error.message}</td></tr>`;
+        }
     }
 
     // *************************************************************************
