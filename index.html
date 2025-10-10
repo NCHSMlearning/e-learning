@@ -682,495 +682,374 @@
     </div>
 
     <script>
-    // *************************************************************************
-    // *** 1. CONFIGURATION: SUPABASE AND LOCATIONIQ ***
-    // *************************************************************************
-
-    const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
-    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-    const LOCATIONIQ_API_KEY = 'pk.cbe61eae35ecbe1d1d682c347d81381c';
-    const LOCATIONIQ_API_URL = 'https://us1.locationiq.com/v1/reverse.php';
-
-    const FALLBACK_LAT = -1.286389; // Nairobi
-    const FALLBACK_LON = 36.817223;
-    const FALLBACK_ACCURACY = 500;
-
-    let currentUserId = null;
-    let currentUserProfile = null;
-    let cachedCourses = [];
-    let cachedDepartments = [];
-
-    // DOM Elements
-    const geoMessage = document.getElementById('geo-message');
-    const checkInButton = document.getElementById('check-in-button');
-    const sessionTypeSelect = document.getElementById('session-type');
-    const attendanceTargetSelect = document.getElementById('attendance-target');
-    const adminWelcomeMessage = document.getElementById('admin-welcome-message'); 
-    const profileForm = document.getElementById('profile-form');
-    const passportFileInput = document.getElementById('passport-file-input');
-    const passportPreview = document.getElementById('passport-preview');
-    const uploadButton = document.getElementById('upload-button');
-    const profileStatus = document.getElementById('profile-status');
-    const editProfileButton = document.getElementById('edit-profile-button');
-    const saveProfileButton = document.getElementById('save-profile-button');
-    const uploadLabel = document.getElementById('upload-label');
-
-    const navLinks = document.querySelectorAll('.nav a');
-    const tabs = document.querySelectorAll('.tab-content');
-
-    // *************************************************************************
-    // *** 2. NAVIGATION ***
-    // *************************************************************************
-
-    function showTab(tabId) {
-        navLinks.forEach(l => l.classList.remove('active'));
-        const activeLink = document.querySelector(`.nav a[data-tab="${tabId}"]`);
-        if(activeLink) activeLink.classList.add('active');
-
-        tabs.forEach(tab => tab.classList.remove('active'));
-        const activeTab = document.getElementById(tabId);
-        if(activeTab) activeTab.classList.add('active');
-
-        if (tabId === 'profile' && currentUserId) loadProfile(currentUserId);
-        if (tabId === 'attendance' && currentUserId) {
-            loadAttendance(currentUserId);
-            loadGeoAttendanceHistory(currentUserId);
-            updateTargetSelect();
-        }
-        if (tabId === 'cats' && currentUserId) loadExams();
-        if (tabId === 'resources' && currentUserId) loadResources();
-        if (tabId === 'messages' && currentUserId) loadStudentMessages();
-        if (tabId === 'courses' && currentUserId) loadCourses();
-        if (tabId === 'dashboard' && currentUserId) {
-            loadWelcomeMessage();
-            loadDashboardMetrics(currentUserId);
-        }
-    }
-
-    navLinks.forEach(link => {
-        link.addEventListener('click', e => {
-            e.preventDefault();
-            showTab(link.dataset.tab);
-        });
-    });
-
-    async function logout() {
-        await sb.auth.signOut();
-        window.location.href = "login.html";
-    }
-
-    // *************************************************************************
-    // *** 3. DASHBOARD FUNCTIONS ***
-    // *************************************************************************
-
-    async function loadWelcomeMessage() {
-        adminWelcomeMessage.textContent = 'Loading message...';
-        const { data, error } = await sb
-            .from('system_settings')
-            .select('setting_value')
-            .eq('setting_key', 'welcome_message')
-            .single();
-
-        if (error || !data) {
-            console.warn("Could not load welcome message:", error);
-            adminWelcomeMessage.textContent = 'The system message is currently unavailable.';
-            return;
-        }
-
-        adminWelcomeMessage.textContent = data.setting_value || 'Welcome to the NCHSM Student Dashboard!';
-    }
-
-    async function loadDashboardMetrics() {
-        // Active courses
-        document.getElementById('dashboard-active-courses').textContent = cachedCourses.length;
-
-        // Attendance rate (calculate from logs)
-        const { data: logs } = await sb
-            .from('geo_attendance_logs')
-            .select('id')
-            .eq('student_id', currentUserId);
-        const attendanceRate = logs ? Math.min(100, logs.length * 10) : 0;
-        document.getElementById('dashboard-attendance-rate').textContent = `${attendanceRate}%`;
-
-        // Upcoming exam
-        const { data: exams } = await sb
-            .from('exams')
-            .select('exam_name, exam_date')
-            .gte('exam_date', new Date().toISOString())
-            .order('exam_date', { ascending: true })
-            .limit(1);
-
-        if (exams && exams.length > 0) {
-            const exam = exams[0];
-            document.getElementById('dashboard-upcoming-exam').textContent = `${new Date(exam.exam_date).toLocaleDateString()} (${exam.exam_name})`;
-        } else {
-            document.getElementById('dashboard-upcoming-exam').textContent = 'No upcoming exams';
-        }
-
-        // New resources
-        const { data: resources } = await sb
-            .from('resources')
-            .select('id')
-            .order('created_at', { ascending: false })
-            .limit(3);
-
-        document.getElementById('dashboard-new-resources').textContent = resources ? resources.length : 0;
-
-        // Passport missing check
-        const actionRequiredEl = document.getElementById('dashboard-actions');
-        const actionsTitleEl = document.getElementById('actions-title');
-        const passportCard = document.getElementById('action-passport');
-        let profileIncomplete = !currentUserProfile?.passport_url;
-
-        passportCard.style.display = profileIncomplete ? 'block' : 'none';
-        if (!profileIncomplete) {
-             actionsTitleEl.style.display = 'none';
-             actionRequiredEl.style.display = 'none';
-        } else {
-             actionsTitleEl.style.display = 'block';
-             actionRequiredEl.style.display = 'flex';
-        }
-    }
-
-    // *************************************************************************
-    // *** 4. AUTHENTICATION AND PROFILE MANAGEMENT ***
-    // *************************************************************************
-
-    async function checkAuthAndLoad() {
-        const { data: { user } } = await sb.auth.getUser();
-
-        if (user) {
-            currentUserId = user.id;
-            await loadProfile(currentUserId);
-            showTab('dashboard');
-        } else {
-            window.location.href = 'login.html';
-        }
-    }
-
-    async function loadProfile(userId) {
-        profileStatus.textContent = 'Loading profile...';
-        const { data: profile, error } = await sb
-            .from('profiles')
-            .select('*')
-            .eq('id', userId)
-            .single();
-
-        if (error) {
-            console.error('Error loading profile:', error);
-            profileStatus.textContent = 'Error loading profile.';
-            return;
-        }
-
-        currentUserProfile = profile;
-        document.getElementById('profile-name').value = profile.full_name || '';
-        document.getElementById('profile-email').value = profile.email || '';
-        document.getElementById('profile-phone').value = profile.phone || '';
-        document.getElementById('profile-program').value = profile.program_name || '';
-
-        passportPreview.src = profile.passport_url 
-            ? sb.storage.from('passports').getPublicUrl(profile.passport_url).data.publicUrl
-            : 'https://via.placeholder.com/150x150?text=NO+PHOTO';
-        passportPreview.alt = profile.full_name || 'Passport Photo';
-
-        document.querySelector('header h1').textContent = `Welcome, ${profile.full_name || 'Student'}!`;
-        profileStatus.textContent = '';
-        toggleProfileEdit(false);
-        if (!profile.passport_url) {
-            uploadLabel.style.display = 'inline-block';
-            passportFileInput.style.display = 'none';
-        }
-    }
-
-    function toggleProfileEdit(enable) {
-        ['profile-name', 'profile-phone'].forEach(id => {
-            const input = document.getElementById(id);
-            if (input) input.readOnly = !enable;
-        });
-
-        editProfileButton.style.display = enable ? 'none' : 'block';
-        saveProfileButton.style.display = enable ? 'block' : 'none';
-        uploadLabel.style.display = enable ? 'inline-block' : 'none';
-        if (enable && !passportFileInput.files[0]) uploadButton.style.display = 'none';
-    }
-
-    editProfileButton.addEventListener('click', () => toggleProfileEdit(true));
-
-    profileForm.addEventListener('submit', async e => {
-        e.preventDefault();
-        profileStatus.textContent = 'Saving...';
-        const updates = {
-            full_name: document.getElementById('profile-name').value,
-            phone: document.getElementById('profile-phone').value,
-            updated_at: new Date().toISOString()
-        };
-
-        const { error } = await sb.from('profiles').update(updates).eq('id', currentUserId);
-
-        if (error) {
-            profileStatus.textContent = `Error saving profile: ${error.message}`;
-        } else {
-            profileStatus.textContent = 'Profile updated successfully!';
-            loadProfile(currentUserId);
-        }
-    });
-
-    passportFileInput.addEventListener('change', () => {
-        const file = passportFileInput.files[0];
-        if (file) {
-            passportPreview.src = URL.createObjectURL(file);
-            uploadButton.style.display = 'block';
-            uploadLabel.style.display = 'none';
-        }
-    });
-
-    uploadButton.addEventListener('click', async () => {
-        const file = passportFileInput.files[0];
-        if (!file) {
-            profileStatus.textContent = 'Select a file first.';
-            return;
-        }
-
-        profileStatus.textContent = 'Uploading...';
-        uploadButton.disabled = true;
-        const fileExt = file.name.split('.').pop();
-        const filePath = `${currentUserId}.${fileExt}`;
-
-        const { error: uploadError } = await sb.storage.from('passports').upload(filePath, file, { cacheControl: '3600', upsert: true });
-        if (uploadError) {
-            profileStatus.textContent = `Upload failed: ${uploadError.message}`;
-            uploadButton.disabled = false;
-            return;
-        }
-
-        const { error: updateError } = await sb.from('profiles').update({ passport_url: filePath, updated_at: new Date().toISOString() }).eq('id', currentUserId);
-        if (updateError) {
-            profileStatus.textContent = `Database update failed: ${updateError.message}`;
-        } else {
-            profileStatus.textContent = 'Photo uploaded successfully!';
-            passportFileInput.value = '';
-            uploadButton.style.display = 'none';
-            uploadLabel.style.display = 'inline-block';
-            loadProfile(currentUserId);
-        }
-        uploadButton.disabled = false;
-    });
-
-    // *************************************************************************
-    // *** 5. ATTENDANCE LOGIC ***
-    // *************************************************************************
-
-    async function fetchCoursesAndDepartments() {
-        const { data: courses } = await sb.from('courses').select('*').order('name');
-        const { data: departments } = await sb.from('hospital_departments').select('*').order('name');
-        cachedCourses = courses || [];
-        cachedDepartments = departments || [];
-    }
-
-    async function updateTargetSelect() {
-        await fetchCoursesAndDepartments();
-        const sessionType = sessionTypeSelect.value;
-        attendanceTargetSelect.innerHTML = '';
-        let targetList = [];
-        let label = 'Rotation/Course:';
-
-        if (sessionType === 'Clinical' || sessionType === 'Call') {
-            targetList = cachedDepartments.map(d => ({ id: d.id, name: d.name, text: `${d.name} (${sessionType})` }));
-            label = 'Department/Area:';
-        } else if (sessionType === 'Class' || sessionType === 'Virtual') {
-            targetList = cachedCourses.map(c => ({ id: c.id, name: c.name, text: `${c.name} (${sessionType})` }));
-            label = 'Course/Subject:';
-        }
-
-        document.getElementById('target-label').textContent = label;
-        if (targetList.length === 0) {
-            attendanceTargetSelect.innerHTML = '<option>No targets available.</option>';
-        } else {
-            targetList.forEach(target => {
-                const option = document.createElement('option');
-                option.value = `${target.id}|${target.name}`;
-                option.textContent = target.text;
-                attendanceTargetSelect.appendChild(option);
-            });
-        }
-
-        geoMessage.textContent = 'Select a Session Type and then a Rotation or Course to check in.';
-    }
-
-    async function geoCheckIn() {
-        const sessionType = sessionTypeSelect.value;
-        const targetSelect = attendanceTargetSelect.value;
-        const checkInTime = new Date().toISOString();
-
-        if (!sessionType || !targetSelect || targetSelect.includes('No targets')) {
-            geoMessage.textContent = 'Please select a valid Session Type and target.';
-            return;
-        }
-
-        checkInButton.disabled = true;
-        geoMessage.textContent = 'Getting location...';
-
-        const getLocation = () => new Promise(resolve => {
-            if (!navigator.geolocation) {
-                resolve({ lat: FALLBACK_LAT, lon: FALLBACK_LON, acc: FALLBACK_ACCURACY, friendly: 'Fallback Location (Disabled)' });
-            } else {
-                navigator.geolocation.getCurrentPosition(
-                    pos => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude, acc: pos.coords.accuracy, friendly: null }),
-                    () => resolve({ lat: FALLBACK_LAT, lon: FALLBACK_LON, acc: FALLBACK_ACCURACY, friendly: 'Fallback Location (GPS Error)' }),
-                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-                );
-            }
-        });
-
-        try {
-            const location = await getLocation();
-            if (!location.friendly) {
-                const geoUrl = `${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${location.lat}&lon=${location.lon}&format=json`;
-                const res = await fetch(geoUrl);
-                if (res.ok) {
-                    const geoData = await res.json();
-                    location.friendly = geoData.display_name || `Lat: ${location.lat}, Lon: ${location.lon}`;
-                } else {
-                    location.friendly = `Geocoding failed. Lat: ${location.lat}, Lon: ${location.lon}`;
-                }
-            }
-
-            const [targetId, targetName] = targetSelect.split('|');
-
-            const { error } = await sb.from('geo_attendance_logs').insert({
-                student_id: currentUserId,
-                check_in_time: checkInTime,
-                session_type: sessionType,
-                target_id: targetId,
-                target_name: targetName,
-                latitude: location.lat,
-                longitude: location.lon,
-                accuracy_m: location.acc,
-                location_friendly_name: location.friendly,
-                is_verified: false,
-                notes: `Checked in via dashboard for ${sessionType}`
-            });
-
-            if (error) {
-                geoMessage.textContent = `Check-in failed: ${error.message}`;
-            } else {
-                geoMessage.textContent = `Check-in successful at ${new Date(checkInTime).toLocaleTimeString()} near ${location.friendly}.`;
-                loadGeoAttendanceHistory(currentUserId);
-            }
-
-        } catch (e) {
-            geoMessage.textContent = `Critical error during check-in: ${e.message}`;
-        } finally {
-            checkInButton.disabled = false;
-        }
-    }
-
-    async function loadGeoAttendanceHistory(userId) {
-        const tableBody = document.getElementById('geo-attendance-history');
-        tableBody.innerHTML = '<tr><td colspan="5">Loading...</td></tr>';
-
-        try {
-            const { data: logs, error } = await sb.from('geo_attendance_logs')
-                .select('check_in_time, session_type, location_friendly_name, accuracy_m, is_verified')
-                .eq('student_id', userId)
-                .order('check_in_time', { ascending: false })
-                .limit(15);
-
-            if (error) throw error;
-
-            tableBody.innerHTML = '';
-            if (!logs || logs.length === 0) {
-                tableBody.innerHTML = '<tr><td colspan="5">No geo check-in history found.</td></tr>';
-                return;
-            }
-
-            logs.forEach(log => {
-                const accuracyText = (log.accuracy_m || 0).toFixed(2) + 'm';
-                const verificationStatus = log.is_verified ? '<span style="color: green; font-weight:600;">Verified</span>' : '<span style="color: orange; font-weight:600;">Pending</span>';
-
-                const row = `<tr>
-                    <td>${new Date(log.check_in_time).toLocaleString()}</td>
-                    <td>${log.session_type}</td>
-                    <td>${log.location_friendly_name || 'N/A'}</td>
-                    <td>${accuracyText}</td>
-                    <td>${verificationStatus}</td>
-                </tr>`;
-                tableBody.innerHTML += row;
-            });
-
-        } catch (error) {
-            console.error(error);
-            tableBody.innerHTML = `<tr><td colspan="5" style="color: #EF4444;">Error loading history: ${error.message}</td></tr>`;
-        }
-    }
-
-    // *************************************************************************
-    // *** 6. LOAD OTHER DATA ***
-    // *************************************************************************
-
-    async function loadAttendance() {
-        const table = document.getElementById('attendance-table');
-        table.innerHTML = '<tr><td colspan="4">Loading attendance...</td></tr>';
-        const { data: attendance } = await sb.from('geo_attendance_logs').select('*').eq('student_id', currentUserId).order('check_in_time', { ascending: false }).limit(20);
-        if (!attendance || attendance.length === 0) {
-            table.innerHTML = '<tr><td colspan="4">No attendance records.</td></tr>';
-            return;
-        }
-        table.innerHTML = attendance.map(a => `<tr>
-            <td>${new Date(a.check_in_time).toLocaleString()}</td>
-            <td>${a.session_type}</td>
-            <td>${a.target_name}</td>
-            <td>${(a.accuracy_m || 0).toFixed(2)}m</td>
-        </tr>`).join('');
-    }
-
-    async function loadCourses() {
-        const table = document.getElementById('courses-table');
-        const { data: courses } = await sb.from('courses').select('*').order('name');
-        if (!courses || courses.length === 0) {
-            table.innerHTML = '<tr><td colspan="2">No courses found.</td></tr>';
-            return;
-        }
-        table.innerHTML = courses.map(c => `<tr><td>${c.name}</td><td>Active</td></tr>`).join('');
-    }
-
-    async function loadExams() {
-        const table = document.getElementById('exams-table');
-        const { data: exams } = await sb.from('exams').select('*').gte('exam_date', new Date().toISOString()).order('exam_date', { ascending: true });
-        if (!exams || exams.length === 0) {
-            table.innerHTML = '<tr><td colspan="3">No upcoming exams.</td></tr>';
-            return;
-        }
-        table.innerHTML = exams.map(e => `<tr><td>${e.exam_name}</td><td>${new Date(e.exam_date).toLocaleDateString()}</td><td>${e.course_name || ''}</td></tr>`).join('');
-    }
-
-    async function loadResources() {
-        const list = document.getElementById('resources-list');
-        const { data: resources } = await sb.from('resources').select('*').order('created_at', { ascending: false });
-        if (!resources || resources.length === 0) {
-            list.innerHTML = '<p>No resources available.</p>';
-            return;
-        }
-        list.innerHTML = resources.map(r => `<p>${r.title}</p>`).join('');
-    }
-
-    async function loadStudentMessages() {
-        const list = document.getElementById('messages-list');
-        const { data: messages } = await sb.from('messages').select('*').order('created_at', { ascending: false }).limit(10);
-        if (!messages || messages.length === 0) {
-            list.innerHTML = '<p>No messages.</p>';
-            return;
-        }
-        list.innerHTML = messages.map(m => `<p>${m.subject}: ${m.body}</p>`).join('');
-    }
-
-    // *************************************************************************
-    // *** 7. INITIALIZATION ***
-    // *************************************************************************
-
-    document.addEventListener('DOMContentLoaded', checkAuthAndLoad);
+  // *************************************************************************
+  // 1. CONFIGURATION
+  // *************************************************************************
+  const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  const LOCATIONIQ_API_KEY = 'pk.cbe61eae35ecbe1d1d682c347d81381c';
+  const LOCATIONIQ_API_URL = 'https://us1.locationiq.com/v1/reverse.php';
+
+  const FALLBACK_LAT = -1.286389; // Nairobi
+  const FALLBACK_LON = 36.817223;
+  const FALLBACK_ACCURACY = 500; 
+
+  let currentUserId = null;
+  let currentUserProfile = null;
+  let cachedCourses = [];
+  let cachedDepartments = [];
+
+  // DOM elements
+  const geoMessage = document.getElementById('geo-message');
+  const checkInButton = document.getElementById('check-in-button');
+  const sessionTypeSelect = document.getElementById('session-type');
+  const attendanceTargetSelect = document.getElementById('attendance-target');
+  const adminWelcomeMessage = document.getElementById('admin-welcome-message'); 
+  const profileForm = document.getElementById('profile-form');
+  const passportFileInput = document.getElementById('passport-file-input');
+  const passportPreview = document.getElementById('passport-preview');
+  const uploadButton = document.getElementById('upload-button');
+  const profileStatus = document.getElementById('profile-status');
+  const editProfileButton = document.getElementById('edit-profile-button');
+  const saveProfileButton = document.getElementById('save-profile-button');
+  const uploadLabel = document.getElementById('upload-label');
+
+  // *************************************************************************
+  // 2. NAVIGATION / TABS
+  // *************************************************************************
+  const navLinks = document.querySelectorAll('.nav a');
+  const tabs = document.querySelectorAll('.tab-content');
+
+  function showTab(tabId) {
+      navLinks.forEach(l => l.classList.remove('active'));
+      const activeLink = document.querySelector(`.nav a[data-tab="${tabId}"]`);
+      if(activeLink) activeLink.classList.add('active');
+
+      tabs.forEach(tab => tab.classList.remove('active'));
+      const activeTab = document.getElementById(tabId);
+      if(activeTab) activeTab.classList.add('active');
+
+      if(tabId === 'profile' && currentUserId) loadProfile(currentUserId);
+      if(tabId === 'attendance' && currentUserId) {
+          updateTargetSelect();
+          loadGeoAttendanceHistory(currentUserId);
+      }
+      if(tabId === 'cats' && currentUserId) loadExams();
+      if(tabId === 'resources' && currentUserId) loadResources();     
+      if(tabId === 'messages' && currentUserId) loadStudentMessages(); 
+      if(tabId === 'courses' && currentUserId) loadCourses(); 
+      if(tabId === 'dashboard' && currentUserId) {
+          loadWelcomeMessage();
+          loadDashboardMetrics();
+      }
+  }
+
+  navLinks.forEach(link => {
+      link.addEventListener('click', e => {
+          e.preventDefault();
+          showTab(link.dataset.tab);
+      });
+  });
+
+  async function logout() {
+      sb.realtime.channels.forEach(channel => sb.removeChannel(channel));
+      await sb.auth.signOut();
+      window.location.href = "login.html"; 
+  }
+
+  // *************************************************************************
+  // 3. DASHBOARD DATA FUNCTIONS
+  // *************************************************************************
+  async function loadWelcomeMessage() {
+      adminWelcomeMessage.textContent = 'Loading message...';
+      const { data, error } = await sb
+          .from('system_settings')
+          .select('setting_value')
+          .eq('setting_key', 'welcome_message')
+          .single();
+      if(error || !data) {
+          console.warn(error);
+          adminWelcomeMessage.textContent = 'Welcome to the NCHSM Dashboard!';
+      } else {
+          adminWelcomeMessage.textContent = data.setting_value || 'Welcome to the NCHSM Dashboard!';
+      }
+  }
+
+  async function loadDashboardMetrics() {
+      document.getElementById('dashboard-active-courses').textContent = cachedCourses.length;
+
+      // Attendance rate (from geo_attendance_logs)
+      const { count } = await sb
+          .from('geo_attendance_logs')
+          .select('*', { count: 'exact' })
+          .eq('student_id', currentUserId);
+
+      const attendanceRate = count ? Math.min((count / 100) * 100, 100) : 0;
+      document.getElementById('dashboard-attendance-rate').textContent = `${attendanceRate.toFixed(0)}%`;
+
+      // Upcoming exam
+      const { data: exams } = await sb
+          .from('exams_with_courses')
+          .select('exam_name, exam_date')
+          .gte('exam_date', new Date().toISOString())
+          .order('exam_date', { ascending: true })
+          .limit(1);
+
+      document.getElementById('dashboard-upcoming-exam').textContent = exams?.[0] 
+          ? `${new Date(exams[0].exam_date).toLocaleDateString()} (${exams[0].exam_name})` 
+          : 'No upcoming exams';
+
+      // New resources
+      const { data: resources } = await sb
+          .from('resources')
+          .select('*')
+          .limit(5);
+      document.getElementById('dashboard-new-resources').textContent = resources?.length || 0;
+
+      // Conditional action card for missing passport
+      const passportCard = document.getElementById('action-passport');
+      const actionsTitleEl = document.getElementById('actions-title');
+      const actionRequiredEl = document.getElementById('dashboard-actions');
+
+      const profileIncomplete = !currentUserProfile?.passport_url; 
+      passportCard.style.display = profileIncomplete ? 'block' : 'none';
+      if(!profileIncomplete){
+          actionsTitleEl.style.display = 'none';
+          actionRequiredEl.style.display = 'none';
+      } else {
+          actionsTitleEl.style.display = 'block';
+          actionRequiredEl.style.display = 'flex';
+      }
+  }
+
+  // *************************************************************************
+  // 4. AUTHENTICATION AND PROFILE
+  // *************************************************************************
+  async function checkAuthAndLoad() {
+      const { data: { user } } = await sb.auth.getUser();
+      if(user){
+          currentUserId = user.id;
+          await loadProfile(currentUserId);
+          await loadCourses();
+          await loadDepartments();
+          showTab('dashboard');
+      } else {
+          window.location.href = 'login.html';
+      }
+  }
+
+  async function loadProfile(userId){
+      profileStatus.textContent = 'Loading profile...';
+      const { data: profile, error } = await sb
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .single();
+      if(error){
+          console.error(error);
+          profileStatus.textContent = 'Error loading profile.';
+          return;
+      }
+      currentUserProfile = profile;
+      document.getElementById('profile-name').value = profile.full_name || '';
+      document.getElementById('profile-email').value = profile.email || '';
+      document.getElementById('profile-phone').value = profile.phone || '';
+      document.getElementById('profile-program').value = profile.program_name || '';
+
+      passportPreview.src = profile.passport_url 
+          ? sb.storage.from('passports').getPublicUrl(profile.passport_url).data.publicUrl
+          : 'https://via.placeholder.com/150x150?text=NO+PHOTO';
+      passportPreview.alt = profile.full_name || 'Passport Photo';
+
+      document.querySelector('header h1').textContent = `Welcome, ${profile.full_name || 'Student'}!`;
+      profileStatus.textContent = '';
+      toggleProfileEdit(false);
+  }
+
+  function toggleProfileEdit(enable){
+      ['profile-name', 'profile-phone'].forEach(id => {
+          const input = document.getElementById(id);
+          if(input) input.readOnly = !enable;
+      });
+      editProfileButton.style.display = enable ? 'none' : 'block';
+      saveProfileButton.style.display = enable ? 'block' : 'none';
+      uploadLabel.style.display = enable ? 'inline-block' : 'none';
+      uploadButton.style.display = 'none';
+  }
+
+  editProfileButton.addEventListener('click', ()=> toggleProfileEdit(true));
+  profileForm.addEventListener('submit', async e=>{
+      e.preventDefault();
+      profileStatus.textContent = 'Saving...';
+      const updates = {
+          full_name: document.getElementById('profile-name').value,
+          phone: document.getElementById('profile-phone').value,
+          updated_at: new Date().toISOString()
+      };
+      const { error } = await sb.from('profiles').update(updates).eq('id', currentUserId);
+      profileStatus.textContent = error ? `Error: ${error.message}` : 'Profile saved successfully!';
+      if(!error) loadProfile(currentUserId);
+  });
+
+  passportFileInput.addEventListener('change', ()=>{
+      const file = passportFileInput.files[0];
+      if(file){
+          passportPreview.src = URL.createObjectURL(file);
+          uploadButton.style.display = 'block';
+          uploadLabel.style.display = 'none';
+      }
+  });
+
+  uploadButton.addEventListener('click', async ()=>{
+      const file = passportFileInput.files[0];
+      if(!file){ profileStatus.textContent = 'Select a file first.'; return; }
+      profileStatus.textContent = 'Uploading...';
+      uploadButton.disabled = true;
+      const ext = file.name.split('.').pop();
+      const filePath = `${currentUserId}.${ext}`;
+      const { error: upErr } = await sb.storage.from('passports').upload(filePath, file, { upsert: true });
+      if(upErr){ profileStatus.textContent = `Upload failed: ${upErr.message}`; uploadButton.disabled=false; return; }
+      const { error: updateErr } = await sb.from('profiles').update({ passport_url: filePath, updated_at: new Date().toISOString() }).eq('id', currentUserId);
+      profileStatus.textContent = updateErr ? `DB update failed: ${updateErr.message}` : 'Photo uploaded!';
+      passportFileInput.value = '';
+      uploadButton.style.display = 'none';
+      uploadLabel.style.display = 'inline-block';
+      uploadButton.disabled = false;
+      loadProfile(currentUserId);
+  });
+
+  // *************************************************************************
+  // 5. ATTENDANCE LOGIC
+  // *************************************************************************
+  async function loadCourses(){
+      const { data, error } = await sb.from('courses').select('*').order('name', {ascending:true});
+      cachedCourses = data || [];
+  }
+
+  async function loadDepartments(){
+      const { data, error } = await sb.from('clinical_departments').select('*').order('name', {ascending:true});
+      cachedDepartments = data || [];
+  }
+
+  function updateTargetSelect(){
+      const sessionType = sessionTypeSelect.value;
+      attendanceTargetSelect.innerHTML = '';
+      let targets=[], label='';
+
+      if(sessionType==='Clinical'||sessionType==='Call'){
+          targets = cachedDepartments.map(d=>({ id:d.id, name:d.name, text:`${d.name} (${sessionType})` }));
+          label='Department/Area:';
+      } else if(sessionType==='Class'||sessionType==='Virtual'){
+          targets = cachedCourses.map(c=>({ id:c.id, name:c.name, text:`${c.name} (${sessionType})` }));
+          label='Course/Subject:';
+      }
+      document.getElementById('target-label').textContent = label;
+
+      if(targets.length===0) attendanceTargetSelect.innerHTML='<option>No targets available.</option>';
+      else targets.forEach(t=>{
+          const opt = document.createElement('option');
+          opt.value=`${t.id}|${t.name}`;
+          opt.textContent=t.text;
+          attendanceTargetSelect.appendChild(opt);
+      });
+      geoMessage.textContent='Select a session and target to check in.';
+  }
+
+  async function geoCheckIn(){
+      const sessionType = sessionTypeSelect.value;
+      const targetVal = attendanceTargetSelect.value;
+      const checkInTime = new Date().toISOString();
+      if(!sessionType || !targetVal) { geoMessage.textContent='Select session and target'; return; }
+      checkInButton.disabled=true; geoMessage.textContent='Getting location...';
+      const location = await new Promise(resolve=>{
+          if(!navigator.geolocation) return resolve({ lat:FALLBACK_LAT, lon:FALLBACK_LON, acc:FALLBACK_ACCURACY, friendly:'Fallback' });
+          navigator.geolocation.getCurrentPosition(
+              pos=>resolve({ lat:pos.coords.latitude, lon:pos.coords.longitude, acc:pos.coords.accuracy, friendly:null }),
+              err=>resolve({ lat:FALLBACK_LAT, lon:FALLBACK_LON, acc:FALLBACK_ACCURACY, friendly:'Fallback' }),
+              { enableHighAccuracy:true, timeout:10000 }
+          );
+      });
+      if(location.friendly===null){
+          try{
+              const res = await fetch(`${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${location.lat}&lon=${location.lon}&format=json`);
+              const data = await res.json();
+              location.friendly=data.display_name||`Lat:${location.lat},Lon:${location.lon}`;
+          } catch(e){
+              location.friendly=`Lat:${location.lat},Lon:${location.lon}`;
+          }
+      }
+      const [targetId,targetName]=targetVal.split('|');
+      const { error } = await sb.from('geo_attendance_logs').insert({
+          student_id:currentUserId,
+          check_in_time:checkInTime,
+          session_type:sessionType,
+          target_id:targetId,
+          target_name:targetName,
+          latitude:location.lat,
+          longitude:location.lon,
+          accuracy_m:location.acc,
+          location_friendly_name:location.friendly,
+          is_verified:false,
+          notes:`Checked in via dashboard for ${sessionType}`
+      });
+      geoMessage.textContent=error?`Check-in failed: ${error.message}`:`Checked in at ${location.friendly} (${new Date(checkInTime).toLocaleTimeString()})`;
+      loadGeoAttendanceHistory(currentUserId);
+      checkInButton.disabled=false;
+  }
+
+  async function loadGeoAttendanceHistory(userId){
+      const tableBody=document.getElementById('geo-attendance-history');
+      tableBody.innerHTML='<tr><td colspan="5">Loading...</td></tr>';
+      const { data, error } = await sb.from('geo_attendance_logs').select('check_in_time,session_type,location_friendly_name,accuracy_m,is_verified').eq('student_id',userId).order('check_in_time',{ascending:false}).limit(15);
+      if(error){ tableBody.innerHTML=`<tr><td colspan="5">Error: ${error.message}</td></tr>`; return; }
+      if(!data.length){ tableBody.innerHTML='<tr><td colspan="5">No check-ins found.</td></tr>'; return; }
+      tableBody.innerHTML='';
+      data.forEach(log=>{
+          tableBody.innerHTML+=`<tr>
+              <td>${new Date(log.check_in_time).toLocaleString()}</td>
+              <td>${log.session_type}</td>
+              <td>${log.location_friendly_name||'N/A'}</td>
+              <td>${(log.accuracy_m||0).toFixed(2)}m</td>
+              <td>${log.is_verified?'<span style="color:green">Verified</span>':'<span style="color:orange">Pending</span>'}</td>
+          </tr>`;
+      });
+  }
+
+  // *************************************************************************
+  // 6. OTHER DATA LOADERS
+  // *************************************************************************
+  async function loadExams(){
+      const { data } = await sb.from('exams_with_courses').select('*').order('exam_date',{ascending:true});
+      const table = document.getElementById('exams-table');
+      table.innerHTML=data?.length?data.map(e=>`<tr><td>${e.exam_name}</td><td>${new Date(e.exam_date).toLocaleDateString()}</td></tr>`).join(''):'<tr><td colspan="2">No exams scheduled</td></tr>';
+  }
+
+  async function loadResources(){
+      const { data } = await sb.from('resources').select('*');
+      const list = document.getElementById('resources-list');
+      list.innerHTML=data?.length?data.map(r=>`<p>${r.name}</p>`).join(''):'<p>No resources available</p>';
+  }
+
+  async function loadStudentMessages(){
+      const { data } = await sb.from('messages').select('*').order('created_at',{ascending:false});
+      const list = document.getElementById('messages-list');
+      list.innerHTML=data?.length?data.map(m=>`<p>${m.content}</p>`).join(''):'<p>No messages</p>';
+  }
+
+  async function loadCourses(){
+      const { data } = await sb.from('courses').select('*').order('name',{ascending:true});
+      cachedCourses=data||[];
+      const table=document.getElementById('courses-table');
+      table.innerHTML=cachedCourses.map(c=>`<tr><td>${c.name}</td><td>Active</td></tr>`).join('');
+  }
+
+  // *************************************************************************
+  // 7. INIT
+  // *************************************************************************
+  document.addEventListener('DOMContentLoaded',checkAuthAndLoad);
 </script>
+
 </body>
 </html>
