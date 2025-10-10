@@ -239,6 +239,49 @@ async function initSession() {
     document.querySelector('#courseEditModal .close')?.addEventListener('click', () => {
         $('courseEditModal').style.display = 'none';
     });
+    
+    // Attach the listener for Edit Course Form submission
+    $('edit-course-form')?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const submitButton = e.submitter;
+        const originalText = submitButton.textContent;
+        setButtonLoading(submitButton, true, originalText);
+
+        const id = $('edit_course_id').value;
+        const name = $('edit_course_name').value.trim();
+        const description = $('edit_course_description').value.trim();
+        const program_type = $('edit_course_program').value; // *** NEW FIELD ***
+        // const intake_year = $('edit_course_intake').value; // Assuming these fields aren't in the modal form
+        // const block = $('edit_course_block').value; 
+        
+        try {
+            // *** UPDATED: Include program_type in the update data ***
+            const updateData = { 
+                course_name: name, 
+                description: description, 
+                program_type: program_type
+                // intake_year, block 
+            };
+            
+            const { error } = await sb
+                .from('courses')
+                .update(updateData)
+                .eq('id', id); 
+
+            if (error) throw error;
+
+            showFeedback('Course updated successfully!');
+            $('courseEditModal').style.display = 'none';
+            loadCourses(); 
+        } catch (e) {
+            showFeedback('Failed to update course: ' + (e.message || e), 'error');
+            console.error('Error updating course:', e);
+        } finally {
+            setButtonLoading(submitButton, false, originalText);
+        }
+    });
+
 }
 
 // Logout
@@ -586,16 +629,17 @@ async function handleEditUser(e) {
 
 
 /*******************************************************
- * 3. Courses Tab - WITH EDIT FUNCTIONALITY
+ * 3. Courses Tab - WITH EDIT FUNCTIONALITY AND PROGRAM TYPE
  *******************************************************/
 
 async function loadCourses() {
     const tbody = $('courses-table');
-    tbody.innerHTML = '<tr><td colspan="5">Loading courses...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6">Loading courses...</td></tr>';
 
+    // *** UPDATED: Fetch courses and include the new 'program_type' column ***
     const { data: courses, error } = await fetchData('courses', '*', {}, 'course_name', true);
     if (error) {
-        tbody.innerHTML = `<tr><td colspan="5">Error loading courses: ${error.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6">Error loading courses: ${error.message}</td></tr>`;
         return;
     }
 
@@ -603,19 +647,23 @@ async function loadCourses() {
     courses.forEach(c => {
         const courseNameAttr = escapeHtml(c.course_name, true);
         const descriptionAttr = escapeHtml(c.description || '', true);
+        
+        // *** NEW: The program type field ***
+        const programTypeAttr = escapeHtml(c.program_type || '', true);
 
         tbody.innerHTML += `<tr>
             <td>${escapeHtml(c.course_name)}</td>
             <td>${escapeHtml(c.description || 'N/A')}</td>
-            <td>${escapeHtml(c.intake_year || 'N/A')}</td>
+            <td>${escapeHtml(c.program_type || 'N/A')}</td> <td>${escapeHtml(c.intake_year || 'N/A')}</td>
             <td>${escapeHtml(c.block || 'N/A')}</td>
             <td>
-                <button class="btn-action" onclick="openEditCourseModal('${c.id}', '${courseNameAttr}', '${descriptionAttr}', '${c.intake_year || ''}', '${c.block || ''}')">Edit</button>
+                <button class="btn-action" onclick="openEditCourseModal('${c.id}', '${courseNameAttr}', '${descriptionAttr}', '${programTypeAttr}', '${c.intake_year || ''}', '${c.block || ''}')">Edit</button>
                 <button class="btn btn-delete" onclick="deleteCourse('${c.id}')">Delete</button>
             </td>
         </tr>`;
     });
     
+    // Refresh course selects in other tabs
     const courseSelects = document.querySelectorAll('#att_course_id, #exam_course_id');
     courseSelects.forEach(select => populateSelect(select, courses, 'id', 'course_name', 'Select Course'));
 }
@@ -628,10 +676,18 @@ $('add-course-form')?.addEventListener('submit', async e => {
 
     const course_name = $('course-name').value.trim();
     const description = $('course-description').value.trim();
+    const program_type = $('course-program').value; // *** NEW FIELD ***
     const intake_year = $('course-intake').value; 
     const block = $('course-block').value; 
+    
+    if (!course_name || !program_type) {
+        showFeedback('Course Name and Program Type are required.', 'error');
+        setButtonLoading(submitButton, false, originalText);
+        return;
+    }
 
-    const { error } = await sb.from('courses').insert({ course_name, description, intake_year, block });
+    // *** UPDATED: Include program_type in the insert data ***
+    const { error } = await sb.from('courses').insert({ course_name, description, program_type, intake_year, block });
 
     if (error) {
         showFeedback(`Failed to add course: ${error.message}`, 'error');
@@ -658,52 +714,20 @@ async function deleteCourse(courseId) {
 }
 
 /** Opens the modal and populates it with course data */
-function openEditCourseModal(id, name, description, intake_year, block) {
+// *** UPDATED: Added programType parameter ***
+function openEditCourseModal(id, name, description, programType, intake_year, block) {
     $('edit_course_id').value = id;
     $('edit_course_name').value = name; 
     $('edit_course_description').value = description;
-    // Assuming you have these fields in your courseEditModal HTML
+    
+    // Populate NEW Program Type field
+    $('edit_course_program').value = programType || 'KRCHN';
+    
     $('edit_course_intake').value = intake_year; 
     $('edit_course_block').value = block;
     
     $('courseEditModal').style.display = 'flex'; 
 }
-
-/** Handles the submission of the edit course form */
-$('edit-course-form')?.addEventListener('submit', async (e) => {
-    e.preventDefault();
-
-    const submitButton = e.submitter;
-    const originalText = submitButton.textContent;
-    setButtonLoading(submitButton, true, originalText);
-
-    const id = $('edit_course_id').value;
-    const name = $('edit_course_name').value.trim();
-    const description = $('edit_course_description').value.trim();
-    const intake_year = $('edit_course_intake').value; 
-    const block = $('edit_course_block').value; 
-    
-    try {
-        const updateData = { course_name: name, description: description, intake_year, block };
-        
-        const { error } = await sb
-            .from('courses')
-            .update(updateData)
-            .eq('id', id); 
-
-        if (error) throw error;
-
-        showFeedback('Course updated successfully!');
-        $('courseEditModal').style.display = 'none';
-        loadCourses(); 
-    } catch (e) {
-        showFeedback('Failed to update course: ' + (e.message || e), 'error');
-        console.error('Error updating course:', e);
-    } finally {
-        setButtonLoading(submitButton, false, originalText);
-    }
-});
-
 
 /*******************************************************
  * 4. Attendance Tab
@@ -747,7 +771,7 @@ function toggleAttendanceFields() {
         courseSelect.required = true;
         
     } else {
-        // Default or other types ('virtual', 'call', etc.) - hide both, make both optional
+        // Default or other types ('virtual', 'call', etc.) - hide course, keep department optional
         departmentInput.style.display = 'inline-block';
         departmentInput.required = false;
         departmentInput.placeholder = "Optional Location/Detail";
@@ -872,31 +896,29 @@ $('manual-attendance-form')?.addEventListener('submit', async e => {
     }
     // --- END NEW LOGIC ---
 
-    // Combine date and time to create ISO timestamp
-    const check_in_time = time ? `${date}T${time}:00.000Z` : `${date}T00:00:00.000Z`;
-    
-    const record = {
+    const check_in_time = time ? `${date}T${time}:00` : `${date}T12:00:00`; // Default to noon if no time specified
+
+    const insertData = {
         student_id,
         session_type,
-        department,     // Contains Department for Clinical, 'Classroom' for Classroom, or null
-        course_id,      // Contains Course ID for Classroom, or null
-        location_name,  // Populated by Department/Course or manual input
+        department,
+        course_id,
+        location_name,
         check_in_time,
-        ip_address: await getIPAddress(),
-        device_id: getDeviceId(),
+        // Since this is a manual entry, latitude/longitude, ip_address, and device_id are null/N/A
     };
 
-    const { error } = await sb.from('geo_attendance_logs').insert([record]);
+    const { error } = await sb.from('geo_attendance_logs').insert(insertData);
 
     if (error) {
-        showFeedback(`Manual Mark Error: ${error.message}`, 'error');
+        showFeedback(`Failed to record attendance: ${error.message}`, 'error');
     } else {
-        showFeedback('Manual attendance marked successfully!', 'success');
+        showFeedback('Attendance recorded successfully!', 'success');
         e.target.reset();
         loadAttendance();
         loadDashboardData();
-        toggleAttendanceFields(); // Reset fields after submission
     }
+
     setButtonLoading(submitButton, false, originalText);
 });
 
@@ -914,57 +936,68 @@ async function deleteAttendanceRecord(recordId) {
     }
 }
 
+/**
+ * Initializes and displays the Mapbox map in a modal.
+ * @param {string} lat - Latitude
+ * @param {string} lng - Longitude
+ * @param {string} locationName - The name of the location
+ * @param {string} studentName - Student's name
+ * @param {string} dateTime - Check-in date/time
+ */
 function showMap(lat, lng, locationName, studentName, dateTime) {
-    const modal = $('mapModal');
-    modal.style.display = 'flex'; 
+    const latitude = parseFloat(lat);
+    const longitude = parseFloat(lng);
 
-    $('mapInfo').innerHTML = `**Student:** ${studentName} | **Time:** ${dateTime} | **Location:** ${locationName}`;
+    $('mapInfo').innerHTML = `<strong>Student:</strong> ${studentName}<br><strong>Time:</strong> ${dateTime}<br><strong>Reported Location:</strong> ${locationName}`;
 
+    $('mapModal').style.display = 'flex';
+
+    // If the map has already been initialized, destroy it before creating a new one
     if (attendanceMap) {
         attendanceMap.remove();
+        attendanceMap = null;
     }
-    
-    const mapElement = $('attendanceMap');
-    mapElement.style.visibility = 'visible'; 
-    
-    // Check if L (Leaflet) is defined before trying to initialize map
-    if (typeof L !== 'undefined') {
-        attendanceMap = L.map('attendanceMap').setView([lat, lng], 16);
 
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-            attribution: '© OpenStreetMap contributors'
-        }).addTo(attendanceMap);
+    // Initialize Mapbox map (using Leaflet library)
+    attendanceMap = L.map('attendanceMap').setView([latitude, longitude], 13);
+    
+    // Add Mapbox tile layer
+    L.tileLayer(`https://api.mapbox.com/styles/v1/mapbox/streets-v11/tiles/{z}/{x}/{y}?access_token=${MAPBOX_ACCESS_TOKEN}`, {
+        attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, Imagery © <a href="https://www.mapbox.com/">Mapbox</a>',
+        maxZoom: 18,
+        id: 'mapbox/streets-v11',
+        tileSize: 512,
+        zoomOffset: -1
+    }).addTo(attendanceMap);
 
-        L.marker([lat, lng])
-            .addTo(attendanceMap)
-            .bindPopup(`<b>${studentName}</b><br>${locationName}`).openPopup();
-            
-        setTimeout(() => {
-            attendanceMap.invalidateSize();
-        }, 100);
-    } else {
-         $('mapInfo').innerHTML = 'Map loading failed. Check if Leaflet CSS/JS is included.';
-    }
+    // Add a marker for the check-in location
+    L.marker([latitude, longitude]).addTo(attendanceMap)
+        .bindPopup(`<b>Check-in Location</b><br>${locationName}`).openPopup();
+
+    // Ensure the map is correctly sized and centered after the modal is shown
+    setTimeout(() => {
+        attendanceMap.invalidateSize();
+    }, 10);
 }
 
 
 /*******************************************************
- * 5. CATS / Exams Tab
+ * 5. CATS/Exams Tab
  *******************************************************/
 
 async function loadExams() {
     const tbody = $('exams-table');
     tbody.innerHTML = '<tr><td colspan="8">Loading exams...</td></tr>';
-    
+
+    // Fetch exams, joining with the courses table for the course name
     const { data: exams, error } = await fetchData(
-        'cats_exams', 
+        'exams', 
         '*, course:course_id(course_name)', 
         {}, 
         'exam_date', 
-        false 
+        false
     );
-
+    
     if (error) {
         tbody.innerHTML = `<tr><td colspan="8">Error loading exams: ${error.message}</td></tr>`;
         return;
@@ -976,15 +1009,15 @@ async function loadExams() {
         const examDate = new Date(e.exam_date).toLocaleDateString();
         
         tbody.innerHTML += `<tr>
-            <td>${escapeHtml(e.program_type)}</td>
+            <td>${escapeHtml(e.program_type || 'N/A')}</td>
             <td>${escapeHtml(courseName)}</td>
             <td>${escapeHtml(e.exam_title)}</td>
             <td>${examDate}</td>
-            <td>${escapeHtml(e.exam_status)}</td>
+            <td>${escapeHtml(e.status)}</td>
             <td>${escapeHtml(e.intake_year || 'N/A')}</td>
             <td>${escapeHtml(e.block || 'N/A')}</td>
             <td>
-                <button class="btn btn-delete" onclick="deleteExam('${e.id}')">Delete</button>
+                <button class="btn-action" onclick="deleteExam('${e.id}')">Delete</button>
             </td>
         </tr>`;
     });
@@ -996,186 +1029,279 @@ $('add-exam-form')?.addEventListener('submit', async e => {
     const originalText = submitButton.textContent;
     setButtonLoading(submitButton, true, originalText);
 
-    const exam_program = $('exam_program').value;
+    const program_type = $('exam_program').value;
     const course_id = $('exam_course_id').value;
     const exam_title = $('exam_title').value.trim();
     const exam_date = $('exam_date').value;
-    const exam_status = $('exam_status').value;
+    const status = $('exam_status').value;
     const intake_year = $('exam_intake').value;
     const block = $('exam_block').value;
 
-    const examData = { exam_program, course_id, exam_title, exam_date, exam_status, intake_year, block };
+    const { error } = await sb.from('exams').insert({ program_type, course_id, exam_title, exam_date, status, intake_year, block });
 
-    try {
-        const { error } = await sb.from('cats_exams').insert([examData]);
-        if (error) throw error;
-        
-        showFeedback('Exam scheduled successfully!', 'success');
+    if (error) {
+        showFeedback(`Failed to add exam: ${error.message}`, 'error');
+    } else {
+        showFeedback('Exam added successfully!', 'success');
         e.target.reset();
         loadExams();
-    } catch (error) {
-        showFeedback(`Failed to schedule exam: ${error.message}`, 'error');
-    } finally {
-        setButtonLoading(submitButton, false, originalText);
     }
+
+    setButtonLoading(submitButton, false, originalText);
 });
 
 async function deleteExam(examId) {
-    if (!confirm('Are you sure you want to delete this exam schedule?')) return;
+    if (!confirm('Are you sure you want to delete this exam/CAT? This cannot be undone.')) return;
 
-    const { error } = await sb.from('cats_exams').delete().eq('id', examId);
+    const { error } = await sb.from('exams').delete().eq('id', examId);
 
     if (error) {
         showFeedback(`Failed to delete exam: ${error.message}`, 'error');
     } else {
-        showFeedback('Exam deleted successfully!');
+        showFeedback('Exam/CAT deleted successfully!');
         loadExams();
     }
 }
 
 
 /*******************************************************
- * 6. Messages Tab (Placeholder/Partial)
- *******************************************************/
-
-async function loadMessages() {
-    const messagesDiv = $('messages-list');
-    messagesDiv.innerHTML = '<p>Loading messages... (Requires full messages table integration)</p>';
-    
-    // Placeholder for fetching messages sent to students/lecturers
-}
-
-
-/*******************************************************
- * 7. Resources Tab (Partial)
+ * 6. Resources Tab
  *******************************************************/
 
 async function loadResources() {
-    const tbody = $('resources-table');
-    tbody.innerHTML = '<tr><td colspan="5">Loading resources...</td></tr>';
+    const tbody = $('resources-list');
+    tbody.innerHTML = '<tr><td colspan="7">Loading resources...</td></tr>';
     
+    // Fetch resource file metadata
+    const { data: files, error: fileError } = await sb.from('resource_files').select('*', { count: 'exact' });
+
+    if (fileError) {
+        tbody.innerHTML = `<tr><td colspan="7">Error loading resource metadata: ${fileError.message}</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = '';
+    files.forEach(f => {
+        const downloadUrl = `${SUPABASE_URL}/storage/v1/object/public/${RESOURCES_BUCKET}/${f.file_path}`;
+        
+        tbody.innerHTML += `<tr>
+            <td>${escapeHtml(f.program_type || 'N/A')}</td>
+            <td><a href="${downloadUrl}" target="_blank">${escapeHtml(f.title || f.file_path.split('/').pop())}</a></td>
+            <td>${escapeHtml(f.intake_year || 'N/A')}</td>
+            <td>${escapeHtml(f.block || 'N/A')}</td>
+            <td>${escapeHtml(f.uploaded_by_id.substring(0, 8))}...</td>
+            <td>${new Date(f.created_at).toLocaleDateString()}</td>
+            <td>
+                <button class="btn btn-delete" onclick="deleteResource('${f.id}', '${escapeHtml(f.file_path, true)}')">Delete</button>
+            </td>
+        </tr>`;
+    });
+}
+
+async function uploadResource() {
+    const fileInput = $('resourceFile');
+    const title = $('resourceTitle').value.trim();
+    const program_type = $('resource_program').value;
+    const intake_year = $('resource_intake').value;
+    const block = $('resource_block').value;
+    const file = fileInput.files[0];
+    
+    if (!file || !title || !program_type || !intake_year || !block) {
+        showFeedback('Please select a file and fill out all fields.', 'error');
+        return;
+    }
+
+    const submitButton = document.querySelector('#upload-resource-form button');
+    setButtonLoading(submitButton, true, 'Upload');
+
+    const fileName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+    const filePath = `${program_type}/${intake_year}/${fileName}`;
+
     try {
-        const { data: files, error } = await sb.storage.from(RESOURCES_BUCKET).list('', {
-            limit: 100,
-            offset: 0,
-            sortBy: { column: 'name', order: 'asc' },
+        // 1. Upload file to Supabase Storage
+        const { error: uploadError } = await sb.storage
+            .from(RESOURCES_BUCKET)
+            .upload(filePath, file, {
+                cacheControl: '3600',
+                upsert: false
+            });
+
+        if (uploadError) throw new Error(`File upload failed: ${uploadError.message}`);
+
+        // 2. Insert file metadata into 'resource_files' table
+        const { error: dbError } = await sb.from('resource_files').insert({
+            title: title,
+            file_path: filePath,
+            file_size: file.size,
+            mime_type: file.type,
+            program_type: program_type,
+            intake_year: intake_year,
+            block: block,
+            uploaded_by_id: currentUserProfile.id
         });
 
-        if (error) throw error;
-        
-        tbody.innerHTML = '';
-        files.filter(f => f.name !== '.emptyFolderPlaceholder').forEach(f => {
-            const fileURL = `${SUPABASE_URL}/storage/v1/object/public/${RESOURCES_BUCKET}/${f.name}`;
-            const size = (f.metadata.size / 1024 / 1024).toFixed(2); // MB
-            
-            tbody.innerHTML += `<tr>
-                <td>${escapeHtml(f.name)}</td>
-                <td>${size} MB</td>
-                <td>${new Date(f.created_at).toLocaleString()}</td>
-                <td>
-                    <a href="${fileURL}" target="_blank" class="btn btn-action">Download</a>
-                    <button class="btn btn-delete" onclick="deleteResource('${f.name}')">Delete</button>
-                </td>
-            </tr>`;
-        });
-    } catch (error) {
-        tbody.innerHTML = `<tr><td colspan="5">Error loading resources: ${error.message}</td></tr>`;
+        if (dbError) throw new Error(`Database record failed: ${dbError.message}`);
+
+        showFeedback('Resource uploaded successfully!');
+        document.getElementById('upload-resource-form').reset();
+        loadResources();
+
+    } catch (e) {
+        showFeedback(e.message, 'error');
+        // IMPORTANT: If metadata insert fails, you should attempt to delete the uploaded file
+        console.error('Resource upload process failed:', e);
+    } finally {
+        setButtonLoading(submitButton, false, 'Upload');
     }
 }
 
-$('upload-resource-form')?.addEventListener('submit', async e => {
+async function deleteResource(id, filePath) {
+    if (!confirm('Are you sure you want to delete this resource? This will delete both the database record and the file.')) return;
+
+    try {
+        // 1. Delete file from Supabase Storage
+        const { error: storageError } = await sb.storage
+            .from(RESOURCES_BUCKET)
+            .remove([filePath]);
+
+        if (storageError) console.warn(`Warning: Could not delete file from storage: ${storageError.message}. Deleting DB record anyway.`);
+
+        // 2. Delete file metadata from 'resource_files' table
+        const { error: dbError } = await sb.from('resource_files').delete().eq('id', id);
+
+        if (dbError) throw new Error(`Failed to delete database record: ${dbError.message}`);
+
+        showFeedback('Resource deleted successfully!');
+        loadResources();
+
+    } catch (e) {
+        showFeedback('Failed to delete resource: ' + e.message, 'error');
+        console.error('Resource deletion failed:', e);
+    }
+}
+
+
+/*******************************************************
+ * 7. Messages Tab
+ *******************************************************/
+
+async function loadMessages() {
+    const tbody = $('messages-table');
+    tbody.innerHTML = '<tr><td colspan="3">Loading messages...</td></tr>';
+    
+    const { data: messages, error } = await fetchData('messages', '*', {}, 'created_at', false);
+
+    if (error) {
+        tbody.innerHTML = `<tr><td colspan="3">Error loading messages: ${error.message}</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = '';
+    messages.forEach(m => {
+        const messageBody = m.body.length > 80 ? m.body.substring(0, 80) + '...' : m.body;
+        const sentDate = new Date(m.created_at).toLocaleString();
+        
+        tbody.innerHTML += `<tr>
+            <td>${escapeHtml(m.target_program || 'N/A')}</td>
+            <td>${escapeHtml(messageBody)}</td>
+            <td>${sentDate}</td>
+        </tr>`;
+    });
+}
+
+$('send-message-form')?.addEventListener('submit', async e => {
     e.preventDefault();
     const submitButton = e.submitter;
     const originalText = submitButton.textContent;
     setButtonLoading(submitButton, true, originalText);
-    
-    const fileInput = $('resource-file');
-    const file = fileInput.files[0];
 
-    if (!file) {
-        showFeedback('Please select a file to upload.', 'error');
+    const target_program = $('msg_program').value;
+    const body = $('msg_body').value.trim();
+    
+    if (!body || !target_program) {
+        showFeedback('Message body and target program are required.', 'error');
         setButtonLoading(submitButton, false, originalText);
         return;
     }
-    
-    try {
-        const { error } = await sb.storage.from(RESOURCES_BUCKET).upload(file.name, file);
 
-        if (error) throw error;
+    const { error } = await sb.from('messages').insert({ target_program, body, sender_id: currentUserProfile.id });
 
-        showFeedback(`File "${file.name}" uploaded successfully!`);
+    if (error) {
+        showFeedback(`Failed to send message: ${error.message}`, 'error');
+    } else {
+        showFeedback('Message sent successfully!', 'success');
         e.target.reset();
-        loadResources();
-    } catch (error) {
-        showFeedback(`Upload failed: ${error.message}`, 'error');
-    } finally {
-        setButtonLoading(submitButton, false, originalText);
+        loadMessages();
     }
+
+    setButtonLoading(submitButton, false, originalText);
 });
 
-async function deleteResource(fileName) {
-    if (!confirm(`Are you sure you want to delete "${fileName}"?`)) return;
-
-    try {
-        const { error } = await sb.storage.from(RESOURCES_BUCKET).remove([fileName]);
-
-        if (error) throw error;
-
-        showFeedback(`File "${fileName}" deleted successfully!`);
-        loadResources();
-    } catch (error) {
-        showFeedback(`Deletion failed: ${error.message}`, 'error');
-    }
-}
 
 /*******************************************************
- * 8. Welcome Message Editor (Partial)
+ * 8. Welcome Message Editor Tab
  *******************************************************/
+
 async function loadWelcomeMessageForEdit() {
-    // You'll need to initialize a WYSIWYG editor (like TinyMCE) here.
+    const editor = $('welcome-message-editor');
+    const preview = $('live-preview');
+    editor.value = 'Loading...';
+    preview.innerHTML = '<p>Loading live preview...</p>';
+
     const { data, error } = await fetchData(SETTINGS_TABLE, '*', { setting_key: MESSAGE_KEY });
 
     if (error) {
-        showFeedback(`Error loading message for edit: ${error.message}`, 'error');
-        return;
+        editor.value = `Error loading: ${error.message}`;
+        preview.innerHTML = `<p class="error-text">Error loading message: ${error.message}</p>`;
+    } else if (data && data.length > 0) {
+        const htmlContent = data[0].setting_value;
+        editor.value = htmlContent;
+        preview.innerHTML = htmlContent;
+    } else {
+        editor.value = '<p>Welcome student! Please check in for attendance. (Default Message)</p>';
+        preview.innerHTML = editor.value;
     }
-    
-    const currentValue = data && data.length > 0 ? data[0].setting_value : '<p>Enter your welcome message here...</p>';
-    
-    // Assuming you initialize your WYSIWYG editor on '#welcome-editor-content'
-    $('welcome-editor-content').value = currentValue; 
 }
 
-$('welcome-editor-form')?.addEventListener('submit', async e => {
+$('edit-welcome-form')?.addEventListener('submit', async e => {
     e.preventDefault();
     const submitButton = e.submitter;
     const originalText = submitButton.textContent;
     setButtonLoading(submitButton, true, originalText);
 
-    // Assuming you get the content from the WYSIWYG editor
-    const newContent = $('welcome-editor-content').value;
-
-    const updateData = {
-        setting_key: MESSAGE_KEY,
-        setting_value: newContent
-    };
+    const newHtml = $('welcome-message-editor').value;
 
     try {
-        const { error } = await sb
-            .from(SETTINGS_TABLE)
-            .upsert(updateData, { onConflict: 'setting_key' });
+        // Attempt to update the existing row first
+        const { data, error: updateError } = await sb.from(SETTINGS_TABLE)
+            .update({ setting_value: newHtml })
+            .eq('setting_key', MESSAGE_KEY)
+            .select();
 
-        if (error) throw error;
+        if (updateError) {
+            // If the row doesn't exist (update returned no rows), insert it
+            if (updateError.code === 'PGRST116') { // This code is for no rows returned, though it's safer to check data/count
+                const { error: insertError } = await sb.from(SETTINGS_TABLE).insert({
+                    setting_key: MESSAGE_KEY,
+                    setting_value: newHtml,
+                    description: 'Student dashboard welcome message (HTML content)'
+                });
+                if (insertError) throw insertError;
+            } else {
+                throw updateError;
+            }
+        }
 
-        showFeedback('Welcome message updated successfully!');
-        loadStudentWelcomeMessage(); // Refresh dashboard widget
-    } catch (error) {
-        showFeedback(`Failed to save message: ${error.message}`, 'error');
+        showFeedback('Student Welcome Message saved successfully!');
+        $('live-preview').innerHTML = newHtml;
+    } catch (e) {
+        showFeedback('Failed to save message: ' + (e.message || e), 'error');
+        console.error('Error saving welcome message:', e);
     } finally {
         setButtonLoading(submitButton, false, originalText);
     }
 });
 
 
-// Call init function when the window loads
-window.onload = initSession;
+// --- INITIALIZATION ---
+document.addEventListener('DOMContentLoaded', initSession);
