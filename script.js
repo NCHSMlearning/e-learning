@@ -73,7 +73,7 @@ async function fetchData(tableName, selectQuery = '*', filters = {}, order = 'cr
 
     const { data, error } = await query;
     if (error) {
-        console.error(`Error loading ${tableName}:`, error);
+        console.error(Error loading ${tableName}:, error);
         return { data: null, error };
     }
     return { data, error: null };
