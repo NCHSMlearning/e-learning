@@ -151,11 +151,18 @@ const tabs = document.querySelectorAll('.tab-content');
 navLinks.forEach(link => {
     link.addEventListener('click', e => {
         e.preventDefault();
+        // Deactivate all links
         navLinks.forEach(l => l.classList.remove('active'));
+        // Activate clicked link
         link.classList.add('active');
+        // Hide all tabs
         tabs.forEach(tab => tab.classList.remove('active'));
+        
         const tabId = link.dataset.tab;
-        document.getElementById(tabId).classList.add('active');
+        // Show target tab
+        const targetTab = document.getElementById(tabId);
+        if (targetTab) targetTab.classList.add('active');
+        
         loadSectionData(tabId);
     });
 });
@@ -166,6 +173,9 @@ function showTab(tabId) {
 }
 
 async function loadSectionData(tabId) {
+    // Ensure all modals are hidden when switching tabs
+    document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
+    
     switch(tabId) {
         case 'dashboard': 
             loadDashboardData(); 
@@ -211,6 +221,24 @@ async function initSession() {
     // Attach the change listener for session type
     $('att_session_type')?.addEventListener('change', toggleAttendanceFields);
     toggleAttendanceFields(); // Initial call to set correct state
+
+    // NEW: Attach the listener for Edit User Form submission
+    $('edit-user-form')?.addEventListener('submit', handleEditUser);
+    
+    // NEW: Attach the listener for closing the Edit User Modal
+    document.querySelector('#userEditModal .close')?.addEventListener('click', () => {
+        $('userEditModal').style.display = 'none';
+    });
+    
+    // Attach the listener for closing the Map Modal
+    document.querySelector('#mapModal .close')?.addEventListener('click', () => {
+        $('mapModal').style.display = 'none';
+    });
+    
+    // Attach the listener for closing the Course Edit Modal
+    document.querySelector('#courseEditModal .close')?.addEventListener('click', () => {
+        $('courseEditModal').style.display = 'none';
+    });
 }
 
 // Logout
@@ -253,7 +281,7 @@ async function loadStudentWelcomeMessage() {
 
 
 /*******************************************************
- * 2. Users/Enroll Tab (Approvals Logic)
+ * 2. Users/Enroll Tab (Approvals, EDIT, Delete Logic)
  *******************************************************/
 async function loadAllUsers() {
     const tbody = $('users-table');
@@ -271,7 +299,10 @@ async function loadAllUsers() {
         const roleOptions = ['student', 'admin', 'superadmin']
             .map(role => `<option value="${role}" ${u.role === role ? 'selected' : ''}>${role}</option>`).join('');
         
-        const statusText = u.approved ? 'Approved' : 'Pending';
+        // Check for Block Status
+        const isBlocked = u.block_program_year === true;
+        const statusText = isBlocked ? 'BLOCKED' : (u.approved ? 'Approved' : 'Pending');
+        const statusClass = isBlocked ? 'status-danger' : (u.approved ? 'status-approved' : 'status-pending');
 
         tbody.innerHTML += `<tr>
             <td>${escapeHtml(u.id.substring(0, 8))}...</td>
@@ -283,8 +314,9 @@ async function loadAllUsers() {
                 </select>
             </td>
             <td>${escapeHtml(u.program_type || 'N/A')}</td>
-            <td>${statusText}</td>
+            <td class="${statusClass}">${statusText}</td>
             <td>
+                <button class="btn btn-map" onclick="openEditUserModal('${u.id}')">Edit</button>
                 ${!u.approved ? `<button class="btn btn-approve" onclick="approveUser('${u.id}')">Approve</button>` : ''}
                 <button class="btn btn-delete" onclick="deleteProfile('${u.id}')">Delete</button>
             </td>
@@ -327,17 +359,22 @@ async function loadPendingApprovals() {
 
 async function loadStudents() {
     const tbody = $('students-table');
-    tbody.innerHTML = '<tr><td colspan="9">Loading students...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10">Loading students...</td></tr>';
     
     const { data: students, error } = await fetchData('profiles', '*', { role: 'student' }, 'full_name', true);
 
     if (error) {
-        tbody.innerHTML = `<tr><td colspan="9">Error loading students: ${error.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="10">Error loading students: ${error.message}</td></tr>`;
         return;
     }
     
     tbody.innerHTML = '';
     students.forEach(s => {
+        // Check for Block Status
+        const isBlocked = s.block_program_year === true;
+        const statusText = isBlocked ? 'BLOCKED' : (s.approved ? 'Approved' : 'Pending');
+        const statusClass = isBlocked ? 'status-danger' : (s.approved ? 'status-approved' : 'status-pending');
+
         tbody.innerHTML += `<tr>
             <td>${escapeHtml(s.id.substring(0, 8))}...</td>
             <td>${escapeHtml(s.full_name)}</td>
@@ -346,8 +383,11 @@ async function loadStudents() {
             <td>${escapeHtml(s.intake_year || 'N/A')}</td>
             <td>${escapeHtml(s.block || 'N/A')}</td>
             <td>${escapeHtml(s.phone)}</td>
-            <td>${s.approved ? 'Approved' : 'Pending'}</td>
-            <td><button class="btn btn-delete" onclick="deleteProfile('${s.id}')">Delete</button></td>
+            <td class="${statusClass}">${statusText}</td>
+            <td>
+                <button class="btn btn-map" onclick="openEditUserModal('${s.id}')">Edit</button>
+                <button class="btn btn-delete" onclick="deleteProfile('${s.id}')">Delete</button>
+            </td>
         </tr>`;
     });
 }
@@ -425,7 +465,8 @@ $('add-account-form')?.addEventListener('submit', async e => {
         program_type: program_type, 
         intake_year: intake_year, 
         block: block, 
-        approved: approved 
+        approved: approved,
+        block_program_year: false // Default to false
     };
 
     const { data: { user }, error: authError } = await sb.auth.signUp({
@@ -454,6 +495,94 @@ $('add-account-form')?.addEventListener('submit', async e => {
 
     setButtonLoading(submitButton, false, originalText);
 });
+
+
+// --- NEW EDIT USER MODAL FUNCTIONS ---
+
+/**
+ * Opens the Edit User Modal and populates it with existing data from the database.
+ * @param {string} userId - The ID (UUID) of the user to edit (the 'id' column in the profiles table).
+ */
+async function openEditUserModal(userId) {
+    try {
+        const { data: user, error } = await sb
+            .from('profiles')
+            .select('*')
+            .eq('id', userId)
+            .single();
+
+        if (error || !user) throw new Error('User data fetch failed.');
+
+        // 1. Populate Modal fields
+        $('edit_user_id').value = user.id;
+        $('edit_user_name').value = user.full_name || '';
+        $('edit_user_email').value = user.email || '';
+        $('edit_user_role').value = user.role || 'student';
+        $('edit_user_program').value = user.program_type || 'KRCHN';
+        $('edit_user_intake').value = user.intake_year || '2024';
+        $('edit_user_block').value = user.block || 'A';
+        
+        // ** CRITICAL: BLOCK PROGRAM YEAR FIELD **
+        const isBlocked = user.block_program_year === true;
+        // The value must be set to 'true' or 'false' (string) to match the <select> options
+        $('edit_user_block_status').value = isBlocked ? 'true' : 'false';
+
+        // 2. Show Modal
+        $('userEditModal').style.display = 'flex'; // Use 'flex' or 'block' based on your CSS
+
+    } catch (error) {
+        showFeedback(`Failed to load user data: ${error.message}`, 'error');
+        console.error('Error in openEditUserModal:', error);
+    }
+}
+
+/**
+ * Handles the submission of the Edit User form.
+ */
+async function handleEditUser(e) {
+    e.preventDefault();
+    const submitButton = e.submitter;
+    const originalText = submitButton.textContent;
+    setButtonLoading(submitButton, true, originalText);
+    
+    const userId = $('edit_user_id').value;
+    
+    // 1. Collect updated data
+    const updatedData = {
+        full_name: $('edit_user_name').value.trim(),
+        email: $('edit_user_email').value.trim(),
+        role: $('edit_user_role').value,
+        program_type: $('edit_user_program').value,
+        intake_year: $('edit_user_intake').value,
+        block: $('edit_user_block').value,
+        // ** CRITICAL: BLOCK PROGRAM YEAR FIELD **
+        // Convert the string 'true'/'false' back to a boolean
+        block_program_year: $('edit_user_block_status').value === 'true' 
+    };
+
+    try {
+        const { error } = await sb
+            .from('profiles')
+            .update(updatedData)
+            .eq('id', userId);
+
+        if (error) throw error;
+
+        showFeedback('User profile updated successfully!');
+        $('userEditModal').style.display = 'none';
+        
+        // Refresh all relevant tables
+        loadAllUsers();
+        loadStudents();
+        loadDashboardData();
+        
+    } catch (e) {
+        showFeedback('Failed to update user: ' + (e.message || e), 'error');
+        console.error('Error updating user:', e);
+    } finally {
+        setButtonLoading(submitButton, false, originalText);
+    }
+}
 
 
 /*******************************************************
@@ -533,8 +662,9 @@ function openEditCourseModal(id, name, description, intake_year, block) {
     $('edit_course_id').value = id;
     $('edit_course_name').value = name; 
     $('edit_course_description').value = description;
-
-    // You would need to add intake_year/block fields to your 'courseEditModal' HTML
+    // Assuming you have these fields in your courseEditModal HTML
+    $('edit_course_intake').value = intake_year; 
+    $('edit_course_block').value = block;
     
     $('courseEditModal').style.display = 'flex'; 
 }
@@ -550,9 +680,11 @@ $('edit-course-form')?.addEventListener('submit', async (e) => {
     const id = $('edit_course_id').value;
     const name = $('edit_course_name').value.trim();
     const description = $('edit_course_description').value.trim();
+    const intake_year = $('edit_course_intake').value; 
+    const block = $('edit_course_block').value; 
     
     try {
-        const updateData = { course_name: name, description: description };
+        const updateData = { course_name: name, description: description, intake_year, block };
         
         const { error } = await sb
             .from('courses')
@@ -595,9 +727,8 @@ function toggleAttendanceFields() {
     const departmentInput = $('att_department');
     const courseSelect = $('att_course_id');
     
-    const departmentLabel = document.querySelector('label[for="att_department"]'); // Assuming you have labels or wrap inputs
-    const courseLabel = document.querySelector('label[for="att_course_id"]');
-
+    // You must adjust the visibility and required properties of the input fields directly
+    
     if (sessionType === 'clinical') {
         departmentInput.style.display = 'inline-block';
         departmentInput.required = true;
@@ -607,10 +738,6 @@ function toggleAttendanceFields() {
         courseSelect.required = false;
         courseSelect.value = ""; // Clear value
         
-        // You might need to adjust the visibility of their wrappers/labels if they exist
-        // if (departmentLabel) departmentLabel.style.display = 'inline';
-        // if (courseLabel) courseLabel.style.display = 'none';
-        
     } else if (sessionType === 'classroom') {
         departmentInput.style.display = 'none';
         departmentInput.required = false;
@@ -619,8 +746,6 @@ function toggleAttendanceFields() {
         courseSelect.style.display = 'inline-block';
         courseSelect.required = true;
         
-        // if (departmentLabel) departmentLabel.style.display = 'none';
-        // if (courseLabel) courseLabel.style.display = 'inline';
     } else {
         // Default or other types ('virtual', 'call', etc.) - hide both, make both optional
         departmentInput.style.display = 'inline-block';
@@ -630,9 +755,6 @@ function toggleAttendanceFields() {
         courseSelect.style.display = 'none';
         courseSelect.required = false;
         courseSelect.value = "";
-        
-        // if (departmentLabel) departmentLabel.style.display = 'inline';
-        // if (courseLabel) courseLabel.style.display = 'none';
     }
 }
 
@@ -826,10 +948,6 @@ function showMap(lat, lng, locationName, studentName, dateTime) {
     }
 }
 
-document.querySelector('#mapModal .close')?.addEventListener('click', () => {
-    $('mapModal').style.display = 'none';
-});
-
 
 /*******************************************************
  * 5. CATS / Exams Tab
@@ -883,32 +1001,27 @@ $('add-exam-form')?.addEventListener('submit', async e => {
     const exam_title = $('exam_title').value.trim();
     const exam_date = $('exam_date').value;
     const exam_status = $('exam_status').value;
-    const intake_year = $('exam_intake').value; 
-    const block = $('exam_block').value; 
-    
-    const { error } = await sb.from('cats_exams').insert([{ 
-        program_type: exam_program,
-        course_id: course_id,
-        exam_title: exam_title,
-        exam_date: exam_date,
-        exam_status: exam_status,
-        intake_year: intake_year, 
-        block: block 
-    }]);
+    const intake_year = $('exam_intake').value;
+    const block = $('exam_block').value;
 
-    if (error) {
-        showFeedback(`Failed to add exam: ${error.message}`, 'error');
-    } else {
-        showFeedback('Exam added successfully!', 'success');
+    const examData = { exam_program, course_id, exam_title, exam_date, exam_status, intake_year, block };
+
+    try {
+        const { error } = await sb.from('cats_exams').insert([examData]);
+        if (error) throw error;
+        
+        showFeedback('Exam scheduled successfully!', 'success');
         e.target.reset();
         loadExams();
+    } catch (error) {
+        showFeedback(`Failed to schedule exam: ${error.message}`, 'error');
+    } finally {
+        setButtonLoading(submitButton, false, originalText);
     }
-
-    setButtonLoading(submitButton, false, originalText);
 });
 
 async function deleteExam(examId) {
-    if (!confirm('Are you sure you want to delete this exam/CAT?')) return;
+    if (!confirm('Are you sure you want to delete this exam schedule?')) return;
 
     const { error } = await sb.from('cats_exams').delete().eq('id', examId);
 
@@ -922,277 +1035,147 @@ async function deleteExam(examId) {
 
 
 /*******************************************************
- * 6. Messages Tab
+ * 6. Messages Tab (Placeholder/Partial)
  *******************************************************/
 
 async function loadMessages() {
-    const tbody = $('messages-table');
-    tbody.innerHTML = '<tr><td colspan="3">Loading messages...</td></tr>';
-
-    const { data: messages, error } = await fetchData('messages', '*', {}, 'created_at', false);
-
-    if (error) {
-        tbody.innerHTML = `<tr><td colspan="3">Error loading messages: ${error.message}</td></tr>`;
-        return;
-    }
-
-    tbody.innerHTML = '';
-    messages.forEach(m => {
-        const messageDate = new Date(m.created_at).toLocaleString();
-        tbody.innerHTML += `<tr>
-            <td>${escapeHtml(m.program_type)}</td>
-            <td>${escapeHtml(m.message_body.substring(0, 100))}...</td>
-            <td>${messageDate}</td>
-        </tr>`;
-    });
-}
-
-$('send-message-form')?.addEventListener('submit', async e => {
-    e.preventDefault();
-    const submitButton = e.submitter;
-    const originalText = submitButton.textContent;
-    setButtonLoading(submitButton, true, originalText);
-
-    const program_type = $('msg_program').value;
-    const message_body = $('msg_body').value.trim();
+    const messagesDiv = $('messages-list');
+    messagesDiv.innerHTML = '<p>Loading messages... (Requires full messages table integration)</p>';
     
-    if (!program_type || !message_body) {
-        showFeedback('Please select a program and enter a message.', 'error');
-        setButtonLoading(submitButton, false, originalText);
-        return;
-    }
-
-    const { error } = await sb.from('messages').insert([{ 
-        sender_id: currentUserProfile.id,
-        program_type: program_type,
-        message_body: message_body,
-    }]);
-
-    if (error) {
-        showFeedback(`Failed to send message: ${error.message}`, 'error');
-    } else {
-        showFeedback(`Message sent to ${program_type} students successfully!`, 'success');
-        e.target.reset();
-        loadMessages();
-    }
-
-    setButtonLoading(submitButton, false, originalText);
-});
+    // Placeholder for fetching messages sent to students/lecturers
+}
 
 
 /*******************************************************
- * 7. Resources Tab - COMPLETED LOGIC
+ * 7. Resources Tab (Partial)
  *******************************************************/
 
 async function loadResources() {
-    const tbody = $('resources-list');
-    tbody.innerHTML = '<tr><td colspan="7">Loading resources...</td></tr>';
-
-    const { data: resources, error } = await fetchData('resources', '*', {}, 'created_at', false);
-
-    if (error) {
-        tbody.innerHTML = `<tr><td colspan="7">Error loading resources: ${error.message}</td></tr>`;
-        return;
-    }
-
-    tbody.innerHTML = '';
-    resources.forEach(r => {
-        const uploadDate = new Date(r.created_at).toLocaleDateString();
-        // Construct the full file path for deletion (Program_type/filename)
-        // Ensure this logic matches the upload path structure
-        const fullFilePath = `${r.program_type}/${r.intake_year || 'unknown'}_${r.block || 'unknown'}/${r.file_name}`; 
-        
-        const fileNameLink = `<a href="${r.file_url}" target="_blank" rel="noopener noreferrer">${escapeHtml(r.file_title || r.file_name)}</a>`;
-        
-        tbody.innerHTML += `<tr>
-            <td>${escapeHtml(r.program_type)}</td>
-            <td>${fileNameLink}</td>
-            <td>${escapeHtml(r.intake_year || 'N/A')}</td>
-            <td>${escapeHtml(r.block || 'N/A')}</td>
-            <td>${escapeHtml(r.uploaded_by_name || 'Admin')}</td>
-            <td>${uploadDate}</td>
-            <td>
-                <button class="btn btn-delete" onclick="deleteResource('${r.id}', '${escapeHtml(fullFilePath, true)}')">Delete</button>
-            </td>
-        </tr>`;
-    });
-}
-
-
-async function uploadResource() {
-    const submitButton = document.querySelector('#upload-resource-form button');
-    const originalText = submitButton.textContent;
-    setButtonLoading(submitButton, true, originalText);
+    const tbody = $('resources-table');
+    tbody.innerHTML = '<tr><td colspan="5">Loading resources...</td></tr>';
     
-    const fileInput = $('resourceFile');
-    const program_type = $('resource_program').value;
-    const intake_year = $('resource_intake').value; 
-    const block = $('resource_block').value; 
-    const file_title = $('resourceTitle').value.trim();
-
-    if (!fileInput.files.length || !program_type || !file_title || !intake_year || !block) {
-        showFeedback('Please select a program, intake, block, enter a title, and select a file.', 'error');
-        setButtonLoading(submitButton, false, originalText);
-        return;
-    }
-
-    const file = fileInput.files[0];
-    const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const fileName = `${Date.now()}_${safeFileName}`;
-    // Store in a folder path that includes program, intake, and block
-    const filePath = `${program_type}/${intake_year}_${block}/${fileName}`;
-
     try {
-        // 1. Upload file to storage bucket
-        const { error: uploadError } = await sb.storage
-            .from(RESOURCES_BUCKET)
-            .upload(filePath, file);
+        const { data: files, error } = await sb.storage.from(RESOURCES_BUCKET).list('', {
+            limit: 100,
+            offset: 0,
+            sortBy: { column: 'name', order: 'asc' },
+        });
 
-        if (uploadError) {
-            throw uploadError;
-        }
-
-        // 2. Get public URL for the file
-        const { data: publicUrlData } = sb.storage
-            .from(RESOURCES_BUCKET)
-            .getPublicUrl(filePath);
-
-        if (!publicUrlData || !publicUrlData.publicUrl) {
-            throw new Error('Failed to get public URL after upload.');
-        }
-
-        // 3. Insert record into the 'resources' table
-        const { error: dbError } = await sb.from('resources').insert([{
-            program_type: program_type,
-            intake_year: intake_year, 
-            block: block, 
-            file_title: file_title,
-            file_name: fileName,
-            file_url: publicUrlData.publicUrl,
-            uploaded_by_id: currentUserProfile.id,
-            uploaded_by_name: currentUserProfile.full_name,
-        }]);
-
-        if (dbError) {
-            showFeedback(`File uploaded, but failed to record in DB: ${dbError.message}. The resource may be unusable.`, 'error');
-        } else {
-            showFeedback('Resource uploaded and saved successfully!', 'success');
-            document.getElementById('upload-resource-form').reset();
-            loadResources(); 
-        }
-
-    } catch (error) {
-        showFeedback(`Upload Failed: ${error.message}`, 'error');
-        console.error('Resource upload process error:', error);
-    } finally {
-        setButtonLoading(submitButton, false, originalText);
-    }
-}
-
-async function deleteResource(resourceId, fullFilePath) {
-    if (!confirm('Are you sure you want to delete this resource? It will be removed from the database and storage.')) return;
-
-    try {
-        // 1. Delete file from storage bucket
-        const { error: storageError } = await sb.storage
-            .from(RESOURCES_BUCKET)
-            .remove([fullFilePath]);
-
-        if (storageError && storageError.message !== 'The resource was not found') {
-            console.warn(`Storage deletion warning: ${storageError.message}. Proceeding with DB delete.`);
-        }
+        if (error) throw error;
         
-        // 2. Delete record from the 'resources' table
-        const { error: dbError } = await sb.from('resources').delete().eq('id', resourceId);
-
-        if (dbError) {
-            throw dbError;
-        }
-
-        showFeedback('Resource and file deleted successfully!', 'success');
-        loadResources();
-
+        tbody.innerHTML = '';
+        files.filter(f => f.name !== '.emptyFolderPlaceholder').forEach(f => {
+            const fileURL = `${SUPABASE_URL}/storage/v1/object/public/${RESOURCES_BUCKET}/${f.name}`;
+            const size = (f.metadata.size / 1024 / 1024).toFixed(2); // MB
+            
+            tbody.innerHTML += `<tr>
+                <td>${escapeHtml(f.name)}</td>
+                <td>${size} MB</td>
+                <td>${new Date(f.created_at).toLocaleString()}</td>
+                <td>
+                    <a href="${fileURL}" target="_blank" class="btn btn-action">Download</a>
+                    <button class="btn btn-delete" onclick="deleteResource('${f.name}')">Delete</button>
+                </td>
+            </tr>`;
+        });
     } catch (error) {
-        showFeedback(`Failed to delete resource: ${error.message}`, 'error');
-        console.error('Resource deletion error:', error);
+        tbody.innerHTML = `<tr><td colspan="5">Error loading resources: ${error.message}</td></tr>`;
     }
 }
 
-
-/*******************************************************
- * 8. Welcome Message Editor
- *******************************************************/
-
-// Load the current message from settings table
-async function loadWelcomeMessageForEdit() {
-    const { data, error } = await fetchData(SETTINGS_TABLE, '*', { setting_key: MESSAGE_KEY });
-    const editor = $('welcome-message-editor');
-    const preview = $('live-preview');
-
-    if (data && data.length > 0) {
-        const messageHtml = data[0].setting_value;
-        editor.value = messageHtml;
-        preview.innerHTML = messageHtml;
-    } else if (error) {
-        showFeedback(`Failed to load welcome message: ${error.message}`, 'error');
-        editor.value = '<p class="error-text">Failed to load message.</p>';
-        preview.innerHTML = '<p class="error-text">Failed to load message.</p>';
-    } else {
-        editor.value = '<h1>Welcome Student!</h1><p>Please use the mobile app to check in for attendance. Check the Resources tab for important documents.</p>';
-        preview.innerHTML = editor.value;
-    }
-    
-    // Auto-update preview as user types
-    editor.addEventListener('input', () => {
-        preview.innerHTML = editor.value;
-    });
-}
-
-// Save the edited message
-$('edit-welcome-form')?.addEventListener('submit', async e => {
+$('upload-resource-form')?.addEventListener('submit', async e => {
     e.preventDefault();
     const submitButton = e.submitter;
     const originalText = submitButton.textContent;
     setButtonLoading(submitButton, true, originalText);
     
-    const setting_value = $('welcome-message-editor').value.trim();
-    
-    const { error } = await sb.from(SETTINGS_TABLE)
-        .upsert({ setting_key: MESSAGE_KEY, setting_value: setting_value, updated_at: new Date().toISOString() }, { onConflict: 'setting_key' });
+    const fileInput = $('resource-file');
+    const file = fileInput.files[0];
 
-    if (error) {
-        showFeedback(`Failed to save welcome message: ${error.message}`, 'error');
-    } else {
-        showFeedback('Welcome message updated successfully!', 'success');
-        loadStudentWelcomeMessage(); // Refresh dashboard message
+    if (!file) {
+        showFeedback('Please select a file to upload.', 'error');
+        setButtonLoading(submitButton, false, originalText);
+        return;
     }
+    
+    try {
+        const { error } = await sb.storage.from(RESOURCES_BUCKET).upload(file.name, file);
 
-    setButtonLoading(submitButton, false, originalText);
+        if (error) throw error;
+
+        showFeedback(`File "${file.name}" uploaded successfully!`);
+        e.target.reset();
+        loadResources();
+    } catch (error) {
+        showFeedback(`Upload failed: ${error.message}`, 'error');
+    } finally {
+        setButtonLoading(submitButton, false, originalText);
+    }
 });
 
+async function deleteResource(fileName) {
+    if (!confirm(`Are you sure you want to delete "${fileName}"?`)) return;
+
+    try {
+        const { error } = await sb.storage.from(RESOURCES_BUCKET).remove([fileName]);
+
+        if (error) throw error;
+
+        showFeedback(`File "${fileName}" deleted successfully!`);
+        loadResources();
+    } catch (error) {
+        showFeedback(`Deletion failed: ${error.message}`, 'error');
+    }
+}
 
 /*******************************************************
- * 9. INITIALIZATION AND EVENT LISTENERS
+ * 8. Welcome Message Editor (Partial)
  *******************************************************/
+async function loadWelcomeMessageForEdit() {
+    // You'll need to initialize a WYSIWYG editor (like TinyMCE) here.
+    const { data, error } = await fetchData(SETTINGS_TABLE, '*', { setting_key: MESSAGE_KEY });
 
-// Event Listener for Map Modal Close
-document.querySelector('#mapModal .close')?.addEventListener('click', () => {
-    $('mapModal').style.display = 'none';
-});
+    if (error) {
+        showFeedback(`Error loading message for edit: ${error.message}`, 'error');
+        return;
+    }
+    
+    const currentValue = data && data.length > 0 ? data[0].setting_value : '<p>Enter your welcome message here...</p>';
+    
+    // Assuming you initialize your WYSIWYG editor on '#welcome-editor-content'
+    $('welcome-editor-content').value = currentValue; 
+}
 
-// Event Listener for Course Edit Modal Close
-document.getElementById('closeCourseEditModal')?.addEventListener('click', () => {
-    $('courseEditModal').style.display = 'none';
-});
-
-// Event Listener for Resource Upload Form
-$('upload-resource-form')?.addEventListener('submit', async e => {
+$('welcome-editor-form')?.addEventListener('submit', async e => {
     e.preventDefault();
-    await uploadResource();
+    const submitButton = e.submitter;
+    const originalText = submitButton.textContent;
+    setButtonLoading(submitButton, true, originalText);
+
+    // Assuming you get the content from the WYSIWYG editor
+    const newContent = $('welcome-editor-content').value;
+
+    const updateData = {
+        setting_key: MESSAGE_KEY,
+        setting_value: newContent
+    };
+
+    try {
+        const { error } = await sb
+            .from(SETTINGS_TABLE)
+            .upsert(updateData, { onConflict: 'setting_key' });
+
+        if (error) throw error;
+
+        showFeedback('Welcome message updated successfully!');
+        loadStudentWelcomeMessage(); // Refresh dashboard widget
+    } catch (error) {
+        showFeedback(`Failed to save message: ${error.message}`, 'error');
+    } finally {
+        setButtonLoading(submitButton, false, originalText);
+    }
 });
 
-// Event Listener for Attendance Search/Filter
-$('attendance-search')?.addEventListener('keyup', filterAttendanceTable);
 
-// Start the application session when the script loads
-document.addEventListener('DOMContentLoaded', initSession);
+// Call init function when the window loads
+window.onload = initSession;
