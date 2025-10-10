@@ -284,7 +284,7 @@
                         </div>
                         <div class="form-field">
                             <label for="profile-email">Email (Login ID)</label>
-                            <input type="email" id="profile-email" readonly>
+                             <input type="email" id="profile-email" readonly>
                         </div>
                         <div class="form-field">
                             <label for="profile-phone">Phone Number</label>
@@ -445,11 +445,9 @@
         if(activeTab) activeTab.classList.add('active');
         
         // Load data specific to the tab being activated
-        if (tabId === 'profile' && currentUserId) loadProfile(currentUserId);
+        if (tabId === 'profile' && currentUserId) loadProfile(currentUserId); // <-- Ensures latest data fetch on tab click
         if (tabId === 'attendance' && currentUserId) {
-            // loadAttendance(currentUserId); // MOCK/empty
             loadGeoAttendanceHistory(currentUserId); 
-            // Important: Update dropdown with current courses/departments
             updateTargetSelect();
         }
         if (tabId === 'courses' && currentUserId) loadCourses(); 
@@ -522,7 +520,7 @@
     }
     
     // *************************************************************************
-    // *** 4. AUTHENTICATION AND PROFILE MANAGEMENT (SECURE FIX APPLIED) ***
+    // *** 4. AUTHENTICATION AND PROFILE MANAGEMENT (FIXED) ***
     // *************************************************************************
 
     async function checkAuthAndLoad() {
@@ -537,9 +535,8 @@
             await loadProfile(currentUserId); 
             showTab('dashboard');
         } else {
-            // 🚨 CRITICAL FIX: Redirect to login page if no user is found
+            // CRITICAL FIX: Redirect to login page if no user is found
             console.warn("No active user session found. Redirecting to login.");
-            // Assuming your login page is named login.html
             window.location.href = "login.html"; 
         }
     }
@@ -557,6 +554,7 @@
         profileStatus.textContent = 'Loading profile...';
         
         // Fetch ALL data from the profiles table for the current user
+        // This *always* fetches the latest version from the database
         const { data: profile, error } = await sb
             .from('profiles')
             .select('*')
@@ -566,21 +564,16 @@
         if (error) {
             console.error('Error loading profile:', error);
             
-            // ** NOTE ON RLS & "N/A" **
-            // If the error code is PGRST116 (No rows found), it means the user's
-            // ID exists in auth.users but not in the profiles table.
-            // If RLS is misconfigured, it will also block the SELECT.
-            
             if (error.code === 'PGRST116' || error.message.includes('permission denied')) {
                 profileStatus.textContent = 'Profile data missing or restricted. Contact Admin.';
                 
-                // Fallback to a partial profile to prevent other components from failing
+                // Fallback profile object using expected column names from the database
                 currentUserProfile = { 
                     first_name: 'Student', 
                     full_name: 'Unknown Student', 
                     email: 'N/A', 
                     program_name: 'N/A', 
-                    student_id_no: 'N/A',
+                    student_id_no: 'N/A', 
                     phone: 'N/A'
                 };
             } else {
@@ -592,8 +585,7 @@
             profileStatus.textContent = '';
         }
 
-        // Reflect all profile data in the form fields.
-        // ** These lines are correct, assuming your column names are 'student_id_no' and 'program_name' **
+        // Populate form fields with the LATEST data from Supabase
         document.getElementById('profile-student-id').value = currentUserProfile.student_id_no || 'N/A';
         document.getElementById('profile-name').value = currentUserProfile.full_name || 'N/A';
         document.getElementById('profile-email').value = currentUserProfile.email || 'N/A';
@@ -603,7 +595,7 @@
         // Handle Passport Photo URL retrieval
         document.getElementById('passport-preview').src = currentUserProfile.passport_url 
             ? sb.storage.from('passports').getPublicUrl(currentUserProfile.passport_url).data.publicUrl
-            : 'images/default_avatar.png'; // Use a default image if NO_PHOTO placeholder is not available
+            : 'https://via.placeholder.com/150x150?text=NO+PHOTO'; 
         
         document.querySelector('header h1').textContent = `Welcome, ${currentUserProfile.first_name || 'Student'}!`;
 
@@ -614,12 +606,20 @@
     }
     
     function toggleProfileEdit(enable) {
-        // Allow editing of Full Name and Phone Number only
-        const fields = ['profile-name', 'profile-phone']; 
-        fields.forEach(id => {
+        // Only allow student to edit name and phone. Admin updates the rest.
+        const editableFields = ['profile-name', 'profile-phone']; 
+        
+        // Set all editable fields to read-only or not
+        editableFields.forEach(id => {
             const input = document.getElementById(id);
             if (input) input.readOnly = !enable;
         });
+        
+        // Crucial Admin-set fields remain read-only always
+        document.getElementById('profile-student-id').readOnly = true;
+        document.getElementById('profile-email').readOnly = true;
+        document.getElementById('profile-program').readOnly = true;
+
 
         editProfileButton.style.display = enable ? 'none' : 'block';
         saveProfileButton.style.display = enable ? 'block' : 'none';
@@ -639,6 +639,7 @@
         e.preventDefault();
         profileStatus.textContent = 'Saving changes...';
         
+        // Only save fields editable by the student
         const updates = {
             id: currentUserId,
             full_name: document.getElementById('profile-name').value,
@@ -655,6 +656,7 @@
             profileStatus.textContent = `Error saving profile: ${error.message}`;
         } else {
             profileStatus.textContent = 'Profile updated successfully!';
+            // Reload the profile to ensure UI consistency after student update
             loadProfile(currentUserId); 
         }
     });
@@ -702,6 +704,7 @@
             profileStatus.textContent = 'Photo uploaded and saved successfully!';
             passportFileInput.value = ''; 
             uploadButton.style.display = 'none';
+            // Reload the profile to refresh the photo link and UI
             loadProfile(currentUserId); 
         }
         uploadButton.disabled = false;
