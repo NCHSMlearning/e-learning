@@ -1100,32 +1100,26 @@ async function loadCourses() {
     document.getElementById('dashboard-active-courses').textContent = cachedCourses.length;
 }
 
-async function loadExams() {
-    const tableBody = document.getElementById('exams-table-body'); // make sure <tbody id="exams-table-body"> exists
-    if (!tableBody) {
-        console.error("Missing <tbody id='exams-table-body'> in HTML");
-        return;
-    }
+const tableBody = document.getElementById('exams-table');
+if (!tableBody) {
+    console.error("Missing <tbody id='exams-table'> in HTML");
+    return;
+}
 
     tableBody.innerHTML = '<tr><td colspan="3">Loading exam schedule...</td></tr>';
 
     try {
         const program = currentUserProfile?.program;
-        const block = currentUserProfile?.block;
-        const intakeYear = currentUserProfile?.intake_year;
-
-        if (!program || !block || !intakeYear) {
-            tableBody.innerHTML = '<tr><td colspan="3">Incomplete profile. Cannot load exams.</td></tr>';
+        if (!program) {
+            tableBody.innerHTML = '<tr><td colspan="3">Missing program info. Cannot load exams.</td></tr>';
             cachedExams = [];
             return;
         }
 
         const { data: exams, error } = await sb
-            .from('exams_with_courses') 
-            .select('exam_name, exam_date, status')
-            .eq('program', program)
-            .eq('block', block)
-            .eq('intake_year', intakeYear)
+            .from('exams_with_courses')
+            .select('title, exam_date, status, course_name')
+            .or(`program_type.eq.${program},program_type.eq.General`)
             .order('exam_date', { ascending: true });
 
         if (error) throw error;
@@ -1138,19 +1132,20 @@ async function loadExams() {
                 const dateStr = exam.exam_date ? new Date(exam.exam_date).toLocaleDateString() : 'N/A';
                 tableBody.innerHTML += `
                     <tr>
-                        <td>${exam.exam_name || 'N/A'}</td>
+                        <td>${exam.title || 'N/A'}</td>
+                        <td>${exam.course_name || 'N/A'}</td>
                         <td>${dateStr}</td>
                         <td>${exam.status || 'N/A'}</td>
                     </tr>
                 `;
             });
         } else {
-            tableBody.innerHTML = '<tr><td colspan="3">No exams or CATs scheduled for your cohort yet.</td></tr>';
+            tableBody.innerHTML = '<tr><td colspan="4">No exams or CATs scheduled for your program yet.</td></tr>';
         }
 
     } catch (error) {
         console.error("Failed to load exams:", error);
-        tableBody.innerHTML = `<tr><td colspan="3" style="color:#EF4444;">Error loading exams: ${error.message}</td></tr>`;
+        tableBody.innerHTML = `<tr><td colspan="4" style="color:#EF4444;">Error loading exams: ${error.message}</td></tr>`;
         cachedExams = [];
     }
 
