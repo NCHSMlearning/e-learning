@@ -1394,41 +1394,74 @@ async function handleSendMessage(e) {
         return;
     }
 
-    const { error } = await sb.from('notifications').insert({ 
-        recipient_id: null, 
-        target_program: target_program === 'ALL' ? null : target_program, 
-        subject: subject, 
-        message_content: message_content, 
-        message_type: message_type,
-        sender_id: currentUserProfile.id
-    });
+    // Determine recipientId only if sending to a specific student
+    let recipientId = null; 
+    if (target_program === 'INDIVIDUAL') {
+        recipientId = $('recipient_id')?.value || null; // ensure valid UUID or null
+    }
 
-    if (error) { showFeedback(`Failed to send message: ${error.message}`, 'error'); } 
-    else { showFeedback('Message sent successfully!'); e.target.reset(); loadMessages(); }
+    try {
+        const { error } = await sb.from('notifications').insert({ 
+            recipient_id: recipientId,                                  // UUID or null
+            target_program: target_program === 'ALL' ? null : target_program, 
+            title: subject || "No Title",                               // ensure NOT NULL
+            message: message_content || "No content",                  // ensure NOT NULL
+            message_type: message_type || 'general',
+            sender_id: currentUserProfile.id,                           // must exist in profiles
+            created_at: new Date().toISOString()
+        });
 
-    setButtonLoading(submitButton, false, originalText);
+        if (error) {
+            showFeedback(`Failed to send message: ${error.message}`, 'error');
+        } else {
+            showFeedback('Message sent successfully!'); 
+            e.target.reset(); 
+            loadMessages(); 
+        }
+
+    } catch (err) {
+        console.error('Send message failed:', err);
+        showFeedback(`Failed to send message: ${err.message}`, 'error');
+    } finally {
+        setButtonLoading(submitButton, false, originalText);
+    }
 }
 
 async function loadMessages() {
     const tbody = $('messages-table');
     tbody.innerHTML = '<tr><td colspan="3">Loading messages...</td></tr>';
     
-    const { data: messages, error } = await fetchData('notifications', '*', { message_type: 'system' }, 'created_at', false);
-    
-    if (error) { tbody.innerHTML = `<tr><td colspan="3">Error loading messages: ${error.message}</td></tr>`; return; }
+    try {
+        const { data: messages, error } = await sb.from('notifications')
+            .select('*')
+            .eq('message_type', 'system')
+            .order('created_at', { ascending: false });
 
-    tbody.innerHTML = '';
-    messages.forEach(m => {
-        const recipient = m.target_program || 'ALL Students';
-        const sendDate = new Date(m.created_at).toLocaleString();
+        if (error) throw error;
 
-        tbody.innerHTML += `<tr>
-            <td>${escapeHtml(recipient)}</td>
-            <td>${escapeHtml(m.message_content.substring(0, 80) + '...')}</td>
-            <td>${sendDate}</td>
-        </tr>`;
-    });
+        tbody.innerHTML = '';
+        if (!messages || messages.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="3">No messages found.</td></tr>';
+            return;
+        }
+
+        messages.forEach(m => {
+            const recipient = m.target_program || 'ALL Students';
+            const sendDate = new Date(m.created_at).toLocaleString();
+
+            tbody.innerHTML += `<tr>
+                <td>${escapeHtml(recipient)}</td>
+                <td>${escapeHtml(m.message.substring(0, 80) + (m.message.length > 80 ? '...' : ''))}</td>
+                <td>${sendDate}</td>
+            </tr>`;
+        });
+
+    } catch (err) {
+        console.error('Failed to load messages:', err);
+        tbody.innerHTML = `<tr><td colspan="3">Error loading messages: ${err.message}</td></tr>`;
+    }
 }
+
 
 /*******************************************************
  * 11. Resources Tab (Fully Corrected)
