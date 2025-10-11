@@ -74,7 +74,6 @@
     .login-link a:hover { text-decoration: underline; }
   </style>
 </head>
-
 <body>
   <div class="container">
     <img src="images/Logo_NCHSM.png" alt="NCHSM Logo">
@@ -103,10 +102,10 @@
 
       <div id="student-fields">
         <label for="student_id_number">Admission / Student ID</label>
-        <input type="text" id="student_id_number" placeholder="e.g. NCHSM2025/001">
+        <input type="text" id="student_id_number" placeholder="e.g. NCHSM2025/001" required>
         
         <label for="program_type">Program</label>
-        <select id="program_type">
+        <select id="program_type" required>
           <option value="">-- Select Your Program --</option>
           <option value="KRCHN">KRCHN Nursing</option>
           <option value="TIVET">TIVET Program</option>
@@ -115,10 +114,10 @@
 
       <div id="lecturer-fields" style="display: none;">
         <label for="staff_id">Staff ID</label>
-        <input type="text" id="staff_id" placeholder="e.g. NCHSM-LECT-001">
+        <input type="text" id="staff_id" placeholder="e.g. NCHSM-LECT-001" required>
 
         <label for="department">Department</label>
-        <select id="department">
+        <select id="department" required>
           <option value="">-- Select Department --</option>
           <option value="Nursing">Nursing</option>
           <option value="Clinical Medicine">Clinical Medicine</option>
@@ -151,7 +150,7 @@
     </div>
   </div>
 
- <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
   const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
@@ -184,6 +183,14 @@
     const password = document.getElementById('password').value.trim();
     const confirmPassword = document.getElementById('confirm_password').value.trim();
 
+    if (!role || !full_name || !email || !phone || !password || !confirmPassword) {
+      message.textContent = '❌ Please fill in all fields.';
+      message.classList.add('error');
+      registerBtn.disabled = false;
+      registerBtn.textContent = 'Register';
+      return;
+    }
+
     if (password !== confirmPassword) {
       message.textContent = '❌ Passwords do not match.';
       message.classList.add('error');
@@ -192,28 +199,39 @@
       return;
     }
 
-    // Only include fields if they have values
+    // Build metadata including role-specific fields
     const metadata = { full_name, role, phone };
     if (role === 'student') {
-      const student_id_number = document.getElementById('student_id_number')?.value.trim();
-      const program_type = document.getElementById('program_type')?.value;
-      if (student_id_number) metadata.student_id_number = student_id_number;
-      if (program_type) metadata.program_type = program_type;
+      const student_id_number = document.getElementById('student_id_number').value.trim();
+      const program_type = document.getElementById('program_type').value;
+      if (!student_id_number || !program_type) {
+        message.textContent = '❌ Please fill in all student fields.';
+        message.classList.add('error');
+        registerBtn.disabled = false;
+        registerBtn.textContent = 'Register';
+        return;
+      }
+      metadata.student_id_number = student_id_number;
+      metadata.program_type = program_type;
     } else if (role === 'lecturer') {
-      const staff_id = document.getElementById('staff_id')?.value.trim();
-      const department = document.getElementById('department')?.value;
-      if (staff_id) metadata.staff_id = staff_id;
-      if (department) metadata.department = department;
+      const staff_id = document.getElementById('staff_id').value.trim();
+      const department = document.getElementById('department').value;
+      if (!staff_id || !department) {
+        message.textContent = '❌ Please fill in all lecturer fields.';
+        message.classList.add('error');
+        registerBtn.disabled = false;
+        registerBtn.textContent = 'Register';
+        return;
+      }
+      metadata.staff_id = staff_id;
+      metadata.department = department;
     }
 
-    // Minimal signup with emailRedirectTo to avoid 500
+    // Supabase signup
     const { data, error } = await sb.auth.signUp({
       email,
       password,
-      options: {
-        data: metadata,
-        emailRedirectTo: 'https://nakurucollegeofhealthelearning.site/login.html'
-      }
+      options: { data: metadata, emailRedirectTo: 'https://nakurucollegeofhealthelearning.site/login.html' }
     });
 
     if (error) {
@@ -224,7 +242,7 @@
       return;
     }
 
-    // Insert into DB tables after successful signup
+    // Insert into DB tables
     if (data.user) {
       try {
         if (role === 'student') {
@@ -233,8 +251,8 @@
             full_name,
             email,
             phone,
-            admission_number: metadata.student_id_number || null,
-            course: metadata.program_type || null,
+            admission_number: metadata.student_id_number,
+            course: metadata.program_type,
             status: 'pending',
             block: null,
             intake_year: null
@@ -246,8 +264,8 @@
             full_name,
             email,
             phone,
-            staff_id: metadata.staff_id || null,
-            department: metadata.department || null,
+            staff_id: metadata.staff_id,
+            department: metadata.department,
             status: 'pending'
           }]);
           if (lecturerError) throw lecturerError;
