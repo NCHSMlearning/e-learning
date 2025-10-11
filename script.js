@@ -1430,11 +1430,11 @@ async function loadMessages() {
     });
 }
 
-
 /*******************************************************
- * 11. Resources Tab
+ * 11. Resources Tab (Fully Corrected)
  *******************************************************/
 
+// Handle upload form
 $('upload-resource-form')?.addEventListener('submit', async e => {
     e.preventDefault();
     const submitButton = e.submitter;
@@ -1447,90 +1447,127 @@ $('upload-resource-form')?.addEventListener('submit', async e => {
     const fileInput = $('resource-file');
     const title = $('resource-title').value.trim();
 
-    if (fileInput.files.length === 0 || !program || !intake || !block || !title) { 
-        showFeedback('Please select a file and all target fields.', 'error'); 
-        setButtonLoading(submitButton, false, originalText); 
-        return; 
+    if (!fileInput.files.length || !program || !intake || !block || !title) {
+        showFeedback('Please select a file and fill all required fields.', 'error');
+        setButtonLoading(submitButton, false, originalText);
+        return;
     }
 
     const file = fileInput.files[0];
-    const filePath = `${program}/${intake}/${block}/${title.replace(/ /g, '_')}_${file.name.replace(/ /g, '_')}`; 
+    const safeFileName = `${title.replace(/\s+/g, '_')}_${file.name.replace(/\s+/g, '_')}`;
+    const filePath = `${program}/${intake}/${block}/${safeFileName}`;
 
     try {
-        const { error } = await sb.storage.from(RESOURCES_BUCKET).upload(filePath, file, { 
-            cacheControl: '3600', 
-            upsert: true,
-            contentType: file.type,
-            metadata: {
+        // 1️⃣ Upload file to Supabase Storage
+        const { error: uploadError } = await sb.storage
+            .from(RESOURCES_BUCKET)
+            .upload(filePath, file, {
+                cacheControl: '3600',
+                upsert: true,
+                contentType: file.type
+            });
+
+        if (uploadError) throw uploadError;
+
+        // 2️⃣ Get the public URL
+        const { data: { publicUrl } } = sb.storage
+            .from(RESOURCES_BUCKET)
+            .getPublicUrl(filePath);
+
+        // 3️⃣ Insert file metadata into 'resources' table
+        const { error: dbError } = await sb
+            .from('resources')
+            .insert({
                 title: title,
-                program: program,
-                intake: intake,
-                block: block,
-                uploaded_by: currentUserProfile.full_name
-            }
-        });
-        if (error) throw error;
-        showFeedback(`File "${file.name}" uploaded successfully!`);
-        e.target.reset(); loadResources();
-    } catch (e) {
-        showFeedback(`File upload failed: ${e.message}`, 'error');
+                program_type: program,
+                file_path: filePath,
+                file_name: file.name,
+                file_url: publicUrl,
+                uploaded_by: currentUserProfile?.full_name || 'Admin',
+                created_at: new Date().toISOString()
+            });
+
+        if (dbError) throw dbError;
+
+        showFeedback(`✅ File "${file.name}" uploaded successfully!`);
+        e.target.reset();
+        loadResources();
+    } catch (err) {
+        console.error('Upload failed:', err);
+        showFeedback(`❌ Upload failed: ${err.message}`, 'error');
     } finally {
         setButtonLoading(submitButton, false, originalText);
     }
 });
 
+// Load resources from Supabase table
 async function loadResources() {
-    const tableBody = $('resources-list'); 
-    tableBody.innerHTML = '<tr><td colspan="7">Loading resources...</td></tr>';
-    
+    const tableBody = $('resources-list');
+    tableBody.innerHTML = '<tr><td colspan="6">Loading resources...</td></tr>';
+
     try {
-        const { data: { contents: files }, error: listError } = await sb.storage
-            .from(RESOURCES_BUCKET).list('', { limit: 1000, offset: 0, sortBy: { column: 'name', order: 'asc' } });
+        const { data: resources, error } = await sb
+            .from('resources')
+            .select('id, title, program_type, file_path, created_at, uploaded_by, file_url')
+            .order('created_at', { ascending: false });
 
-        if (listError) throw listError;
-        
+        if (error) throw error;
+
         tableBody.innerHTML = '';
-        if (!files || files.length === 0) { tableBody.innerHTML = '<tr><td colspan="7">No resources found.</td></tr>'; return; }
 
-        files.forEach(file => {
-            if (file.name === '.emptyFolderPlaceholder' || file.id === undefined) return;
-            
-            const { data: { publicUrl } } = sb.storage.from(RESOURCES_BUCKET).getPublicUrl(file.name);
-            const lastModified = new Date(file.lastModified).toLocaleString();
-            
-            const parts = file.name.split('/');
-            const program = parts[0] || 'N/A';
-            const intake = parts[1] || 'N/A';
-            const block = parts[2] || 'N/A';
-            const fileName = parts.slice(3).join('/') || file.name;
+        if (!resources?.length) {
+            tableBody.innerHTML = '<tr><td colspan="6">No resources found.</td></tr>';
+            return;
+        }
 
-            tableBody.innerHTML += `<tr>
-                <td>${escapeHtml(program)}</td>
-                <td>${escapeHtml(fileName)}</td>
-                <td>${escapeHtml(intake)}</td>
-                <td>${escapeHtml(block)}</td>
-                <td>${escapeHtml(file.metadata?.uploaded_by || 'Admin')}</td>
-                <td>${lastModified}</td>
-                <td>
-                    <a href="${publicUrl}" target="_blank" class="btn-action">Download</a>
-                    <button class="btn btn-delete" onclick="deleteResource('${escapeHtml(file.name, true)}')">Delete</button>
-                </td>
-            </tr>`;
+        resources.forEach(resource => {
+            const date = new Date(resource.created_at).toLocaleString();
+
+            tableBody.innerHTML += `
+                <tr>
+                    <td>${escapeHtml(resource.program_type || 'N/A')}</td>
+                    <td>${escapeHtml(resource.title || 'Untitled')}</td>
+                    <td>${escapeHtml(resource.uploaded_by || 'Unknown')}</td>
+                    <td>${date}</td>
+                    <td>
+                        <a href="${escapeHtml(resource.file_url)}" target="_blank" class="btn-action">Download</a>
+                        <button class="btn btn-delete" onclick="deleteResource('${escapeHtml(resource.file_path, true)}', ${resource.id})">Delete</button>
+                    </td>
+                </tr>
+            `;
         });
+
     } catch (e) {
-        tableBody.innerHTML = `<tr><td colspan="7">Error listing resources: ${e.message}</td></tr>`;
+        console.error('Error loading resources:', e);
+        tableBody.innerHTML = `<tr><td colspan="6">Error loading resources: ${e.message}</td></tr>`;
     }
-    filterTable('resource-search', 'resources-list', [0, 1]); 
+
+    filterTable('resource-search', 'resources-list', [0, 1]);
 }
 
-async function deleteResource(fileName) {
-    if (!confirm(`Are you sure you want to delete "${fileName}"? This cannot be undone.`)) return;
+// Delete resource from both Storage and Table
+async function deleteResource(filePath, id) {
+    if (!confirm(`Are you sure you want to delete this file? This action cannot be undone.`)) return;
+
     try {
-        const { error } = await sb.storage.from(RESOURCES_BUCKET).remove([fileName]);
-        if (error) throw error;
-        showFeedback('Resource deleted successfully!'); loadResources();
+        // Remove file from storage
+        const { error: storageError } = await sb.storage
+            .from(RESOURCES_BUCKET)
+            .remove([filePath]);
+        if (storageError) throw storageError;
+
+        // Remove metadata from database
+        const { error: dbError } = await sb
+            .from('resources')
+            .delete()
+            .eq('id', id);
+        if (dbError) throw dbError;
+
+        showFeedback('✅ Resource deleted successfully.');
+        loadResources();
     } catch (e) {
-        showFeedback(`Failed to delete resource: ${e.message}`, 'error');
+        console.error('Delete failed:', e);
+        showFeedback(`❌ Failed to delete resource: ${e.message}`, 'error');
     }
 }
 
