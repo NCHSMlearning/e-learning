@@ -902,35 +902,44 @@ async function handleAddSession(e) {
     const originalText = submitButton.textContent;
     setButtonLoading(submitButton, true, originalText);
 
-    const session_type = $('session_type').value;
+    const session_type = $('session_type').value.trim();
     const session_title = $('session_title').value.trim();
     const session_date = $('session_date').value;
-    const session_time = $('session_time').value;
-    const target_program = $('session_program').value;
+    const session_time = $('session_time').value || null;
+    const target_program = $('session_program').value || null;
+    const program_type = $('session_program_type').value;  // make sure you have this input
     const intake_year = $('session_intake').value;
     const block_term = $('session_block_term').value;
     const course_id = $('session_course_id').value || null;
 
-    if (!session_type || !session_title || !session_date || !target_program || !block_term) {
+    if (!session_type || !session_title || !session_date || !program_type || !intake_year || !block_term) {
         showFeedback('Please fill in all required fields.', 'error');
         setButtonLoading(submitButton, false, originalText);
         return;
     }
 
     const sessionData = {
-        session_type, session_title, 
-        session_date, session_time: session_time || null, 
-        target_program, intake_year, block_term, course_id
+        session_type,
+        session_title,
+        title: session_title,         // required
+        session_date,
+        session_time,
+        target_program,
+        program_type,                 // required
+        intake_year,
+        block_term,
+        course_id,
+        created_at: new Date().toISOString()
     };
 
     const { error } = await sb.from('scheduled_sessions').insert([sessionData]);
-    
+
     if (error) {
-        showFeedback(`Failed to schedule session: ${error.message}`, 'error');
+        showFeedback(`❌ Failed to schedule session: ${error.message}`, 'error');
     } else {
-        showFeedback('Session scheduled successfully!');
-        e.target.reset(); 
-        loadScheduledSessions(); 
+        showFeedback('✅ Session scheduled successfully!');
+        e.target.reset();
+        loadScheduledSessions();
         renderFullCalendar();
     }
 
