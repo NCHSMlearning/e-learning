@@ -1101,7 +1101,12 @@ async function loadCourses() {
 }
 
 async function loadExams() {
-    const tableBody = document.getElementById('exams-table').querySelector('tbody');
+    const tableBody = document.getElementById('exams-table-body'); // make sure <tbody id="exams-table-body"> exists
+    if (!tableBody) {
+        console.error("Missing <tbody id='exams-table-body'> in HTML");
+        return;
+    }
+
     tableBody.innerHTML = '<tr><td colspan="3">Loading exam schedule...</td></tr>';
 
     try {
@@ -1110,31 +1115,14 @@ async function loadExams() {
         const intakeYear = currentUserProfile?.intake_year;
 
         if (!program || !block || !intakeYear) {
-            tableBody.innerHTML = '<tr><td colspan="3">Missing enrollment details.</td></tr>';
+            tableBody.innerHTML = '<tr><td colspan="3">Incomplete profile. Cannot load exams.</td></tr>';
             cachedExams = [];
             return;
         }
 
-       async function loadExams() {
-    try {
-        const tableBody = document.getElementById('exams-table-body');
-        if (!tableBody) {
-            console.error("Missing <tbody id='exams-table-body'> in HTML");
-            return;
-        }
-
-        const program = currentUserProfile?.program;
-        const block = currentUserProfile?.block;
-        const intakeYear = currentUserProfile?.intake_year;
-
-        if (!program || !block || !intakeYear) {
-            tableBody.innerHTML = '<tr><td colspan="3">Incomplete profile. Cannot load exams.</td></tr>';
-            return;
-        }
-
         const { data: exams, error } = await sb
-            .from('exams_with_courses') // make sure table exists
-            .select('exam_name, exam_date, status') // update columns if they differ
+            .from('exams_with_courses') 
+            .select('exam_name, exam_date, status')
             .eq('program', program)
             .eq('block', block)
             .eq('intake_year', intakeYear)
@@ -1162,10 +1150,7 @@ async function loadExams() {
 
     } catch (error) {
         console.error("Failed to load exams:", error);
-        const tableBody = document.getElementById('exams-table-body');
-        if (tableBody) {
-            tableBody.innerHTML = `<tr><td colspan="3" style="color: #EF4444;">Error loading exams: ${error.message}</td></tr>`;
-        }
+        tableBody.innerHTML = `<tr><td colspan="3" style="color:#EF4444;">Error loading exams: ${error.message}</td></tr>`;
         cachedExams = [];
     }
 
