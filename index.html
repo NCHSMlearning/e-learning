@@ -45,6 +45,7 @@
 
         /* Main Content */
         .main { flex: 1; padding: 30px; overflow-y: auto; }
+        /* UPDATED: Header ID for dynamic name */
         header h1 { margin: 0; font-size: 2.2rem; color: #4C1D95; }
         .subtitle { color: #6B7280; margin-bottom: 25px; }
 
@@ -96,6 +97,14 @@
         th, td { padding: 15px; border-bottom: 1px solid #E2E8F0; text-align: left; }
         th { background-color: #E5E7EB; color: #1F2937; }
         tr:hover { background-color: #F8FAFC; }
+        
+        /* Calendar Specific Styles */
+        #calendar-table th.session-type-col { width: 15%; }
+        #calendar-table th.date-col { width: 15%; }
+        #calendar-table td.Clinical { background-color: #fce7f3; } /* Light Pink */
+        #calendar-table td.Class { background-color: #e0f2f1; } /* Light Teal */
+        #calendar-table td.Exam { background-color: #fef3c7; } /* Light Yellow */
+
 
         /* Forms */
         form input, form select, form button, form textarea {
@@ -222,6 +231,7 @@
             <ul class="nav">
                 <li><a href="#" data-tab="dashboard" class="active">🏠 Dashboard</a></li>
                 <li><a href="#" data-tab="profile">👤 Profile</a></li>
+                <li><a href="#" data-tab="calendar">📅 Academic Calendar</a></li> 
                 <li><a href="#" data-tab="courses">📚 My Courses</a></li>
                 <li><a href="#" data-tab="attendance">✅ Attendance</a></li>
                 <li><a href="#" data-tab="cats">📝 CATS/Exams</a></li>
@@ -233,16 +243,16 @@
 
         <main class="main">
             <header>
-                <h1>Welcome, Student!</h1>
-                <p class="subtitle">Access your learning tools and updates</p>
+                <h1 id="welcome-header">Hello, Student!</h1>
+                <p class="subtitle">Your academic resources and tools.</p>
             </header>
 
             <section id="dashboard" class="tab-content active">
                 
                 <div id="welcome-banner">
-                    <span class="info-icon">&#x2139;</span>
-                    <strong>ADMIN MESSAGE:</strong> 
-                    <span id="admin-welcome-message">Loading message...</span>
+                    <span class="info-icon">📣</span>
+                    <strong>THE OFFICIAL ANNOUNCEMENT IS HERE:</strong> 
+                    <span id="student-welcome-message">Loading message...</span>
                 </div>
                 
                 <h2 style="margin-top: 30px; color: #4C1D95;">Quick Snapshot</h2>
@@ -335,10 +345,38 @@
                     </div>
                 </form>
             </section>
+
+            <section id="calendar" class="tab-content">
+                <h2 style="color: #4C1D95;">Academic Calendar</h2>
+                <p class="subtitle">A unified view of your scheduled sessions, clinical rotations, and exams.</p>
+
+                <div class="calendar-controls" style="margin-bottom: 20px;">
+                    <label for="calendar-filter">Filter by Type:</label>
+                    <select id="calendar-filter" onchange="loadAcademicCalendar()">
+                        <option value="all">Show All</option>
+                        <option value="Clinical">Clinical Rotations</option>
+                        <option value="Class">Scheduled Sessions</option>
+                        <option value="Exam">Exams/CATS</option>
+                    </select>
+                </div>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="date-col">Date & Time</th>
+                            <th>Event / Details</th>
+                            <th class="session-type-col">Type</th>
+                        </tr>
+                    </thead>
+                    <tbody id="calendar-table">
+                        <tr><td colspan="3">Loading academic schedule...</td></tr>
+                    </tbody>
+                </table>
+            </section>
             
             <section id="courses" class="tab-content">
                 <h2 style="color: #4C1D95;">My Courses (Real-Time Enrollment)</h2>
-                <p>Courses shown here are filtered by your **Program**, **Block**, and **Intake Year** for relevance.</p>
+                <p>Courses shown here are filtered by your *Program, **Block, and **Intake Year* for relevance.</p>
                 <table>
                     <thead><tr><th>Course Name</th><th>Status</th></tr></thead>
                     <tbody id="courses-table">
@@ -362,20 +400,20 @@
                     <div class="control-group" id="target-control-group">
                         <label for="attendance-target" id="target-label">Department/Course:</label>
                         <select id="attendance-target">
-                            <option>Select Session Type first...</option>
+                            <option value="">Select Session Type first...</option>
                         </select>
                     </div>
 
                     <button id="check-in-button" onclick="geoCheckIn()">Check In Now</button>
                     
-                    <p id="geo-message">Select a **Session Type** and then a specific **Department or Course** to check in at your current GPS location and time.</p>
+                    <p id="geo-message">Select a *Session Type* and then a specific *Department or Course* to check in at your current GPS location and time.</p>
                 </div>
 
-                <h3 style="color: #4C1D95;">Geo Attendance History (Check-in Logs)</h3>
+                <h3 style="color: #4C1D95;">Past Attendance History (Check-in Logs)</h3>
                 <table>
-                    <thead><tr><th>Time</th><th>Session Type</th><th>Target</th><th>Accuracy (m)</th><th>Verified by Admin</th></tr></thead>
+                    <thead><tr><th>Time</th><th>Session Type</th><th>Target</th><th>Location</th><th>Accuracy (m)</th><th>Verified</th></tr></thead>
                     <tbody id="geo-attendance-history">
-                        <tr><td colspan="5">Loading geo check-in history...</td></tr>
+                        <tr><td colspan="6">Loading geo check-in history...</td></tr>
                     </tbody>
                 </table>
             </section>
@@ -422,40 +460,28 @@
     // ** LOCATIONIQ CONFIGURATION (Geocoding API) **
     const LOCATIONIQ_API_KEY = 'pk.cbe61eae35ecbe1d1d682c347d81381c'; 
     const LOCATIONIQ_API_URL = 'https://us1.locationiq.com/v1/reverse.php';
-
-    // ** STATIC DATA (Clinical Departments/Areas) **
-    const MOCK_HOSPITAL_DEPARTMENTS = [
-        { id: '1', name: 'Maternity Department' },
-        { id: '2', name: 'Male Surgical' },
-        { id: '3', name: 'Female Surgical' },
-        { id: '4', name: 'Male Medical' },
-        { id: '5', name: 'Female Medical' },
-        { id: '6', name: 'Peaditrics' },
-        { id: '7', name: 'Psychiatry' },
-        { id: '8', name: 'ICU' },
-        { id: '9', name: 'Outpatient' },
-        { id: '10', name: 'Oncology' },
-        { id: '11', name: 'NBU' }, 
-        { id: '12', name: 'Gynecology' },
-        { id: '13', name: 'Community Health' },
-    ];
     
     // ** FALLBACK LOCATION **
     const FALLBACK_LAT = -1.286389; 
     const FALLBACK_LON = 36.817223;
     const FALLBACK_ACCURACY = 500; 
 
+    // ** SUPABASE TABLE NAMES FOR WELCOME MESSAGE **
+    const SETTINGS_TABLE = 'app_settings'; // Your system settings table
+    const MESSAGE_KEY = 'student_welcome_message'; // The key for the welcome message
+
     let currentUserId = null;
     let currentUserProfile = null;
-    // Holds courses loaded from Supabase. Used by both 'My Courses' and 'Attendance' dropdown.
     let cachedCourses = []; 
     let cachedExams = [];
+    let cachedClinicalAreas = []; // Cache for clinical targets
+    let cachedSchedule = []; // Cache for combined academic calendar
 
     // DOM Elements
     const geoMessage = document.getElementById('geo-message');
     const sessionTypeSelect = document.getElementById('session-type');
     const attendanceTargetSelect = document.getElementById('attendance-target');
-    const adminWelcomeMessage = document.getElementById('admin-welcome-message'); 
+    const welcomeHeader = document.getElementById('welcome-header');
     
     // ... other DOM elements
 
@@ -467,7 +493,7 @@
 
     function showTab(tabId) {
         navLinks.forEach(l => l.classList.remove('active'));
-        const activeLink = document.querySelector(`.nav a[data-tab="${tabId}"]`);
+        const activeLink = document.querySelector(.nav a[data-tab="${tabId}"]);
         if(activeLink) activeLink.classList.add('active');
 
         tabs.forEach(tab => tab.classList.remove('active'));
@@ -480,19 +506,18 @@
             loadGeoAttendanceHistory(currentUserId); 
             updateTargetSelect();
         }
-        // CRITICAL: Ensure load order for dashboard dependencies
         if (tabId === 'dashboard' && currentUserId) {
-            loadWelcomeMessage();
+            loadWelcomeDetails(); // UPDATED: Load name and message
             loadCourses();
             loadExams();
             loadResources();
-            // Metrics relies on all the above to populate the counts
             setTimeout(() => loadDashboardMetrics(currentUserId), 500); 
         }
         if (tabId === 'courses' && currentUserId) loadCourses(); 
         if (tabId === 'resources' && currentUserId) loadResources(); 
         if (tabId === 'cats' && currentUserId) loadExams();
         if (tabId === 'messages' && currentUserId) loadStudentMessages(); 
+        if (tabId === 'calendar' && currentUserId) loadAcademicCalendar(); // NEW: Calendar load
     }
 
     navLinks.forEach(link => {
@@ -503,7 +528,6 @@
     });
 
     async function logout() {
-        // Disconnect from real-time channels gracefully
         sb.realtime.channels.forEach(channel => sb.removeChannel(channel)); 
         await sb.auth.signOut();
         window.location.href = "login.html"; // Redirect to your login page
@@ -513,21 +537,60 @@
     // *** 3. CORE DATA AND DASHBOARD FUNCTIONS ***
     // *************************************************************************
     
-    async function loadWelcomeMessage() {
-        adminWelcomeMessage.textContent = 'Loading message...';
-        
-        const { data, error } = await sb
-            .from('system_settings') // Assuming a table named 'system_settings'
-            .select('setting_value')
-            .eq('setting_key', 'welcome_message')
-            .single();
-
-        if (error || !data || !data.setting_value) {
-            adminWelcomeMessage.textContent = 'Welcome to the NCHSM Student Dashboard! Stay updated with your studies.';
-            return;
+    // UPDATED: Function to load both the name and the admin message
+    async function loadWelcomeDetails() {
+        // 1. Update Name in Header
+        if (currentUserProfile && currentUserProfile.full_name) {
+            const firstName = currentUserProfile.full_name.split(' ')[0] || 'Student';
+            welcomeHeader.textContent = Hello, ${firstName}!;
+        } else {
+             welcomeHeader.textContent = Hello, Student!;
         }
 
-        adminWelcomeMessage.textContent = data.setting_value;
+        // 2. Load Admin Message
+        await loadStudentWelcomeMessage();
+    }
+    
+    // NEW: Function to load the live admin communication message
+    async function loadStudentWelcomeMessage() {
+        const messageDiv = document.getElementById('student-welcome-message');
+        if (!messageDiv) return;
+
+        messageDiv.textContent = 'Loading official announcement...';
+
+        // 1. Fetch initial message
+        const { data, error } = await sb
+            .from(SETTINGS_TABLE)
+            .select('value')
+            .eq('key', MESSAGE_KEY)
+            .single();
+
+        if (!error && data) {
+            messageDiv.innerHTML = data.value;
+        } else {
+            messageDiv.innerHTML =
+                'Welcome to the Student Portal! Stay informed and use the navigation on the left. (Default Message)';
+        }
+
+        // 2. Listen for live updates (Realtime setup)
+        sb.channel('student_welcome_updates')
+            .on(
+                'postgres_changes',
+                {
+                    event: 'UPDATE', 
+                    schema: 'public',
+                    table: SETTINGS_TABLE,
+                    filter: key=eq.${MESSAGE_KEY},
+                },
+                (payload) => {
+                    const newValue = payload.new?.value;
+                    if (newValue) {
+                        messageDiv.innerHTML = newValue;
+                        console.log("Admin message updated in real-time.");
+                    }
+                }
+            )
+            .subscribe();
     }
     
     async function loadDashboardMetrics(userId) {
@@ -543,31 +606,26 @@
              const now = new Date();
              const upcomingExam = cachedExams.find(e => new Date(e.exam_date) >= now);
              if (upcomingExam) {
-                 nextExamText = `${new Date(upcomingExam.exam_date).toLocaleDateString()} (${upcomingExam.exam_name})`;
+                 nextExamText = ${new Date(upcomingExam.exam_date).toLocaleDateString()} (${upcomingExam.exam_name});
              } else {
                  nextExamText = 'Semester Complete';
              }
         }
         document.getElementById('dashboard-upcoming-exam').textContent = nextExamText;
 
+        // --- 4. Load New Resources (Updated by loadResources) ---
+        // Handled in loadResources
 
-        // --- 4. Load New Resources (Updated by loadResources - assuming a variable/cache) ---
-        // loadResources will handle updating the metric, if not, use a simple mock/placeholder
-        
         // --- 5. Conditional Action Required Section ---
         const passportCard = document.getElementById('action-passport');
-        
-        // FIX: Replaced optional chaining with standard check
         let profileIncomplete = !(currentUserProfile && currentUserProfile.passport_url); 
         
         passportCard.style.display = profileIncomplete ? 'block' : 'none';
         
-        // If the 'Action Required' title exists, we might toggle its visibility
         const actionsContainer = document.getElementById('dashboard-actions');
         const actionTitle = document.getElementById('actions-title');
         
         if (actionTitle) {
-            // Note: This is an over-simplification. Needs better visibility check if more cards added.
             if (!profileIncomplete && actionsContainer.children.length <= 1) { 
                  actionTitle.style.display = 'none';
             } else {
@@ -577,27 +635,27 @@
     }
     
     // *************************************************************************
-    // *** 4. AUTHENTICATION AND PROFILE MANAGEMENT (FIXED) ***
+    // *** 4. AUTHENTICATION AND PROFILE MANAGEMENT ***
     // *************************************************************************
 
     async function checkAuthAndLoad() {
-        // Get the current user session from Supabase Auth
         const { data: { user } } = await sb.auth.getUser();
 
         if (user) {
             currentUserId = user.id;
         
-            // CRITICAL: Load profile first to get enrollment filters
             await loadProfile(currentUserId); 
             
-            // Start loading all data
+            // CRITICAL: Load all data sources
             await loadCourses(); 
             await loadExams();
             await loadResources(); 
+            await loadClinicalTargets(); // NEW: Load clinical areas
             
-            // Final step: switch to dashboard and load metrics
+            // Update name and load admin message
+            await loadWelcomeDetails();
+
             showTab('dashboard');
-            // The showTab('dashboard') calls the sequence, but we call the final metric load for safety
             setTimeout(() => loadDashboardMetrics(currentUserId), 500);
 
         } else {
@@ -618,7 +676,6 @@
     async function loadProfile(userId) {
         profileStatus.textContent = 'Loading profile...';
         
-        // Fetch ALL data from the profiles table for the current user
         const { data: profile, error } = await sb
             .from('profiles')
             .select('*')
@@ -631,14 +688,10 @@
             if (error.code === 'PGRST116' || error.message.includes('permission denied')) {
                 profileStatus.textContent = 'Profile data missing or restricted. Contact Admin.';
                 currentUserProfile = { 
-                    first_name: 'Student', 
                     full_name: 'Unknown Student', 
-                    email: 'N/A', 
                     program: 'N/A', 
                     block: 'N/A', 
                     intake_year: 'N/A', 
-                    student_id_no: 'N/A', 
-                    phone: 'N/A'
                 };
             } else {
                 profileStatus.textContent = 'Error loading profile details.';
@@ -649,7 +702,6 @@
             profileStatus.textContent = '';
         }
 
-        // Populate form fields with the LATEST data from Supabase
         document.getElementById('profile-student-id').value = currentUserProfile.student_id_no || 'N/A';
         document.getElementById('profile-name').value = currentUserProfile.full_name || 'N/A';
         document.getElementById('profile-email').value = currentUserProfile.email || 'N/A';
@@ -658,7 +710,6 @@
         document.getElementById('profile-block').value = currentUserProfile.block || 'N/A';
         document.getElementById('profile-intake-year').value = currentUserProfile.intake_year || 'N/A';
         
-        // FIX: Removed Optional Chaining from here and used standard check
         let photoUrl = 'https://via.placeholder.com/150x150?text=NO+PHOTO';
         if (currentUserProfile.passport_url) {
             const publicUrlResponse = sb.storage.from('passports').getPublicUrl(currentUserProfile.passport_url);
@@ -668,8 +719,7 @@
         }
         document.getElementById('passport-preview').src = photoUrl;
         
-        // FIX: Removed Optional Chaining
-        document.querySelector('header h1').textContent = `Welcome, ${(currentUserProfile && currentUserProfile.first_name) || 'Student'}!`;
+        document.querySelector('header h1').textContent = Welcome, ${(currentUserProfile && currentUserProfile.full_name.split(' ')[0]) || 'Student'}!;
 
         toggleProfileEdit(false); 
         if (!currentUserProfile.passport_url) {
@@ -678,7 +728,6 @@
     }
     
     function toggleProfileEdit(enable) {
-        // Only allow student to edit name and phone. Admin updates the rest.
         const editableFields = ['profile-name', 'profile-phone']; 
         
         editableFields.forEach(id => {
@@ -686,7 +735,6 @@
             if (input) input.readOnly = !enable;
         });
         
-        // Crucial Admin-set fields remain read-only always
         document.getElementById('profile-student-id').readOnly = true;
         document.getElementById('profile-email').readOnly = true;
         document.getElementById('profile-program').readOnly = true;
@@ -696,7 +744,6 @@
         editProfileButton.style.display = enable ? 'none' : 'block';
         saveProfileButton.style.display = enable ? 'block' : 'none';
         
-        // FIX: Removed Optional Chaining
         if (enable || !(currentUserProfile && currentUserProfile.passport_url)) {
             uploadLabel.style.display = 'block';
         } else {
@@ -725,7 +772,7 @@
             .eq('id', currentUserId);
 
         if (error) {
-            profileStatus.textContent = `Error saving profile: ${error.message}`;
+            profileStatus.textContent = Error saving profile: ${error.message};
         } else {
             profileStatus.textContent = 'Profile updated successfully!';
             loadProfile(currentUserId); 
@@ -752,14 +799,14 @@
         uploadButton.disabled = true;
 
         const fileExt = file.name.split('.').pop();
-        const filePath = `${currentUserId}.${fileExt}`;
+        const filePath = ${currentUserId}.${fileExt};
 
         const { error: uploadError } = await sb.storage
             .from('passports')
             .upload(filePath, file, { cacheControl: '3600', upsert: true });
 
         if (uploadError) {
-            profileStatus.textContent = `Upload failed: ${uploadError.message}`;
+            profileStatus.textContent = Upload failed: ${uploadError.message};
             uploadButton.disabled = false;
             return;
         }
@@ -770,7 +817,7 @@
             .eq('id', currentUserId);
 
         if (updateError) {
-            profileStatus.textContent = `Database update failed: ${updateError.message}`;
+            profileStatus.textContent = Database update failed: ${updateError.message};
         } else {
             profileStatus.textContent = 'Photo uploaded and saved successfully!';
             passportFileInput.value = ''; 
@@ -784,6 +831,38 @@
     // *************************************************************************
     // *** 5. ATTENDANCE LOGIC ***
     // *************************************************************************
+    
+    // NEW: Load Clinical Areas from Supabase
+    async function loadClinicalTargets() {
+        if (!currentUserProfile || !currentUserProfile.program || !currentUserProfile.block || !currentUserProfile.intake_year) {
+            cachedClinicalAreas = [];
+            return;
+        }
+        
+        const program = currentUserProfile.program;
+        const block = currentUserProfile.block;
+        const intakeYear = currentUserProfile.intake_year;
+
+        try {
+             // Fetch areas specific to the student's cohort from the 'clinical_areas' table
+            const { data, error } = await sb
+                .from('clinical_areas')
+                .select('id, name')
+                .eq('program', program)
+                .eq('intake_year', intakeYear)
+                .eq('block', block)
+                .order('name');
+
+            if (error) throw error;
+            
+            cachedClinicalAreas = data.map(area => ({ id: area.id, name: area.name }));
+            
+        } catch (error) {
+            console.error("Error loading clinical areas:", error);
+            cachedClinicalAreas = [];
+        }
+    }
+
 
     function updateTargetSelect() {
         const sessionType = sessionTypeSelect.value;
@@ -792,21 +871,20 @@
         let targetList = [];
         let label = 'Department/Course:';
 
-        // Logic: Clinical Session uses Departments
+        // Logic: Clinical Session uses DYNAMIC Clinical Areas
         if (sessionType === 'Clinical') {
-            targetList = MOCK_HOSPITAL_DEPARTMENTS.map(d => ({ 
+            targetList = cachedClinicalAreas.map(d => ({ 
                 id: d.id, 
                 name: d.name, 
-                text: `${d.name} (Clinical)` 
+                text: ${d.name} (Clinical) 
             }));
             label = 'Department/Area:';
         // Logic: On Class Session uses real-time loaded courses
         } else if (sessionType === 'Class') {
-            // Use the courses loaded from Supabase
             targetList = cachedCourses.map(c => ({ 
                 id: c.id, 
                 name: c.name, 
-                text: `${c.code ? c.code + ' - ' : ''}${c.name} (Class)` 
+                text: ${c.code ? c.code + ' - ' : ''}${c.name} (Class) 
             }));
             label = 'Course/Subject:';
         }
@@ -814,38 +892,45 @@
         document.getElementById('target-label').textContent = label;
 
         if (targetList.length === 0) {
-            const message = sessionType === 'Class' ? 'No active courses found. Please check My Courses.' : 'No clinical targets available.';
-            attendanceTargetSelect.innerHTML = `<option>${message}</option>`;
+            const message = sessionType === 'Class' ? 'No active courses found.' : 'No clinical areas assigned to your block.';
+            attendanceTargetSelect.innerHTML = <option value="">${message}</option>;
         } else {
+             const defaultOption = document.createElement('option');
+             defaultOption.value = '';
+             defaultOption.textContent = -- Select a ${label.replace(':', '')} --;
+             attendanceTargetSelect.appendChild(defaultOption);
+             
             targetList.forEach(target => {
                 const option = document.createElement('option');
-                option.value = `${target.id}|${target.name}`; 
+                option.value = ${target.id}|${target.name}; 
                 option.textContent = target.text;
                 attendanceTargetSelect.appendChild(option);
             });
         }
-        geoMessage.innerHTML = `Please select a specific **${label.replace(':', '')}** to check in.`;
+        geoMessage.innerHTML = Please select a specific **${label.replace(':', '')}** to check in.;
     }
 
-    // GeoCheckIn implementation
+    // UPDATED: GeoCheckIn implementation to enforce high accuracy and save friendly location name
     async function geoCheckIn() {
         const sessionType = sessionTypeSelect.value;
         const targetSelect = attendanceTargetSelect.value;
         const checkInTime = new Date().toISOString();
         const button = document.getElementById('check-in-button');
         
-        if (!sessionType || !targetSelect || targetSelect.includes('Select Session Type first') || targetSelect.includes('No targets available')) {
+        if (!sessionType || !targetSelect || targetSelect === '') {
             geoMessage.textContent = 'Error: Please select both a Session Type and a valid Department/Course.';
             return;
         }
 
         button.disabled = true;
-        geoMessage.textContent = 'Attempting to get location and check in...';
+        geoMessage.textContent = 'Attempting to get *high-accuracy location* and check in...';
 
         const getLocation = () => new Promise((resolve, reject) => {
             if (!navigator.geolocation) {
                 return resolve({ lat: FALLBACK_LAT, lon: FALLBACK_LON, acc: FALLBACK_ACCURACY, friendly: 'Fallback Location (Geolocation Disabled)' });
             }
+            
+            // Enforce High Accuracy GPS
             navigator.geolocation.getCurrentPosition(
                 (pos) => resolve({ 
                     lat: pos.coords.latitude, 
@@ -854,29 +939,36 @@
                     friendly: null 
                 }),
                 (err) => {
-                    console.warn(`Geolocation error (${err.code}): ${err.message}. Using fallback.`);
+                    console.warn(Geolocation error (${err.code}): ${err.message}. Using fallback.);
                     resolve({ lat: FALLBACK_LAT, lon: FALLBACK_LON, acc: FALLBACK_ACCURACY, friendly: 'Fallback Location (GPS Error)' });
                 },
-                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                { 
+                    enableHighAccuracy: true, // Request the highest accuracy possible
+                    timeout: 7000,           // Wait up to 7 seconds for a fix
+                    maximumAge: 0            // Don't use a cached position
+                }
             );
         });
 
         try {
             let location = await getLocation();
 
+            // Fetch Friendly Name via LocationIQ
             if (location.friendly === null) {
-                const geocodeUrl = `${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${location.lat}&lon=${location.lon}&format=json`;
+                const geocodeUrl = ${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${location.lat}&lon=${location.lon}&format=json;
                 const response = await fetch(geocodeUrl);
                 if (response.ok) {
                     const geoData = await response.json();
-                    location.friendly = geoData.display_name || `Lat: ${location.lat.toFixed(4)}, Lon: ${location.lon.toFixed(4)}`;
+                    // CRITICAL: Save the friendly location name
+                    location.friendly = geoData.display_name || Lat: ${location.lat.toFixed(4)}, Lon: ${location.lon.toFixed(4)};
                 } else {
-                    location.friendly = `Geocoding Failed. Lat: ${location.lat.toFixed(4)}, Lon: ${location.lon.toFixed(4)}`;
+                    location.friendly = Geocoding Failed. Lat: ${location.lat.toFixed(4)}, Lon: ${location.lon.toFixed(4)};
                 }
             }
             
             const [targetId, targetName] = targetSelect.split('|');
 
+            // CRITICAL: Insert 'location.friendly' into the log table
             const { error } = await sb
                 .from('geo_attendance_logs')
                 .insert({
@@ -888,9 +980,8 @@
                     latitude: location.lat,
                     longitude: location.lon,
                     accuracy_m: location.acc,
-                    location_friendly_name: location.friendly,
+                    location_friendly_name: location.friendly, 
                     is_verified: false,
-                    // FIX: Removed optional chaining
                     program: currentUserProfile ? currentUserProfile.program : null, 
                     block: currentUserProfile ? currentUserProfile.block : null, 
                     intake_year: currentUserProfile ? currentUserProfile.intake_year : null
@@ -898,38 +989,39 @@
 
             if (error) {
                 console.error("Check-in failed:", error);
-                geoMessage.textContent = `Check-in failed: Error: ${error.message}`;
+                geoMessage.textContent = Check-in failed: Error: ${error.message};
             } else {
-                geoMessage.textContent = `Check-in successful! Logged at ${new Date(checkInTime).toLocaleTimeString()} near ${location.friendly}.`;
+                geoMessage.textContent = Check-in successful! Logged at ${new Date(checkInTime).toLocaleTimeString()} near **${location.friendly}**.;
                 loadGeoAttendanceHistory(currentUserId);
             }
 
         } catch (e) {
             console.error("GeoCheckIn major failure:", e);
-            geoMessage.textContent = `A critical error occurred during check-in: ${e.message}`;
+            geoMessage.textContent = A critical error occurred during check-in: ${e.message};
         } finally {
             button.disabled = false;
         }
     }
 
+    // UPDATED: Load history function to display the friendly location name
     async function loadGeoAttendanceHistory(userId) {
         const tableBody = document.getElementById('geo-attendance-history');
-        tableBody.innerHTML = '<tr><td colspan="5">Loading geo check-in history...</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="6">Loading past check-in history...</td></tr>';
 
         try {
             const { data: logs, error } = await sb
-                .from('geo_attendance_logs')
-                .select('check_in_time, session_type, target_name, accuracy_m, is_verified')
+                .from('geo_attendance_logs') 
+                .select('check_in_time, session_type, target_name, location_friendly_name, accuracy_m, is_verified')
                 .eq('student_id', userId)
                 .order('check_in_time', { ascending: false })
-                .limit(10); 
+                .limit(20); 
 
             if (error) throw error;
 
             tableBody.innerHTML = '';
 
             if (!logs || logs.length === 0) {
-                tableBody.innerHTML = '<tr><td colspan="5">No geo check-in history found.</td></tr>';
+                tableBody.innerHTML = '<tr><td colspan="6">You have no attendance records yet.</td></tr>';
                 return;
             }
 
@@ -945,6 +1037,7 @@
                         <td>${new Date(log.check_in_time).toLocaleString()}</td>
                         <td>${log.session_type}</td>
                         <td>${log.target_name || 'N/A'}</td>
+                        <td>${log.location_friendly_name || 'Coordinates Only'}</td> 
                         <td>${accuracyText}</td>
                         <td>${verificationStatus}</td>
                     </tr>
@@ -954,37 +1047,31 @@
 
         } catch (error) {
             console.error("Failed to load geo attendance history:", error);
-            tableBody.innerHTML = `<tr><td colspan="5" style="color: #EF4444;">Error loading history: ${error.message}</td></tr>`;
+            tableBody.innerHTML = <tr><td colspan="6" style="color: #EF4444;">Error loading history: ${error.message}</td></tr>;
         }
     }
 
     // *************************************************************************
-    // *** 6. SUPABASE DATA LOADING FUNCTIONS (SECURE FILTERING APPLIED) ***
+    // *** 6. SUPABASE DATA LOADING FUNCTIONS ***
     // *************************************************************************
 
-    // ** THIS FUNCTION IS CRITICAL AND HAS BEEN CORRECTED TO TRUST RLS **
     async function loadCourses() {
         const tableBody = document.getElementById('courses-table');
         tableBody.innerHTML = '<tr><td colspan="2">Loading courses from Supabase...</td></tr>';
         
         try {
-            // 1. Query all courses visible to the user (filtered entirely by RLS)
-            // NO WHERE, NO EQ, NO FILTERS needed here. RLS does all the heavy lifting.
             const { data: visibleCourses, error: coursesError } = await sb
                 .from('courses')
-                // Select only necessary columns. Note: using 'course_name' to match your schema.
                 .select('id, course_name, code, target_program, block, intake_year') 
-                .order('course_name', { ascending: true }); // Switched order by to 'course_name'
+                .order('course_name', { ascending: true }); 
 
             if (coursesError) throw coursesError;
             
-            // 2. TRUST THE RLS: ALL courses returned are the student's active courses for their cohort.
-            // We use a simplified mapping for presentation.
             cachedCourses = visibleCourses.map(c => ({
                 id: c.id,
                 name: c.course_name, 
                 code: c.code,
-                status: 'Active' // Assume status is active for RLS-filtered courses
+                status: 'Active' 
             }));
             
             tableBody.innerHTML = '';
@@ -1006,11 +1093,10 @@
             
         } catch (error) {
             console.error("Failed to load courses:", error);
-            tableBody.innerHTML = `<tr><td colspan="2" style="color: #EF4444;">Error loading courses: ${error.message}.</td></tr>`;
+            tableBody.innerHTML = <tr><td colspan="2" style="color: #EF4444;">Error loading courses: ${error.message}.</td></tr>;
             cachedCourses = []; 
         }
         
-        // Update dependent UI elements
         if (document.getElementById('attendance').classList.contains('active')) {
             updateTargetSelect();
         }
@@ -1022,7 +1108,6 @@
         tableBody.innerHTML = '<tr><td colspan="3">Loading exam schedule...</td></tr>';
         
         try {
-            // FIX: Use standard null check
             const program = currentUserProfile ? currentUserProfile.program : null;
             const block = currentUserProfile ? currentUserProfile.block : null;
             const intakeYear = currentUserProfile ? currentUserProfile.intake_year : null;
@@ -1033,9 +1118,8 @@
                 return;
             }
 
-            // CRITICAL: Filter exams based on student's cohort details
             const { data: exams, error } = await sb
-                .from('exams_schedule') // Assuming a table named 'exams_schedule'
+                .from('exams_schedule') 
                 .select('exam_name, exam_date, status')
                 .eq('program', program)
                 .eq('block', block)
@@ -1064,10 +1148,9 @@
             
         } catch (error) {
             console.error("Failed to load exams:", error);
-            tableBody.innerHTML = `<tr><td colspan="3" style="color: #EF4444;">Error loading exams: ${error.message}.</td></tr>`;
+            tableBody.innerHTML = <tr><td colspan="3" style="color: #EF4444;">Error loading exams: ${error.message}.</td></tr>;
             cachedExams = [];
         }
-        // Update the dashboard metric after loading
         loadDashboardMetrics(currentUserId);
     }
 
@@ -1076,7 +1159,6 @@
         resourceList.innerHTML = 'Loading resources from Supabase...';
         
         try {
-            // FIX: Use standard null check
             const program = currentUserProfile ? currentUserProfile.program : null;
             const block = currentUserProfile ? currentUserProfile.block : null;
             
@@ -1085,13 +1167,10 @@
                 return;
             }
             
-            // CRITICAL: Filter for resources specific to the cohort OR resources marked as 'General'
             const { data: resources, error } = await sb
                 .from('resources')
                 .select('id, title, file_path, program, block, upload_date')
-                // Filter by program AND block OR just general resources (program='General')
-                .or(`program.eq.${program},program.eq.General`) // Simplify OR logic
-                // Additional filter for block (only for the specific program) would go here if needed.
+                .or(program.eq.${program},program.eq.General) 
                 .order('upload_date', { ascending: false });
 
             if (error) throw error;
@@ -1099,7 +1178,7 @@
             resourceList.innerHTML = '';
 
             if (resources.length === 0) {
-                resourceList.innerHTML = `<p>No learning resources found for your Program (${program}) or Block (${block}) yet.</p>`;
+                resourceList.innerHTML = <p>No learning resources found for your Program (${program}) or Block (${block}) yet.</p>;
                 document.getElementById('dashboard-new-resources').textContent = '0';
                 return;
             }
@@ -1112,7 +1191,7 @@
                         <div>
                             <a href="${publicUrl}" target="_blank">${res.title}</a>
                             <p style="margin: 5px 0 0; font-size: 0.9em; color: #6B7280;">
-                                ${res.program === 'General' ? 'General' : `${res.program}, Block ${res.block}`} - 
+                                ${res.program === 'General' ? 'General' : ${res.program}, Block ${res.block}} - 
                                 Uploaded: ${new Date(res.upload_date).toLocaleDateString()}
                             </p>
                         </div>
@@ -1122,7 +1201,6 @@
                 resourceList.innerHTML += item;
             });
             
-            // Update dashboard metric for new resources (uploaded in the last 7 days)
             const oneWeekAgo = new Date();
             oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
             const newCount = resources.filter(r => new Date(r.upload_date) > oneWeekAgo).length;
@@ -1130,7 +1208,123 @@
             
         } catch (error) {
             console.error("Failed to load resources:", error);
-            resourceList.innerHTML = `<p style="color: #EF4444;">Error loading resources: ${error.message}</p>`;
+            resourceList.innerHTML = <p style="color: #EF4444;">Error loading resources: ${error.message}</p>;
+        }
+    }
+    
+    // *************************************************************************
+    // *** 7. ACADEMIC CALENDAR LOGIC (NEW SECTION) ***
+    // *************************************************************************
+
+    async function fetchAllScheduleData() {
+        if (!currentUserProfile || !currentUserProfile.program || !currentUserProfile.block || !currentUserProfile.intake_year) {
+            console.warn("Missing profile data for scheduling.");
+            return [];
+        }
+
+        const program = currentUserProfile.program;
+        const block = currentUserProfile.block;
+        const intakeYear = currentUserProfile.intake_year;
+        
+        // 1. Fetch Scheduled Sessions 
+        const sessionsPromise = sb
+            .from('sessions_schedule') // Assumed table name for classes/sessions
+            .select('session_name, start_time, end_time, course_name, course_code')
+            .eq('program', program)
+            .eq('block', block)
+            .eq('intake_year', intakeYear)
+            .then(({ data, error }) => {
+                if (error) { console.error("Sessions error:", error); return []; }
+                return (data || []).map(s => ({
+                    date: s.start_time,
+                    title: ${s.course_code ? s.course_code + ' - ' : ''}${s.session_name} (${s.course_name}),
+                    type: 'Class',
+                    details: ${new Date(s.start_time).toLocaleTimeString()} - ${new Date(s.end_time).toLocaleTimeString()}
+                }));
+            });
+
+        // 2. Fetch Exams 
+        const examsPromise = sb
+            .from('exams_schedule') 
+            .select('exam_name, exam_date, status')
+            .eq('program', program)
+            .eq('block', block)
+            .eq('intake_year', intakeYear)
+            .then(({ data, error }) => {
+                if (error) { console.error("Exams error:", error); return []; }
+                return (data || []).map(e => ({
+                    date: e.exam_date,
+                    title: ${e.exam_name} - Status: ${e.status},
+                    type: 'Exam',
+                    details: 'Check CATS/Exams tab for location details'
+                }));
+            });
+
+        // 3. Fetch Clinical Rotations (Using the targets loaded previously, mapped to rotation data)
+        const clinicalsPromise = sb
+             .from('clinical_rotations') // Assumed table name for rotation assignments
+             .select('area_name, start_date, end_date')
+             .eq('student_id', currentUserId) 
+             .then(({ data, error }) => {
+                if (error) { console.error("Clinical rotations error:", error); return []; }
+                return (data || []).map(c => ({
+                    date: c.start_date, 
+                    title: Rotation in ${c.area_name},
+                    type: 'Clinical',
+                    details: From ${new Date(c.start_date).toLocaleDateString()} to ${new Date(c.end_date).toLocaleDateString()}
+                }));
+            });
+
+        const [sessions, exams, clinicals] = await Promise.all([sessionsPromise, examsPromise, clinicalsPromise]);
+
+        const combinedSchedule = [...sessions, ...exams, ...clinicals]
+            .sort((a, b) => new Date(a.date) - new Date(b.date));
+        
+        return combinedSchedule;
+    }
+
+
+    async function loadAcademicCalendar() {
+        const tableBody = document.getElementById('calendar-table');
+        const filter = document.getElementById('calendar-filter').value;
+        tableBody.innerHTML = '<tr><td colspan="3">Loading combined academic schedule...</td></tr>';
+        
+        try {
+            if (cachedSchedule.length === 0) {
+                 cachedSchedule = await fetchAllScheduleData();
+            }
+
+            let displaySchedule = cachedSchedule;
+
+            if (filter !== 'all') {
+                displaySchedule = cachedSchedule.filter(item => item.type === filter);
+            }
+
+            tableBody.innerHTML = '';
+
+            if (displaySchedule.length === 0) {
+                tableBody.innerHTML = <tr><td colspan="3">No ${filter === 'all' ? '' : filter} events scheduled for your cohort in the near future.</td></tr>;
+                return;
+            }
+
+            displaySchedule.forEach(item => {
+                const dateTime = new Date(item.date).toLocaleString();
+                const row = `
+                    <tr>
+                        <td>${dateTime}</td>
+                        <td>
+                            <strong>${item.title}</strong>
+                            <p style="margin: 0; font-size: 0.9em; color: #6B7280;">${item.details}</p>
+                        </td>
+                        <td class="${item.type}"><strong>${item.type}</strong></td>
+                    </tr>
+                `;
+                tableBody.innerHTML += row;
+            });
+            
+        } catch (error) {
+            console.error("Failed to load academic calendar:", error);
+            tableBody.innerHTML = <tr><td colspan="3" style="color: #EF4444;">Error loading calendar: ${error.message}.</td></tr>;
         }
     }
 
