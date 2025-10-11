@@ -1053,295 +1053,260 @@
         }
     }
 
-    // *************************************************************************
-    // *** 6. SUPABASE DATA LOADING FUNCTIONS (Courses, Exams, Resources) ***
-    // *************************************************************************
+// *************************************************************************
+// *** 6. SUPABASE DATA LOADING FUNCTIONS (Courses, Exams, Resources) ***
+// *************************************************************************
 
-    async function loadCourses() {
-        const tableBody = document.getElementById('courses-table');
-        tableBody.innerHTML = '<tr><td colspan="2">Loading courses from Supabase...</td></tr>';
-        
-        try {
-            // Assuming courses visible to all students for simplicity or filtered by RLS
-            const { data: visibleCourses, error: coursesError } = await sb
-                .from('courses')
-                .select('id, course_name, code') 
-                .order('course_name', { ascending: true }); 
+async function loadCourses() {
+    const tableBody = document.getElementById('courses-table');
+    tableBody.innerHTML = '<tr><td colspan="2">Loading courses from Supabase...</td></tr>';
 
-            if (coursesError) throw coursesError;
-            
-            cachedCourses = visibleCourses.map(c => ({
-                id: c.id,
-                name: c.course_name, 
-                code: c.code,
-                status: 'Active' 
-            }));
-            
-            tableBody.innerHTML = '';
-            
-            if (cachedCourses.length > 0) {
-                
-                cachedCourses.forEach(c => {
-                    const row = `
-                        <tr>
-                            <td>${c.code ? c.code + ' - ' : ''}${c.name}</td>
-                            <td>${c.status}</td>
-                        </tr>
-                    `;
-                    tableBody.innerHTML += row;
-                });
-            } else {
-                tableBody.innerHTML = '<tr><td colspan="2">You are currently not enrolled in any courses for this block/year.</td></tr>';
-            }
-            
-        } catch (error) {
-            console.error("Failed to load courses:", error);
-            tableBody.innerHTML = `<tr><td colspan="2" style="color: #EF4444;">Error loading courses: ${error.message}.</td></tr>`;
-            cachedCourses = []; 
-        }
-        
-        if (document.getElementById('attendance').classList.contains('active')) {
-            updateTargetSelect();
-        }
-        document.getElementById('dashboard-active-courses').textContent = cachedCourses.length;
-    }
+    try {
+        const { data: visibleCourses, error } = await sb
+            .from('courses')
+            .select('id, course_name, code') 
+            .order('course_name', { ascending: true });
 
-    async function loadExams() {
-        const tableBody = document.getElementById('exams-table').querySelector('tbody');
-        tableBody.innerHTML = '<tr><td colspan="3">Loading exam schedule...</td></tr>';
-        
-        try {
-            const program = currentUserProfile ? currentUserProfile.program : null;
-            const block = currentUserProfile ? currentUserProfile.block : null;
-            const intakeYear = currentUserProfile ? currentUserProfile.intake_year : null;
+        if (error) throw error;
 
-            if (!program || !block || !intakeYear) {
-                tableBody.innerHTML = '<tr><td colspan="3">Missing enrollment details. Cannot load schedule.</td></tr>';
-                cachedExams = [];
-                return;
-            }
+        cachedCourses = visibleCourses.map(c => ({
+            id: c.id,
+            name: c.course_name, 
+            code: c.code,
+            status: 'Active' 
+        }));
 
-            const { data: exams, error } = await sb
-                .from('exams_schedule') 
-                .select('exam_name, exam_date, status')
-                .eq('program', program)
-                .eq('block', block)
-                .eq('intake_year', intakeYear)
-                .order('exam_date', { ascending: true });
+        tableBody.innerHTML = '';
 
-            if (error) throw error;
-            
-            cachedExams = exams || [];
-            tableBody.innerHTML = '';
-            
-            if (cachedExams.length > 0) {
-                cachedExams.forEach(exam => {
-                    const row = `
-                        <tr>
-                            <td>${exam.exam_name}</td>
-                            <td>${new Date(exam.exam_date).toLocaleDateString()}</td>
-                            <td>${exam.status}</td>
-                        </tr>
-                    `;
-                    tableBody.innerHTML += row;
-                });
-            } else {
-                tableBody.innerHTML = '<tr><td colspan="3">No exams or CATs scheduled for your cohort yet.</td></tr>';
-            }
-            
-        } catch (error) {
-            console.error("Failed to load exams:", error);
-            tableBody.innerHTML = `<tr><td colspan="3" style="color: #EF4444;">Error loading exams: ${error.message}.</td></tr>`;
-            cachedExams = [];
-        }
-        loadDashboardMetrics(currentUserId);
-    }
-
-    async function loadResources() {
-        const resourceList = document.getElementById('resources-list');
-        resourceList.innerHTML = 'Loading resources from Supabase...';
-        
-        try {
-            const program = currentUserProfile ? currentUserProfile.program : null;
-            const block = currentUserProfile ? currentUserProfile.block : null;
-            
-            if (!program || !block) {
-                resourceList.innerHTML = '<p>Missing enrollment details. Cannot load resources.</p>';
-                return;
-            }
-            
-            // Filter by program OR General
-            const { data: resources, error } = await sb
-                .from('resources')
-                .select('id, title, file_path, program, block, upload_date')
-                .or(`program.eq.${program},program.eq.General`) 
-                .order('upload_date', { ascending: false });
-
-            if (error) throw error;
-
-            resourceList.innerHTML = '';
-
-            if (resources.length === 0) {
-                resourceList.innerHTML = `<p>No learning resources found for your Program (${program}) or Block (${block}) yet.</p>`;
-                document.getElementById('dashboard-new-resources').textContent = '0';
-                return;
-            }
-            
-            resources.forEach(res => {
-                const publicUrl = sb.storage.from('materials').getPublicUrl(res.file_path).data.publicUrl;
-
-                const item = `
-                    <div class="resource-item">
-                        <div>
-                            <a href="${publicUrl}" target="_blank">${res.title}</a>
-                            <p style="margin: 5px 0 0; font-size: 0.9em; color: #6B7280;">
-                                ${res.program === 'General' ? 'General' : `${res.program}, Block ${res.block}`} - 
-                                Uploaded: ${new Date(res.upload_date).toLocaleDateString()}
-                            </p>
-                        </div>
-                        <span style="font-size: 1.5em;">&#x1F4C4;</span>
-                    </div>
+        if (cachedCourses.length > 0) {
+            cachedCourses.forEach(c => {
+                tableBody.innerHTML += `
+                    <tr>
+                        <td>${c.code ? c.code + ' - ' : ''}${c.name}</td>
+                        <td>${c.status}</td>
+                    </tr>
                 `;
-                resourceList.innerHTML += item;
             });
-            
-            const oneWeekAgo = new Date();
-            oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-            const newCount = resources.filter(r => new Date(r.upload_date) > oneWeekAgo).length;
-            document.getElementById('dashboard-new-resources').textContent = newCount;
-            
-        } catch (error) {
-            console.error("Failed to load resources:", error);
-            resourceList.innerHTML = `<p style="color: #EF4444;">Error loading resources: ${error.message}</p>`;
+        } else {
+            tableBody.innerHTML = '<tr><td colspan="2">No courses found for your block/year.</td></tr>';
         }
+
+    } catch (error) {
+        console.error("Failed to load courses:", error);
+        tableBody.innerHTML = `<tr><td colspan="2" style="color: #EF4444;">Error loading courses: ${error.message}</td></tr>`;
+        cachedCourses = [];
     }
-    
-    // *************************************************************************
-    // *** 7. ACADEMIC CALENDAR LOGIC ***
-    // *************************************************************************
 
-    async function fetchAllScheduleData() {
-        if (!currentUserProfile || !currentUserProfile.program || !currentUserProfile.block || !currentUserProfile.intake_year) {
-            console.warn("Missing profile data for scheduling.");
-            return [];
+    document.getElementById('dashboard-active-courses').textContent = cachedCourses.length;
+}
+
+async function loadExams() {
+    const tableBody = document.getElementById('exams-table').querySelector('tbody');
+    tableBody.innerHTML = '<tr><td colspan="3">Loading exam schedule...</td></tr>';
+
+    try {
+        const program = currentUserProfile?.program;
+        const block = currentUserProfile?.block;
+        const intakeYear = currentUserProfile?.intake_year;
+
+        if (!program || !block || !intakeYear) {
+            tableBody.innerHTML = '<tr><td colspan="3">Missing enrollment details.</td></tr>';
+            cachedExams = [];
+            return;
         }
 
-        const program = currentUserProfile.program;
-        const block = currentUserProfile.block;
-        const intakeYear = currentUserProfile.intake_year;
-        
-        // 1. Fetch Scheduled Sessions 
-        const sessionsPromise = sb
-            .from('sessions_schedule') 
-            .select('session_name, start_time, end_time, course_name, course_code')
-            .eq('program', program)
-            .eq('block', block)
-            .eq('intake_year', intakeYear)
-            .then(({ data, error }) => {
-                if (error) { console.error("Sessions error:", error); return []; }
-                return (data || []).map(s => ({
-                    date: s.start_time,
-                    title: `${s.course_code ? s.course_code + ' - ' : ''}${s.session_name} (${s.course_name})`,
-                    type: 'Class',
-                    details: `${new Date(s.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${new Date(s.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-                }));
-            });
-
-        // 2. Fetch Exams 
-        const examsPromise = sb
-            .from('exams_schedule') 
+        const { data: exams, error } = await sb
+            .from('exams_with_courses') // updated table name
             .select('exam_name, exam_date, status')
             .eq('program', program)
             .eq('block', block)
             .eq('intake_year', intakeYear)
-            .then(({ data, error }) => {
-                if (error) { console.error("Exams error:", error); return []; }
-                return (data || []).map(e => ({
-                    date: e.exam_date,
-                    title: `${e.exam_name} - Status: ${e.status}`,
-                    type: 'Exam',
-                    details: 'Scheduled Date. Check CATS/Exams tab for venue details.'
-                }));
-            });
+            .order('exam_date', { ascending: true });
 
-        // 3. Fetch Clinical Rotations 
-        const clinicalsPromise = sb
-             .from('clinical_rotations') 
-             .select('area_name, start_date, end_date')
-             .eq('student_id', currentUserId) 
-             .then(({ data, error }) => {
-                if (error) { console.error("Clinical rotations error:", error); return []; }
-                // Create a single event entry for the duration of the rotation
-                return (data || []).map(c => ({
-                    date: c.start_date, 
-                    title: `Rotation in ${c.area_name}`,
-                    type: 'Clinical',
-                    details: `Rotation runs from ${new Date(c.start_date).toLocaleDateString()} to ${new Date(c.end_date).toLocaleDateString()}`
-                }));
-            });
+        if (error) throw error;
 
-        const [sessions, exams, clinicals] = await Promise.all([sessionsPromise, examsPromise, clinicalsPromise]);
+        cachedExams = exams || [];
+        tableBody.innerHTML = '';
 
-        const combinedSchedule = [...sessions, ...exams, ...clinicals]
-            .sort((a, b) => new Date(a.date) - new Date(b.date));
-        
-        return combinedSchedule;
-    }
-
-
-    async function loadAcademicCalendar() {
-        const tableBody = document.getElementById('calendar-table');
-        const filter = document.getElementById('calendar-filter').value;
-        tableBody.innerHTML = '<tr><td colspan="3">Loading combined academic schedule...</td></tr>';
-        
-        try {
-            if (cachedSchedule.length === 0) {
-                 cachedSchedule = await fetchAllScheduleData();
-            }
-
-            let displaySchedule = cachedSchedule;
-
-            if (filter !== 'all') {
-                displaySchedule = cachedSchedule.filter(item => item.type === filter);
-            }
-
-            tableBody.innerHTML = '';
-
-            if (displaySchedule.length === 0) {
-                tableBody.innerHTML = `<tr><td colspan="3">No ${filter === 'all' ? '' : filter} events scheduled for your cohort in the near future.</td></tr>`;
-                return;
-            }
-
-            displaySchedule.forEach(item => {
-                // Determine if it's a date only or date/time event for display
-                const dateOptions = { year: 'numeric', month: 'short', day: 'numeric' };
-                const timeOptions = { hour: '2-digit', minute: '2-digit' };
-                let dateTimeDisplay = new Date(item.date).toLocaleDateString('en-US', dateOptions);
-                
-                // Add time if it's a class session
-                if (item.type === 'Class') {
-                     dateTimeDisplay += ` - ${new Date(item.date).toLocaleTimeString('en-US', timeOptions)}`;
-                }
-                
-                const row = `
+        if (cachedExams.length > 0) {
+            cachedExams.forEach(exam => {
+                tableBody.innerHTML += `
                     <tr>
-                        <td>${dateTimeDisplay}</td>
-                        <td>
-                            <strong>${item.title}</strong>
-                            <p style="margin: 0; font-size: 0.9em; color: #6B7280;">${item.details}</p>
-                        </td>
-                        <td class="${item.type}"><strong>${item.type}</strong></td>
+                        <td>${exam.exam_name}</td>
+                        <td>${new Date(exam.exam_date).toLocaleDateString()}</td>
+                        <td>${exam.status}</td>
                     </tr>
                 `;
-                tableBody.innerHTML += row;
             });
-            
-        } catch (error) {
-            console.error("Failed to load academic calendar:", error);
-            tableBody.innerHTML = `<tr><td colspan="3" style="color: #EF4444;">Error loading calendar: ${error.message}.</td></tr>`;
+        } else {
+            tableBody.innerHTML = '<tr><td colspan="3">No exams or CATs scheduled for your cohort yet.</td></tr>';
         }
+
+    } catch (error) {
+        console.error("Failed to load exams:", error);
+        tableBody.innerHTML = `<tr><td colspan="3" style="color: #EF4444;">Error loading exams: ${error.message}</td></tr>`;
+        cachedExams = [];
     }
 
+    loadDashboardMetrics(currentUserId);
+}
+
+async function loadResources() {
+    const resourceList = document.getElementById('resources-list');
+    resourceList.innerHTML = 'Loading resources from Supabase...';
+
+    try {
+        const program = currentUserProfile?.program;
+        const block = currentUserProfile?.block;
+
+        if (!program || !block) {
+            resourceList.innerHTML = '<p>Missing enrollment details.</p>';
+            return;
+        }
+
+        const { data: resources, error } = await sb
+            .from('resources')
+            .select('id, title, file_path, program_type, block_term, uploaded_by_name, created_at')
+            .or(`program_type.eq.${program},program_type.eq.General`) 
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        resourceList.innerHTML = '';
+        if (!resources.length) {
+            resourceList.innerHTML = `<p>No learning resources found for your Program (${program}) or Block (${block}).</p>`;
+            document.getElementById('dashboard-new-resources').textContent = '0';
+            return;
+        }
+
+        resources.forEach(res => {
+            const publicUrl = sb.storage.from('materials').getPublicUrl(res.file_path).data.publicUrl;
+            resourceList.innerHTML += `
+                <div class="resource-item">
+                    <div>
+                        <a href="${publicUrl}" target="_blank">${res.title}</a>
+                        <p style="margin:5px 0 0;font-size:0.9em;color:#6B7280;">
+                            ${res.program_type === 'General' ? 'General' : `${res.program_type}, Block ${res.block_term}`} - 
+                            Uploaded: ${new Date(res.created_at).toLocaleDateString()}
+                        </p>
+                    </div>
+                    <span style="font-size:1.5em;">&#x1F4C4;</span>
+                </div>
+            `;
+        });
+
+        const oneWeekAgo = new Date();
+        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+        const newCount = resources.filter(r => new Date(r.created_at) > oneWeekAgo).length;
+        document.getElementById('dashboard-new-resources').textContent = newCount;
+
+    } catch (error) {
+        console.error("Failed to load resources:", error);
+        resourceList.innerHTML = `<p style="color:#EF4444;">Error loading resources: ${error.message}</p>`;
+    }
+}
+
+// *************************************************************************
+// *** 7. ACADEMIC CALENDAR LOGIC ***
+// *************************************************************************
+
+async function fetchAllScheduleData() {
+    const program = currentUserProfile?.program;
+    const block = currentUserProfile?.block;
+    const intakeYear = currentUserProfile?.intake_year;
+
+    if (!program || !block || !intakeYear) return [];
+
+    // 1️⃣ Scheduled Sessions
+    const sessionsPromise = sb
+        .from('scheduled_sessions') // updated table
+        .select('session_title, session_time, session_date, target_program, course_id')
+        .eq('program_type', program)
+        .eq('block_term', block)
+        .eq('intake_year', intakeYear)
+        .then(({ data, error }) => {
+            if (error) { console.error("Sessions error:", error); return []; }
+            return (data || []).map(s => ({
+                date: s.session_date,
+                title: s.session_title,
+                type: 'Class',
+                details: s.session_time ? `Time: ${s.session_time}` : 'Time: N/A'
+            }));
+        });
+
+    // 2️⃣ Exams
+    const examsPromise = sb
+        .from('exams_with_courses') // updated table
+        .select('exam_name, exam_date, status')
+        .eq('program', program)
+        .eq('block', block)
+        .eq('intake_year', intakeYear)
+        .then(({ data, error }) => {
+            if (error) { console.error("Exams error:", error); return []; }
+            return (data || []).map(e => ({
+                date: e.exam_date,
+                title: `${e.exam_name} - Status: ${e.status}`,
+                type: 'Exam',
+                details: 'Check CATS/Exams tab for venue details.'
+            }));
+        });
+
+    // 3️⃣ Clinical Rotations
+    const clinicalsPromise = sb
+        .from('clinical_departments') // updated table
+        .select('area_name, start_date, end_date')
+        .eq('student_id', currentUserId)
+        .then(({ data, error }) => {
+            if (error) { console.error("Clinical rotations error:", error); return []; }
+            return (data || []).map(c => ({
+                date: c.start_date,
+                title: `Rotation in ${c.area_name}`,
+                type: 'Clinical',
+                details: `Rotation: ${new Date(c.start_date).toLocaleDateString()} - ${new Date(c.end_date).toLocaleDateString()}`
+            }));
+        });
+
+    const [sessions, exams, clinicals] = await Promise.all([sessionsPromise, examsPromise, clinicalsPromise]);
+    return [...sessions, ...exams, ...clinicals].sort((a, b) => new Date(a.date) - new Date(b.date));
+}
+
+async function loadAcademicCalendar() {
+    const tableBody = document.getElementById('calendar-table');
+    tableBody.innerHTML = '<tr><td colspan="3">Loading academic schedule...</td></tr>';
+
+    try {
+        if (!cachedSchedule.length) cachedSchedule = await fetchAllScheduleData();
+
+        let displaySchedule = cachedSchedule;
+        const filter = document.getElementById('calendar-filter').value;
+        if (filter !== 'all') displaySchedule = cachedSchedule.filter(e => e.type === filter);
+
+        tableBody.innerHTML = '';
+
+        if (!displaySchedule.length) {
+            tableBody.innerHTML = `<tr><td colspan="3">No ${filter === 'all' ? '' : filter} events scheduled.</td></tr>`;
+            return;
+        }
+
+        displaySchedule.forEach(item => {
+            const dateDisplay = new Date(item.date).toLocaleDateString();
+            tableBody.innerHTML += `
+                <tr>
+                    <td>${dateDisplay}</td>
+                    <td>
+                        <strong>${item.title}</strong>
+                        <p style="margin:0;font-size:0.9em;color:#6B7280;">${item.details}</p>
+                    </td>
+                    <td class="${item.type}"><strong>${item.type}</strong></td>
+                </tr>
+            `;
+        });
+
+    } catch (error) {
+        console.error("Failed to load academic calendar:", error);
+        tableBody.innerHTML = `<tr><td colspan="3" style="color:#EF4444;">Error loading calendar: ${error.message}</td></tr>`;
+    }
+}
 
     // MOCK FUNCTIONS 
     async function loadStudentMessages() {
