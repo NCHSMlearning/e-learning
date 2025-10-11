@@ -1109,7 +1109,6 @@ async function loadCourses() {
 
     document.getElementById('dashboard-active-courses').textContent = cachedCourses.length;
 }
-    
 async function loadExams() {
     const tableBody = document.getElementById('exams-table');
     if (!tableBody) {
@@ -1121,16 +1120,22 @@ async function loadExams() {
 
     try {
         const program = currentUserProfile?.program;
-        if (!program) {
-            tableBody.innerHTML = '<tr><td colspan="4">Missing program info. Cannot load exams.</td></tr>';
+        const block = currentUserProfile?.block;
+        const intakeYear = currentUserProfile?.intake_year;
+
+        if (!program || !block || !intakeYear) {
+            tableBody.innerHTML = '<tr><td colspan="4">Missing program, block, or intake year info. Cannot load exams.</td></tr>';
             cachedExams = [];
             return;
         }
 
+        // Fetch exams filtered by program, block, and intake year
         const { data: exams, error } = await sb
             .from('exams_with_courses')
-            .select('exam_name, exam_date, status, block_term') // removed title and course_name
+            .select('exam_name, exam_date, status, block_term')
             .or(`program_type.eq.${program},program_type.eq.General`)
+            .eq('block_term', block)
+            .eq('intake_year', intakeYear)
             .order('exam_date', { ascending: true });
 
         if (error) throw error;
@@ -1151,7 +1156,7 @@ async function loadExams() {
                 `;
             });
         } else {
-            tableBody.innerHTML = '<tr><td colspan="4">No exams or CATs scheduled for your program yet.</td></tr>';
+            tableBody.innerHTML = '<tr><td colspan="4">No exams or CATs scheduled for your program, block, and intake year yet.</td></tr>';
         }
 
     } catch (error) {
@@ -1160,9 +1165,10 @@ async function loadExams() {
         cachedExams = [];
     }
 
+    // Update dashboard metrics
     loadDashboardMetrics(currentUserId);
 }
-
+    
 async function loadResources() {
     const resourceList = document.getElementById('resources-list');
     resourceList.innerHTML = 'Loading resources from Supabase...';
