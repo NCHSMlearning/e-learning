@@ -45,7 +45,6 @@
 
         /* Main Content */
         .main { flex: 1; padding: 30px; overflow-y: auto; }
-        /* UPDATED: Header ID for dynamic name */
         header h1 { margin: 0; font-size: 2.2rem; color: #4C1D95; }
         .subtitle { color: #6B7280; margin-bottom: 25px; }
 
@@ -225,7 +224,7 @@
     <div class="container">
         <aside class="sidebar">
             <div class="sidebar-header">
-                <img src="images/logo.png" alt="Logo"> 
+                <img src="https://raw.githubusercontent.com/NCHSMlearning/e-learning/main/images/Logo_NCHSM.png" alt="NCHSM Logo" style="width: 100px; margin-bottom: 10px; filter: none;"> 
                 <h2>STUDENT PORTAL</h2>
             </div>
             <ul class="nav">
@@ -376,7 +375,7 @@
             
             <section id="courses" class="tab-content">
                 <h2 style="color: #4C1D95;">My Courses (Real-Time Enrollment)</h2>
-                <p>Courses shown here are filtered by your *Program, **Block, and **Intake Year* for relevance.</p>
+                <p>Courses shown here are filtered by your **Program**, **Block**, and **Intake Year** for relevance.</p>
                 <table>
                     <thead><tr><th>Course Name</th><th>Status</th></tr></thead>
                     <tbody id="courses-table">
@@ -406,7 +405,7 @@
 
                     <button id="check-in-button" onclick="geoCheckIn()">Check In Now</button>
                     
-                    <p id="geo-message">Select a *Session Type* and then a specific *Department or Course* to check in at your current GPS location and time.</p>
+                    <p id="geo-message">Select a **Session Type** and then a specific **Department or Course** to check in at your current GPS location and time.</p>
                 </div>
 
                 <h3 style="color: #4C1D95;">Past Attendance History (Check-in Logs)</h3>
@@ -453,8 +452,9 @@
     // *************************************************************************
     
     // ** SUPABASE CONFIGURATION **
-    const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co'; // <--- Update with your actual Supabase URL
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk'; // <--- Update with your actual Anon Key
+    // !!! IMPORTANT: REPLACE THESE KEYS WITH YOUR ACTUAL SUPABASE DETAILS !!!
+    const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co'; 
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk'; 
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     // ** LOCATIONIQ CONFIGURATION (Geocoding API) **
@@ -467,15 +467,15 @@
     const FALLBACK_ACCURACY = 500; 
 
     // ** SUPABASE TABLE NAMES FOR WELCOME MESSAGE **
-    const SETTINGS_TABLE = 'app_settings'; // Your system settings table
-    const MESSAGE_KEY = 'student_welcome_message'; // The key for the welcome message
+    const SETTINGS_TABLE = 'app_settings'; 
+    const MESSAGE_KEY = 'student_welcome_message'; 
 
     let currentUserId = null;
     let currentUserProfile = null;
     let cachedCourses = []; 
     let cachedExams = [];
-    let cachedClinicalAreas = []; // Cache for clinical targets
-    let cachedSchedule = []; // Cache for combined academic calendar
+    let cachedClinicalAreas = []; 
+    let cachedSchedule = []; 
 
     // DOM Elements
     const geoMessage = document.getElementById('geo-message');
@@ -483,8 +483,6 @@
     const attendanceTargetSelect = document.getElementById('attendance-target');
     const welcomeHeader = document.getElementById('welcome-header');
     
-    // ... other DOM elements
-
     // *************************************************************************
     // *** 2. UI AND NAVIGATION LOGIC ***
     // *************************************************************************
@@ -493,7 +491,7 @@
 
     function showTab(tabId) {
         navLinks.forEach(l => l.classList.remove('active'));
-        const activeLink = document.querySelector(.nav a[data-tab="${tabId}"]);
+        const activeLink = document.querySelector(`.nav a[data-tab="${tabId}"]`);
         if(activeLink) activeLink.classList.add('active');
 
         tabs.forEach(tab => tab.classList.remove('active'));
@@ -507,7 +505,7 @@
             updateTargetSelect();
         }
         if (tabId === 'dashboard' && currentUserId) {
-            loadWelcomeDetails(); // UPDATED: Load name and message
+            loadWelcomeDetails(); 
             loadCourses();
             loadExams();
             loadResources();
@@ -517,7 +515,7 @@
         if (tabId === 'resources' && currentUserId) loadResources(); 
         if (tabId === 'cats' && currentUserId) loadExams();
         if (tabId === 'messages' && currentUserId) loadStudentMessages(); 
-        if (tabId === 'calendar' && currentUserId) loadAcademicCalendar(); // NEW: Calendar load
+        if (tabId === 'calendar' && currentUserId) loadAcademicCalendar(); 
     }
 
     navLinks.forEach(link => {
@@ -537,21 +535,25 @@
     // *** 3. CORE DATA AND DASHBOARD FUNCTIONS ***
     // *************************************************************************
     
-    // UPDATED: Function to load both the name and the admin message
     async function loadWelcomeDetails() {
         // 1. Update Name in Header
+        let studentName = 'Student'; // Default name
+
         if (currentUserProfile && currentUserProfile.full_name) {
-            const firstName = currentUserProfile.full_name.split(' ')[0] || 'Student';
-            welcomeHeader.textContent = Hello, ${firstName}!;
-        } else {
-             welcomeHeader.textContent = Hello, Student!;
+            // Pick only the first word/name
+            const parts = currentUserProfile.full_name.trim().split(/\s+/);
+            if (parts.length > 0) {
+                 studentName = parts[0];
+            }
         }
+        
+        // Update the main welcome header using the first name
+        welcomeHeader.textContent = `Welcome, ${studentName}!`; 
 
         // 2. Load Admin Message
         await loadStudentWelcomeMessage();
     }
     
-    // NEW: Function to load the live admin communication message
     async function loadStudentWelcomeMessage() {
         const messageDiv = document.getElementById('student-welcome-message');
         if (!messageDiv) return;
@@ -580,7 +582,7 @@
                     event: 'UPDATE', 
                     schema: 'public',
                     table: SETTINGS_TABLE,
-                    filter: key=eq.${MESSAGE_KEY},
+                    filter: `key=eq.${MESSAGE_KEY}`,
                 },
                 (payload) => {
                     const newValue = payload.new?.value;
@@ -598,7 +600,8 @@
         document.getElementById('dashboard-active-courses').textContent = cachedCourses.length;
 
         // --- 2. Load Attendance Rate (MOCK for now) ---
-        document.getElementById('dashboard-attendance-rate').textContent = '94%';
+        // In a real app, this would query geo_attendance_logs for present/total sessions.
+        document.getElementById('dashboard-attendance-rate').textContent = '94%'; 
 
         // --- 3. Load Upcoming Exam (uses cachedExams) ---
         let nextExamText = 'None Scheduled';
@@ -606,15 +609,14 @@
              const now = new Date();
              const upcomingExam = cachedExams.find(e => new Date(e.exam_date) >= now);
              if (upcomingExam) {
-                 nextExamText = ${new Date(upcomingExam.exam_date).toLocaleDateString()} (${upcomingExam.exam_name});
+                 nextExamText = `${new Date(upcomingExam.exam_date).toLocaleDateString()} (${upcomingExam.exam_name})`;
              } else {
                  nextExamText = 'Semester Complete';
              }
         }
         document.getElementById('dashboard-upcoming-exam').textContent = nextExamText;
 
-        // --- 4. Load New Resources (Updated by loadResources) ---
-        // Handled in loadResources
+        // --- 4. Load New Resources (Handled in loadResources) ---
 
         // --- 5. Conditional Action Required Section ---
         const passportCard = document.getElementById('action-passport');
@@ -626,7 +628,10 @@
         const actionTitle = document.getElementById('actions-title');
         
         if (actionTitle) {
-            if (!profileIncomplete && actionsContainer.children.length <= 1) { 
+            // Check if only the 'Review New Course Material' card is showing
+            const visibleActions = Array.from(actionsContainer.children).filter(child => child.style.display !== 'none').length;
+            
+            if (visibleActions === 0) { 
                  actionTitle.style.display = 'none';
             } else {
                  actionTitle.style.display = 'block';
@@ -650,9 +655,8 @@
             await loadCourses(); 
             await loadExams();
             await loadResources(); 
-            await loadClinicalTargets(); // NEW: Load clinical areas
+            await loadClinicalTargets(); 
             
-            // Update name and load admin message
             await loadWelcomeDetails();
 
             showTab('dashboard');
@@ -660,6 +664,7 @@
 
         } else {
             console.warn("No active user session found. Redirecting to login.");
+            // Make sure you have a login.html page set up
             window.location.href = "login.html"; 
         }
     }
@@ -719,8 +724,8 @@
         }
         document.getElementById('passport-preview').src = photoUrl;
         
-        document.querySelector('header h1').textContent = Welcome, ${(currentUserProfile && currentUserProfile.full_name.split(' ')[0]) || 'Student'}!;
-
+        // Removed old header text update here, now handled in loadWelcomeDetails
+        
         toggleProfileEdit(false); 
         if (!currentUserProfile.passport_url) {
             uploadLabel.style.display = 'block';
@@ -735,6 +740,7 @@
             if (input) input.readOnly = !enable;
         });
         
+        // These fields should generally remain read-only for students
         document.getElementById('profile-student-id').readOnly = true;
         document.getElementById('profile-email').readOnly = true;
         document.getElementById('profile-program').readOnly = true;
@@ -772,7 +778,7 @@
             .eq('id', currentUserId);
 
         if (error) {
-            profileStatus.textContent = Error saving profile: ${error.message};
+            profileStatus.textContent = `Error saving profile: ${error.message}`;
         } else {
             profileStatus.textContent = 'Profile updated successfully!';
             loadProfile(currentUserId); 
@@ -799,14 +805,14 @@
         uploadButton.disabled = true;
 
         const fileExt = file.name.split('.').pop();
-        const filePath = ${currentUserId}.${fileExt};
+        const filePath = `${currentUserId}.${fileExt}`;
 
         const { error: uploadError } = await sb.storage
             .from('passports')
             .upload(filePath, file, { cacheControl: '3600', upsert: true });
 
         if (uploadError) {
-            profileStatus.textContent = Upload failed: ${uploadError.message};
+            profileStatus.textContent = `Upload failed: ${uploadError.message}`;
             uploadButton.disabled = false;
             return;
         }
@@ -817,7 +823,7 @@
             .eq('id', currentUserId);
 
         if (updateError) {
-            profileStatus.textContent = Database update failed: ${updateError.message};
+            profileStatus.textContent = `Database update failed: ${updateError.message}`;
         } else {
             profileStatus.textContent = 'Photo uploaded and saved successfully!';
             passportFileInput.value = ''; 
@@ -829,10 +835,9 @@
 
 
     // *************************************************************************
-    // *** 5. ATTENDANCE LOGIC ***
+    // *** 5. ATTENDANCE LOGIC (GeoCheckIn) ***
     // *************************************************************************
     
-    // NEW: Load Clinical Areas from Supabase
     async function loadClinicalTargets() {
         if (!currentUserProfile || !currentUserProfile.program || !currentUserProfile.block || !currentUserProfile.intake_year) {
             cachedClinicalAreas = [];
@@ -844,7 +849,7 @@
         const intakeYear = currentUserProfile.intake_year;
 
         try {
-             // Fetch areas specific to the student's cohort from the 'clinical_areas' table
+            // Fetch areas specific to the student's cohort from the 'clinical_areas' table
             const { data, error } = await sb
                 .from('clinical_areas')
                 .select('id, name')
@@ -871,20 +876,20 @@
         let targetList = [];
         let label = 'Department/Course:';
 
-        // Logic: Clinical Session uses DYNAMIC Clinical Areas
+        // Logic: Clinical Session uses DYNAMIC Clinical Areas (cachedClinicalAreas)
         if (sessionType === 'Clinical') {
             targetList = cachedClinicalAreas.map(d => ({ 
                 id: d.id, 
                 name: d.name, 
-                text: ${d.name} (Clinical) 
+                text: `${d.name} (Clinical)` 
             }));
             label = 'Department/Area:';
-        // Logic: On Class Session uses real-time loaded courses
+        // Logic: On Class Session uses real-time loaded courses (cachedCourses)
         } else if (sessionType === 'Class') {
             targetList = cachedCourses.map(c => ({ 
                 id: c.id, 
                 name: c.name, 
-                text: ${c.code ? c.code + ' - ' : ''}${c.name} (Class) 
+                text: `${c.code ? c.code + ' - ' : ''}${c.name} (Class)` 
             }));
             label = 'Course/Subject:';
         }
@@ -893,24 +898,23 @@
 
         if (targetList.length === 0) {
             const message = sessionType === 'Class' ? 'No active courses found.' : 'No clinical areas assigned to your block.';
-            attendanceTargetSelect.innerHTML = <option value="">${message}</option>;
+            attendanceTargetSelect.innerHTML = `<option value="">${message}</option>`;
         } else {
              const defaultOption = document.createElement('option');
              defaultOption.value = '';
-             defaultOption.textContent = -- Select a ${label.replace(':', '')} --;
+             defaultOption.textContent = `-- Select a ${label.replace(':', '')} --`;
              attendanceTargetSelect.appendChild(defaultOption);
              
             targetList.forEach(target => {
                 const option = document.createElement('option');
-                option.value = ${target.id}|${target.name}; 
+                option.value = `${target.id}|${target.name}`; 
                 option.textContent = target.text;
                 attendanceTargetSelect.appendChild(option);
             });
         }
-        geoMessage.innerHTML = Please select a specific **${label.replace(':', '')}** to check in.;
+        geoMessage.innerHTML = `Please select a specific **${label.replace(':', '')}** to check in.`;
     }
 
-    // UPDATED: GeoCheckIn implementation to enforce high accuracy and save friendly location name
     async function geoCheckIn() {
         const sessionType = sessionTypeSelect.value;
         const targetSelect = attendanceTargetSelect.value;
@@ -923,7 +927,7 @@
         }
 
         button.disabled = true;
-        geoMessage.textContent = 'Attempting to get *high-accuracy location* and check in...';
+        geoMessage.textContent = 'Attempting to get **high-accuracy location** and check in...';
 
         const getLocation = () => new Promise((resolve, reject) => {
             if (!navigator.geolocation) {
@@ -939,13 +943,13 @@
                     friendly: null 
                 }),
                 (err) => {
-                    console.warn(Geolocation error (${err.code}): ${err.message}. Using fallback.);
+                    console.warn(`Geolocation error (${err.code}): ${err.message}. Using fallback.`);
                     resolve({ lat: FALLBACK_LAT, lon: FALLBACK_LON, acc: FALLBACK_ACCURACY, friendly: 'Fallback Location (GPS Error)' });
                 },
                 { 
-                    enableHighAccuracy: true, // Request the highest accuracy possible
-                    timeout: 7000,           // Wait up to 7 seconds for a fix
-                    maximumAge: 0            // Don't use a cached position
+                    enableHighAccuracy: true, 
+                    timeout: 7000,           
+                    maximumAge: 0            
                 }
             );
         });
@@ -955,20 +959,19 @@
 
             // Fetch Friendly Name via LocationIQ
             if (location.friendly === null) {
-                const geocodeUrl = ${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${location.lat}&lon=${location.lon}&format=json;
+                const geocodeUrl = `${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${location.lat}&lon=${location.lon}&format=json`;
                 const response = await fetch(geocodeUrl);
                 if (response.ok) {
                     const geoData = await response.json();
-                    // CRITICAL: Save the friendly location name
-                    location.friendly = geoData.display_name || Lat: ${location.lat.toFixed(4)}, Lon: ${location.lon.toFixed(4)};
+                    location.friendly = geoData.display_name || `Lat: ${location.lat.toFixed(4)}, Lon: ${location.lon.toFixed(4)}`;
                 } else {
-                    location.friendly = Geocoding Failed. Lat: ${location.lat.toFixed(4)}, Lon: ${location.lon.toFixed(4)};
+                    location.friendly = `Geocoding Failed. Lat: ${location.lat.toFixed(4)}, Lon: ${location.lon.toFixed(4)}`;
                 }
             }
             
             const [targetId, targetName] = targetSelect.split('|');
 
-            // CRITICAL: Insert 'location.friendly' into the log table
+            // Insert 'location.friendly' into the log table
             const { error } = await sb
                 .from('geo_attendance_logs')
                 .insert({
@@ -989,21 +992,20 @@
 
             if (error) {
                 console.error("Check-in failed:", error);
-                geoMessage.textContent = Check-in failed: Error: ${error.message};
+                geoMessage.textContent = `Check-in failed: Error: ${error.message}`;
             } else {
-                geoMessage.textContent = Check-in successful! Logged at ${new Date(checkInTime).toLocaleTimeString()} near **${location.friendly}**.;
+                geoMessage.textContent = `Check-in successful! Logged at ${new Date(checkInTime).toLocaleTimeString()} near **${location.friendly}**.`;
                 loadGeoAttendanceHistory(currentUserId);
             }
 
         } catch (e) {
             console.error("GeoCheckIn major failure:", e);
-            geoMessage.textContent = A critical error occurred during check-in: ${e.message};
+            geoMessage.textContent = `A critical error occurred during check-in: ${e.message}`;
         } finally {
             button.disabled = false;
         }
     }
 
-    // UPDATED: Load history function to display the friendly location name
     async function loadGeoAttendanceHistory(userId) {
         const tableBody = document.getElementById('geo-attendance-history');
         tableBody.innerHTML = '<tr><td colspan="6">Loading past check-in history...</td></tr>';
@@ -1047,12 +1049,12 @@
 
         } catch (error) {
             console.error("Failed to load geo attendance history:", error);
-            tableBody.innerHTML = <tr><td colspan="6" style="color: #EF4444;">Error loading history: ${error.message}</td></tr>;
+            tableBody.innerHTML = `<tr><td colspan="6" style="color: #EF4444;">Error loading history: ${error.message}</td></tr>`;
         }
     }
 
     // *************************************************************************
-    // *** 6. SUPABASE DATA LOADING FUNCTIONS ***
+    // *** 6. SUPABASE DATA LOADING FUNCTIONS (Courses, Exams, Resources) ***
     // *************************************************************************
 
     async function loadCourses() {
@@ -1060,9 +1062,10 @@
         tableBody.innerHTML = '<tr><td colspan="2">Loading courses from Supabase...</td></tr>';
         
         try {
+            // Assuming courses visible to all students for simplicity or filtered by RLS
             const { data: visibleCourses, error: coursesError } = await sb
                 .from('courses')
-                .select('id, course_name, code, target_program, block, intake_year') 
+                .select('id, course_name, code') 
                 .order('course_name', { ascending: true }); 
 
             if (coursesError) throw coursesError;
@@ -1093,7 +1096,7 @@
             
         } catch (error) {
             console.error("Failed to load courses:", error);
-            tableBody.innerHTML = <tr><td colspan="2" style="color: #EF4444;">Error loading courses: ${error.message}.</td></tr>;
+            tableBody.innerHTML = `<tr><td colspan="2" style="color: #EF4444;">Error loading courses: ${error.message}.</td></tr>`;
             cachedCourses = []; 
         }
         
@@ -1148,7 +1151,7 @@
             
         } catch (error) {
             console.error("Failed to load exams:", error);
-            tableBody.innerHTML = <tr><td colspan="3" style="color: #EF4444;">Error loading exams: ${error.message}.</td></tr>;
+            tableBody.innerHTML = `<tr><td colspan="3" style="color: #EF4444;">Error loading exams: ${error.message}.</td></tr>`;
             cachedExams = [];
         }
         loadDashboardMetrics(currentUserId);
@@ -1167,10 +1170,11 @@
                 return;
             }
             
+            // Filter by program OR General
             const { data: resources, error } = await sb
                 .from('resources')
                 .select('id, title, file_path, program, block, upload_date')
-                .or(program.eq.${program},program.eq.General) 
+                .or(`program.eq.${program},program.eq.General`) 
                 .order('upload_date', { ascending: false });
 
             if (error) throw error;
@@ -1178,7 +1182,7 @@
             resourceList.innerHTML = '';
 
             if (resources.length === 0) {
-                resourceList.innerHTML = <p>No learning resources found for your Program (${program}) or Block (${block}) yet.</p>;
+                resourceList.innerHTML = `<p>No learning resources found for your Program (${program}) or Block (${block}) yet.</p>`;
                 document.getElementById('dashboard-new-resources').textContent = '0';
                 return;
             }
@@ -1191,7 +1195,7 @@
                         <div>
                             <a href="${publicUrl}" target="_blank">${res.title}</a>
                             <p style="margin: 5px 0 0; font-size: 0.9em; color: #6B7280;">
-                                ${res.program === 'General' ? 'General' : ${res.program}, Block ${res.block}} - 
+                                ${res.program === 'General' ? 'General' : `${res.program}, Block ${res.block}`} - 
                                 Uploaded: ${new Date(res.upload_date).toLocaleDateString()}
                             </p>
                         </div>
@@ -1208,12 +1212,12 @@
             
         } catch (error) {
             console.error("Failed to load resources:", error);
-            resourceList.innerHTML = <p style="color: #EF4444;">Error loading resources: ${error.message}</p>;
+            resourceList.innerHTML = `<p style="color: #EF4444;">Error loading resources: ${error.message}</p>`;
         }
     }
     
     // *************************************************************************
-    // *** 7. ACADEMIC CALENDAR LOGIC (NEW SECTION) ***
+    // *** 7. ACADEMIC CALENDAR LOGIC ***
     // *************************************************************************
 
     async function fetchAllScheduleData() {
@@ -1228,7 +1232,7 @@
         
         // 1. Fetch Scheduled Sessions 
         const sessionsPromise = sb
-            .from('sessions_schedule') // Assumed table name for classes/sessions
+            .from('sessions_schedule') 
             .select('session_name, start_time, end_time, course_name, course_code')
             .eq('program', program)
             .eq('block', block)
@@ -1237,9 +1241,9 @@
                 if (error) { console.error("Sessions error:", error); return []; }
                 return (data || []).map(s => ({
                     date: s.start_time,
-                    title: ${s.course_code ? s.course_code + ' - ' : ''}${s.session_name} (${s.course_name}),
+                    title: `${s.course_code ? s.course_code + ' - ' : ''}${s.session_name} (${s.course_name})`,
                     type: 'Class',
-                    details: ${new Date(s.start_time).toLocaleTimeString()} - ${new Date(s.end_time).toLocaleTimeString()}
+                    details: `${new Date(s.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${new Date(s.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
                 }));
             });
 
@@ -1254,24 +1258,25 @@
                 if (error) { console.error("Exams error:", error); return []; }
                 return (data || []).map(e => ({
                     date: e.exam_date,
-                    title: ${e.exam_name} - Status: ${e.status},
+                    title: `${e.exam_name} - Status: ${e.status}`,
                     type: 'Exam',
-                    details: 'Check CATS/Exams tab for location details'
+                    details: 'Scheduled Date. Check CATS/Exams tab for venue details.'
                 }));
             });
 
-        // 3. Fetch Clinical Rotations (Using the targets loaded previously, mapped to rotation data)
+        // 3. Fetch Clinical Rotations 
         const clinicalsPromise = sb
-             .from('clinical_rotations') // Assumed table name for rotation assignments
+             .from('clinical_rotations') 
              .select('area_name, start_date, end_date')
              .eq('student_id', currentUserId) 
              .then(({ data, error }) => {
                 if (error) { console.error("Clinical rotations error:", error); return []; }
+                // Create a single event entry for the duration of the rotation
                 return (data || []).map(c => ({
                     date: c.start_date, 
-                    title: Rotation in ${c.area_name},
+                    title: `Rotation in ${c.area_name}`,
                     type: 'Clinical',
-                    details: From ${new Date(c.start_date).toLocaleDateString()} to ${new Date(c.end_date).toLocaleDateString()}
+                    details: `Rotation runs from ${new Date(c.start_date).toLocaleDateString()} to ${new Date(c.end_date).toLocaleDateString()}`
                 }));
             });
 
@@ -1303,15 +1308,24 @@
             tableBody.innerHTML = '';
 
             if (displaySchedule.length === 0) {
-                tableBody.innerHTML = <tr><td colspan="3">No ${filter === 'all' ? '' : filter} events scheduled for your cohort in the near future.</td></tr>;
+                tableBody.innerHTML = `<tr><td colspan="3">No ${filter === 'all' ? '' : filter} events scheduled for your cohort in the near future.</td></tr>`;
                 return;
             }
 
             displaySchedule.forEach(item => {
-                const dateTime = new Date(item.date).toLocaleString();
+                // Determine if it's a date only or date/time event for display
+                const dateOptions = { year: 'numeric', month: 'short', day: 'numeric' };
+                const timeOptions = { hour: '2-digit', minute: '2-digit' };
+                let dateTimeDisplay = new Date(item.date).toLocaleDateString('en-US', dateOptions);
+                
+                // Add time if it's a class session
+                if (item.type === 'Class') {
+                     dateTimeDisplay += ` - ${new Date(item.date).toLocaleTimeString('en-US', timeOptions)}`;
+                }
+                
                 const row = `
                     <tr>
-                        <td>${dateTime}</td>
+                        <td>${dateTimeDisplay}</td>
                         <td>
                             <strong>${item.title}</strong>
                             <p style="margin: 0; font-size: 0.9em; color: #6B7280;">${item.details}</p>
@@ -1324,19 +1338,19 @@
             
         } catch (error) {
             console.error("Failed to load academic calendar:", error);
-            tableBody.innerHTML = <tr><td colspan="3" style="color: #EF4444;">Error loading calendar: ${error.message}.</td></tr>;
+            tableBody.innerHTML = `<tr><td colspan="3" style="color: #EF4444;">Error loading calendar: ${error.message}.</td></tr>`;
         }
     }
 
 
-    // MOCK FUNCTIONS (for tabs not yet fully implemented)
+    // MOCK FUNCTIONS 
     async function loadStudentMessages() {
          document.getElementById('messages-list').innerHTML = '<h2>Recent Admin Messages</h2><p>No new messages. (MOCK)</p>';
     }
     
 
     // *************************************************************************
-    // *** 9. INITIALIZATION ***
+    // *** 8. INITIALIZATION ***
     // *************************************************************************
 
     document.addEventListener('DOMContentLoaded', checkAuthAndLoad);
