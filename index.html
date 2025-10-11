@@ -338,7 +338,7 @@
             
             <section id="courses" class="tab-content">
                 <h2 style="color: #4C1D95;">My Courses (Real-Time Enrollment)</h2>
-                <p>Courses shown here are filtered by your **Program**, **Block**, and **Intake Year** for relevance.</p>
+                <p>Courses shown here are filtered by your *Program, **Block, and **Intake Year* for relevance.</p>
                 <table>
                     <thead><tr><th>Course Name</th><th>Status</th></tr></thead>
                     <tbody id="courses-table">
@@ -368,7 +368,7 @@
 
                     <button id="check-in-button" onclick="geoCheckIn()">Check In Now</button>
                     
-                    <p id="geo-message">Select a **Session Type** and then a specific **Department or Course** to check in at your current GPS location and time.</p>
+                    <p id="geo-message">Select a *Session Type* and then a specific *Department or Course* to check in at your current GPS location and time.</p>
                 </div>
 
                 <h3 style="color: #4C1D95;">Geo Attendance History (Check-in Logs)</h3>
@@ -959,42 +959,43 @@
         tableBody.innerHTML = '<tr><td colspan="2">Loading courses from Supabase...</td></tr>';
         
         try {
-            const program = currentUserProfile?.program;
-            const block = currentUserProfile?.block;
-            const intakeYear = currentUserProfile?.intake_year;
+            // Step 1: Query all courses visible to the user (filtered by RLS)
+            // The RLS policy for the 'courses' table does the hard work of filtering by cohort.
+            const { data: visibleCourses, error: coursesError } = await sb
+                .from('courses')
+                .select('id, name, code, target_program, block, intake_year')
+                .order('name', { ascending: true });
 
-            if (!program || !block || !intakeYear) {
-                 tableBody.innerHTML = '<tr><td colspan="2">Missing enrollment details (Program/Block/Year). Cannot load courses.</td></tr>';
-                 cachedCourses = [];
-                 return;
-            }
-
-            // CRITICAL: Filter based on enrollment and program/block/year match
-             // Load courses directly from the courses table
-        const { data: courses, error } = await sb
-            .from('courses')
-            .select('*')
-            .eq('target_program', program)
-            .eq('block', block)
-            .eq('intake_year', intake_year)
-            .eq('status', 'Active')
-            .order('course_name', { ascending: true });
-
+            if (coursesError) throw coursesError;
             
-            if (error) throw error;
+            // Step 2: Query the student's enrollment status for the visible courses
+            // This is necessary because the status (Enrolled/Completed) is NOT in the 'courses' table.
+            const visibleCourseIds = visibleCourses.map(c => c.id);
+
+            const { data: enrollments, error: enrollmentsError } = await sb
+                .from('student_courses')
+                .select('course_id, status')
+                .eq('student_id', currentUserId)
+                .in('course_id', visibleCourseIds);
+                
+            if (enrollmentsError) throw enrollmentsError;
+            
+            // Step 3: Combine course details with enrollment status
+            const enrollmentMap = new Map(enrollments.map(e => [e.course_id, e.status]));
+
+            // Filter out courses the student is NOT enrolled in (optional, but good for 'My Courses' tab)
+            cachedCourses = visibleCourses
+                .filter(c => enrollmentMap.has(c.id)) 
+                .map(c => ({
+                    id: c.id,
+                    name: c.name,
+                    code: c.code,
+                    status: enrollmentMap.get(c.id) || 'Enrolled' // Default to 'Enrolled'
+                }));
             
             tableBody.innerHTML = '';
             
-            if (enrollments && enrollments.length > 0) {
-                // Cache the loaded courses. Note: The RLS policy should already ensure these are the correct cohort's courses.
-                cachedCourses = enrollments
-                    .filter(e => e.courses)
-                    .map(e => ({
-                        id: e.courses.id,
-                        name: e.courses.name,
-                        code: e.courses.code,
-                        status: e.status
-                    }));
+            if (cachedCourses.length > 0) {
                 
                 cachedCourses.forEach(c => {
                     const row = `
@@ -1007,7 +1008,6 @@
                 });
             } else {
                 tableBody.innerHTML = '<tr><td colspan="2">You are currently not enrolled in any courses for this block/year.</td></tr>';
-                cachedCourses = []; 
             }
             
         } catch (error) {
@@ -1093,7 +1093,8 @@
                 .from('resources')
                 .select('id, title, file_path, program, block, upload_date')
                 // Filter by program AND block OR just general resources (program='General')
-                .or(and(program.eq.${program},block.eq.${block}),program.eq.General)
+                .or(program.eq.${program},program.eq.General) // Simplify OR logic
+                // Additional filter for block (only for the specific program) would go here if needed.
                 .order('upload_date', { ascending: false });
 
             if (error) throw error;
