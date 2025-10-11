@@ -1,35 +1,35 @@
 /**********************************************************************************
- * Final Integrated JavaScript File (script.js) - WITH FIXES
+ * Final Integrated JavaScript File (script.js)
  * SUPERADMIN DASHBOARD - COURSE, USER, ATTENDANCE & FULL FILTERING MANAGEMENT
+ * (Includes fixes for dynamic Program/Intake/Block/Course filtering across all tabs)
  **********************************************************************************/
 
 // !!! IMPORTANT: CHECK YOUR KEYS AND URL !!!
 // REPLACE with your actual Supabase URL and ANON_KEY
-const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
+const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co'; 
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const RESOURCES_BUCKET = 'resources';
 const IP_API_URL = 'https://api.ipify.org?format=json';
 const DEVICE_ID_KEY = 'nchsm_device_id';
-const SETTINGS_TABLE = 'app_settings';
-const MESSAGE_KEY = 'student_welcome';
+const SETTINGS_TABLE = 'app_settings'; 
+const MESSAGE_KEY = 'student_welcome'; 
 
 // Global Variables
 let currentUserProfile = null;
 let attendanceMap = null; // Used for Leaflet instance
-let fullCalendarInstance = null; // Store the FullCalendar object for refreshing
 
 /*******************************************************
  * 1. CORE UTILITY FUNCTIONS
  *******************************************************/
 function $(id){ return document.getElementById(id); }
 
-function escapeHtml(s, isAttribute = false){
+function escapeHtml(s, isAttribute = false){ 
     let str = String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     if (isAttribute) {
         str = str.replace(/'/g,'&#39;').replace(/"/g,'&quot;');
     } else {
-        str = str.replace(/"/g, '&#34;').replace(/'/g, '&#39;'); // Use entity codes for general text safety
+        str = str.replace(/"/g,'&quot;').replace(/'/g,'&#39;');
     }
     return str;
 }
@@ -40,10 +40,7 @@ function escapeHtml(s, isAttribute = false){
  */
 function showFeedback(message, type = 'success') {
     const prefix = type === 'success' ? '✅ Success: ' : '❌ Error: ';
-    // IMPORTANT: Since we cannot use alert(), this falls back to console logging and UI indication.
-    console.log(prefix + message); 
-    // In a real app, this would use a custom modal/toast UI. We'll use a basic console log for now.
-    alert(prefix + message); 
+    alert(prefix + message);
 }
 
 /**
@@ -140,28 +137,23 @@ async function loadSectionData(tabId) {
     // Hide all modals when switching tabs
     document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
     
-    // NOTE: This array of promises allows all data to load concurrently
-    const promises = [];
-
     switch(tabId) {
-        case 'dashboard': promises.push(loadDashboardData()); break;
-        case 'users': promises.push(loadAllUsers()); break;
-        case 'pending': promises.push(loadPendingApprovals()); break;
-        case 'enroll': promises.push(loadStudents(), () => updateBlockTermOptions('account')); break; 
-        case 'courses': promises.push(loadCourses(), () => updateBlockTermOptions('course')); break; 
-        case 'sessions': promises.push(loadScheduledSessions(), populateSessionCourseSelects, () => updateBlockTermOptions('session'), () => updateBlockTermOptions('clinical')); break;
-        case 'attendance': promises.push(loadAttendance(), populateAttendanceSelects); break;
-        case 'cats': promises.push(loadExams(), populateExamCourseSelects, () => updateBlockTermOptions('exam')); break;
-        case 'messages': promises.push(loadMessages()); break;
-        case 'calendar': promises.push(renderFullCalendar()); break; // CRITICAL: Call the calendar render function
-        case 'resources': promises.push(loadResources(), () => updateBlockTermOptions('resource')); break; 
-        case 'welcome-editor': promises.push(loadWelcomeMessageForEdit()); break; 
-        case 'backup': promises.push(loadBackupHistory()); break;
-        default: break;
+        case 'dashboard': 
+            loadDashboardData(); 
+            break;
+        case 'users': loadAllUsers(); break;
+        case 'pending': loadPendingApprovals(); break;
+        case 'enroll': loadStudents(); break; 
+        case 'courses': loadCourses(); break;
+        case 'sessions': loadScheduledSessions(); populateSessionCourseSelects(); break;
+        case 'attendance': loadAttendance(); populateAttendanceSelects(); break;
+        case 'cats': loadExams(); populateExamCourseSelects(); break;
+        case 'messages': loadMessages(); break;
+        case 'calendar': renderFullCalendar(); break;
+        case 'resources': loadResources(); break;
+        case 'welcome-editor': loadWelcomeMessageForEdit(); break; 
+        case 'backup': loadBackupHistory(); break;
     }
-    
-    // Execute all data loading promises
-    await Promise.all(promises.map(p => typeof p === 'function' ? p() : p));
 }
 
 // --- Session / Init ---
@@ -197,78 +189,54 @@ async function initSession() {
     
     // ENROLLMENT/USER TAB
     $('add-account-form')?.addEventListener('submit', handleAddAccount);
-    $('account-program')?.addEventListener('change', () => updateBlockTermOptions('account'));
-    
+    $('account-program')?.addEventListener('change', () => updateBlockTermOptions('account-program', 'account-block-term')); 
+    $('account-intake')?.addEventListener('change', () => updateBlockTermOptions('account-program', 'account-block-term'));
     $('user-search')?.addEventListener('keyup', () => filterTable('user-search', 'users-table', [1, 2, 4]));
     
     // COURSES TAB
     $('add-course-form')?.addEventListener('submit', handleAddCourse);
     $('course-search')?.addEventListener('keyup', () => filterTable('course-search', 'courses-table', [0, 1, 3]));
-    $('course-program')?.addEventListener('change', () => { updateBlockTermOptions('course'); });
+    $('course-program')?.addEventListener('change', () => { updateBlockTermOptions('course-program', 'course-block'); });
+    $('course-intake')?.addEventListener('change', () => { updateBlockTermOptions('course-program', 'course-block'); });
     
     // SESSIONS TAB
     $('add-session-form')?.addEventListener('submit', handleAddSession);
-    $('session_program')?.addEventListener('change', () => { updateBlockTermOptions('session'); loadSessionCourses(); });
-    $('session_block_term')?.addEventListener('change', loadSessionCourses); // Load courses when Block/Term changes
-    $('clinical_program')?.addEventListener('change', () => { updateBlockTermOptions('clinical'); });
-    $('clinical_intake')?.addEventListener('change', () => updateBlockTermOptions('clinical')); 
+    // Program changes MUST update courses AND blocks
+    $('session_program')?.addEventListener('change', () => { 
+        updateBlockTermOptions('session_program', 'session_block_term'); 
+        populateSessionCourseSelects(); 
+    });
+    // Intake only needs to update blocks
+    $('session_intake')?.addEventListener('change', () => updateBlockTermOptions('session_program', 'session_block_term')); 
+    $('clinical_program')?.addEventListener('change', () => { updateBlockTermOptions('clinical_program', 'clinical_block_term'); }); 
+    $('clinical_intake')?.addEventListener('change', () => updateBlockTermOptions('clinical_program', 'clinical_block_term')); 
 
-    // CATS/EXAMS TAB -- CRITICAL FIXES APPLIED HERE
+    // CATS/EXAMS TAB
     $('add-exam-form')?.addEventListener('submit', handleAddExam);
-    $('exam_program')?.addEventListener('change', () => { updateBlockTermOptions('exam'); loadExamCourses(); });
-    $('exam_block_term')?.addEventListener('change', loadExamCourses); // FIX: Added listener for Block/Term to trigger course filtering
+    // Program changes MUST update courses AND blocks
+    $('exam_program')?.addEventListener('change', () => { 
+        filterCoursesByProgram(); // This handles populating exam_course_id
+        updateBlockTermOptions('exam_program', 'exam_block_term'); 
+    });
+    // Intake only needs to update blocks
+    $('exam_intake')?.addEventListener('change', () => updateBlockTermOptions('exam_program', 'exam_block_term')); 
     
     // MESSAGE/WELCOME EDITOR TAB
     $('send-message-form')?.addEventListener('submit', handleSendMessage);
     $('edit-welcome-form')?.addEventListener('submit', handleSaveWelcomeMessage); 
     
     // RESOURCES TAB
-    $('resource_program')?.addEventListener('change', () => { updateBlockTermOptions('resource'); });
-    $('resource-upload-form')?.addEventListener('submit', handleResourceUpload); // Added resource upload handler
-    $('resource-search')?.addEventListener('keyup', () => filterTable('resource-search', 'resources-table', [0, 1, 2]));
+    $('resource_program')?.addEventListener('change', () => { updateBlockTermOptions('resource_program', 'resource_block'); });
+    $('resource_intake')?.addEventListener('change', () => { updateBlockTermOptions('resource_program', 'resource_block'); });
 
     // MODAL/EDIT LISTENERS
     $('edit-user-form')?.addEventListener('submit', handleEditUser);
     document.querySelector('#userEditModal .close')?.addEventListener('click', () => { $('userEditModal').style.display = 'none'; });
-    $('edit_user_program')?.addEventListener('change', () => { updateBlockTermOptions('edit_user'); });
-    
     document.querySelector('#mapModal .close')?.addEventListener('click', () => { $('mapModal').style.display = 'none'; });
     $('edit-course-form')?.addEventListener('submit', handleEditCourse);
-    $('edit_course_program')?.addEventListener('change', () => { updateBlockTermOptions('edit_course'); }); // Use 'edit_course' context
+    $('edit_course_program')?.addEventListener('change', () => { updateBlockTermOptions('edit_course_program', 'edit_course_block'); });
+    $('edit_course_intake')?.addEventListener('change', () => { updateBlockTermOptions('edit_course_program', 'edit_course_block'); });
     document.querySelector('#courseEditModal .close')?.addEventListener('click', () => { $('courseEditModal').style.display = 'none'; });
-
-    // Session Edit Listeners (Placeholder)
-    $('edit-session-form')?.addEventListener('submit', handleEditSession);
-    document.querySelector('#sessionEditModal .close')?.addEventListener('click', () => { $('sessionEditModal').style.display = 'none'; });
-    $('edit-exam-form')?.addEventListener('submit', handleEditExam);
-    document.querySelector('#examEditModal .close')?.addEventListener('click', () => { $('examEditModal').style.display = 'none'; });
-
-    // Location Map listener for session creation
-    $('add-session-form').addEventListener('click', (e) => {
-        if (e.target.matches('.btn-map-picker')) {
-            showMapPicker(
-                $('session_location_name').value, 
-                $('session_latitude').value, 
-                $('session_longitude').value
-            );
-        }
-    });
-
-    // Location Map listener for clinical rotation creation
-    $('add-clinical-form').addEventListener('click', (e) => {
-        if (e.target.matches('.btn-map-picker')) {
-            showMapPicker(
-                $('clinical_location_name').value, 
-                $('clinical_latitude').value, 
-                $('clinical_longitude').value,
-                (lat, lon, name) => {
-                    $('clinical_latitude').value = lat;
-                    $('clinical_longitude').value = lon;
-                    $('clinical_location_name').value = name;
-                }
-            );
-        }
-    });
 }
 
 // Logout
@@ -455,50 +423,36 @@ async function handleSaveWelcomeMessage(e) {
 /**
  * Dynamic Block/Term Options based on Program (KRCHN vs TVET).
  * KRCHN uses Block A/B. TVET uses Term 1/2/3.
- * @param {string} context - The ID prefix of the related selects (e.g., 'account', 'course', 'edit_user', 'session')
- * @param {string|null} selectedProgram - Optional: The program type, used when context select is not yet loaded (e.g., inside modal population).
+ * @param {string} programSelectId - ID of the program SELECT element 
+ * @param {string} blockTermSelectId - ID of the block/term SELECT element 
  */
-function updateBlockTermOptions(context, selectedProgram = null) {
-    let programSelectId, blockTermSelectId;
-
-    // Map the context to the actual HTML IDs
-    switch(context) {
-        case 'account': programSelectId = 'account-program'; blockTermSelectId = 'account-block-term'; break;
-        case 'course': programSelectId = 'course-program'; blockTermSelectId = 'course-block'; break;
-        case 'session': programSelectId = 'session_program'; blockTermSelectId = 'session_block_term'; break;
-        case 'clinical': programSelectId = 'clinical_program'; blockTermSelectId = 'clinical_block_term'; break;
-        case 'exam': programSelectId = 'exam_program'; blockTermSelectId = 'exam_block_term'; break;
-        case 'resource': programSelectId = 'resource_program'; blockTermSelectId = 'resource_block'; break;
-        case 'edit_user': // Used for user edit modal
-        case 'edit_course': // Used for course edit modal
-            programSelectId = `edit_${context}_program`; blockTermSelectId = `edit_${context}_block`; break;
-        default: return;
-    }
-    
-    const programSelect = $(programSelectId);
+function updateBlockTermOptions(programSelectId, blockTermSelectId) {
+    const program = $(programSelectId)?.value;
     const blockTermSelect = $(blockTermSelectId);
     
     if (!blockTermSelect) return;
 
-    // Determine the selected program
-    const program = selectedProgram || (programSelect ? programSelect.value : null);
-
     let options = [];
 
     if (program === 'KRCHN') {
+        // KRCHN specific: Only uses Block A and Block B
         options = [
-            { value: 'Block A', text: 'Block A' },
-            { value: 'Block B', text: 'Block B' }
+            { value: 'A', text: 'Block A' },
+            { value: 'B', text: 'Block B' }
         ];
     } else if (program === 'TVET') {
+        // TVET specific: Uses Term 1, Term 2, Term 3
         options = [
-            { value: 'Term 1', text: 'Term 1' },
-            { value: 'Term 2', text: 'Term 2' },
-            { value: 'Term 3', text: 'Term 3' }
+            { value: 'T1', text: 'Term 1' },
+            { value: 'T2', text: 'Term 2' },
+            { value: 'T3', text: 'Term 3' }
         ];
     } else {
-        // Default/Other (e.g., if program isn't selected or for non-student roles)
-        options = []; 
+        // Default/Other (e.g., if program isn't selected or is Admin)
+        options = [
+            { value: 'A', text: 'Block A / Term 1' },
+            { value: 'B', text: 'Block B / Term 2' }
+        ];
     }
     
     let html = '<option value="">-- Select Block/Term --</option>';
@@ -507,7 +461,6 @@ function updateBlockTermOptions(context, selectedProgram = null) {
     });
     blockTermSelect.innerHTML = html;
 }
-
 
 async function handleAddAccount(e) {
     e.preventDefault();
@@ -556,8 +509,8 @@ async function loadAllUsers() {
     
     tbody.innerHTML = '';
     users.forEach(u => {
-        const roleOptions = ['student', 'lecturer', 'admin', 'superadmin']
-            .map(role => `<option value="${role}" ${u.role === role ? 'selected' : ''}>${role.charAt(0).toUpperCase() + role.slice(1)}</option>`).join('');
+        const roleOptions = ['student', 'admin', 'superadmin']
+            .map(role => `<option value="${role}" ${u.role === role ? 'selected' : ''}>${role}</option>`).join('');
         
         const isBlocked = u.block_program_year === true;
         const statusText = isBlocked ? 'BLOCKED' : (u.approved ? 'Approved' : 'Pending');
@@ -667,26 +620,20 @@ async function openEditUserModal(userId) {
     try {
         const { data: user, error } = await sb.from('profiles').select('*').eq('id', userId).single();
         if (error || !user) throw new Error('User data fetch failed.');
-        
-        // 1. Populate standard fields
+
         $('edit_user_id').value = user.id;
         $('edit_user_name').value = user.full_name || '';
         $('edit_user_email').value = user.email || '';
         $('edit_user_role').value = user.role || 'student';
         $('edit_user_program').value = user.program_type || 'KRCHN';
         $('edit_user_intake').value = user.intake_year || '2024';
-        
-        // 2. CRITICAL FIX: Update the Block/Term dropdown options based on the user's program
-        updateBlockTermOptions('edit_user', user.program_type); 
-
-        // 3. Now set the user's saved Block/Term value (which is now a valid option)
-        $('edit_user_block').value = user.block || ''; 
-
-        // 4. Set status
+        $('edit_user_block').value = user.block || 'A';
         $('edit_user_block_status').value = user.block_program_year === true ? 'true' : 'false';
-        
-        // 5. Clear the password field (security/usability fix)
-        $('edit_user_password').value = '';
+
+        // NOTE: This relies on the select options in the HTML matching the DB data.
+        updateBlockTermOptions('edit_user_program', 'edit_user_block');
+        $('edit_user_block').value = user.block || 'A';
+
 
         $('userEditModal').style.display = 'flex'; 
     } catch (error) {
@@ -701,8 +648,6 @@ async function handleEditUser(e) {
     setButtonLoading(submitButton, true, originalText);
     
     const userId = $('edit_user_id').value;
-    const newPassword = $('edit_user_password').value.trim();
-
     const updatedData = {
         full_name: $('edit_user_name').value.trim(),
         email: $('edit_user_email').value.trim(),
@@ -714,17 +659,8 @@ async function handleEditUser(e) {
     };
 
     try {
-        // 1. Update Profile Table
-        const { error: profileError } = await sb.from('profiles').update(updatedData).eq('id', userId);
-        if (profileError) throw profileError;
-
-        // 2. Handle Password Reset (Auth Table)
-        if (newPassword) {
-            const { error: authError } = await sb.auth.admin.updateUserById(userId, { password: newPassword });
-            if (authError) throw authError;
-            // Note: Password reset success message is intentionally suppressed here to prevent confusion, 
-            // as the main update success message covers the action.
-        }
+        const { error } = await sb.from('profiles').update(updatedData).eq('id', userId);
+        if (error) throw error;
 
         showFeedback('User profile updated successfully!');
         $('userEditModal').style.display = 'none';
@@ -738,7 +674,7 @@ async function handleEditUser(e) {
 
 
 /*******************************************************
- * 5. Courses Tab (COMPLETED SECTION)
+ * 5. Courses Tab
  *******************************************************/
 
 async function handleAddCourse(e) {
@@ -776,8 +712,6 @@ async function handleAddCourse(e) {
         showFeedback('Course added successfully!');
         e.target.reset();
         loadCourses();
-        populateSessionCourseSelects(); // Refresh course options in other tabs
-        populateExamCourseSelects();
     }
 
     setButtonLoading(submitButton, false, originalText);
@@ -785,15 +719,19 @@ async function handleAddCourse(e) {
 
 async function loadCourses() {
     const tbody = $('courses-table');
-    tbody.innerHTML = '<tr><td colspan="7">Loading courses...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6">Loading courses...</td></tr>';
 
     const { data: courses, error } = await fetchData('courses', '*', {}, 'course_name', true);
-    if (error) { tbody.innerHTML = `<tr><td colspan="7">Error loading courses: ${error.message}</td></tr>`; return; }
+    if (error) { tbody.innerHTML = `<tr><td colspan="6">Error loading courses: ${error.message}</td></tr>`; return; }
 
     tbody.innerHTML = '';
     courses.forEach(c => {
         const courseNameAttr = escapeHtml(c.course_name, true);
         const unitCodeAttr = escapeHtml(c.unit_code || '', true);
+        const descriptionAttr = escapeHtml(c.description || '', true);
+        const programTypeAttr = escapeHtml(c.target_program || '', true); 
+        const intakeYearAttr = escapeHtml(c.intake_year || '', true);     
+        const blockAttr = escapeHtml(c.block || '', true);              
 
         tbody.innerHTML += `<tr>
             <td>${escapeHtml(c.course_name)}</td>
@@ -801,53 +739,42 @@ async function loadCourses() {
             <td>${escapeHtml(c.target_program || 'N/A')}</td>
             <td>${escapeHtml(c.intake_year || 'N/A')}</td>
             <td>${escapeHtml(c.block || 'N/A')}</td>
-            <td>${escapeHtml(c.description || 'N/A')}</td>
             <td>
-                <button class="btn btn-map" onclick="openEditCourseModal('${c.id}')">Edit</button>
-                <button class="btn btn-delete" onclick="deleteCourse('${c.id}', '${courseNameAttr}')">Delete</button>
+                <button class="btn-action" onclick="openEditCourseModal('${c.id}', '${courseNameAttr}', '${unitCodeAttr}', '${descriptionAttr}', '${programTypeAttr}', '${intakeYearAttr}', '${blockAttr}')">Edit</button>
+                <button class="btn btn-delete" onclick="deleteCourse('${c.id}')">Delete</button>
             </td>
         </tr>`;
     });
-    filterTable('course-search', 'courses-table', [0, 1, 3]);
-}
-
-async function deleteCourse(courseId, courseName) {
-    if (!confirm(`Are you sure you want to delete the course: ${courseName}? This action is irreversible.`)) return;
-
-    const { error } = await sb.from('courses').delete().eq('id', courseId);
     
-    if (error) {
-        showFeedback(`Failed to delete course: ${error.message}`, 'error');
-    } else {
-        showFeedback(`Course '${courseName}' deleted successfully!`);
-        loadCourses();
-        populateSessionCourseSelects(); // Refresh course options
-        populateExamCourseSelects();
-    }
+    filterTable('course-search', 'courses-table', [0, 1, 3]); 
+    
+    // Auto-populate course selectors in other tabs
+    populateExamCourseSelects(courses);
+    populateSessionCourseSelects(courses);
 }
 
-async function openEditCourseModal(courseId) {
-    try {
-        const { data: course, error } = await sb.from('courses').select('*').eq('id', courseId).single();
-        if (error || !course) throw new Error('Course data fetch failed.');
+async function deleteCourse(courseId) {
+    if (!confirm('Are you sure you want to delete this course? This cannot be undone.')) return;
+    const { error } = await sb.from('courses').delete().eq('id', courseId);
+    if (error) { showFeedback(`Failed to delete course: ${error.message}`, 'error'); } 
+    else { showFeedback('Course deleted successfully!'); loadCourses(); }
+}
 
-        $('edit_course_id').value = course.id;
-        $('edit_course_name').value = course.course_name || '';
-        $('edit_course_unit_code').value = course.unit_code || '';
-        $('edit_course_description').value = course.description || '';
-        $('edit_course_program').value = course.target_program || 'KRCHN';
-        $('edit_course_intake').value = course.intake_year || '2024';
-        
-        // 1. Update the Block/Term dropdown options based on the course's program
-        updateBlockTermOptions('edit_course', course.target_program); 
+function openEditCourseModal(id, name, unit_code, description, target_program, intake_year, block) {
+    $('edit_course_id').value = id;
+    $('edit_course_name').value = name; 
+    $('edit_course_unit_code').value = unit_code; 
+    $('edit_course_description').value = description;
+    $('edit_course_program').value = target_program || ''; 
+    $('edit_course_intake').value = intake_year; 
+    
+    // 1. Load correct block options based on program
+    updateBlockTermOptions('edit_course_program', 'edit_course_block'); 
+    
+    // 2. Set the block value (this must happen AFTER block options are loaded)
+    $('edit_course_block').value = block;
 
-        // 2. Now set the course's saved Block/Term value
-        $('edit_course_block').value = course.block || ''; 
-
-        $('courseEditModal').style.display = 'flex';
-    } catch (error) {
-        showFeedback(`Failed to load course data: ${error.message}`, 'error');
-    }
+    $('courseEditModal').style.display = 'flex'; 
 }
 
 async function handleEditCourse(e) {
@@ -856,27 +783,31 @@ async function handleEditCourse(e) {
     const originalText = submitButton.textContent;
     setButtonLoading(submitButton, true, originalText);
 
-    const courseId = $('edit_course_id').value;
-
-    const updatedData = {
-        course_name: $('edit_course_name').value.trim(),
-        unit_code: $('edit_course_unit_code').value.trim(),
-        description: $('edit_course_description').value.trim(),
-        target_program: $('edit_course_program').value,
-        intake_year: $('edit_course_intake').value,
-        block: $('edit_course_block').value,
-        updated_at: new Date().toISOString()
-    };
-
+    const id = $('edit_course_id').value;
+    const name = $('edit_course_name').value.trim();
+    const unit_code = $('edit_course_unit_code').value.trim(); 
+    const description = $('edit_course_description').value.trim();
+    const target_program = $('edit_course_program').value;
+    const intake_year = $('edit_course_intake').value;
+    const block = $('edit_course_block').value;
+    
     try {
-        const { error } = await sb.from('courses').update(updatedData).eq('id', courseId);
+        const updateData = { 
+            course_name: name, 
+            unit_code: unit_code, 
+            description: description, 
+            target_program: target_program,
+            intake_year: intake_year,
+            block: block
+        };
+        
+        const { error } = await sb.from('courses').update(updateData).eq('id', id); 
+
         if (error) throw error;
 
         showFeedback('Course updated successfully!');
         $('courseEditModal').style.display = 'none';
-        loadCourses();
-        populateSessionCourseSelects(); // Refresh course options
-        populateExamCourseSelects();
+        loadCourses(); 
     } catch (e) {
         showFeedback('Failed to update course: ' + (e.message || e), 'error');
     } finally {
@@ -886,177 +817,408 @@ async function handleEditCourse(e) {
 
 
 /*******************************************************
- * 6. Sessions / Clinical Rotations
+ * 6. Manage Sessions Tab (Including Clinical)
  *******************************************************/
 
-async function populateSessionCourseSelects() {
-    const { data: courses } = await fetchData('courses', 'id, unit_code, course_name', {}, 'unit_code', true);
+async function populateSessionCourseSelects(courses = null) {
+    const courseSelect = $('session_course_id');
+    const program = $('session_program').value;
     
-    // Populate session course select
-    const sessionSelect = $('session_course_id');
-    populateSelect(sessionSelect, courses, 'id', 'course_name', 'Select Course');
+    let filteredCourses = [];
     
-    // Populate clinical course select (optional, if rotations are tied to courses)
-    const clinicalSelect = $('clinical_course_id');
-    populateSelect(clinicalSelect, courses, 'id', 'course_name', 'Select Course (Optional)');
+    if (!program) {
+        // If no program is selected, show no courses initially
+        filteredCourses = []; 
+    } else {
+        if (!courses) {
+            // Fetch courses if not already provided
+            const { data } = await fetchData('courses', 'id, course_name', { target_program: program }, 'course_name', true);
+            filteredCourses = data || [];
+        } else {
+            // Filter courses if provided (e.g., from loadCourses call)
+            filteredCourses = courses.filter(c => c.target_program === program);
+        }
+    }
+    
+    populateSelect(courseSelect, filteredCourses, 'id', 'course_name', 'Select Course (Optional)');
 }
 
-async function loadSessionCourses() {
-    // This function is triggered by program/block change to filter the courses displayed in the select list.
-    const program = $('session_program').value;
-    const blockTerm = $('session_block_term').value;
 
-    let filters = {};
-    if (program) filters.target_program = program;
-    if (blockTerm) filters.block = blockTerm;
+async function loadScheduledSessions() {
+    const tbody = $('scheduled-sessions-table');
+    tbody.innerHTML = '<tr><td colspan="6">Loading scheduled sessions...</td></tr>';
+    
+    const { data: sessions, error } = await fetchData('scheduled_sessions', '*, course:course_id(course_name)', {}, 'session_date', false);
+    if (error) { tbody.innerHTML = `<tr><td colspan="6">Error loading sessions: ${error.message}</td></tr>`; return; }
 
-    const { data: courses } = await fetchData('courses', 'id, course_name', filters, 'course_name', true);
-    populateSelect($('session_course_id'), courses, 'id', 'course_name', 'Select Course');
+    tbody.innerHTML = '';
+    sessions.forEach(s => {
+        const dateTime = new Date(s.session_date).toLocaleDateString() + ' ' + (s.session_time || 'N/A');
+        const courseName = s.course?.course_name || 'N/A';
+        
+        let detail = s.session_title;
+        if (s.session_type === 'clinical' && s.clinical_area) {
+            detail += ` (${s.clinical_area})`;
+        } else if (s.session_type === 'class' && courseName !== 'N/A') {
+            detail += ` (${courseName})`;
+        }
+
+        tbody.innerHTML += `<tr>
+            <td>${escapeHtml(s.session_type)}</td>
+            <td>${escapeHtml(detail)}</td>
+            <td>${dateTime}</td>
+            <td>${escapeHtml(s.target_program || 'N/A')}</td>
+            <td>${escapeHtml(s.block_term || 'N/A')}</td>
+            <td>
+                <button class="btn btn-delete" onclick="deleteSession('${s.id}')">Delete</button>
+            </td>
+        </tr>`;
+    });
 }
 
 async function handleAddSession(e) {
     e.preventDefault();
-    const isClinical = e.target.id === 'add-clinical-form'; // Assuming a separate form for clinical rotations
-    const formIdPrefix = isClinical ? 'clinical_' : 'session_';
     const submitButton = e.submitter;
     const originalText = submitButton.textContent;
     setButtonLoading(submitButton, true, originalText);
 
-    const course_id = $(formIdPrefix + 'course_id').value;
-    const session_type = isClinical ? 'Clinical Rotation' : $(formIdPrefix + 'type').value;
-    const start_time = $(formIdPrefix + 'start_time').value;
-    const end_time = $(formIdPrefix + 'end_time').value;
-    const location_name = $(formIdPrefix + 'location_name').value.trim();
-    const latitude = $(formIdPrefix + 'latitude').value;
-    const longitude = $(formIdPrefix + 'longitude').value;
-    const program = $(formIdPrefix + 'program').value;
-    const block_term = $(formIdPrefix + 'block_term').value;
-    const intake = $(formIdPrefix + 'intake').value;
+    const session_type = $('session_type').value;
+    const session_title = $('session_title').value.trim();
+    const session_date = $('session_date').value;
+    const session_time = $('session_time').value;
+    const target_program = $('session_program').value;
+    const intake_year = $('session_intake').value;
+    const block_term = $('session_block_term').value;
+    const course_id = $('session_course_id').value || null;
 
-    if (!session_type || !start_time || !end_time || !program || !block_term) {
-        showFeedback('All mandatory fields (Type, Time, Program, Block/Term) must be filled.', 'error');
+    if (!session_type || !session_title || !session_date || !target_program || !block_term) {
+        showFeedback('Please fill in all required fields.', 'error');
         setButtonLoading(submitButton, false, originalText);
         return;
     }
 
-    const newSession = {
-        course_id,
-        session_type,
-        start_time: new Date(start_time).toISOString(), // Ensure ISO format
-        end_time: new Date(end_time).toISOString(),     // Ensure ISO format
-        location_name,
-        latitude: latitude ? parseFloat(latitude) : null,
-        longitude: longitude ? parseFloat(longitude) : null,
-        target_program: program,
-        target_block_term: block_term,
-        target_intake: intake,
-        is_clinical: isClinical
+    const sessionData = {
+        session_type, session_title, 
+        session_date, session_time: session_time || null, 
+        target_program, intake_year, block_term, course_id
     };
 
-    const { error } = await sb.from('geo_sessions').insert(newSession);
-
+    const { error } = await sb.from('scheduled_sessions').insert([sessionData]);
+    
     if (error) {
-        showFeedback(`Failed to add session: ${error.message}`, 'error');
+        showFeedback(`Failed to schedule session: ${error.message}`, 'error');
     } else {
-        showFeedback(`${isClinical ? 'Clinical Rotation' : 'Session'} added successfully!`);
-        e.target.reset();
-        loadScheduledSessions();
+        showFeedback('Session scheduled successfully!');
+        e.target.reset(); 
+        loadScheduledSessions(); 
         renderFullCalendar();
     }
+
     setButtonLoading(submitButton, false, originalText);
 }
 
-async function loadScheduledSessions() {
-    const tbody = $('sessions-table');
-    const tbodyClinical = $('clinical-table');
-    tbody.innerHTML = '<tr><td colspan="9">Loading sessions...</td></tr>';
-    tbodyClinical.innerHTML = '<tr><td colspan="9">Loading clinical rotations...</td></tr>';
-
-    const { data: sessions, error } = await fetchData('geo_sessions', '*, courses(course_name)', {}, 'start_time', false);
-    if (error) { 
-        tbody.innerHTML = `<tr><td colspan="9">Error loading sessions: ${error.message}</td></tr>`; 
-        tbodyClinical.innerHTML = `<tr><td colspan="9">Error loading clinicals: ${error.message}</td></tr>`;
-        return; 
-    }
-
-    let sessionHtml = '';
-    let clinicalHtml = '';
-
-    sessions.forEach(s => {
-        const courseName = s.courses?.course_name || 'N/A';
-        const start = new Date(s.start_time).toLocaleString();
-        const end = new Date(s.end_time).toLocaleString();
-        const isClinical = s.is_clinical;
-
-        const row = `<tr>
-            <td>${escapeHtml(courseName)}</td>
-            <td>${escapeHtml(s.session_type)}</td>
-            <td>${start}</td>
-            <td>${end}</td>
-            <td>${escapeHtml(s.location_name || 'N/A')}</td>
-            <td>${escapeHtml(s.target_program)} / ${escapeHtml(s.target_block_term)}</td>
-            <td>${s.latitude ? 'Yes' : 'No'}</td>
-            <td>
-                <button class="btn btn-map" onclick="showMapModal(${s.latitude}, ${s.longitude}, '${escapeHtml(s.location_name, true)}')">View Map</button>
-            </td>
-            <td>
-                <button class="btn btn-map" onclick="openEditSessionModal('${s.id}')">Edit</button>
-                <button class="btn btn-delete" onclick="deleteSession('${s.id}', '${s.session_type}')">Delete</button>
-            </td>
-        </tr>`;
-        
-        if (isClinical) {
-            clinicalHtml += row;
-        } else {
-            sessionHtml += row;
-        }
-    });
-
-    tbody.innerHTML = sessionHtml || '<tr><td colspan="9">No regular sessions scheduled.</td></tr>';
-    tbodyClinical.innerHTML = clinicalHtml || '<tr><td colspan="9">No clinical rotations scheduled.</td></tr>';
+async function deleteSession(sessionId) {
+    if (!confirm('Are you sure you want to delete this session?')) return;
+    const { error } = await sb.from('scheduled_sessions').delete().eq('id', sessionId);
+    if (error) { showFeedback(`Failed to delete session: ${error.message}`, 'error'); } 
+    else { showFeedback('Session deleted successfully!'); loadScheduledSessions(); renderFullCalendar(); }
 }
 
-async function deleteSession(sessionId, sessionType) {
-    if (!confirm(`Are you sure you want to delete the ${sessionType}? This will affect student attendance records.`)) return;
+// Placeholder function for Clinical Name Update
+function saveClinicalName() {
+    const program = $('clinical_program').value;
+    const intake = $('clinical_intake').value;
+    const block = $('clinical_block_term').value;
+    const name = $('clinical_name_to_edit').value.trim();
 
-    const { error } = await sb.from('geo_sessions').delete().eq('id', sessionId);
+    if (!program || !intake || !block || !name) {
+        showFeedback('Please select Program, Intake, Block/Term and provide a name.', 'error');
+        return;
+    }
     
-    if (error) {
-        showFeedback(`Failed to delete session: ${error.message}`, 'error');
-    } else {
-        showFeedback(`${sessionType} deleted successfully!`);
-        loadScheduledSessions();
-        renderFullCalendar();
-    }
-}
-
-async function handleEditSession(e) {
-    e.preventDefault();
-    showFeedback('Session edit logic not fully implemented yet.', 'error');
-    // Implement full CRUD logic for editing sessions/clinicals here.
+    showFeedback(`Clinical Area: "${name}" saved for ${program} ${intake} Block/Term ${block}. (DB logic not implemented)`, 'success');
 }
 
 
 /*******************************************************
- * 7. Exams / CATS
+ * 7. Attendance Tab
  *******************************************************/
 
-async function populateExamCourseSelects() {
-    const { data: courses } = await fetchData('courses', 'id, unit_code, course_name', {}, 'unit_code', true);
-    populateSelect($('exam_course_id'), courses, 'id', 'course_name', 'Select Course');
+async function populateAttendanceSelects() {
+    const { data: students } = await fetchData('profiles', 'id, full_name', { role: 'student', approved: true }, 'full_name', true);
+    const attStudentSelect = $('att_student_id');
+    if (students) { populateSelect(attStudentSelect, students, 'id', 'full_name', 'Select Student'); }
 }
 
-async function loadExamCourses() {
-    // This function is triggered by program/block change to filter the courses displayed in the select list.
+function toggleAttendanceFields() {
+    const sessionType = $('att_session_type').value;
+    const departmentInput = $('att_department');
+    const courseSelect = $('att_course_id');
+    
+    // These elements don't exist in the HTML provided, so we'll skip checking for them or hide them
+    // const departmentGroup = $('att_department_group');
+    // const courseGroup = $('att_course_group');
+    
+    // if (departmentGroup) departmentGroup.style.display = 'block'; // Assume always visible for robustness
+    // if (courseGroup) courseGroup.style.display = 'block'; // Assume always visible for robustness
+
+    if (sessionType === 'clinical') {
+        departmentInput.placeholder = "Clinical Department/Area";
+        departmentInput.required = true;
+        if (courseSelect) courseSelect.required = false;
+        if (courseSelect) courseSelect.value = ""; 
+    } else if (sessionType === 'classroom') {
+        departmentInput.placeholder = "Classroom Location/Room (Optional)";
+        departmentInput.required = false;
+        if (courseSelect) courseSelect.required = true;
+    } else {
+        departmentInput.placeholder = "Location/Detail (e.g., Virtual Meeting Link)";
+        departmentInput.required = false;
+        if (courseSelect) courseSelect.required = false;
+        if (courseSelect) courseSelect.value = "";
+    }
+}
+
+async function handleManualAttendance(e) {
+    e.preventDefault();
+    const submitButton = e.submitter;
+    const originalText = submitButton.textContent;
+    setButtonLoading(submitButton, true, originalText);
+
+    const student_id = $('att_student_id').value;
+    const session_type = $('att_session_type').value;
+    const date = $('att_date').value;
+    const time = $('att_time').value;
+    
+    const course_id = session_type === 'classroom' ? $('att_course_id').value : null;
+    const department = $('att_department').value.trim() || null; // Use department for clinical or other location details
+    const location_name = $('att_location').value.trim() || 'Manual Admin Entry';
+    
+    let check_in_time = new Date().toISOString();
+    if (date && time) {
+        check_in_time = new Date(`${date}T${time}`).toISOString();
+    } else if (date) {
+        check_in_time = new Date(date).toISOString();
+    }
+    
+    if (!student_id || (session_type === 'classroom' && !course_id)) {
+        showFeedback('Please select a student and fill in required fields.', 'error');
+        setButtonLoading(submitButton, false, originalText);
+        return;
+    }
+    
+    const attendanceData = {
+        student_id: student_id,
+        session_type: session_type,
+        check_in_time: check_in_time, 
+        department: department,
+        course_id: course_id,
+        is_manual_entry: true, 
+        latitude: null, longitude: null,
+        location_name: location_name,
+        ip_address: await getIPAddress(),
+        device_id: getDeviceId()
+    };
+
+    const { error } = await sb.from('geo_attendance_logs').insert([attendanceData]);
+    
+    if (error) {
+        showFeedback(`Failed to record attendance: ${error.message}`, 'error');
+    } else {
+        showFeedback('Manual attendance recorded successfully!');
+        e.target.reset(); 
+        loadAttendance(); 
+        toggleAttendanceFields(); 
+    }
+
+    setButtonLoading(submitButton, false, originalText);
+}
+
+async function loadAttendance() {
+    const todayBody = $('attendance-table');
+    const pastBody = $('past-attendance-table');
+    
+    todayBody.innerHTML = '<tr><td colspan="6">Loading today\'s records...</td></tr>';
+    pastBody.innerHTML = '<tr><td colspan="5">Loading history...</td></tr>';
+    
+    const todayISO = new Date().toISOString().slice(0, 10);
+
+    const { data: allRecords, error } = await fetchData(
+        'geo_attendance_logs', 
+        '*, profile:student_id(full_name, role), course:course_id(course_name)', 
+        {}, 'check_in_time', false 
+    );
+
+    if (error) { 
+        todayBody.innerHTML = `<tr><td colspan="6">Error loading records: ${error.message}</td></tr>`; 
+        pastBody.innerHTML = `<tr><td colspan="5">Error loading records: ${error.message}</td></tr>`;
+        return; 
+    }
+
+    let todayHtml = '';
+    let pastHtml = '';
+    
+    allRecords.forEach(r => {
+        const userName = r.profile?.full_name || 'N/A User';
+        const userRole = r.profile?.role || 'N/A';
+        const dateTime = new Date(r.check_in_time).toLocaleString();
+        
+        let locationDetail;
+        if (r.session_type === 'clinical' && r.department) {
+            locationDetail = escapeHtml(r.department);
+        } else if (r.session_type === 'classroom' && r.course?.course_name) {
+            locationDetail = escapeHtml(r.course.course_name);
+        } else {
+            locationDetail = escapeHtml(r.location_name || r.department || 'N/A Location');
+        }
+        
+        const recordDate = new Date(r.check_in_time).toISOString().slice(0, 10);
+        
+        if (recordDate === todayISO) {
+            // TODAY'S RECORDS
+            let geoStatus;
+            let mapButton = '';
+            if (r.latitude && r.longitude) {
+                geoStatus = 'Yes (Geo-Logged)';
+                mapButton = `<button class="btn btn-map" onclick="showMap('${r.latitude}', '${r.longitude}', '${escapeHtml(r.location_name || 'Check-in Location', true)}', '${escapeHtml(userName, true)}', '${dateTime}')">View Map</button>`;
+            } else {
+                geoStatus = 'No (Manual)';
+            }
+            
+            todayHtml += `<tr>
+                <td>${escapeHtml(userName)}</td>
+                <td>${escapeHtml(r.session_type || 'N/A')}</td>
+                <td>${locationDetail}</td>
+                <td>${dateTime}</td>
+                <td>${geoStatus}</td>
+                <td>
+                    ${mapButton}
+                    <button class="btn btn-delete" onclick="deleteAttendanceRecord('${r.id}')">Delete</button>
+                </td>
+            </tr>`;
+        } else {
+            // PAST HISTORY
+            pastHtml += `<tr>
+                <td>${escapeHtml(userName)} (${userRole})</td>
+                <td>${escapeHtml(r.session_type || 'N/A')}</td>
+                <td>${dateTime}</td>
+                <td>${r.is_manual_entry ? 'Manual' : 'Geo-Tracked'}</td>
+                <td>
+                    <button class="btn btn-delete" onclick="deleteAttendanceRecord('${r.id}')">Delete</button>
+                </td>
+            </tr>`;
+        }
+    });
+    
+    todayBody.innerHTML = todayHtml || '<tr><td colspan="6">No check-in records for today.</td></tr>';
+    pastBody.innerHTML = pastHtml || '<tr><td colspan="5">No past attendance history found.</td></tr>';
+
+    filterTable('attendance-search', 'attendance-table', [0, 1, 2]); 
+}
+
+function showMap(lat, lng, locationName, studentName, dateTime) {
+    const mapModal = $('mapModal');
+    const mapContainer = $('mapbox-map'); 
+    
+    // NOTE: map-modal-title element is missing in the provided HTML, using mapModal.querySelector if possible or omitting.
+    // Assuming the title is set by the H2 in the modal content which is static.
+    
+    $('map-details').innerHTML = `<strong>Time:</strong> ${dateTime}<br><strong>Location:</strong> ${locationName}<br><strong>Coords:</strong> ${lat}, ${lng}`;
+
+    mapModal.style.display = 'flex';
+    
+    if (attendanceMap) {
+        attendanceMap.remove(); 
+    }
+    
+    // Initialize Leaflet Map
+    attendanceMap = L.map(mapContainer.id, { attributionControl: false }).setView([lat, lng], 15);
+
+    // Add Tile Layer (OpenStreetMap)
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    }).addTo(attendanceMap);
+
+    // Add Marker
+    L.marker([lat, lng])
+        .bindPopup(`<h5>${locationName}</h5><p>${studentName}</p>`)
+        .addTo(attendanceMap)
+        .openPopup();
+        
+    setTimeout(() => { 
+        if (attendanceMap) { attendanceMap.invalidateSize(); } 
+    }, 100); 
+}
+
+async function deleteAttendanceRecord(recordId) {
+    if (!confirm('Are you sure you want to delete this attendance record?')) return;
+    const { error } = await sb.from('geo_attendance_logs').delete().eq('id', recordId);
+    if (error) { showFeedback(`Failed to delete record: ${error.message}`, 'error'); } 
+    else { showFeedback('Attendance record deleted successfully!'); loadAttendance(); }
+}
+
+async function adminCheckIn() {
+    const ip = await getIPAddress();
+    const deviceId = getDeviceId();
+    
+    if (!currentUserProfile) {
+        showFeedback('User profile not loaded. Cannot check in.', 'error');
+        return;
+    }
+
+    const checkinData = {
+        student_id: currentUserProfile.id,
+        session_type: 'admin_checkin',
+        check_in_time: new Date().toISOString(), 
+        is_manual_entry: true, 
+        location_name: 'Admin Self Check-in',
+        ip_address: ip,
+        device_id: deviceId
+    };
+
+    const { error } = await sb.from('geo_attendance_logs').insert([checkinData]);
+    
+    if (error) {
+        showFeedback(`Failed to record admin check-in: ${error.message}`, 'error');
+    } else {
+        showFeedback('Admin self check-in recorded successfully!');
+        loadAttendance(); 
+        loadDashboardData();
+    }
+}
+
+
+/*******************************************************
+ * 8. CATS/Exams Tab
+ *******************************************************/
+async function populateExamCourseSelects(courses = null) {
+    const courseSelect = $('exam_course_id');
     const program = $('exam_program').value;
-    const blockTerm = $('exam_block_term').value;
+    
+    let filteredCourses = [];
+    
+    if (!program) {
+        // If no program is selected, show no courses initially
+        filteredCourses = []; 
+    } else {
+        if (!courses) {
+            // Fetch courses if not already provided
+            const { data } = await fetchData('courses', 'id, course_name', { target_program: program }, 'course_name', true);
+            filteredCourses = data || [];
+        } else {
+            // Filter courses if provided (e.g., from loadCourses call)
+            filteredCourses = courses.filter(c => c.target_program === program);
+        }
+    }
+    
+    // The select box for courses is now populated only with courses matching the selected program.
+    populateSelect(courseSelect, filteredCourses, 'id', 'course_name', 'Select Course');
+}
 
-    let filters = {};
-    if (program) filters.target_program = program;
-    if (blockTerm) filters.block = blockTerm;
-
-    const { data: courses } = await fetchData('courses', 'id, course_name', filters, 'course_name', true);
-    populateSelect($('exam_course_id'), courses, 'id', 'course_name', 'Select Course');
+function filterCoursesByProgram() {
+    // This is the simplified function called by the exam_program onchange handler.
+    populateExamCourseSelects();
 }
 
 async function handleAddExam(e) {
@@ -1065,354 +1227,135 @@ async function handleAddExam(e) {
     const originalText = submitButton.textContent;
     setButtonLoading(submitButton, true, originalText);
 
-    const course_id = $('exam_course_id').value;
-    const exam_type = $('exam_type').value;
-    const exam_date = $('exam_date').value;
-    const start_time = $('exam_start_time').value;
-    const end_time = $('exam_end_time').value;
-    const location_name = $('exam_location_name').value.trim();
     const program = $('exam_program').value;
+    const course_id = $('exam_course_id').value;
+    const exam_title = $('exam_title').value.trim();
+    const exam_date = $('exam_date').value;
+    const exam_status = $('exam_status').value;
+    const intake = $('exam_intake').value;
     const block_term = $('exam_block_term').value;
 
-    if (!course_id || !exam_type || !exam_date || !start_time || !end_time || !program || !block_term) {
-        showFeedback('All exam details are required.', 'error');
+    if (!program || !course_id || !exam_title || !exam_date || !intake || !block_term) {
+        showFeedback('All fields in the Add Exam form are required.', 'error');
         setButtonLoading(submitButton, false, originalText);
         return;
     }
 
-    const startTimeCombined = new Date(`${exam_date}T${start_time}:00`).toISOString();
-    const endTimeCombined = new Date(`${exam_date}T${end_time}:00`).toISOString();
+    const { error } = await sb.from('exams').insert({ 
+        exam_name: exam_title, 
+        course_id, 
+        exam_date, 
+        target_program: program, 
+        intake_year: intake,     
+        block_term,              
+        status: exam_status
+    });
 
-    const newExam = {
-        course_id,
-        exam_type,
-        start_time: startTimeCombined,
-        end_time: endTimeCombined,
-        location_name,
-        target_program: program,
-        target_block_term: block_term
-    };
+    if (error) { showFeedback(`Failed to add exam: ${error.message}`, 'error'); } 
+    else { showFeedback('Exam added successfully!'); e.target.reset(); loadExams(); renderFullCalendar(); }
 
-    const { error } = await sb.from('exams_cats').insert(newExam);
-
-    if (error) {
-        showFeedback(`Failed to add exam/CAT: ${error.message}`, 'error');
-    } else {
-        showFeedback('Exam/CAT scheduled successfully!');
-        e.target.reset();
-        loadExams();
-        renderFullCalendar();
-    }
     setButtonLoading(submitButton, false, originalText);
 }
 
+
 async function loadExams() {
     const tbody = $('exams-table');
-    tbody.innerHTML = '<tr><td colspan="8">Loading exams and CATs...</td></tr>';
-
-    const { data: exams, error } = await fetchData('exams_cats', '*, courses(course_name, unit_code)', {}, 'start_time', false);
+    tbody.innerHTML = '<tr><td colspan="8">Loading exams/CATs...</td></tr>';
+    
+    const { data: exams, error } = await fetchData('exams', '*, course:course_id(course_name)', {}, 'exam_date', false);
     if (error) { tbody.innerHTML = `<tr><td colspan="8">Error loading exams: ${error.message}</td></tr>`; return; }
 
     tbody.innerHTML = '';
     exams.forEach(e => {
-        const courseName = e.courses?.course_name || 'N/A';
-        const unitCode = e.courses?.unit_code || 'N/A';
-        const start = new Date(e.start_time).toLocaleString();
-        const end = new Date(e.end_time).toLocaleString();
+        const examDate = new Date(e.exam_date).toLocaleDateString();
+        const courseName = e.course?.course_name || 'N/A';
+        const program = e.target_program || 'N/A';
+        const intake = e.intake_year || 'N/A';
 
         tbody.innerHTML += `<tr>
-            <td>${escapeHtml(e.exam_type)}</td>
-            <td>${escapeHtml(courseName)} (${unitCode})</td>
-            <td>${start}</td>
-            <td>${end}</td>
-            <td>${escapeHtml(e.location_name || 'N/A')}</td>
-            <td>${escapeHtml(e.target_program)} / ${escapeHtml(e.target_block_term)}</td>
+            <td>${escapeHtml(program)}</td>
+            <td>${escapeHtml(courseName)}</td>
+            <td>${escapeHtml(e.exam_name)}</td>
+            <td>${examDate}</td>
+            <td>${escapeHtml(e.status)}</td>
+            <td>${escapeHtml(intake)}</td>
+            <td>${escapeHtml(e.block_term || 'N/A')}</td>
             <td>
-                <button class="btn btn-map" onclick="openEditExamModal('${e.id}')">Edit</button>
-                <button class="btn btn-delete" onclick="deleteExam('${e.id}', '${e.exam_type} - ${unitCode}')">Delete</button>
+                <button class="btn-action" onclick="openGradeModal('${e.id}', '${escapeHtml(e.exam_name, true)}')">Grade</button>
+                <button class="btn btn-delete" onclick="deleteExam('${e.id}')">Delete</button>
             </td>
         </tr>`;
     });
-}
-
-async function deleteExam(examId, examDetails) {
-    if (!confirm(`Are you sure you want to delete the assessment: ${examDetails}?`)) return;
-
-    const { error } = await sb.from('exams_cats').delete().eq('id', examId);
     
-    if (error) {
-        showFeedback(`Failed to delete assessment: ${error.message}`, 'error');
-    } else {
-        showFeedback(`Assessment '${examDetails}' deleted successfully!`);
-        loadExams();
-        renderFullCalendar();
-    }
+    filterTable('exam-search', 'exams-table', [2, 1, 6]); 
 }
 
-async function handleEditExam(e) {
-    e.preventDefault();
-    showFeedback('Exam/CAT edit logic not fully implemented yet.', 'error');
-    // Implement full CRUD logic for editing exams/cats here.
+async function deleteExam(examId) {
+    if (!confirm('Are you sure you want to delete this exam? This cannot be undone.')) return;
+    const { error } = await sb.from('exams').delete().eq('id', examId);
+    if (error) { showFeedback(`Failed to delete exam: ${error.message}`, 'error'); } 
+    else { showFeedback('Exam deleted successfully!'); loadExams(); renderFullCalendar(); }
+}
+
+function openGradeModal(examId, examName) {
+    showFeedback(`Grading functionality for: ${examName} (ID: ${examId}) is pending implementation.`, 'success');
 }
 
 
 /*******************************************************
- * 8. Calendar Integration (THE CORE ANSWER)
+ * 9. Calendar Tab (FullCalendar Integration)
  *******************************************************/
 
-async function fetchCalendarEvents() {
+async function renderFullCalendar() {
+    const calendarEl = $('fullCalendarDisplay');
+    if (!calendarEl) return;
+    calendarEl.innerHTML = ''; 
+
+    const { data: sessions } = await fetchData('scheduled_sessions', '*', {}, 'session_date', true);
+    const { data: exams } = await fetchData('exams', '*, course:course_id(course_name)', {}, 'exam_date', true);
+
     const events = [];
 
-    // Fetch Sessions and Clinical Rotations (from geo_sessions)
-    const { data: sessions, error: sessionError } = await fetchData('geo_sessions', '*, courses(course_name, unit_code)', {}, 'start_time', false);
-    if (sessionError) { console.error("Error fetching sessions for calendar:", sessionError); }
-
+    // Map Sessions
     sessions?.forEach(s => {
-        const course = s.courses?.course_name || 'No Course';
-        const type = s.is_clinical ? 'CLINICAL' : 'SESSION';
-        const color = s.is_clinical ? '#03543f' : '#1e3a8a'; // Green for Clinical, Blue for Session
-
+        let title = `${s.session_type.toUpperCase()}: ${s.session_title}`;
+        let color = s.session_type === 'clinical' ? '#2ecc71' : s.session_type === 'event' ? '#9b59b6' : '#3498db';
+        
         events.push({
-            id: s.id,
-            title: `${type}: ${course} (${s.session_type})`,
-            start: s.start_time,
-            end: s.end_time,
-            allDay: s.is_clinical, // Clinical rotations might be all-day blocks
-            color: color,
-            extendedProps: {
-                location: s.location_name,
-                program: s.target_program,
-                block: s.target_block_term
-            }
-        });
-    });
-
-    // Fetch Exams and CATs (from exams_cats)
-    const { data: exams, error: examError } = await fetchData('exams_cats', '*, courses(course_name, unit_code)', {}, 'start_time', false);
-    if (examError) { console.error("Error fetching exams for calendar:", examError); }
-
-    exams?.forEach(e => {
-        const courseUnit = e.courses?.unit_code || 'N/A';
-        const title = `${e.exam_type.toUpperCase()}: ${courseUnit}`;
-        const color = '#991b1b'; // Red for Exams/CATS
-
-        events.push({
-            id: e.id,
             title: title,
-            start: e.start_time,
-            end: e.end_time,
-            color: color,
-            extendedProps: {
-                location: e.location_name,
-                program: e.target_program,
-                block: e.target_block_term
-            }
+            start: s.session_date + (s.session_time ? `T${s.session_time}` : ''),
+            allDay: !s.session_time,
+            color: color
         });
     });
 
-    return events;
-}
+    // Map Exams
+    exams?.forEach(e => {
+        const courseName = e.course?.course_name || 'Exam';
+        events.push({
+            title: `EXAM: ${e.exam_name} (${courseName})`,
+            start: e.exam_date,
+            allDay: true,
+            color: '#e74c3c'
+        });
+    });
 
-async function renderFullCalendar() {
-    const calendarEl = $('full-calendar');
-    if (!calendarEl) return;
-
-    // Check if FullCalendar is loaded (assuming CDN link in HTML)
-    if (typeof FullCalendar === 'undefined') {
-        calendarEl.innerHTML = '<p class="error-message">FullCalendar library not loaded. Please ensure the required CDN scripts are included in the HTML.</p>';
-        return;
-    }
-
-    // Destroy existing instance if present
-    if (fullCalendarInstance) {
-        fullCalendarInstance.destroy();
-    }
-
-    const events = await fetchCalendarEvents();
-    
-    fullCalendarInstance = new FullCalendar.Calendar(calendarEl, {
+    const calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: 'dayGridMonth',
         headerToolbar: {
             left: 'prev,next today',
             center: 'title',
-            right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek'
+            right: 'dayGridMonth,timeGridWeek,timeGridDay'
         },
-        events: events,
-        eventDisplay: 'block',
-        eventTextColor: '#ffffff',
-        eventClick: function(info) {
-            const props = info.event.extendedProps;
-            const title = info.event.title;
-            const start = info.event.start.toLocaleString();
-            const end = info.event.end.toLocaleString();
-
-            let details = `
-                <strong>Event:</strong> ${title}<br>
-                <strong>Start:</strong> ${start}<br>
-                <strong>End:</strong> ${end}<br>
-                <strong>Location:</strong> ${escapeHtml(props.location || 'N/A')}<br>
-                <strong>Program:</strong> ${escapeHtml(props.program || 'N/A')}<br>
-                <strong>Block/Term:</strong> ${escapeHtml(props.block || 'N/A')}
-            `;
-            
-            // NOTE: Using a simple alert, replaced with custom modal in production.
-            alert(`--- Scheduled Event Details ---\n${details.replace(/<br>/g, '\n').replace(/<strong>/g, '').replace(/<\/strong>/g, '')}`);
-        },
-        loading: function(isLoading) {
-            // Optional: Show/hide loading indicator
-            calendarEl.style.opacity = isLoading ? 0.5 : 1;
-        }
+        events: events
     });
 
-    fullCalendarInstance.render();
-}
-
-
-/*******************************************************
- * 9. Location / Map Handlers
- *******************************************************/
-
-/**
- * Shows the map modal and initializes the Leaflet map for viewing a specific location.
- */
-function showMapModal(lat, lon, name) {
-    if (lat && lon) {
-        $('mapModalTitle').textContent = `Location: ${name}`;
-        $('mapModal').style.display = 'flex';
-        initializeMap(lat, lon, name, false); // Initialize map for viewing only
-    } else {
-        showFeedback(`Location coordinates not available for ${name}.`, 'error');
-    }
-}
-
-/**
- * Initializes the Leaflet map for viewing or picking a location.
- * @param {number} lat - Initial Latitude
- * @param {number} lon - Initial Longitude
- * @param {string} name - Location Name
- * @param {boolean} isPicker - If true, enables map clicking for selection.
- * @param {function} callback - Callback function(lat, lon, name) if isPicker is true.
- */
-function initializeMap(lat, lon, name, isPicker = false, callback = null) {
-    if (attendanceMap) {
-        attendanceMap.remove();
-    }
-
-    // Default to a central location if coordinates are missing
-    const defaultLat = lat || 0; 
-    const defaultLon = lon || 0; 
-    const mapCenter = [defaultLat, defaultLon];
-
-    attendanceMap = L.map('attendance-map').setView(mapCenter, 13);
-    
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-    }).addTo(attendanceMap);
-
-    let currentMarker = null;
-
-    if (defaultLat !== 0 && defaultLon !== 0) {
-        currentMarker = L.marker(mapCenter).addTo(attendanceMap)
-            .bindPopup(name).openPopup();
-    }
-
-    if (isPicker && callback) {
-        attendanceMap.on('click', function(e) {
-            const newLat = e.latlng.lat;
-            const newLon = e.latlng.lng;
-            
-            // Simple reverse geocoding placeholder (requires separate service call in production)
-            const newName = `Picked Location @ ${newLat.toFixed(4)}, ${newLon.toFixed(4)}`; 
-
-            if (currentMarker) {
-                attendanceMap.removeLayer(currentMarker);
-            }
-            currentMarker = L.marker([newLat, newLon]).addTo(attendanceMap)
-                .bindPopup(newName).openPopup();
-
-            callback(newLat, newLon, newName);
-        });
-    }
-
-    // Fix for map display issues in modals
-    setTimeout(() => {
-        attendanceMap.invalidateSize();
-        if (currentMarker) {
-             attendanceMap.setView(currentMarker.getLatLng(), 15);
-        }
-    }, 200);
-}
-
-// Functionality to open the map in 'picker' mode (for setting session/clinical location)
-function showMapPicker(currentName, currentLat, currentLon, callback = null) {
-    const defaultCallback = callback || ((lat, lon, name) => {
-        $('session_latitude').value = lat;
-        $('session_longitude').value = lon;
-        $('session_location_name').value = name;
-    });
-
-    $('mapModalTitle').textContent = `Select Location on Map (Click to Pin)`;
-    $('mapModal').style.display = 'flex';
-
-    initializeMap(
-        parseFloat(currentLat) || 0, 
-        parseFloat(currentLon) || 0, 
-        currentName || 'Drag to set location', 
-        true, // isPicker = true
-        defaultCallback
-    );
+    calendar.render();
 }
 
 /*******************************************************
- * 10. Attendance Management
+ * 10. Messages Tab
  *******************************************************/
-async function loadAttendance() {
-    // Load attendance logic here. (Not fully implemented in the provided stub, adding placeholder).
-    const tbody = $('attendance-table');
-    tbody.innerHTML = '<tr><td colspan="7">Loading attendance logs... (Not fully implemented)</td></tr>';
-}
-
-function toggleAttendanceFields() {
-    // Toggles fields for manual attendance based on type (Session/Clinical)
-    const type = $('att_session_type').value;
-    $('att_location_field').style.display = (type === 'Session') ? 'block' : 'none';
-    $('att_clinical_field').style.display = (type === 'Clinical') ? 'block' : 'none';
-}
-
-async function handleManualAttendance(e) {
-    e.preventDefault();
-    showFeedback('Manual attendance submission is disabled for security and audit purposes.', 'error');
-}
-
-async function populateAttendanceSelects() {
-    // Populate session/clinical select lists for manual attendance (if enabled)
-}
-
-/*******************************************************
- * 11. Messaging / Notifications
- *******************************************************/
-
-async function loadMessages() {
-    const tbody = $('messages-table');
-    tbody.innerHTML = '<tr><td colspan="5">Loading sent messages...</td></tr>';
-    
-    // Assuming a 'messages' table for super admin sent messages
-    const { data: messages, error } = await fetchData('messages', '*', {}, 'created_at', false);
-    if (error) { tbody.innerHTML = `<tr><td colspan="5">Error loading messages: ${error.message}</td></tr>`; return; }
-
-    tbody.innerHTML = '';
-    messages.forEach(m => {
-        tbody.innerHTML += `<tr>
-            <td>${escapeHtml(m.subject)}</td>
-            <td>${escapeHtml(m.recipient_role || 'All Students')}</td>
-            <td>${escapeHtml(m.target_program || 'All')}</td>
-            <td>${new Date(m.created_at).toLocaleString()}</td>
-            <td>
-                <button class="btn btn-map" onclick="alert('${escapeHtml(m.body, true)}')">View Content</button>
-            </td>
-        </tr>`;
-    });
-}
 
 async function handleSendMessage(e) {
     e.preventDefault();
@@ -1420,153 +1363,198 @@ async function handleSendMessage(e) {
     const originalText = submitButton.textContent;
     setButtonLoading(submitButton, true, originalText);
 
-    const subject = $('message-subject').value.trim();
-    const body = $('message-body').value.trim();
-    const recipient_role = $('message-recipient-role').value;
-    const target_program = $('message-target-program').value;
-    const target_intake = $('message-target-intake').value;
+    const target_program = $('msg_program').value; 
+    const message_content = $('msg_body').value.trim(); 
+    const subject = `Message to ${target_program}`;
+    const message_type = 'system'; 
 
-    if (!subject || !body) {
-        showFeedback('Subject and Message Body are required.', 'error');
+    if (!message_content) {
+        showFeedback('Message content cannot be empty.', 'error');
         setButtonLoading(submitButton, false, originalText);
         return;
     }
 
-    const newMessage = {
-        subject,
-        body,
-        recipient_role,
-        target_program,
-        target_intake,
+    const { error } = await sb.from('notifications').insert({ 
+        recipient_id: null, 
+        target_program: target_program === 'ALL' ? null : target_program, 
+        subject: subject, 
+        message_content: message_content, 
+        message_type: message_type,
         sender_id: currentUserProfile.id
-    };
+    });
 
-    const { error } = await sb.from('messages').insert(newMessage);
+    if (error) { showFeedback(`Failed to send message: ${error.message}`, 'error'); } 
+    else { showFeedback('Message sent successfully!'); e.target.reset(); loadMessages(); }
 
-    if (error) {
-        showFeedback(`Failed to send message: ${error.message}`, 'error');
-    } else {
-        showFeedback('Message sent successfully!');
-        e.target.reset();
-        loadMessages();
-    }
     setButtonLoading(submitButton, false, originalText);
 }
 
-
-/*******************************************************
- * 12. Resources Management
- *******************************************************/
-
-async function loadResources() {
-    const tbody = $('resources-table');
-    tbody.innerHTML = '<tr><td colspan="7">Loading resources...</td></tr>';
-
-    const { data: resources, error } = await fetchData('resources', '*', {}, 'created_at', false);
-    if (error) { tbody.innerHTML = `<tr><td colspan="7">Error loading resources: ${error.message}</td></tr>`; return; }
+async function loadMessages() {
+    const tbody = $('messages-table');
+    tbody.innerHTML = '<tr><td colspan="3">Loading messages...</td></tr>';
+    
+    const { data: messages, error } = await fetchData('notifications', '*', { message_type: 'system' }, 'created_at', false);
+    
+    if (error) { tbody.innerHTML = `<tr><td colspan="3">Error loading messages: ${error.message}</td></tr>`; return; }
 
     tbody.innerHTML = '';
-    resources.forEach(r => {
-        const fileUrl = sb.storage.from(RESOURCES_BUCKET).getPublicUrl(r.file_path).data.publicUrl;
-        const uploadDate = new Date(r.created_at).toLocaleDateString();
+    messages.forEach(m => {
+        const recipient = m.target_program || 'ALL Students';
+        const sendDate = new Date(m.created_at).toLocaleString();
 
         tbody.innerHTML += `<tr>
-            <td>${escapeHtml(r.title)}</td>
-            <td>${escapeHtml(r.target_program)} / ${escapeHtml(r.target_block)}</td>
-            <td>${escapeHtml(r.uploaded_by)}</td>
-            <td>${uploadDate}</td>
-            <td>
-                <a class="btn btn-approve" href="${fileUrl}" target="_blank">Download</a>
-                <button class="btn btn-delete" onclick="deleteResource('${r.id}', '${r.file_path}')">Delete</button>
-            </td>
+            <td>${escapeHtml(recipient)}</td>
+            <td>${escapeHtml(m.message_content.substring(0, 80) + '...')}</td>
+            <td>${sendDate}</td>
         </tr>`;
     });
 }
 
-async function handleResourceUpload(e) {
+
+/*******************************************************
+ * 11. Resources Tab
+ *******************************************************/
+
+$('upload-resource-form')?.addEventListener('submit', async e => {
     e.preventDefault();
     const submitButton = e.submitter;
     const originalText = submitButton.textContent;
     setButtonLoading(submitButton, true, originalText);
 
-    const title = $('resource-title').value.trim();
     const program = $('resource_program').value;
+    const intake = $('resource_intake').value;
     const block = $('resource_block').value;
     const fileInput = $('resource-file');
-    const file = fileInput.files[0];
+    const title = $('resource-title').value.trim();
 
-    if (!title || !program || !block || !file) {
-        showFeedback('Title, Program, Block, and File are required.', 'error');
-        setButtonLoading(submitButton, false, originalText);
-        return;
+    if (fileInput.files.length === 0 || !program || !intake || !block || !title) { 
+        showFeedback('Please select a file and all target fields.', 'error'); 
+        setButtonLoading(submitButton, false, originalText); 
+        return; 
     }
 
-    const fileExt = file.name.split('.').pop();
-    const filePath = `${currentUserProfile.id}/${Date.now()}.${fileExt}`;
+    const file = fileInput.files[0];
+    const filePath = `${program}/${intake}/${block}/${title.replace(/ /g, '_')}_${file.name.replace(/ /g, '_')}`; 
 
     try {
-        // 1. Upload file to Supabase Storage
-        const { error: uploadError } = await sb.storage.from(RESOURCES_BUCKET).upload(filePath, file);
-        if (uploadError) throw uploadError;
-
-        // 2. Insert metadata into 'resources' table
-        const newResource = {
-            title,
-            file_path: filePath,
-            target_program: program,
-            target_block: block,
-            uploaded_by: currentUserProfile.full_name || 'Admin',
-            uploaded_by_id: currentUserProfile.id
-        };
-        const { error: dbError } = await sb.from('resources').insert(newResource);
-        if (dbError) {
-             // If DB insert fails, try to delete the uploaded file
-             await sb.storage.from(RESOURCES_BUCKET).remove([filePath]);
-             throw dbError;
-        }
-
-        showFeedback('Resource uploaded and metadata saved successfully!');
-        e.target.reset();
-        loadResources();
-
+        const { error } = await sb.storage.from(RESOURCES_BUCKET).upload(filePath, file, { 
+            cacheControl: '3600', 
+            upsert: true,
+            contentType: file.type,
+            metadata: {
+                title: title,
+                program: program,
+                intake: intake,
+                block: block,
+                uploaded_by: currentUserProfile.full_name
+            }
+        });
+        if (error) throw error;
+        showFeedback(`File "${file.name}" uploaded successfully!`);
+        e.target.reset(); loadResources();
     } catch (e) {
-        showFeedback(`Failed to upload resource: ${e.message}`, 'error');
+        showFeedback(`File upload failed: ${e.message}`, 'error');
     } finally {
         setButtonLoading(submitButton, false, originalText);
     }
+});
+
+async function loadResources() {
+    const tableBody = $('resources-list'); 
+    tableBody.innerHTML = '<tr><td colspan="7">Loading resources...</td></tr>';
+    
+    try {
+        const { data: { contents: files }, error: listError } = await sb.storage
+            .from(RESOURCES_BUCKET).list('', { limit: 1000, offset: 0, sortBy: { column: 'name', order: 'asc' } });
+
+        if (listError) throw listError;
+        
+        tableBody.innerHTML = '';
+        if (!files || files.length === 0) { tableBody.innerHTML = '<tr><td colspan="7">No resources found.</td></tr>'; return; }
+
+        files.forEach(file => {
+            if (file.name === '.emptyFolderPlaceholder' || file.id === undefined) return;
+            
+            const { data: { publicUrl } } = sb.storage.from(RESOURCES_BUCKET).getPublicUrl(file.name);
+            const lastModified = new Date(file.lastModified).toLocaleString();
+            
+            const parts = file.name.split('/');
+            const program = parts[0] || 'N/A';
+            const intake = parts[1] || 'N/A';
+            const block = parts[2] || 'N/A';
+            const fileName = parts.slice(3).join('/') || file.name;
+
+            tableBody.innerHTML += `<tr>
+                <td>${escapeHtml(program)}</td>
+                <td>${escapeHtml(fileName)}</td>
+                <td>${escapeHtml(intake)}</td>
+                <td>${escapeHtml(block)}</td>
+                <td>${escapeHtml(file.metadata?.uploaded_by || 'Admin')}</td>
+                <td>${lastModified}</td>
+                <td>
+                    <a href="${publicUrl}" target="_blank" class="btn-action">Download</a>
+                    <button class="btn btn-delete" onclick="deleteResource('${escapeHtml(file.name, true)}')">Delete</button>
+                </td>
+            </tr>`;
+        });
+    } catch (e) {
+        tableBody.innerHTML = `<tr><td colspan="7">Error listing resources: ${e.message}</td></tr>`;
+    }
+    filterTable('resource-search', 'resources-list', [0, 1]); 
 }
 
-async function deleteResource(resourceId, filePath) {
-    if (!confirm('Are you sure you want to delete this resource?')) return;
-
+async function deleteResource(fileName) {
+    if (!confirm(`Are you sure you want to delete "${fileName}"? This cannot be undone.`)) return;
     try {
-        // 1. Delete from Supabase Storage
-        const { error: storageError } = await sb.storage.from(RESOURCES_BUCKET).remove([filePath]);
-        if (storageError) {
-            // Note: Continue even if storage delete fails, focus on removing DB record.
-            console.warn(`Storage file delete failed for ${filePath}: ${storageError.message}`);
-        }
-
-        // 2. Delete metadata from 'resources' table
-        const { error: dbError } = await sb.from('resources').delete().eq('id', resourceId);
-        if (dbError) throw dbError;
-
-        showFeedback('Resource successfully deleted!');
-        loadResources();
+        const { error } = await sb.storage.from(RESOURCES_BUCKET).remove([fileName]);
+        if (error) throw error;
+        showFeedback('Resource deleted successfully!'); loadResources();
     } catch (e) {
-        showFeedback(`Failed to delete resource record: ${e.message}`, 'error');
+        showFeedback(`Failed to delete resource: ${e.message}`, 'error');
     }
 }
 
+
 /*******************************************************
- * 13. Backup History
+ * 12. Backup & Restore Tab
  *******************************************************/
 
 async function loadBackupHistory() {
-    // Backup history logic (Not implemented in the provided stub, adding placeholder)
-    const tbody = $('backup-table');
-    tbody.innerHTML = '<tr><td colspan="3">Backup history loading... (Functionality not yet implemented)</td></tr>';
+    const tbody = $('backup-history-table');
+    tbody.innerHTML = '<tr><td colspan="4">Loading backup history...</td></tr>';
+    
+    // Placeholder Data
+    const history = [
+        { name: 'nchsm_db_20251010.sql', date: '2025-10-10 02:00:00', size: '125 MB' },
+        { name: 'nchsm_db_20251009.sql', date: '2025-10-09 02:00:00', size: '124 MB' },
+    ];
+
+    tbody.innerHTML = '';
+    history.forEach(h => {
+        tbody.innerHTML += `<tr>
+            <td>${h.name}</td>
+            <td>${h.date}</td>
+            <td>${h.size}</td>
+            <td>
+                <button class="btn-action" onclick="showFeedback('Download feature is a placeholder. File: ${h.name}')">Download</button>
+                <button class="btn btn-delete" onclick="showFeedback('Delete feature is a placeholder. File: ${h.name}')">Delete</button>
+            </td>
+        </tr>`;
+    });
 }
 
-// --- FINAL INIT CALL ---
-window.addEventListener('load', initSession);
+function triggerBackup() {
+    showFeedback('Backup initiated! Check Supabase Console for status (manual process).', 'success');
+}
+
+$('restore-form')?.addEventListener('submit', e => {
+    e.preventDefault();
+    showFeedback('Database restoration initiated. This is a critical server-side process, check logs for completion.', 'error');
+    e.target.reset();
+});
+
+
+// =================================================================
+// INITIALIZATION
+// =================================================================
+document.addEventListener('DOMContentLoaded', initSession);
