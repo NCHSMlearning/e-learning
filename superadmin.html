@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NCHSM Super Admin Dashboard</title>
+    <title>NCHSM Super Admin Dashboard - Revised</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/main.min.css">
     <link rel="stylesheet" href="style.css"> 
 </head>
 <body>
@@ -20,13 +21,11 @@
                 <li><a href="#" data-tab="pending">Pending Approvals</a></li> 
                 <li><a href="#" data-tab="enroll">Enroll Accounts</a></li>
                 <li><a href="#" data-tab="courses">Courses</a></li>
-                <li><a href="#" data-tab="attendance">Attendance</a></li>
-                <li><a href="#" data-tab="cats">CATS/Exams</a></li>
+                <li><a href="#" data-tab="sessions">Manage Sessions</a></li> <li><a href="#" data-tab="attendance">Attendance & Check-in</a></li> <li><a href="#" data-tab="cats">CATS/Exams</a></li>
                 <li><a href="#" data-tab="messages">Inbox</a></li>
-                <li><a href="#" data-tab="calendar">Calendar</a></li>
-                <li><a href="#" data-tab="resources">Resources</a></li>
+                <li><a href="#" data-tab="calendar">System Calendar</a></li> <li><a href="#" data-tab="resources">Resources</a></li>
                 <li><a href="#" data-tab="welcome-editor">Edit Welcome Message</a></li> 
-            </ul>
+                <li><a href="#" data-tab="backup">Backup & Restore</a></li> </ul>
             <div class="logout"><a href="#" onclick="logout()">Logout</a></div>
         </aside>
 
@@ -40,7 +39,6 @@
                 <div id="student-welcome-message">
                     <p>Loading NCHSM Welcome Message...</p>
                 </div>
-
                 <div class="cards">
                     <div class="card" onclick="showTab('users')"><h3>Total Users</h3><p class="data" id="totalUsers">0</p></div>
                     <div class="card" onclick="showTab('pending')"><h3>Pending Approvals</h3><p class="data" id="pendingApprovals">0</p></div>
@@ -51,7 +49,10 @@
 
             <section id="users" class="tab-content">
                 <h2>System Users</h2>
-                <p>Manage all user accounts (Admin, Student, etc.) and assign roles.</p>
+                <p>Manage all user accounts (Admin, Student, Lecturer, etc.) and assign roles. **Role will display correctly in the table.**</p>
+                <div class="search-bar">
+                    <input type="text" id="user-search" placeholder="Search by Name or Email..." onkeyup="filterUserTable()">
+                </div>
                 <table>
                     <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Role</th><th>Program</th><th>Status</th><th>Actions</th></tr></thead>
                     <tbody id="users-table">
@@ -71,7 +72,7 @@
             
             <section id="enroll" class="tab-content"> 
                 <h2>Enroll Accounts</h2>
-                <p>Use the form below to **enroll new Student or Admin accounts**. This registers them in Auth and creates their profile.</p>
+                <p>Use the form below to **enroll new Student, Admin, or Lecturer accounts**. This registers them in Auth and creates their profile.</p>
                 <form id="add-account-form" class="inline-form">
                     <input type="text" id="account-name" placeholder="Full Name" required>
                     <input type="email" id="account-email" placeholder="Email" required>
@@ -79,7 +80,7 @@
                     <select id="account-role" required>
                         <option value="student">Student</option>
                         <option value="admin">Admin</option>
-                    </select>
+                        <option value="lecturer">Lecturer</option> </select>
                     <input type="text" id="account-phone" placeholder="Phone" required>
                     <select id="account-program" required>
                         <option value="">-- Select Program --</option>
@@ -115,7 +116,7 @@
                 <h2>Courses</h2>
                 <form id="add-course-form" class="inline-form">
                     <input type="text" id="course-name" placeholder="Course Name" required>
-                    <input type="text" id="course-description" placeholder="Description (Optional)">
+                    <input type="text" id="course-unit-code" placeholder="Unit Code (e.g., NURS101)" required> <input type="text" id="course-description" placeholder="Description (Optional)">
                     
                     <select id="course-program" required> 
                         <option value="">-- Select Program Type --</option>
@@ -138,12 +139,77 @@
                     <button type="submit">Add Course</button>
                 </form>
                 <table>
-                    <thead><tr><th>Course Name</th><th>Description</th><th>Intake</th><th>Block</th><th>Actions</th></tr></thead>
-                    <tbody id="courses-table"><tr><td colspan="5">Loading courses...</td></tr></tbody>
+                    <thead><tr><th>Course Name</th><th>Unit Code</th><th>Description</th><th>Intake</th><th>Block</th><th>Actions</th></tr></thead> <tbody id="courses-table"><tr><td colspan="6">Loading courses...</td></tr></tbody>
                 </table>
             </section>
+            
+            <section id="sessions" class="tab-content">
+                <h2>Manage Sessions (Class, Clinical, Events)</h2>
+                <p>Add and manage scheduled sessions. These will be automatically linked to the **System Calendar**.</p>
+                
+                <h3>Add New Session</h3>
+                <form id="add-session-form" class="inline-form">
+                    <select id="session_type" required>
+                        <option value="">-- Select Session Type --</option>
+                        <option value="class">Class Session</option>
+                        <option value="clinical">Clinical Rotation</option>
+                        <option value="exam">Exam/CAT</option>
+                        <option value="event">General Event</option>
+                    </select>
+                    <input type="text" id="session_title" placeholder="Title/Topic (e.g., Maternity Ward)" required>
+                    <input type="date" id="session_date" required>
+                    <input type="time" id="session_time" placeholder="Start Time">
+
+                    <select id="session_program" required>
+                        <option value="">-- Select Program --</option>
+                        <option value="KRCHN">KRCHN Students</option>
+                        <option value="TVET">TVET Students</option>
+                    </select>
+                    <select id="session_intake" required>
+                        <option value="">-- Select Intake Year --</option>
+                        <option value="2024">March 2024</option>
+                        <option value="2025">March 2025</option>
+                        <option value="2026">March 2026</option>
+                    </select>
+                    <select id="session_block" required>
+                        <option value="">-- Select Block --</option>
+                        <option value="A">Block A</option>
+                        <option value="B">Block B</option>
+                    </select>
+                    <select id="session_course_id"><option value="">-- Select Course (Optional) --</option></select>
+                    <button type="submit">Schedule Session</button>
+                </form>
+
+                <hr>
+
+                <h3>Clinical Rotation Management</h3>
+                <p>Define names for clinical rotations by program/intake/block.</p>
+                <form id="edit-clinical-names-form" class="inline-form">
+                    <select id="clinical_program" required>
+                        <option value="">-- Select Program --</option>
+                        <option value="KRCHN">KRCHN Students</option>
+                        <option value="TVET">TVET Students</option>
+                    </select>
+                    <select id="clinical_intake" required>
+                        <option value="">-- Select Intake Year --</option>
+                        <option value="2024">March 2024</option>
+                    </select>
+                    <select id="clinical_block" required>
+                        <option value="">-- Select Block --</option>
+                        <option value="A">Block A</option>
+                        <option value="B">Block B</option>
+                    </select>
+                    <input type="text" id="clinical_name_to_edit" placeholder="New Clinical Area Name (e.g., PEDIATRICS)" required>
+                    <button type="button" onclick="saveClinicalName()">Update Clinical Name</button>
+                </form>
+
+            </section>
+
             <section id="attendance" class="tab-content">
-                <h2>Daily Attendance Check-in</h2>
+                <h2>Daily Attendance & Geo Check-in</h2>
+                
+                <h3>Admin/Super Admin Manual Check-in (Mark Attendance)</h3>
+                <p>Use this form to manually mark attendance for a student.</p>
                 <form id="manual-attendance-form" class="inline-form">
                     <select id="att_student_id" required><option value="">-- Select Student --</option></select>
                     <select id="att_session_type" required>
@@ -162,27 +228,38 @@
                 </form>
 
                 <div id="attendance-records">
-                    <h3>All Attendance Records</h3>
+                    <h3>Today's Attendance Records</h3>
                     <input type="text" id="attendance-search" placeholder="Search by Student Name..." onkeyup="filterAttendanceTable()">
                     <table>
                         <thead>
                             <tr><th>Student</th><th>Session Type</th><th>Department/Location</th><th>Date/Time</th><th>Geo Data</th><th>Actions</th></tr>
                         </thead>
-                        <tbody id="attendance-table"><tr><td colspan="6">Loading records...</td></tr></tbody>
+                        <tbody id="attendance-table"><tr><td colspan="6">Loading today's records...</td></tr></tbody>
+                    </table>
+                </div>
+
+                <div id="past-attendance-history">
+                    <h3>Past Attendance History</h3>
+                    <p>Records from previous days.</p>
+                    <table>
+                        <thead>
+                            <tr><th>Student</th><th>Session Type</th><th>Date/Time</th><th>Status</th><th>Actions</th></tr>
+                        </thead>
+                        <tbody id="past-attendance-table"><tr><td colspan="5">Loading history...</td></tr></tbody>
                     </table>
                 </div>
             </section>
 
             <section id="cats" class="tab-content">
                 <h2>CATS / Exams</h2>
+                <p>Note: Selecting **KRCHN** program will dynamically filter the **Course** dropdown to show only KRCHN courses.</p>
                 <form id="add-exam-form" class="inline-form">
                     <select id="exam_program" required>
                         <option value="">-- Select Program --</option>
                         <option value="KRCHN">KRCHN Students</option>
                         <option value="TIVET">TIVET Students</option>
                     </select>
-                    <select id="exam_course_id" required><option value="">-- Select Course --</option></select>
-                    <input type="text" id="exam_title" placeholder="Exam Title" required>
+                    <select id="exam_course_id" required><option value="">-- Select Course --</option></select> <input type="text" id="exam_title" placeholder="Exam Title" required>
                     <input type="date" id="exam_date" required>
                     <select id="exam_status"><option>Upcoming</option><option>Completed</option></select>
                     <select id="exam_intake">
@@ -208,6 +285,7 @@
 
             <section id="resources" class="tab-content">
                 <h2>Resource Center</h2>
+                <p>**Note: Ensure your `script.js` uses Supabase Storage for file handling to make this section fully functional.**</p>
                 <form id="upload-resource-form" class="inline-form">
                     <select id="resource_program" required>
                         <option value="">-- Select Program --</option>
@@ -227,11 +305,11 @@
                         <option value="A">Block A</option>
                         <option value="B">Block B</option>
                     </select>
-    <input type="file" id="resource-file" required>
-    <input type="text" id="resource-title" placeholder="Title for file" required>
-    <button type="submit">Upload</button>
-</form>
-<table>
+                    <input type="file" id="resource-file" required>
+                    <input type="text" id="resource-title" placeholder="Title for file" required>
+                    <button type="submit">Upload</button>
+                </form>
+                <table>
                     <thead><tr><th>Program</th><th>File Name</th><th>Intake</th><th>Block</th><th>Uploaded By</th><th>Date</th><th>Actions</th></tr></thead>
                     <tbody id="resources-list"><tr><td colspan="7">Loading resources...</td></tr></tbody>
                 </table>
@@ -257,12 +335,13 @@
             </section>
 
             <section id="calendar" class="tab-content">
-                <h2>Calendar</h2>
-                <div id="calendar"><p>Simple calendar placeholder - Exam and Clinical dates will show here.</p></div>
-            </section>
+                <h2>System Calendar</h2>
+                <p>This calendar will display all scheduled Sessions, Exams/CATS, and Clinical Rotations managed in the **Manage Sessions** tab.</p>
+                <div id="fullCalendarDisplay"></div> </section>
 
             <section id="welcome-editor" class="tab-content">
                 <h2>Edit Student Welcome Message</h2>
+                <p>**Note: Ensure your `script.js` is set up to write this content to the student's `index.html` file (via a database or file store) for it to update the live message.**</p>
                 <form id="edit-welcome-form">
                     <textarea id="welcome-message-editor" rows="20" placeholder="Paste the HTML content for the Welcome Message here..."></textarea>
                     <button type="submit" class="btn-action">Save Welcome Message</button>
@@ -271,6 +350,31 @@
                 <div id="live-preview">
                     <p>Loading live preview...</p>
                 </div>
+            </section>
+            
+            <section id="backup" class="tab-content">
+                <h2>Database Backup & Restore</h2>
+                <p>Manage database backups to prevent data loss. **Requires specific Supabase/Postgres API endpoints in `script.js`.**</p>
+                
+                <h3>Backup Actions</h3>
+                <button onclick="triggerBackup()" class="btn-action">Generate New Backup (.sql)</button>
+                
+                <hr>
+
+                <h3>Restore Database</h3>
+                <p>WARNING: Restoring will overwrite current live data. Use with caution.</p>
+                <form id="restore-form">
+                    <input type="file" id="restore-file" accept=".sql" required>
+                    <button type="submit" class="btn-danger">Restore from File</button>
+                </form>
+                
+                <hr>
+                
+                <h3>Recent Backups</h3>
+                <table>
+                    <thead><tr><th>File Name</th><th>Date</th><th>Size</th><th>Actions</th></tr></thead>
+                    <tbody id="backup-history-table"><tr><td colspan="4">Loading backup history...</td></tr></tbody>
+                </table>
             </section>
         </main>
     </div>
@@ -294,6 +398,8 @@
                 <label for="edit_course_name">Course Name</label>
                 <input type="text" id="edit_course_name" placeholder="Course Name" required>
                 
+                <label for="edit_course_unit_code">Unit Code</label> <input type="text" id="edit_course_unit_code" placeholder="Unit Code (e.g., NURS101)" required>
+                
                 <label for="edit_course_description">Description</label>
                 <input type="text" id="edit_course_description" placeholder="Description (Optional)">
                 
@@ -306,6 +412,7 @@
             </form>
         </div>
     </div>
+    
     <div id="userEditModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="document.getElementById('userEditModal').style.display='none'">&times;</span>
@@ -324,8 +431,7 @@
                 <select id="edit_user_role" required>
                     <option value="student">Student</option>
                     <option value="admin">Admin</option>
-                    <option value="lecturer">Lecturer</option>
-                </select>
+                    <option value="lecturer">Lecturer</option> </select>
                 
                 <label for="edit_user_program">Program</label>
                 <select id="edit_user_program" required>
@@ -358,8 +464,9 @@
             </form>
         </div>
     </div>
+    
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-    <script src="script.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script> <script src="script.js"></script>
 </body>
 </html>
