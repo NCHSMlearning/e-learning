@@ -8,11 +8,6 @@
 const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co'; 
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17P17pk';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-// ⚠️ WARNING: If you intend to use sb.auth.admin.updateUserById() from a secure server environment (like a Supabase Edge Function), 
-// ensure that instance of the client is initialized with the Service Role Key!
-// The client below uses the ANON_KEY and CANNOT execute admin functions securely.
-
 const RESOURCES_BUCKET = 'resources';
 const IP_API_URL = 'https://api.ipify.org?format=json';
 const DEVICE_ID_KEY = 'nchsm_device_id';
@@ -22,7 +17,6 @@ const MESSAGE_KEY = 'student_welcome';
 // Global Variables
 let currentUserProfile = null;
 let attendanceMap = null; // Used for Leaflet instance
-let allCoursesCache = []; // NEW: Cache to prevent redundant database queries
 
 /*******************************************************
  * 1. CORE UTILITY FUNCTIONS
@@ -32,6 +26,7 @@ function $(id){ return document.getElementById(id); }
 function escapeHtml(s, isAttribute = false){ 
     let str = String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     if (isAttribute) {
+        // Essential for safely embedding in HTML attributes like onclick
         str = str.replace(/'/g,'&#39;').replace(/"/g,'&quot;'); 
     } else {
         str = str.replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -141,11 +136,6 @@ async function loadSectionData(tabId) {
     // Hide all modals when switching tabs
     document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
     
-    // DRY Improvement: Pre-load courses for sections that rely on them
-    if (tabId === 'sessions' || tabId === 'cats' || tabId === 'resources') {
-        await loadCourses(false); // Load into cache, but don't render table
-    }
-
     switch(tabId) {
         case 'dashboard': 
             loadDashboardData(); 
@@ -153,7 +143,7 @@ async function loadSectionData(tabId) {
         case 'users': loadAllUsers(); break;
         case 'pending': loadPendingApprovals(); break;
         case 'enroll': loadStudents(); break; 
-        case 'courses': loadCourses(true); break; // Render table on this tab
+        case 'courses': loadCourses(); break;
         case 'sessions': loadScheduledSessions(); populateSessionCourseSelects(); break;
         case 'attendance': loadAttendance(); populateAttendanceSelects(); break;
         case 'cats': loadExams(); populateExamCourseSelects(); break;
@@ -167,92 +157,74 @@ async function loadSectionData(tabId) {
 
 // --- Session / Init ---
 async function initSession() {
-    try {
-        // 1. Check for logged-in user
-        const { data: { user }, error: authError } = await sb.auth.getUser();
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) {
+        window.location.href = "login.html";
+        return;
+    }
 
-        if (authError || !user) {
-            // If no user or auth error, redirect to login
-            window.location.href = "login.html";
-            return;
-        }
-
-        // 2. Fetch the user's profile to check their role
-        const { data: profile, error: profileError } = await sb.from('profiles').select('*').eq('id', user.id).single();
-
-        if (profileError || !profile) {
-            console.error("Profile not found despite active session. Logging out.");
-            await sb.auth.signOut();
-            window.location.href = "login.html";
-            return;
-        }
-
+    const { data: profile } = await sb.from('profiles').select('*').eq('id', user.id).single();
+    if (profile) {
         currentUserProfile = profile;
-        
-        // 3. Role check
         if (currentUserProfile.role !== 'superadmin') {
-            // Redirect non-superadmins to the regular admin page
             window.location.href = "admin.html"; 
             return;
         }
-        
-        // Success: Initialize Super Admin Dashboard
         document.querySelector('header h1').textContent = `Welcome, ${profile.full_name || 'Super Admin'}!`;
-        
-        loadSectionData('dashboard');
-        
-        // Setup Event Listeners
-        
-        // ATTENDANCE TAB
-        $('att_session_type')?.addEventListener('change', toggleAttendanceFields);
-        toggleAttendanceFields(); 
-        $('manual-attendance-form')?.addEventListener('submit', handleManualAttendance);
-        $('attendance-search')?.addEventListener('keyup', () => filterTable('attendance-search', 'attendance-table', [0, 1, 2]));
-        
-        // ENROLLMENT/USER TAB
-        $('add-account-form')?.addEventListener('submit', handleAddAccount);
-        $('account-program')?.addEventListener('change', updateEnrollBlockTermOptions);
-        $('account-intake')?.addEventListener('change', updateEnrollBlockTermOptions);
-        $('user-search')?.addEventListener('keyup', () => filterTable('user-search', 'users-table', [1, 2, 4]));
-        
-        // COURSES TAB
-        $('add-course-form')?.addEventListener('submit', handleAddCourse);
-        $('course-search')?.addEventListener('keyup', () => filterTable('course-search', 'courses-table', [0, 1, 3]));
-        $('course-program')?.addEventListener('change', () => { updateBlockTermOptions('course-program', 'course-block'); });
-        
-        // SESSIONS TAB
-        $('add-session-form')?.addEventListener('submit', handleAddSession);
-        $('session_program')?.addEventListener('change', () => { updateTermBlockOptions('session'); populateSessionCourseSelects(); });
-        $('session_intake')?.addEventListener('change', () => updateTermBlockOptions('session'));
-        $('clinical_program')?.addEventListener('change', () => { updateTermBlockOptions('clinical'); });
-        $('clinical_intake')?.addEventListener('change', () => updateTermBlockOptions('clinical'));
-
-        // CATS/EXAMS TAB
-        $('add-exam-form')?.addEventListener('submit', handleAddExam);
-        $('exam_program')?.addEventListener('change', () => { filterCoursesByProgram(); updateTermBlockOptions('exam'); });
-        $('exam_intake')?.addEventListener('change', () => updateTermBlockOptions('exam'));
-        
-        // MESSAGE/WELCOME EDITOR TAB
-        $('send-message-form')?.addEventListener('submit', handleSendMessage);
-        $('edit-welcome-form')?.addEventListener('submit', handleSaveWelcomeMessage); 
-        
-        // RESOURCES TAB
-        $('resource_program')?.addEventListener('change', () => { updateBlockTermOptions('resource_program', 'resource_block'); });
-
-        // MODAL/EDIT LISTENERS
-        $('edit-user-form')?.addEventListener('submit', handleEditUser);
-        $('edit_user_program')?.addEventListener('change', () => { updateBlockTermOptions('edit_user_program', 'edit_user_block'); }); 
-        document.querySelector('#userEditModal .close')?.addEventListener('click', () => { $('userEditModal').style.display = 'none'; });
-        document.querySelector('#mapModal .close')?.addEventListener('click', () => { $('mapModal').style.display = 'none'; });
-        $('edit-course-form')?.addEventListener('submit', handleEditCourse);
-        $('edit_course_program')?.addEventListener('change', () => { updateBlockTermOptions('edit_course_program', 'edit_course_block'); });
-        document.querySelector('#courseEditModal .close')?.addEventListener('click', () => { $('courseEditModal').style.display = 'none'; });
-
-    } catch (e) {
-        // Catch network or unexpected errors
-        console.error("Initialization failed:", e);
+    } else {
         window.location.href = "login.html";
+        return;
     }
+    
+    loadSectionData('dashboard');
+    
+    // Setup Event Listeners
+    
+    // ATTENDANCE TAB
+    $('att_session_type')?.addEventListener('change', toggleAttendanceFields);
+    toggleAttendanceFields(); 
+    $('manual-attendance-form')?.addEventListener('submit', handleManualAttendance);
+    $('attendance-search')?.addEventListener('keyup', () => filterTable('attendance-search', 'attendance-table', [0, 1, 2]));
+    
+    // ENROLLMENT/USER TAB
+    $('add-account-form')?.addEventListener('submit', handleAddAccount);
+    $('account-program')?.addEventListener('change', updateEnrollBlockTermOptions);
+    $('account-intake')?.addEventListener('change', updateEnrollBlockTermOptions);
+    $('user-search')?.addEventListener('keyup', () => filterTable('user-search', 'users-table', [1, 2, 4]));
+    
+    // COURSES TAB
+    $('add-course-form')?.addEventListener('submit', handleAddCourse);
+    $('course-search')?.addEventListener('keyup', () => filterTable('course-search', 'courses-table', [0, 1, 3]));
+    $('course-program')?.addEventListener('change', () => { updateBlockTermOptions('course-program', 'course-block'); });
+    
+    // SESSIONS TAB
+    $('add-session-form')?.addEventListener('submit', handleAddSession);
+    $('session_program')?.addEventListener('change', () => { updateTermBlockOptions('session'); populateSessionCourseSelects(); });
+    $('session_intake')?.addEventListener('change', () => updateTermBlockOptions('session'));
+    $('clinical_program')?.addEventListener('change', () => { updateTermBlockOptions('clinical'); });
+    $('clinical_intake')?.addEventListener('change', () => updateTermBlockOptions('clinical'));
+
+    // CATS/EXAMS TAB
+    $('add-exam-form')?.addEventListener('submit', handleAddExam);
+    $('exam_program')?.addEventListener('change', () => { filterCoursesByProgram(); updateTermBlockOptions('exam'); });
+    $('exam_intake')?.addEventListener('change', () => updateTermBlockOptions('exam'));
+    
+    // MESSAGE/WELCOME EDITOR TAB
+    $('send-message-form')?.addEventListener('submit', handleSendMessage);
+    $('edit-welcome-form')?.addEventListener('submit', handleSaveWelcomeMessage); 
+    
+    // RESOURCES TAB
+    $('resource_program')?.addEventListener('change', () => { updateBlockTermOptions('resource_program', 'resource_block'); });
+
+    // MODAL/EDIT LISTENERS
+    $('edit-user-form')?.addEventListener('submit', handleEditUser);
+    // CRITICAL FIX: Ensure program change in edit modal updates block options
+    $('edit_user_program')?.addEventListener('change', () => { updateBlockTermOptions('edit_user_program', 'edit_user_block'); }); 
+    document.querySelector('#userEditModal .close')?.addEventListener('click', () => { $('userEditModal').style.display = 'none'; });
+    document.querySelector('#mapModal .close')?.addEventListener('click', () => { $('mapModal').style.display = 'none'; });
+    $('edit-course-form')?.addEventListener('submit', handleEditCourse);
+    $('edit_course_program')?.addEventListener('change', () => { updateBlockTermOptions('edit_course_program', 'edit_course_block'); });
+    document.querySelector('#courseEditModal .close')?.addEventListener('click', () => { $('courseEditModal').style.display = 'none'; });
 }
 
 // Logout
@@ -438,6 +410,7 @@ async function handleSaveWelcomeMessage(e) {
 
 /**
  * Dynamic Block/Term Options based on Program (KRCHN vs TVET).
+ * KRCHN uses Block A/B. TVET uses Term 1/2/3.
  */
 function updateBlockTermOptions(programSelectId, blockTermSelectId) {
     const program = $(programSelectId)?.value;
@@ -448,17 +421,20 @@ function updateBlockTermOptions(programSelectId, blockTermSelectId) {
     let options = [];
 
     if (program === 'KRCHN') {
+        // KRCHN specific: Only uses Block A and Block B
         options = [
             { value: 'A', text: 'Block A' },
             { value: 'B', text: 'Block B' }
         ];
     } else if (program === 'TVET') {
+        // TVET specific: Uses Term 1, Term 2, Term 3
         options = [
             { value: 'T1', text: 'Term 1' },
             { value: 'T2', text: 'Term 2' },
             { value: 'T3', text: 'Term 3' }
         ];
     } else {
+        // Default/Other (e.g., if program isn't selected or is Admin)
         options = [
             { value: 'A', text: 'Block A / Term 1' },
             { value: 'B', text: 'Block B / Term 2' }
@@ -491,12 +467,6 @@ async function handleAddAccount(e) {
     const program_type = $('account-program').value;
     const intake_year = $('account-intake').value; 
     const block = $('account-block-term').value; 
-
-    if (!name || !email || !password || !role) {
-        showFeedback('Name, Email, Password, and Role are required.', 'error');
-        setButtonLoading(submitButton, false, originalText);
-        return;
-    }
 
     const userData = { 
         full_name: name, role: role, phone: phone, program_type: program_type, 
@@ -646,24 +616,18 @@ async function openEditUserModal(userId) {
         const { data: user, error } = await sb.from('profiles').select('*').eq('id', userId).single();
         if (error || !user) throw new Error('User data fetch failed.');
 
+        // CRITICAL FIX: Ensure these IDs match your HTML and are not null
         $('edit_user_id').value = user.id;
         $('edit_user_name').value = user.full_name || '';
         $('edit_user_email').value = user.email || '';
         $('edit_user_role').value = user.role || 'student';
         $('edit_user_program').value = user.program_type || 'KRCHN';
         $('edit_user_intake').value = user.intake_year || '2024';
+        $('edit_user_block').value = user.block || 'A';
         $('edit_user_block_status').value = user.block_program_year === true ? 'true' : 'false';
-        
-        // 1. Load correct block/term options based on program
-        updateBlockTermOptions('edit_user_program', 'edit_user_block'); 
-        
-        // 2. Set the user's specific block/term value after options are loaded
-        $('edit_user_block').value = user.block || ''; 
 
-        // Clear password fields for security when opening the modal
-        $('edit_user_new_password').value = '';
-        $('edit_user_confirm_password').value = '';
-        $('password-reset-feedback').textContent = ''; 
+        // Fix to ensure correct block/term options are loaded when modal opens
+        updateBlockTermOptions('edit_user_program', 'edit_user_block'); 
 
         $('userEditModal').style.display = 'flex'; 
     } catch (error) {
@@ -678,27 +642,7 @@ async function handleEditUser(e) {
     setButtonLoading(submitButton, true, originalText);
     
     const userId = $('edit_user_id').value;
-    const newPassword = $('edit_user_new_password').value.trim();
-    const confirmPassword = $('edit_user_confirm_password').value.trim();
-    const feedbackElement = $('password-reset-feedback');
-    feedbackElement.textContent = ''; // Clear previous feedback
-
-    // 1. Validate Password Change (if attempted)
-    if (newPassword || confirmPassword) {
-        if (newPassword.length < 6) {
-            feedbackElement.textContent = 'Password must be at least 6 characters long.';
-            setButtonLoading(submitButton, false, originalText);
-            return;
-        }
-        if (newPassword !== confirmPassword) {
-            feedbackElement.textContent = 'New password and confirmation do not match.';
-            setButtonLoading(submitButton, false, originalText);
-            return;
-        }
-    }
-
-    // 2. Prepare Profile Data Update
-    const updatedProfileData = {
+    const updatedData = {
         full_name: $('edit_user_name').value.trim(),
         email: $('edit_user_email').value.trim(),
         role: $('edit_user_role').value,
@@ -709,42 +653,12 @@ async function handleEditUser(e) {
     };
 
     try {
-        let successMessage = 'User profile updated successfully!';
-        let profileError = null;
-        let authError = null;
+        const { error } = await sb.from('profiles').update(updatedData).eq('id', userId);
+        if (error) throw error;
 
-        // A. Update Supabase Profile Table
-        const { error: pError } = await sb.from('profiles').update(updatedProfileData).eq('id', userId);
-        if (pError) profileError = pError;
-
-        // B. Update Supabase Auth Password (Only if a new password was provided)
-        if (newPassword) {
-            // ⚠️ WARNING: sb.auth.admin.updateUserById() requires the Service Role Key 
-            // and should only be run from a secure server (like an Edge Function).
-            const { error: aError } = await sb.auth.admin.updateUserById(userId, { 
-                password: newPassword,
-            });
-
-            if (aError) authError = aError;
-            if (!authError) {
-                successMessage += ' Password reset successfully!';
-            }
-        }
-        
-        // 3. Handle Errors and Feedback
-        if (profileError || authError) {
-            // Combine both errors for debugging
-            const combinedError = (profileError?.message || '') + ' ' + (authError?.message || '');
-            throw new Error(combinedError.trim());
-        }
-
-        showFeedback(successMessage);
-        
-        // 4. Cleanup and UI Update
+        showFeedback('User profile updated successfully!');
         $('userEditModal').style.display = 'none';
-        e.target.reset(); // Clear form fields, including passwords
         loadAllUsers(); loadStudents(); loadDashboardData();
-        
     } catch (e) {
         showFeedback('Failed to update user: ' + (e.message || e), 'error');
     } finally {
@@ -791,40 +705,22 @@ async function handleAddCourse(e) {
     } else {
         showFeedback('Course added successfully!');
         e.target.reset();
-        loadCourses(true); // Reload and render
+        loadCourses();
     }
 
     setButtonLoading(submitButton, false, originalText);
 }
 
-/**
- * Loads courses, updates cache, and optionally renders the table.
- * @param {boolean} renderTable 
- */
-async function loadCourses(renderTable = false) {
+async function loadCourses() {
     const tbody = $('courses-table');
-    if (renderTable) {
-        tbody.innerHTML = '<tr><td colspan="6">Loading courses...</td></tr>';
-    }
+    tbody.innerHTML = '<tr><td colspan="6">Loading courses...</td></tr>';
 
     const { data: courses, error } = await fetchData('courses', '*', {}, 'course_name', true);
-    
-    if (error) { 
-        if (renderTable) {
-            tbody.innerHTML = `<tr><td colspan="6">Error loading courses: ${error.message}</td></tr>`; 
-        }
-        allCoursesCache = [];
-        return; 
-    }
-    
-    // Update global cache
-    allCoursesCache = courses;
+    if (error) { tbody.innerHTML = `<tr><td colspan="6">Error loading courses: ${error.message}</td></tr>`; return; }
 
-    if (!renderTable) return;
-
-    // Render logic for the Courses tab
     tbody.innerHTML = '';
     courses.forEach(c => {
+        // CRITICAL FIX: Ensure all string values are escaped for safe insertion into the onclick attribute
         const courseIdAttr = escapeHtml(c.id, true);
         const courseNameAttr = escapeHtml(c.course_name, true);
         const unitCodeAttr = escapeHtml(c.unit_code || '', true);
@@ -833,6 +729,7 @@ async function loadCourses(renderTable = false) {
         const intakeYearAttr = escapeHtml(c.intake_year || '', true);     
         const blockAttr = escapeHtml(c.block || '', true);              
 
+        // Passing all 7 required arguments to openEditCourseModal
         const editFuncCall = `openEditCourseModal('${courseIdAttr}', '${courseNameAttr}', '${unitCodeAttr}', '${descriptionAttr}', '${programTypeAttr}', '${intakeYearAttr}', '${blockAttr}')`;
 
         tbody.innerHTML += `<tr>
@@ -849,13 +746,16 @@ async function loadCourses(renderTable = false) {
     });
     
     filterTable('course-search', 'courses-table', [0, 1, 3]); 
+    
+    populateExamCourseSelects(courses);
+    populateSessionCourseSelects(courses);
 }
 
 async function deleteCourse(courseId) {
     if (!confirm('Are you sure you want to delete this course? This cannot be undone.')) return;
     const { error } = await sb.from('courses').delete().eq('id', courseId);
     if (error) { showFeedback(`Failed to delete course: ${error.message}`, 'error'); } 
-    else { showFeedback('Course deleted successfully!'); loadCourses(true); }
+    else { showFeedback('Course deleted successfully!'); loadCourses(); }
 }
 
 function openEditCourseModal(id, name, unit_code, description, target_program, intake_year, block) {
@@ -865,10 +765,8 @@ function openEditCourseModal(id, name, unit_code, description, target_program, i
     $('edit_course_description').value = description;
     $('edit_course_program').value = target_program || ''; 
     $('edit_course_intake').value = intake_year; 
-    
+    $('edit_course_block').value = block;
     updateBlockTermOptions('edit_course_program', 'edit_course_block'); // Load correct block options
-    $('edit_course_block').value = block; // Set the value
-    
     $('courseEditModal').style.display = 'flex'; 
 }
 
@@ -902,7 +800,7 @@ async function handleEditCourse(e) {
 
         showFeedback('Course updated successfully!');
         $('courseEditModal').style.display = 'none';
-        loadCourses(true); // Reload and render
+        loadCourses(); 
     } catch (e) {
         showFeedback('Failed to update course: ' + (e.message || e), 'error');
     } finally {
@@ -923,13 +821,14 @@ function updateTermBlockOptions(prefix) {
     }
 }
 
-async function populateSessionCourseSelects() {
+async function populateSessionCourseSelects(courses = null) {
     const courseSelect = $('session_course_id');
     const program = $('session_program').value;
     
-    let courses = allCoursesCache; // Use cached data
-    
-    if (program) {
+    if (!courses) {
+        const { data } = await fetchData('courses', 'id, course_name', { target_program: program }, 'course_name', true);
+        courses = data;
+    } else if (program) {
         courses = courses.filter(c => c.target_program === program);
     }
     
@@ -1050,11 +949,6 @@ function toggleAttendanceFields() {
     const departmentGroup = $('att_department_group');
     const courseGroup = $('att_course_group');
     
-    // DRY Improvement: Ensure the courses are loaded before populating the course select
-    if (sessionType === 'classroom' && allCoursesCache.length === 0) {
-        loadCourses(false); // Load courses into cache
-    }
-
     if (sessionType === 'clinical') {
         departmentGroup.style.display = 'block';
         departmentInput.required = true;
@@ -1067,8 +961,6 @@ function toggleAttendanceFields() {
         departmentInput.value = ""; 
         courseGroup.style.display = 'block';
         courseSelect.required = true;
-        // Populate course select using cached data
-        populateSelect(courseSelect, allCoursesCache, 'id', 'course_name', 'Select Course');
     } else {
         departmentGroup.style.display = 'block';
         departmentInput.required = false;
@@ -1291,13 +1183,14 @@ async function adminCheckIn() {
 /*******************************************************
  * 8. CATS/Exams Tab
  *******************************************************/
-async function populateExamCourseSelects() {
+async function populateExamCourseSelects(courses = null) {
     const courseSelect = $('exam_course_id');
     const program = $('exam_program').value;
     
-    let courses = allCoursesCache; // Use cached data
-    
-    if (program) {
+    if (!courses) {
+        const { data } = await fetchData('courses', 'id, course_name', { target_program: program }, 'course_name', true);
+        courses = data;
+    } else if (program) {
         courses = courses.filter(c => c.target_program === program);
     }
     
@@ -1396,7 +1289,7 @@ function openGradeModal(examId, examName) {
 
 async function renderFullCalendar() {
     const calendarEl = $('fullCalendarDisplay');
-    if (!calendarEl || typeof FullCalendar === 'undefined') return;
+    if (!calendarEl) return;
     calendarEl.innerHTML = ''; 
 
     const { data: sessions } = await fetchData('scheduled_sessions', '*', {}, 'session_date', true);
@@ -1563,9 +1456,12 @@ async function loadResources() {
         files.forEach(file => {
             if (file.name === '.emptyFolderPlaceholder' || file.id === undefined) return;
             
+            // This is a simplified way to construct a file path for public URL if the file path is the file name itself
+            // If files are nested, the .name property should contain the full path.
             const { data: { publicUrl } } = sb.storage.from(RESOURCES_BUCKET).getPublicUrl(file.name);
             const lastModified = new Date(file.lastModified).toLocaleString();
             
+            // Assuming the file.name contains the full path like "KRCHN/2024/A/file_name.pdf"
             const parts = file.name.split('/');
             const program = parts[0] || 'N/A';
             const intake = parts[1] || 'N/A';
