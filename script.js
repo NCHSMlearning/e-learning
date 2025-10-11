@@ -342,41 +342,53 @@ function exportTableToCSV(tableId, filename) {
 
 
 /*******************************************************
- * 3. Dashboard / Welcome Editor
+ * 3. Dashboard / Welcome Editor (Fixed)
  *******************************************************/
 
 async function loadDashboardData() {
     const { count: allUsersCount } = await sb.from('profiles').select('id', { count: 'exact' });
     $('totalUsers').textContent = allUsersCount || 0;
-    const { count: pendingCount } = await sb.from('profiles').select('id', { count: 'exact' }).eq('approved', false);
+
+    const { count: pendingCount } = await sb
+        .from('profiles')
+        .select('id', { count: 'exact' })
+        .eq('approved', false);
     $('pendingApprovals').textContent = pendingCount || 0;
-    const { count: studentsCount } = await sb.from('profiles').select('id', { count: 'exact' }).eq('role', 'student');
+
+    const { count: studentsCount } = await sb
+        .from('profiles')
+        .select('id', { count: 'exact' })
+        .eq('role', 'student');
     $('totalStudents').textContent = studentsCount || 0;
+
     const today = new Date().toISOString().slice(0, 10);
-    const { data: checkinData } = await sb.from('geo_attendance_logs').select('id').gte('check_in_time', today);
+    const { data: checkinData } = await sb
+        .from('geo_attendance_logs')
+        .select('id')
+        .gte('check_in_time', today);
     $('todayCheckins').textContent = checkinData?.length || 0;
-    
-    loadStudentWelcomeMessage(); 
+
+    loadStudentWelcomeMessage();
 }
 
 async function loadStudentWelcomeMessage() {
-    const { data } = await fetchData(SETTINGS_TABLE, '*', { setting_key: MESSAGE_KEY });
+    const { data } = await fetchData(SETTINGS_TABLE, '*', { key: MESSAGE_KEY });
     const messageDiv = $('student-welcome-message') || $('live-preview');
     if (!messageDiv) return;
 
     if (data && data.length > 0) {
-        messageDiv.innerHTML = data[0].setting_value;
+        messageDiv.innerHTML = data[0].value;
     } else {
         messageDiv.innerHTML = '<p>Welcome student! Please check in for attendance. (Default Message)</p>';
     }
 }
 
 async function loadWelcomeMessageForEdit() {
-    const { data } = await fetchData(SETTINGS_TABLE, '*', { setting_key: MESSAGE_KEY });
+    const { data } = await fetchData(SETTINGS_TABLE, '*', { key: MESSAGE_KEY });
     const editor = $('welcome-message-editor');
 
     if (data && data.length > 0) {
-        editor.value = data[0].setting_value;
+        editor.value = data[0].value;
     } else {
         editor.value = '<p>Welcome student! Please check in for attendance. (Default Message)</p>';
     }
@@ -389,19 +401,27 @@ async function handleSaveWelcomeMessage(e) {
     const originalText = submitButton.textContent;
     setButtonLoading(submitButton, true, originalText);
 
-    const setting_value = $('welcome-message-editor').value.trim();
+    const value = $('welcome-message-editor').value.trim();
 
-    if (!setting_value) { showFeedback('Message content cannot be empty.', 'error'); setButtonLoading(submitButton, false, originalText); return; }
-    
-    const { data: existing } = await fetchData(SETTINGS_TABLE, 'id', { setting_key: MESSAGE_KEY });
+    if (!value) {
+        showFeedback('Message content cannot be empty.', 'error');
+        setButtonLoading(submitButton, false, originalText);
+        return;
+    }
 
+    const { data: existing } = await fetchData(SETTINGS_TABLE, 'id', { key: MESSAGE_KEY });
     let updateOrInsertError = null;
 
     if (existing && existing.length > 0) {
-        const { error } = await sb.from(SETTINGS_TABLE).update({ setting_value, updated_at: new Date().toISOString() }).eq('id', existing[0].id);
+        const { error } = await sb
+            .from(SETTINGS_TABLE)
+            .update({ value, updated_at: new Date().toISOString() })
+            .eq('id', existing[0].id);
         updateOrInsertError = error;
     } else {
-        const { error } = await sb.from(SETTINGS_TABLE).insert({ setting_key: MESSAGE_KEY, setting_value: setting_value });
+        const { error } = await sb
+            .from(SETTINGS_TABLE)
+            .insert({ key: MESSAGE_KEY, value });
         updateOrInsertError = error;
     }
 
