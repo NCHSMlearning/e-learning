@@ -3,6 +3,11 @@
  * SUPERADMIN DASHBOARD - COURSE, USER, ATTENDANCE & FULL FILTERING MANAGEMENT
  * (Includes fixes for dynamic Program/Intake/Block/Course filtering across all tabs)
  **********************************************************************************/
+ // Hides the .html extension in the URL
+    if (window.location.pathname.endsWith('.html')) {
+        const cleanPath = window.location.pathname.replace(/\.html$/, '');
+        window.history.replaceState({}, '', cleanPath);
+    }
 
 // !!! IMPORTANT: CHECK YOUR KEYS AND URL !!!
 // REPLACE with your actual Supabase URL and ANON_KEY
