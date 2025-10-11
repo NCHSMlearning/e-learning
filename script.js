@@ -868,18 +868,27 @@ async function loadScheduledSessions() {
     const tbody = $('scheduled-sessions-table');
     tbody.innerHTML = '<tr><td colspan="6">Loading scheduled sessions...</td></tr>';
     
-    const { data: sessions, error } = await fetchData('scheduled_sessions', '*, course:course_id(course_name)', {}, 'session_date', false);
-    if (error) { tbody.innerHTML = `<tr><td colspan="6">Error loading sessions: ${error.message}</td></tr>`; return; }
+    const { data: sessions, error } = await fetchData(
+        'scheduled_sessions',
+        '*, course:course_id(course_name)',
+        {},
+        'session_date',
+        false
+    );
+
+    if (error) {
+        tbody.innerHTML = `<tr><td colspan="6">Error loading sessions: ${error.message}</td></tr>`;
+        return;
+    }
 
     tbody.innerHTML = '';
     sessions.forEach(s => {
         const dateTime = new Date(s.session_date).toLocaleDateString() + ' ' + (s.session_time || 'N/A');
         const courseName = s.course?.course_name || 'N/A';
-        
+
+        // For clarity, just show session_title plus course if class session
         let detail = s.session_title;
-        if (s.session_type === 'clinical' && s.clinical_area) {
-            detail += ` (${s.clinical_area})`;
-        } else if (s.session_type === 'class' && courseName !== 'N/A') {
+        if (s.session_type === 'class' && courseName !== 'N/A') {
             detail += ` (${courseName})`;
         }
 
