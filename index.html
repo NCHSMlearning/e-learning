@@ -408,22 +408,18 @@
             </section>
         </main>
     </div>
+<script>
+    // *************************************************************************
+    // *** 1. CONFIGURATION ***
+    // *************************************************************************
 
-    <script>
-    // *************************************************************************
-    // *** 1. CONFIGURATION: UPDATE THESE VALUES ***
-    // *************************************************************************
-    
-    // ** SUPABASE CONFIGURATION **
-    const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co'; // <--- Update with your actual Supabase URL
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk'; // <--- Update with your actual Anon Key
+    const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // ** LOCATIONIQ CONFIGURATION (Geocoding API) **
     const LOCATIONIQ_API_KEY = 'pk.cbe61eae35ecbe1d1d682c347d81381c'; 
     const LOCATIONIQ_API_URL = 'https://us1.locationiq.com/v1/reverse.php';
 
-    // ** STATIC DATA (Clinical Departments/Areas) **
     const MOCK_HOSPITAL_DEPARTMENTS = [
         { id: '1', name: 'Maternity Department' },
         { id: '2', name: 'Male Surgical' },
@@ -439,29 +435,25 @@
         { id: '12', name: 'Gynecology' },
         { id: '13', name: 'Community Health' },
     ];
-    
-    // ** FALLBACK LOCATION **
+
     const FALLBACK_LAT = -1.286389; 
     const FALLBACK_LON = 36.817223;
     const FALLBACK_ACCURACY = 500; 
 
     let currentUserId = null;
     let currentUserProfile = null;
-    // Holds courses loaded from Supabase. Used by both 'My Courses' and 'Attendance' dropdown.
-    let cachedCourses = []; 
+    let cachedCourses = [];
     let cachedExams = [];
 
-    // DOM Elements
     const geoMessage = document.getElementById('geo-message');
     const sessionTypeSelect = document.getElementById('session-type');
     const attendanceTargetSelect = document.getElementById('attendance-target');
     const adminWelcomeMessage = document.getElementById('admin-welcome-message'); 
-    
-    // ... other DOM elements
 
     // *************************************************************************
     // *** 2. UI AND NAVIGATION LOGIC ***
     // *************************************************************************
+
     const navLinks = document.querySelectorAll('.nav a');
     const tabs = document.querySelectorAll('.tab-content');
 
@@ -474,19 +466,16 @@
         const activeTab = document.getElementById(tabId);
         if(activeTab) activeTab.classList.add('active');
         
-        // Load data specific to the tab being activated
         if (tabId === 'profile' && currentUserId) loadProfile(currentUserId); 
         if (tabId === 'attendance' && currentUserId) {
             loadGeoAttendanceHistory(currentUserId); 
             updateTargetSelect();
         }
-        // CRITICAL: Ensure load order for dashboard dependencies
         if (tabId === 'dashboard' && currentUserId) {
             loadWelcomeMessage();
             loadCourses();
             loadExams();
             loadResources();
-            // Metrics relies on all the above to populate the counts
             setTimeout(() => loadDashboardMetrics(currentUserId), 500); 
         }
         if (tabId === 'courses' && currentUserId) loadCourses(); 
@@ -503,21 +492,19 @@
     });
 
     async function logout() {
-        // Disconnect from real-time channels gracefully
         sb.realtime.channels.forEach(channel => sb.removeChannel(channel)); 
         await sb.auth.signOut();
-        window.location.href = "login.html"; // Redirect to your login page
+        window.location.href = "login.html";
     }
 
     // *************************************************************************
     // *** 3. CORE DATA AND DASHBOARD FUNCTIONS ***
     // *************************************************************************
-    
+
     async function loadWelcomeMessage() {
         adminWelcomeMessage.textContent = 'Loading message...';
-        
         const { data, error } = await sb
-            .from('system_settings') // Assuming a table named 'system_settings'
+            .from('system_settings')
             .select('setting_value')
             .eq('setting_key', 'welcome_message')
             .single();
@@ -531,13 +518,9 @@
     }
     
     async function loadDashboardMetrics(userId) {
-        // --- 1. Load Active Courses Count (uses cachedCourses) ---
         document.getElementById('dashboard-active-courses').textContent = cachedCourses.length;
-
-        // --- 2. Load Attendance Rate (MOCK for now) ---
         document.getElementById('dashboard-attendance-rate').textContent = '94%';
 
-        // --- 3. Load Upcoming Exam (uses cachedExams) ---
         let nextExamText = 'None Scheduled';
         if (cachedExams && cachedExams.length > 0) {
              const now = new Date();
@@ -550,23 +533,13 @@
         }
         document.getElementById('dashboard-upcoming-exam').textContent = nextExamText;
 
-
-        // --- 4. Load New Resources (Updated by loadResources - assuming a variable/cache) ---
-        // loadResources will handle updating the metric, if not, use a simple mock/placeholder
-        
-        // --- 5. Conditional Action Required Section ---
         const passportCard = document.getElementById('action-passport');
-        // Check if currentUserProfile exists and if it has a passport_url
         let profileIncomplete = !currentUserProfile?.passport_url; 
-        
         passportCard.style.display = profileIncomplete ? 'block' : 'none';
-        
-        // If the 'Action Required' title exists, we might toggle its visibility
+
         const actionsContainer = document.getElementById('dashboard-actions');
         const actionTitle = document.getElementById('actions-title');
-        // Check if there are any visible children (actions)
         if (actionTitle) {
-            // Note: This is an over-simplification. Needs better visibility check if more cards added.
             if (!profileIncomplete && actionsContainer.children.length <= 1) { 
                  actionTitle.style.display = 'none';
             } else {
@@ -574,37 +547,28 @@
             }
         }
     }
-    
+
     // *************************************************************************
-    // *** 4. AUTHENTICATION AND PROFILE MANAGEMENT (FIXED) ***
+    // *** 4. AUTH AND PROFILE MANAGEMENT ***
     // *************************************************************************
 
     async function checkAuthAndLoad() {
-        // Get the current user session from Supabase Auth
         const { data: { user } } = await sb.auth.getUser();
 
         if (user) {
             currentUserId = user.id;
-        
-            // CRITICAL: Load profile first to get enrollment filters
             await loadProfile(currentUserId); 
-            
-            // Start loading all data
             await loadCourses(); 
             await loadExams();
             await loadResources(); 
-            
-            // Final step: switch to dashboard and load metrics
             showTab('dashboard');
-            // The showTab('dashboard') calls the sequence, but we call the final metric load for safety
             setTimeout(() => loadDashboardMetrics(currentUserId), 500);
-
         } else {
             console.warn("No active user session found. Redirecting to login.");
             window.location.href = "login.html"; 
         }
     }
-    
+
     const profileForm = document.getElementById('profile-form');
     const passportFileInput = document.getElementById('passport-file-input');
     const passportPreview = document.getElementById('passport-preview');
@@ -613,11 +577,9 @@
     const editProfileButton = document.getElementById('edit-profile-button');
     const saveProfileButton = document.getElementById('save-profile-button');
     const uploadLabel = document.getElementById('upload-label');
-    
+
     async function loadProfile(userId) {
         profileStatus.textContent = 'Loading profile...';
-        
-        // Fetch ALL data from the profiles table for the current user
         const { data: profile, error } = await sb
             .from('profiles')
             .select('*')
@@ -626,29 +588,13 @@
 
         if (error) {
             console.error('Error loading profile:', error);
-            
-            if (error.code === 'PGRST116' || error.message.includes('permission denied')) {
-                profileStatus.textContent = 'Profile data missing or restricted. Contact Admin.';
-                currentUserProfile = { 
-                    first_name: 'Student', 
-                    full_name: 'Unknown Student', 
-                    email: 'N/A', 
-                    program: 'N/A', 
-                    block: 'N/A', 
-                    intake_year: 'N/A', 
-                    student_id_no: 'N/A', 
-                    phone: 'N/A'
-                };
-            } else {
-                profileStatus.textContent = 'Error loading profile details.';
-                return;
-            }
+            profileStatus.textContent = 'Error loading profile details.';
+            currentUserProfile = { first_name: 'Student', full_name: 'Unknown', email: 'N/A', program: 'N/A', block: 'N/A', intake_year: 'N/A', student_id_no: 'N/A', phone: 'N/A' };
         } else {
             currentUserProfile = profile;
             profileStatus.textContent = '';
         }
 
-        // Populate form fields with the LATEST data from Supabase
         document.getElementById('profile-student-id').value = currentUserProfile.student_id_no || 'N/A';
         document.getElementById('profile-name').value = currentUserProfile.full_name || 'N/A';
         document.getElementById('profile-email').value = currentUserProfile.email || 'N/A';
@@ -656,30 +602,20 @@
         document.getElementById('profile-program').value = currentUserProfile.program || 'N/A';
         document.getElementById('profile-block').value = currentUserProfile.block || 'N/A';
         document.getElementById('profile-intake-year').value = currentUserProfile.intake_year || 'N/A';
-        
-        // Handle Passport Photo URL retrieval
-        document.getElementById('passport-preview').src = currentUserProfile.passport_url 
+
+        passportPreview.src = currentUserProfile.passport_url 
             ? sb.storage.from('passports').getPublicUrl(currentUserProfile.passport_url).data.publicUrl
             : 'https://via.placeholder.com/150x150?text=NO+PHOTO'; 
-        
-        document.querySelector('header h1').textContent = `Welcome, ${currentUserProfile.first_name || 'Student'}!`;
 
+        document.querySelector('header h1').textContent = `Welcome, ${currentUserProfile.first_name || 'Student'}!`;
         toggleProfileEdit(false); 
-        if (!currentUserProfile.passport_url) {
-            uploadLabel.style.display = 'block';
-        }
+        if (!currentUserProfile.passport_url) uploadLabel.style.display = 'block';
     }
-    
+
     function toggleProfileEdit(enable) {
-        // Only allow student to edit name and phone. Admin updates the rest.
         const editableFields = ['profile-name', 'profile-phone']; 
-        
-        editableFields.forEach(id => {
-            const input = document.getElementById(id);
-            if (input) input.readOnly = !enable;
-        });
-        
-        // Crucial Admin-set fields remain read-only always
+        editableFields.forEach(id => document.getElementById(id).readOnly = !enable);
+
         document.getElementById('profile-student-id').readOnly = true;
         document.getElementById('profile-email').readOnly = true;
         document.getElementById('profile-program').readOnly = true;
@@ -688,18 +624,12 @@
 
         editProfileButton.style.display = enable ? 'none' : 'block';
         saveProfileButton.style.display = enable ? 'block' : 'none';
-        
-        if (enable || !currentUserProfile?.passport_url) {
-            uploadLabel.style.display = 'block';
-        } else {
-            uploadLabel.style.display = 'none';
-        }
-
-        document.getElementById('upload-button').style.display = 'none'; 
+        uploadLabel.style.display = (enable || !currentUserProfile?.passport_url) ? 'block' : 'none';
+        uploadButton.style.display = 'none'; 
     }
-    
+
     editProfileButton.addEventListener('click', () => toggleProfileEdit(true));
-    
+
     profileForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         profileStatus.textContent = 'Saving changes...';
@@ -711,10 +641,7 @@
             updated_at: new Date().toISOString()
         };
 
-        const { error } = await sb
-            .from('profiles')
-            .update(updates)
-            .eq('id', currentUserId);
+        const { error } = await sb.from('profiles').update(updates).eq('id', currentUserId);
 
         if (error) {
             profileStatus.textContent = `Error saving profile: ${error.message}`;
@@ -735,10 +662,7 @@
 
     uploadButton.addEventListener('click', async () => {
         const file = passportFileInput.files[0];
-        if (!file) {
-            profileStatus.textContent = 'Please select a file first.';
-            return;
-        }
+        if (!file) { profileStatus.textContent = 'Please select a file first.'; return; }
 
         profileStatus.textContent = 'Uploading photo...';
         uploadButton.disabled = true;
@@ -746,32 +670,16 @@
         const fileExt = file.name.split('.').pop();
         const filePath = `${currentUserId}.${fileExt}`;
 
-        const { error: uploadError } = await sb.storage
-            .from('passports')
-            .upload(filePath, file, { cacheControl: '3600', upsert: true });
+        const { error: uploadError } = await sb.storage.from('passports').upload(filePath, file, { cacheControl: '3600', upsert: true });
 
-        if (uploadError) {
-            profileStatus.textContent = `Upload failed: ${uploadError.message}`;
-            uploadButton.disabled = false;
-            return;
-        }
-        
-        const { error: updateError } = await sb
-            .from('profiles')
-            .update({ passport_url: filePath, updated_at: new Date().toISOString() })
-            .eq('id', currentUserId);
+        if (uploadError) { profileStatus.textContent = `Upload failed: ${uploadError.message}`; uploadButton.disabled = false; return; }
 
-        if (updateError) {
-            profileStatus.textContent = `Database update failed: ${updateError.message}`;
-        } else {
-            profileStatus.textContent = 'Photo uploaded and saved successfully!';
-            passportFileInput.value = ''; 
-            uploadButton.style.display = 'none';
-            loadProfile(currentUserId); 
-        }
+        const { error: updateError } = await sb.from('profiles').update({ passport_url: filePath, updated_at: new Date().toISOString() }).eq('id', currentUserId);
+
+        if (updateError) { profileStatus.textContent = `Database update failed: ${updateError.message}`; } 
+        else { profileStatus.textContent = 'Photo uploaded and saved successfully!'; passportFileInput.value = ''; uploadButton.style.display = 'none'; loadProfile(currentUserId); }
         uploadButton.disabled = false;
     });
-
 
     // *************************************************************************
     // *** 5. ATTENDANCE LOGIC ***
@@ -780,26 +688,14 @@
     function updateTargetSelect() {
         const sessionType = sessionTypeSelect.value;
         attendanceTargetSelect.innerHTML = '';
-        
         let targetList = [];
         let label = 'Department/Course:';
 
-        // Logic: Clinical Session uses Departments
         if (sessionType === 'Clinical') {
-            targetList = MOCK_HOSPITAL_DEPARTMENTS.map(d => ({ 
-                id: d.id, 
-                name: d.name, 
-                text: `${d.name} (Clinical)` 
-            }));
+            targetList = MOCK_HOSPITAL_DEPARTMENTS.map(d => ({ id: d.id, name: d.name, text: `${d.name} (Clinical)` }));
             label = 'Department/Area:';
-        // Logic: On Class Session uses real-time loaded courses
         } else if (sessionType === 'Class') {
-            // Use the courses loaded from Supabase
-            targetList = cachedCourses.map(c => ({ 
-                id: c.id, 
-                name: c.name, 
-                text: `${c.code ? c.code + ' - ' : ''}${c.name} (Class)` 
-            }));
+            targetList = cachedCourses.map(c => ({ id: c.id, name: c.name, text: `${c.code ? c.code + ' - ' : ''}${c.name} (Class)` }));
             label = 'Course/Subject:';
         }
 
@@ -811,7 +707,7 @@
         } else {
             targetList.forEach(target => {
                 const option = document.createElement('option');
-                option.value = `${target.id}|${target.name}`; 
+                option.value = `${target.id}|${target.name}`;
                 option.textContent = target.text;
                 attendanceTargetSelect.appendChild(option);
             });
@@ -819,339 +715,111 @@
         geoMessage.innerHTML = `Please select a specific **${label.replace(':', '')}** to check in.`;
     }
 
-    // GeoCheckIn implementation
-    async function geoCheckIn() {
-        const sessionType = sessionTypeSelect.value;
-        const targetSelect = attendanceTargetSelect.value;
-        const checkInTime = new Date().toISOString();
-        const button = document.getElementById('check-in-button');
-        
-        if (!sessionType || !targetSelect || targetSelect.includes('Select Session Type first') || targetSelect.includes('No targets available')) {
-            geoMessage.textContent = 'Error: Please select both a Session Type and a valid Department/Course.';
-            return;
-        }
-
-        button.disabled = true;
-        geoMessage.textContent = 'Attempting to get location and check in...';
-
-        const getLocation = () => new Promise((resolve, reject) => {
-            if (!navigator.geolocation) {
-                return resolve({ lat: FALLBACK_LAT, lon: FALLBACK_LON, acc: FALLBACK_ACCURACY, friendly: 'Fallback Location (Geolocation Disabled)' });
-            }
-            navigator.geolocation.getCurrentPosition(
-                (pos) => resolve({ 
-                    lat: pos.coords.latitude, 
-                    lon: pos.coords.longitude, 
-                    acc: pos.coords.accuracy, 
-                    friendly: null 
-                }),
-                (err) => {
-                    console.warn(`Geolocation error (${err.code}): ${err.message}. Using fallback.`);
-                    resolve({ lat: FALLBACK_LAT, lon: FALLBACK_LON, acc: FALLBACK_ACCURACY, friendly: 'Fallback Location (GPS Error)' });
-                },
-                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-            );
-        });
-
-        try {
-            let location = await getLocation();
-
-            if (location.friendly === null) {
-                const geocodeUrl = `${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${location.lat}&lon=${location.lon}&format=json`;
-                const response = await fetch(geocodeUrl);
-                if (response.ok) {
-                    const geoData = await response.json();
-                    location.friendly = geoData.display_name || `Lat: ${location.lat.toFixed(4)}, Lon: ${location.lon.toFixed(4)}`;
-                } else {
-                    location.friendly = `Geocoding Failed. Lat: ${location.lat.toFixed(4)}, Lon: ${location.lon.toFixed(4)}`;
-                }
-            }
-            
-            const [targetId, targetName] = targetSelect.split('|');
-
-            const { error } = await sb
-                .from('geo_attendance_logs')
-                .insert({
-                    student_id: currentUserId,
-                    check_in_time: checkInTime,
-                    session_type: sessionType === 'Clinical' ? 'Clinical' : 'Class', 
-                    target_id: targetId,
-                    target_name: targetName,
-                    latitude: location.lat,
-                    longitude: location.lon,
-                    accuracy_m: location.acc,
-                    location_friendly_name: location.friendly,
-                    is_verified: false,
-                    // IMPORTANT: Include cohort filters for administrative reporting/filtering
-                    program: currentUserProfile?.program, 
-                    block: currentUserProfile?.block, 
-                    intake_year: currentUserProfile?.intake_year
-                });
-
-            if (error) {
-                console.error("Check-in failed:", error);
-                geoMessage.textContent = `Check-in failed: Error: ${error.message}`;
-            } else {
-                geoMessage.textContent = `Check-in successful! Logged at ${new Date(checkInTime).toLocaleTimeString()} near ${location.friendly}.`;
-                loadGeoAttendanceHistory(currentUserId);
-            }
-
-        } catch (e) {
-            console.error("GeoCheckIn major failure:", e);
-            geoMessage.textContent = `A critical error occurred during check-in: ${e.message}`;
-        } finally {
-            button.disabled = false;
-        }
-    }
-
-    async function loadGeoAttendanceHistory(userId) {
-        const tableBody = document.getElementById('geo-attendance-history');
-        tableBody.innerHTML = '<tr><td colspan="5">Loading geo check-in history...</td></tr>';
-
-        try {
-            const { data: logs, error } = await sb
-                .from('geo_attendance_logs')
-                .select('check_in_time, session_type, target_name, accuracy_m, is_verified')
-                .eq('student_id', userId)
-                .order('check_in_time', { ascending: false })
-                .limit(10); 
-
-            if (error) throw error;
-
-            tableBody.innerHTML = '';
-
-            if (!logs || logs.length === 0) {
-                tableBody.innerHTML = '<tr><td colspan="5">No geo check-in history found.</td></tr>';
-                return;
-            }
-
-            logs.forEach(log => {
-                const accuracyText = (log.accuracy_m || 0).toFixed(2) + 'm'; 
-                
-                const verificationStatus = log.is_verified 
-                    ? '<span style="color: #10B981; font-weight: 600;">Verified</span>' 
-                    : '<span style="color: #F59E0B; font-weight: 600;">Pending</span>';
-
-                const row = `
-                    <tr>
-                        <td>${new Date(log.check_in_time).toLocaleString()}</td>
-                        <td>${log.session_type}</td>
-                        <td>${log.target_name || 'N/A'}</td>
-                        <td>${accuracyText}</td>
-                        <td>${verificationStatus}</td>
-                    </tr>
-                `;
-                tableBody.innerHTML += row;
-            });
-
-        } catch (error) {
-            console.error("Failed to load geo attendance history:", error);
-            tableBody.innerHTML = `<tr><td colspan="5" style="color: #EF4444;">Error loading history: ${error.message}</td></tr>`;
-        }
-    }
-
     // *************************************************************************
-    // *** 6. SUPABASE DATA LOADING FUNCTIONS (SECURE FILTERING APPLIED) ***
+    // *** 6. SUPABASE DATA LOADING FUNCTIONS (COURSES FIXED) ***
     // *************************************************************************
 
     async function loadCourses() {
         const tableBody = document.getElementById('courses-table');
         tableBody.innerHTML = '<tr><td colspan="2">Loading courses from Supabase...</td></tr>';
-        
+
         try {
             const program = currentUserProfile?.program;
             const block = currentUserProfile?.block;
             const intakeYear = currentUserProfile?.intake_year;
 
             if (!program || !block || !intakeYear) {
-                 tableBody.innerHTML = '<tr><td colspan="2">Missing enrollment details (Program/Block/Year). Cannot load courses.</td></tr>';
+                 tableBody.innerHTML = '<tr><td colspan="2">Missing enrollment details. Cannot load courses.</td></tr>';
                  cachedCourses = [];
                  return;
             }
 
-            // CRITICAL: Filter based on enrollment and program/block/year match
-            const { data: enrollments, error } = await sb
-                .from('student_courses') 
-                .select(`
-                    course_id,
-                    status,
-                    courses (id, name, code) 
-                `)
+            const { data: enrollments, error } = await sb.from('student_courses')
+                .select('course_id, status, courses (id, name, code)')
                 .eq('student_id', currentUserId)
-                // Assuming 'student_courses' links to 'courses' which is RLS-filtered 
-                // OR that 'student_courses' itself is filtered by an RLS policy checking 'profiles'
-                // The most secure method is relying on RLS, but for client-side explicit filtering:
                 .order('course_id', { ascending: true });
-
 
             if (error) throw error;
             
             tableBody.innerHTML = '';
             
             if (enrollments && enrollments.length > 0) {
-                // Cache the loaded courses. Note: The RLS policy should already ensure these are the correct cohort's courses.
-                cachedCourses = enrollments
-                    .filter(e => e.courses)
-                    .map(e => ({
-                        id: e.courses.id,
-                        name: e.courses.name,
-                        code: e.courses.code,
-                        status: e.status
-                    }));
+                cachedCourses = enrollments.filter(e => e.courses).map(e => ({
+                    id: e.courses.id,
+                    name: e.courses.name,
+                    code: e.courses.code,
+                    status: e.status
+                }));
                 
                 cachedCourses.forEach(c => {
-                    const row = `
-                        <tr>
-                            <td>${c.code ? c.code + ' - ' : ''}${c.name}</td>
-                            <td>${c.status || 'Active'}</td>
-                        </tr>
-                    `;
-                    tableBody.innerHTML += row;
+                    const row = `<tr><td>${c.code ? c.code + ' - ' : ''}${c.name}</td><td>${c.status}</td></tr>`;
+                    tableBody.insertAdjacentHTML('beforeend', row);
                 });
             } else {
-                tableBody.innerHTML = '<tr><td colspan="2">You are currently not enrolled in any courses for this block/year.</td></tr>';
-                cachedCourses = []; 
+                tableBody.innerHTML = '<tr><td colspan="2">No courses found for your enrollment.</td></tr>';
+                cachedCourses = [];
             }
-            
-        } catch (error) {
-            console.error("Failed to load courses:", error);
-            tableBody.innerHTML = `<tr><td colspan="2" style="color: #EF4444;">Error loading courses: ${error.message}.</td></tr>`;
-            cachedCourses = []; 
-        }
-        
-        if (document.getElementById('attendance').classList.contains('active')) {
+
             updateTargetSelect();
+        } catch (err) {
+            console.error('Error loading courses:', err);
+            tableBody.innerHTML = `<tr><td colspan="2">Error loading courses: ${err.message}</td></tr>`;
         }
-        document.getElementById('dashboard-active-courses').textContent = cachedCourses.length;
     }
 
     async function loadExams() {
-        const tableBody = document.getElementById('exams-table').querySelector('tbody');
-        tableBody.innerHTML = '<tr><td colspan="3">Loading exam schedule...</td></tr>';
-        
+        const tableBody = document.getElementById('cats-table');
+        tableBody.innerHTML = '<tr><td colspan="2">Loading exams...</td></tr>';
         try {
-            const program = currentUserProfile?.program;
-            const block = currentUserProfile?.block;
-            const intakeYear = currentUserProfile?.intake_year;
-
-            if (!program || !block || !intakeYear) {
-                tableBody.innerHTML = '<tr><td colspan="3">Missing enrollment details. Cannot load schedule.</td></tr>';
-                cachedExams = [];
-                return;
-            }
-
-            // CRITICAL: Filter exams based on student's cohort details
-            const { data: exams, error } = await sb
-                .from('exams_schedule') // Assuming a table named 'exams_schedule'
-                .select('exam_name, exam_date, status')
-                .eq('program', program)
-                .eq('block', block)
-                .eq('intake_year', intakeYear)
+            const { data, error } = await sb.from('exams')
+                .select('*')
+                .eq('student_id', currentUserId)
                 .order('exam_date', { ascending: true });
-
             if (error) throw error;
-            
-            cachedExams = exams || [];
+
+            cachedExams = data || [];
             tableBody.innerHTML = '';
-            
+
             if (cachedExams.length > 0) {
                 cachedExams.forEach(exam => {
-                    const row = `
-                        <tr>
-                            <td>${exam.exam_name}</td>
-                            <td>${new Date(exam.exam_date).toLocaleDateString()}</td>
-                            <td>${exam.status}</td>
-                        </tr>
-                    `;
-                    tableBody.innerHTML += row;
+                    const row = `<tr><td>${exam.exam_name}</td><td>${new Date(exam.exam_date).toLocaleDateString()}</td></tr>`;
+                    tableBody.insertAdjacentHTML('beforeend', row);
                 });
-            } else {
-                tableBody.innerHTML = '<tr><td colspan="3">No exams or CATs scheduled for your cohort yet.</td></tr>';
-            }
-            
-        } catch (error) {
-            console.error("Failed to load exams:", error);
-            tableBody.innerHTML = `<tr><td colspan="3" style="color: #EF4444;">Error loading exams: ${error.message}.</td></tr>`;
-            cachedExams = [];
+            } else tableBody.innerHTML = '<tr><td colspan="2">No exams scheduled.</td></tr>';
+        } catch (err) {
+            console.error('Error loading exams:', err);
+            tableBody.innerHTML = `<tr><td colspan="2">Error loading exams: ${err.message}</td></tr>`;
         }
-        // Update the dashboard metric after loading
-        loadDashboardMetrics(currentUserId);
     }
 
     async function loadResources() {
-        const resourceList = document.getElementById('resources-list');
-        resourceList.innerHTML = 'Loading resources from Supabase...';
-        
-        try {
-            const program = currentUserProfile?.program;
-            const block = currentUserProfile?.block;
-            
-            if (!program || !block) {
-                resourceList.innerHTML = '<p>Missing enrollment details. Cannot load resources.</p>';
-                return;
-            }
-            
-            // CRITICAL: Filter for resources specific to the cohort OR resources marked as 'General'
-            const { data: resources, error } = await sb
-                .from('resources')
-                .select('id, title, file_path, program, block, upload_date')
-                // Filter by program AND block OR just general resources (program='General')
-                .or(`and(program.eq.${program},block.eq.${block}),program.eq.General`)
-                .order('upload_date', { ascending: false });
+        const tableBody = document.getElementById('resources-table');
+        tableBody.innerHTML = '<tr><td colspan="2">Loading resources...</td></tr>';
 
+        try {
+            const { data, error } = await sb.from('resources').select('*').order('created_at', { ascending: false });
             if (error) throw error;
 
-            resourceList.innerHTML = '';
-
-            if (resources.length === 0) {
-                resourceList.innerHTML = `<p>No learning resources found for your Program (${program}) or Block (${block}) yet.</p>`;
-                document.getElementById('dashboard-new-resources').textContent = '0';
-                return;
-            }
-            
-            resources.forEach(res => {
-                const publicUrl = sb.storage.from('materials').getPublicUrl(res.file_path).data.publicUrl;
-
-                const item = `
-                    <div class="resource-item">
-                        <div>
-                            <a href="${publicUrl}" target="_blank">${res.title}</a>
-                            <p style="margin: 5px 0 0; font-size: 0.9em; color: #6B7280;">
-                                ${res.program === 'General' ? 'General' : `${res.program}, Block ${res.block}`} - 
-                                Uploaded: ${new Date(res.upload_date).toLocaleDateString()}
-                            </p>
-                        </div>
-                        <span style="font-size: 1.5em;">&#x1F4C4;</span>
-                    </div>
-                `;
-                resourceList.innerHTML += item;
-            });
-            
-            // Update dashboard metric for new resources (uploaded in the last 7 days)
-            const oneWeekAgo = new Date();
-            oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-            const newCount = resources.filter(r => new Date(r.upload_date) > oneWeekAgo).length;
-            document.getElementById('dashboard-new-resources').textContent = newCount;
-            
-        } catch (error) {
-            console.error("Failed to load resources:", error);
-            resourceList.innerHTML = `<p style="color: #EF4444;">Error loading resources: ${error.message}</p>`;
+            tableBody.innerHTML = '';
+            if (data && data.length > 0) {
+                data.forEach(r => {
+                    const row = `<tr><td>${r.title}</td><td><a href="${r.file_url}" target="_blank">Download</a></td></tr>`;
+                    tableBody.insertAdjacentHTML('beforeend', row);
+                });
+            } else tableBody.innerHTML = '<tr><td colspan="2">No resources found.</td></tr>';
+        } catch (err) {
+            console.error('Error loading resources:', err);
+            tableBody.innerHTML = `<tr><td colspan="2">Error loading resources: ${err.message}</td></tr>`;
         }
     }
 
-
-    // MOCK FUNCTIONS (for tabs not yet fully implemented)
-    async function loadStudentMessages() {
-         document.getElementById('messages-list').innerHTML = '<h2>Recent Admin Messages</h2><p>No new messages. (MOCK)</p>';
-    }
-    
-
     // *************************************************************************
-    // *** 9. INITIALIZATION ***
+    // *** 7. INITIALIZATION ***
     // *************************************************************************
 
-    document.addEventListener('DOMContentLoaded', checkAuthAndLoad);
-
-    </script>
+    document.addEventListener('DOMContentLoaded', () => {
+        checkAuthAndLoad();
+    });
+</script>
 </body>
 </html>
