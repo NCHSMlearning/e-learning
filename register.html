@@ -300,43 +300,46 @@
     }
 
     // Step 2: Insert into students or lecturers table
-    if (data.user) {
-      if (role === 'student') {
-        const { error: studentError } = await sb.from('students').insert([
-          {
-            user_id: data.user.id,
-            full_name,
-            email,
-            phone,
-            admission_number: student_id_number,
-            course: program_type,
-            status: 'pending' // default, can be approved later
-          }
-        ]);
-        if (studentError) console.error('Student table insert error:', studentError.message);
-      } else if (role === 'lecturer') {
-        const { error: lecturerError } = await sb.from('lecturers').insert([
-          {
-            user_id: data.user.id,
-            full_name,
-            email,
-            phone,
-            staff_id,
-            department,
-            status: 'pending'
-          }
-        ]);
-        if (lecturerError) console.error('Lecturer table insert error:', lecturerError.message);
+if (data.user) {
+  if (role === 'student') {
+    const { error: studentError } = await sb.from('students').insert([
+      {
+        user_id: data.user.id,
+        full_name,
+        email,
+        phone,
+        admission_number: student_id_number || null,
+        course: program_type || null,
+        status: 'pending',      // default status
+        block: null,            // admin will assign later
+        intake_year: null       // admin will assign later
       }
-    }
+    ]);
+    if (studentError) console.error('Student table insert error:', studentError.message);
+  } else if (role === 'lecturer') {
+    const { error: lecturerError } = await sb.from('lecturers').insert([
+      {
+        user_id: data.user.id,
+        full_name,
+        email,
+        phone,
+        staff_id,
+        department,
+        status: 'pending'
+      }
+    ]);
+    if (lecturerError) console.error('Lecturer table insert error:', lecturerError.message);
+  }
+}
 
-    message.textContent = '✅ Registration successful! Await admin approval before logging in.';
-    message.classList.add('success');
-    registerBtn.textContent = 'Registered!';
-    form.reset();
-    studentFields.style.display = 'none';
-    lecturerFields.style.display = 'none';
-    registerBtn.disabled = false;
+message.textContent = '✅ Registration successful! Await admin approval before logging in.';
+message.classList.add('success');
+registerBtn.textContent = 'Registered!';
+form.reset();
+studentFields.style.display = 'none';
+lecturerFields.style.display = 'none';
+registerBtn.disabled = false;
+
   });
 </script>
 </body>
