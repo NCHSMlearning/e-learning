@@ -216,7 +216,7 @@
     <div class="container">
         <aside class="sidebar">
             <div class="sidebar-header">
-                <img src="images/Logo_NCHSM.png" alt="Logo"> 
+                <img src="images/logo.png" alt="Logo"> 
                 <h2>STUDENT PORTAL</h2>
             </div>
             <ul class="nav">
@@ -338,7 +338,7 @@
             
             <section id="courses" class="tab-content">
                 <h2 style="color: #4C1D95;">My Courses (Real-Time Enrollment)</h2>
-                <p>Courses shown here are filtered by your *Program, **Block, and **Intake Year* for relevance.</p>
+                <p>Courses shown here are filtered by your **Program**, **Block**, and **Intake Year** for relevance.</p>
                 <table>
                     <thead><tr><th>Course Name</th><th>Status</th></tr></thead>
                     <tbody id="courses-table">
@@ -368,7 +368,7 @@
 
                     <button id="check-in-button" onclick="geoCheckIn()">Check In Now</button>
                     
-                    <p id="geo-message">Select a *Session Type* and then a specific *Department or Course* to check in at your current GPS location and time.</p>
+                    <p id="geo-message">Select a **Session Type** and then a specific **Department or Course** to check in at your current GPS location and time.</p>
                 </div>
 
                 <h3 style="color: #4C1D95;">Geo Attendance History (Check-in Logs)</h3>
@@ -467,7 +467,7 @@
 
     function showTab(tabId) {
         navLinks.forEach(l => l.classList.remove('active'));
-        const activeLink = document.querySelector(.nav a[data-tab="${tabId}"]);
+        const activeLink = document.querySelector(`.nav a[data-tab="${tabId}"]`);
         if(activeLink) activeLink.classList.add('active');
 
         tabs.forEach(tab => tab.classList.remove('active'));
@@ -543,7 +543,7 @@
              const now = new Date();
              const upcomingExam = cachedExams.find(e => new Date(e.exam_date) >= now);
              if (upcomingExam) {
-                 nextExamText = ${new Date(upcomingExam.exam_date).toLocaleDateString()} (${upcomingExam.exam_name});
+                 nextExamText = `${new Date(upcomingExam.exam_date).toLocaleDateString()} (${upcomingExam.exam_name})`;
              } else {
                  nextExamText = 'Semester Complete';
              }
@@ -556,15 +556,16 @@
         
         // --- 5. Conditional Action Required Section ---
         const passportCard = document.getElementById('action-passport');
-        // Check if currentUserProfile exists and if it has a passport_url
-        let profileIncomplete = !currentUserProfile?.passport_url; 
+        
+        // FIX: Replaced optional chaining with standard check
+        let profileIncomplete = !(currentUserProfile && currentUserProfile.passport_url); 
         
         passportCard.style.display = profileIncomplete ? 'block' : 'none';
         
         // If the 'Action Required' title exists, we might toggle its visibility
         const actionsContainer = document.getElementById('dashboard-actions');
         const actionTitle = document.getElementById('actions-title');
-        // Check if there are any visible children (actions)
+        
         if (actionTitle) {
             // Note: This is an over-simplification. Needs better visibility check if more cards added.
             if (!profileIncomplete && actionsContainer.children.length <= 1) { 
@@ -657,12 +658,18 @@
         document.getElementById('profile-block').value = currentUserProfile.block || 'N/A';
         document.getElementById('profile-intake-year').value = currentUserProfile.intake_year || 'N/A';
         
-        // Handle Passport Photo URL retrieval
-        document.getElementById('passport-preview').src = currentUserProfile.passport_url 
-            ? sb.storage.from('passports').getPublicUrl(currentUserProfile.passport_url).data.publicUrl
-            : 'https://via.placeholder.com/150x150?text=NO+PHOTO'; 
+        // FIX: Removed Optional Chaining from here and used standard check
+        let photoUrl = 'https://via.placeholder.com/150x150?text=NO+PHOTO';
+        if (currentUserProfile.passport_url) {
+            const publicUrlResponse = sb.storage.from('passports').getPublicUrl(currentUserProfile.passport_url);
+            if (publicUrlResponse.data) {
+                photoUrl = publicUrlResponse.data.publicUrl;
+            }
+        }
+        document.getElementById('passport-preview').src = photoUrl;
         
-        document.querySelector('header h1').textContent = Welcome, ${currentUserProfile.first_name || 'Student'}!;
+        // FIX: Removed Optional Chaining
+        document.querySelector('header h1').textContent = `Welcome, ${(currentUserProfile && currentUserProfile.first_name) || 'Student'}!`;
 
         toggleProfileEdit(false); 
         if (!currentUserProfile.passport_url) {
@@ -689,7 +696,8 @@
         editProfileButton.style.display = enable ? 'none' : 'block';
         saveProfileButton.style.display = enable ? 'block' : 'none';
         
-        if (enable || !currentUserProfile?.passport_url) {
+        // FIX: Removed Optional Chaining
+        if (enable || !(currentUserProfile && currentUserProfile.passport_url)) {
             uploadLabel.style.display = 'block';
         } else {
             uploadLabel.style.display = 'none';
@@ -717,7 +725,7 @@
             .eq('id', currentUserId);
 
         if (error) {
-            profileStatus.textContent = Error saving profile: ${error.message};
+            profileStatus.textContent = `Error saving profile: ${error.message}`;
         } else {
             profileStatus.textContent = 'Profile updated successfully!';
             loadProfile(currentUserId); 
@@ -744,14 +752,14 @@
         uploadButton.disabled = true;
 
         const fileExt = file.name.split('.').pop();
-        const filePath = ${currentUserId}.${fileExt};
+        const filePath = `${currentUserId}.${fileExt}`;
 
         const { error: uploadError } = await sb.storage
             .from('passports')
             .upload(filePath, file, { cacheControl: '3600', upsert: true });
 
         if (uploadError) {
-            profileStatus.textContent = Upload failed: ${uploadError.message};
+            profileStatus.textContent = `Upload failed: ${uploadError.message}`;
             uploadButton.disabled = false;
             return;
         }
@@ -762,7 +770,7 @@
             .eq('id', currentUserId);
 
         if (updateError) {
-            profileStatus.textContent = Database update failed: ${updateError.message};
+            profileStatus.textContent = `Database update failed: ${updateError.message}`;
         } else {
             profileStatus.textContent = 'Photo uploaded and saved successfully!';
             passportFileInput.value = ''; 
@@ -789,7 +797,7 @@
             targetList = MOCK_HOSPITAL_DEPARTMENTS.map(d => ({ 
                 id: d.id, 
                 name: d.name, 
-                text: ${d.name} (Clinical) 
+                text: `${d.name} (Clinical)` 
             }));
             label = 'Department/Area:';
         // Logic: On Class Session uses real-time loaded courses
@@ -798,7 +806,7 @@
             targetList = cachedCourses.map(c => ({ 
                 id: c.id, 
                 name: c.name, 
-                text: ${c.code ? c.code + ' - ' : ''}${c.name} (Class) 
+                text: `${c.code ? c.code + ' - ' : ''}${c.name} (Class)` 
             }));
             label = 'Course/Subject:';
         }
@@ -807,16 +815,16 @@
 
         if (targetList.length === 0) {
             const message = sessionType === 'Class' ? 'No active courses found. Please check My Courses.' : 'No clinical targets available.';
-            attendanceTargetSelect.innerHTML = <option>${message}</option>;
+            attendanceTargetSelect.innerHTML = `<option>${message}</option>`;
         } else {
             targetList.forEach(target => {
                 const option = document.createElement('option');
-                option.value = ${target.id}|${target.name}; 
+                option.value = `${target.id}|${target.name}`; 
                 option.textContent = target.text;
                 attendanceTargetSelect.appendChild(option);
             });
         }
-        geoMessage.innerHTML = Please select a specific **${label.replace(':', '')}** to check in.;
+        geoMessage.innerHTML = `Please select a specific **${label.replace(':', '')}** to check in.`;
     }
 
     // GeoCheckIn implementation
@@ -846,7 +854,7 @@
                     friendly: null 
                 }),
                 (err) => {
-                    console.warn(Geolocation error (${err.code}): ${err.message}. Using fallback.);
+                    console.warn(`Geolocation error (${err.code}): ${err.message}. Using fallback.`);
                     resolve({ lat: FALLBACK_LAT, lon: FALLBACK_LON, acc: FALLBACK_ACCURACY, friendly: 'Fallback Location (GPS Error)' });
                 },
                 { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
@@ -857,13 +865,13 @@
             let location = await getLocation();
 
             if (location.friendly === null) {
-                const geocodeUrl = ${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${location.lat}&lon=${location.lon}&format=json;
+                const geocodeUrl = `${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${location.lat}&lon=${location.lon}&format=json`;
                 const response = await fetch(geocodeUrl);
                 if (response.ok) {
                     const geoData = await response.json();
-                    location.friendly = geoData.display_name || Lat: ${location.lat.toFixed(4)}, Lon: ${location.lon.toFixed(4)};
+                    location.friendly = geoData.display_name || `Lat: ${location.lat.toFixed(4)}, Lon: ${location.lon.toFixed(4)}`;
                 } else {
-                    location.friendly = Geocoding Failed. Lat: ${location.lat.toFixed(4)}, Lon: ${location.lon.toFixed(4)};
+                    location.friendly = `Geocoding Failed. Lat: ${location.lat.toFixed(4)}, Lon: ${location.lon.toFixed(4)}`;
                 }
             }
             
@@ -882,23 +890,23 @@
                     accuracy_m: location.acc,
                     location_friendly_name: location.friendly,
                     is_verified: false,
-                    // IMPORTANT: Include cohort filters for administrative reporting/filtering
-                    program: currentUserProfile?.program, 
-                    block: currentUserProfile?.block, 
-                    intake_year: currentUserProfile?.intake_year
+                    // FIX: Removed optional chaining
+                    program: currentUserProfile ? currentUserProfile.program : null, 
+                    block: currentUserProfile ? currentUserProfile.block : null, 
+                    intake_year: currentUserProfile ? currentUserProfile.intake_year : null
                 });
 
             if (error) {
                 console.error("Check-in failed:", error);
-                geoMessage.textContent = Check-in failed: Error: ${error.message};
+                geoMessage.textContent = `Check-in failed: Error: ${error.message}`;
             } else {
-                geoMessage.textContent = Check-in successful! Logged at ${new Date(checkInTime).toLocaleTimeString()} near ${location.friendly}.;
+                geoMessage.textContent = `Check-in successful! Logged at ${new Date(checkInTime).toLocaleTimeString()} near ${location.friendly}.`;
                 loadGeoAttendanceHistory(currentUserId);
             }
 
         } catch (e) {
             console.error("GeoCheckIn major failure:", e);
-            geoMessage.textContent = A critical error occurred during check-in: ${e.message};
+            geoMessage.textContent = `A critical error occurred during check-in: ${e.message}`;
         } finally {
             button.disabled = false;
         }
@@ -946,7 +954,7 @@
 
         } catch (error) {
             console.error("Failed to load geo attendance history:", error);
-            tableBody.innerHTML = <tr><td colspan="5" style="color: #EF4444;">Error loading history: ${error.message}</td></tr>;
+            tableBody.innerHTML = `<tr><td colspan="5" style="color: #EF4444;">Error loading history: ${error.message}</td></tr>`;
         }
     }
 
@@ -1012,7 +1020,7 @@
             
         } catch (error) {
             console.error("Failed to load courses:", error);
-            tableBody.innerHTML = <tr><td colspan="2" style="color: #EF4444;">Error loading courses: ${error.message}.</td></tr>;
+            tableBody.innerHTML = `<tr><td colspan="2" style="color: #EF4444;">Error loading courses: ${error.message}.</td></tr>`;
             cachedCourses = []; 
         }
         
@@ -1027,9 +1035,10 @@
         tableBody.innerHTML = '<tr><td colspan="3">Loading exam schedule...</td></tr>';
         
         try {
-            const program = currentUserProfile?.program;
-            const block = currentUserProfile?.block;
-            const intakeYear = currentUserProfile?.intake_year;
+            // FIX: Use standard null check
+            const program = currentUserProfile ? currentUserProfile.program : null;
+            const block = currentUserProfile ? currentUserProfile.block : null;
+            const intakeYear = currentUserProfile ? currentUserProfile.intake_year : null;
 
             if (!program || !block || !intakeYear) {
                 tableBody.innerHTML = '<tr><td colspan="3">Missing enrollment details. Cannot load schedule.</td></tr>';
@@ -1068,7 +1077,7 @@
             
         } catch (error) {
             console.error("Failed to load exams:", error);
-            tableBody.innerHTML = <tr><td colspan="3" style="color: #EF4444;">Error loading exams: ${error.message}.</td></tr>;
+            tableBody.innerHTML = `<tr><td colspan="3" style="color: #EF4444;">Error loading exams: ${error.message}.</td></tr>`;
             cachedExams = [];
         }
         // Update the dashboard metric after loading
@@ -1080,8 +1089,9 @@
         resourceList.innerHTML = 'Loading resources from Supabase...';
         
         try {
-            const program = currentUserProfile?.program;
-            const block = currentUserProfile?.block;
+            // FIX: Use standard null check
+            const program = currentUserProfile ? currentUserProfile.program : null;
+            const block = currentUserProfile ? currentUserProfile.block : null;
             
             if (!program || !block) {
                 resourceList.innerHTML = '<p>Missing enrollment details. Cannot load resources.</p>';
@@ -1093,7 +1103,7 @@
                 .from('resources')
                 .select('id, title, file_path, program, block, upload_date')
                 // Filter by program AND block OR just general resources (program='General')
-                .or(program.eq.${program},program.eq.General) // Simplify OR logic
+                .or(`program.eq.${program},program.eq.General`) // Simplify OR logic
                 // Additional filter for block (only for the specific program) would go here if needed.
                 .order('upload_date', { ascending: false });
 
@@ -1102,7 +1112,7 @@
             resourceList.innerHTML = '';
 
             if (resources.length === 0) {
-                resourceList.innerHTML = <p>No learning resources found for your Program (${program}) or Block (${block}) yet.</p>;
+                resourceList.innerHTML = `<p>No learning resources found for your Program (${program}) or Block (${block}) yet.</p>`;
                 document.getElementById('dashboard-new-resources').textContent = '0';
                 return;
             }
@@ -1115,7 +1125,7 @@
                         <div>
                             <a href="${publicUrl}" target="_blank">${res.title}</a>
                             <p style="margin: 5px 0 0; font-size: 0.9em; color: #6B7280;">
-                                ${res.program === 'General' ? 'General' : ${res.program}, Block ${res.block}} - 
+                                ${res.program === 'General' ? 'General' : `${res.program}, Block ${res.block}`} - 
                                 Uploaded: ${new Date(res.upload_date).toLocaleDateString()}
                             </p>
                         </div>
@@ -1133,7 +1143,7 @@
             
         } catch (error) {
             console.error("Failed to load resources:", error);
-            resourceList.innerHTML = <p style="color: #EF4444;">Error loading resources: ${error.message}</p>;
+            resourceList.innerHTML = `<p style="color: #EF4444;">Error loading resources: ${error.message}</p>`;
         }
     }
 
