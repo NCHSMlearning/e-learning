@@ -6,7 +6,7 @@
 // !!! IMPORTANT: CHECK YOUR KEYS AND URL !!!
 // REPLACE with your actual Supabase URL and ANON_KEY
 const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co'; 
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17P17pk';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const RESOURCES_BUCKET = 'resources';
 const IP_API_URL = 'https://api.ipify.org?format=json';
@@ -26,7 +26,8 @@ function $(id){ return document.getElementById(id); }
 function escapeHtml(s, isAttribute = false){ 
     let str = String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     if (isAttribute) {
-        str = str.replace(/'/g,'&#39;').replace(/"/g,'&quot;');
+        // Essential for safely embedding in HTML attributes like onclick
+        str = str.replace(/'/g,'&#39;').replace(/"/g,'&quot;'); 
     } else {
         str = str.replace(/"/g,'&quot;').replace(/'/g,'&#39;');
     }
@@ -217,6 +218,8 @@ async function initSession() {
 
     // MODAL/EDIT LISTENERS
     $('edit-user-form')?.addEventListener('submit', handleEditUser);
+    // CRITICAL FIX: Ensure program change in edit modal updates block options
+    $('edit_user_program')?.addEventListener('change', () => { updateBlockTermOptions('edit_user_program', 'edit_user_block'); }); 
     document.querySelector('#userEditModal .close')?.addEventListener('click', () => { $('userEditModal').style.display = 'none'; });
     document.querySelector('#mapModal .close')?.addEventListener('click', () => { $('mapModal').style.display = 'none'; });
     $('edit-course-form')?.addEventListener('submit', handleEditCourse);
@@ -503,22 +506,24 @@ async function loadAllUsers() {
         const isBlocked = u.block_program_year === true;
         const statusText = isBlocked ? 'BLOCKED' : (u.approved ? 'Approved' : 'Pending');
         const statusClass = isBlocked ? 'status-danger' : (u.approved ? 'status-approved' : 'status-pending');
+        
+        const userIdAttr = escapeHtml(u.id, true);
 
         tbody.innerHTML += `<tr>
             <td>${escapeHtml(u.id.substring(0, 8))}...</td>
             <td>${escapeHtml(u.full_name)}</td>
             <td>${escapeHtml(u.email)}</td>
             <td>
-                <select class="btn" onchange="updateUserRole('${u.id}', this.value)" ${u.role === 'superadmin' ? 'disabled' : ''}>
+                <select class="btn" onchange="updateUserRole('${userIdAttr}', this.value)" ${u.role === 'superadmin' ? 'disabled' : ''}>
                     ${roleOptions}
                 </select>
             </td>
             <td>${escapeHtml(u.program_type || 'N/A')}</td>
             <td class="${statusClass}">${statusText}</td>
             <td>
-                <button class="btn btn-map" onclick="openEditUserModal('${u.id}')">Edit</button>
-                ${!u.approved ? `<button class="btn btn-approve" onclick="approveUser('${u.id}')">Approve</button>` : ''}
-                <button class="btn btn-delete" onclick="deleteProfile('${u.id}')">Delete</button>
+                <button class="btn btn-map" onclick="openEditUserModal('${userIdAttr}')">Edit</button>
+                ${!u.approved ? `<button class="btn btn-approve" onclick="approveUser('${userIdAttr}')">Approve</button>` : ''}
+                <button class="btn btn-delete" onclick="deleteProfile('${userIdAttr}')">Delete</button>
             </td>
         </tr>`;
     });
@@ -537,6 +542,7 @@ async function loadPendingApprovals() {
     
     pending.forEach(p => {
         const registeredDate = new Date(p.created_at).toLocaleDateString();
+        const userIdAttr = escapeHtml(p.id, true);
         tbody.innerHTML += `<tr>
             <td>${escapeHtml(p.full_name)}</td>
             <td>${escapeHtml(p.email)}</td>
@@ -544,8 +550,8 @@ async function loadPendingApprovals() {
             <td>${escapeHtml(p.program_type || 'N/A')}</td>
             <td>${registeredDate}</td>
             <td>
-                <button class="btn btn-approve" onclick="approveUser('${p.id}')">Approve</button>
-                <button class="btn btn-reject" onclick="deleteProfile('${p.id}')">Reject & Delete</button>
+                <button class="btn btn-approve" onclick="approveUser('${userIdAttr}')">Approve</button>
+                <button class="btn btn-reject" onclick="deleteProfile('${userIdAttr}')">Reject & Delete</button>
             </td>
         </tr>`;
     });
@@ -563,6 +569,7 @@ async function loadStudents() {
         const isBlocked = s.block_program_year === true;
         const statusText = isBlocked ? 'BLOCKED' : (s.approved ? 'Approved' : 'Pending');
         const statusClass = isBlocked ? 'status-danger' : (s.approved ? 'status-approved' : 'status-pending');
+        const userIdAttr = escapeHtml(s.id, true);
 
         tbody.innerHTML += `<tr>
             <td>${escapeHtml(s.id.substring(0, 8))}...</td>
@@ -574,8 +581,8 @@ async function loadStudents() {
             <td>${escapeHtml(s.phone)}</td>
             <td class="${statusClass}">${statusText}</td>
             <td>
-                <button class="btn btn-map" onclick="openEditUserModal('${s.id}')">Edit</button>
-                <button class="btn btn-delete" onclick="deleteProfile('${s.id}')">Delete</button>
+                <button class="btn btn-map" onclick="openEditUserModal('${userIdAttr}')">Edit</button>
+                <button class="btn btn-delete" onclick="deleteProfile('${userIdAttr}')">Delete</button>
             </td>
         </tr>`;
     });
@@ -609,6 +616,7 @@ async function openEditUserModal(userId) {
         const { data: user, error } = await sb.from('profiles').select('*').eq('id', userId).single();
         if (error || !user) throw new Error('User data fetch failed.');
 
+        // CRITICAL FIX: Ensure these IDs match your HTML and are not null
         $('edit_user_id').value = user.id;
         $('edit_user_name').value = user.full_name || '';
         $('edit_user_email').value = user.email || '';
@@ -618,9 +626,12 @@ async function openEditUserModal(userId) {
         $('edit_user_block').value = user.block || 'A';
         $('edit_user_block_status').value = user.block_program_year === true ? 'true' : 'false';
 
+        // Fix to ensure correct block/term options are loaded when modal opens
+        updateBlockTermOptions('edit_user_program', 'edit_user_block'); 
+
         $('userEditModal').style.display = 'flex'; 
     } catch (error) {
-        showFeedback(`Failed to load user data: ${error.message}`, 'error');
+        showFeedback(`Failed to load user data: ${error.message}. Check that all modal form IDs (edit_user_*) exist in your HTML.`, 'error');
     }
 }
 
@@ -709,12 +720,17 @@ async function loadCourses() {
 
     tbody.innerHTML = '';
     courses.forEach(c => {
+        // CRITICAL FIX: Ensure all string values are escaped for safe insertion into the onclick attribute
+        const courseIdAttr = escapeHtml(c.id, true);
         const courseNameAttr = escapeHtml(c.course_name, true);
         const unitCodeAttr = escapeHtml(c.unit_code || '', true);
         const descriptionAttr = escapeHtml(c.description || '', true);
         const programTypeAttr = escapeHtml(c.target_program || '', true); 
         const intakeYearAttr = escapeHtml(c.intake_year || '', true);     
         const blockAttr = escapeHtml(c.block || '', true);              
+
+        // Passing all 7 required arguments to openEditCourseModal
+        const editFuncCall = `openEditCourseModal('${courseIdAttr}', '${courseNameAttr}', '${unitCodeAttr}', '${descriptionAttr}', '${programTypeAttr}', '${intakeYearAttr}', '${blockAttr}')`;
 
         tbody.innerHTML += `<tr>
             <td>${escapeHtml(c.course_name)}</td>
@@ -723,8 +739,8 @@ async function loadCourses() {
             <td>${escapeHtml(c.intake_year || 'N/A')}</td>
             <td>${escapeHtml(c.block || 'N/A')}</td>
             <td>
-                <button class="btn-action" onclick="openEditCourseModal('${c.id}', '${courseNameAttr}', '${unitCodeAttr}', '${descriptionAttr}', '${programTypeAttr}', '${intakeYearAttr}', '${blockAttr}')">Edit</button>
-                <button class="btn btn-delete" onclick="deleteCourse('${c.id}')">Delete</button>
+                <button class="btn-action" onclick="${editFuncCall}">Edit</button>
+                <button class="btn btn-delete" onclick="deleteCourse('${courseIdAttr}')">Delete</button>
             </td>
         </tr>`;
     });
@@ -846,7 +862,7 @@ async function loadScheduledSessions() {
             <td>${escapeHtml(s.target_program || 'N/A')}</td>
             <td>${escapeHtml(s.block_term || 'N/A')}</td>
             <td>
-                <button class="btn btn-delete" onclick="deleteSession('${s.id}')">Delete</button>
+                <button class="btn btn-delete" onclick="deleteSession('${escapeHtml(s.id, true)}')">Delete</button>
             </td>
         </tr>`;
     });
@@ -1049,6 +1065,7 @@ async function loadAttendance() {
         }
         
         const recordDate = new Date(r.check_in_time).toISOString().slice(0, 10);
+        const recordIdAttr = escapeHtml(r.id, true);
         
         if (recordDate === todayISO) {
             // TODAY'S RECORDS
@@ -1069,7 +1086,7 @@ async function loadAttendance() {
                 <td>${geoStatus}</td>
                 <td>
                     ${mapButton}
-                    <button class="btn btn-delete" onclick="deleteAttendanceRecord('${r.id}')">Delete</button>
+                    <button class="btn btn-delete" onclick="deleteAttendanceRecord('${recordIdAttr}')">Delete</button>
                 </td>
             </tr>`;
         } else {
@@ -1080,7 +1097,7 @@ async function loadAttendance() {
                 <td>${dateTime}</td>
                 <td>${r.is_manual_entry ? 'Manual' : 'Geo-Tracked'}</td>
                 <td>
-                    <button class="btn btn-delete" onclick="deleteAttendanceRecord('${r.id}')">Delete</button>
+                    <button class="btn btn-delete" onclick="deleteAttendanceRecord('${recordIdAttr}')">Delete</button>
                 </td>
             </tr>`;
         }
@@ -1234,6 +1251,7 @@ async function loadExams() {
         const courseName = e.course?.course_name || 'N/A';
         const program = e.target_program || 'N/A';
         const intake = e.intake_year || 'N/A';
+        const examIdAttr = escapeHtml(e.id, true);
 
         tbody.innerHTML += `<tr>
             <td>${escapeHtml(program)}</td>
@@ -1244,8 +1262,8 @@ async function loadExams() {
             <td>${escapeHtml(intake)}</td>
             <td>${escapeHtml(e.block_term || 'N/A')}</td>
             <td>
-                <button class="btn-action" onclick="openGradeModal('${e.id}', '${escapeHtml(e.exam_name, true)}')">Grade</button>
-                <button class="btn btn-delete" onclick="deleteExam('${e.id}')">Delete</button>
+                <button class="btn-action" onclick="openGradeModal('${examIdAttr}', '${escapeHtml(e.exam_name, true)}')">Grade</button>
+                <button class="btn btn-delete" onclick="deleteExam('${examIdAttr}')">Delete</button>
             </td>
         </tr>`;
     });
@@ -1438,9 +1456,12 @@ async function loadResources() {
         files.forEach(file => {
             if (file.name === '.emptyFolderPlaceholder' || file.id === undefined) return;
             
+            // This is a simplified way to construct a file path for public URL if the file path is the file name itself
+            // If files are nested, the .name property should contain the full path.
             const { data: { publicUrl } } = sb.storage.from(RESOURCES_BUCKET).getPublicUrl(file.name);
             const lastModified = new Date(file.lastModified).toLocaleString();
             
+            // Assuming the file.name contains the full path like "KRCHN/2024/A/file_name.pdf"
             const parts = file.name.split('/');
             const program = parts[0] || 'N/A';
             const intake = parts[1] || 'N/A';
@@ -1499,8 +1520,8 @@ async function loadBackupHistory() {
             <td>${h.date}</td>
             <td>${h.size}</td>
             <td>
-                <button class="btn-action" onclick="showFeedback('Download feature is a placeholder. File: ${h.name}')">Download</button>
-                <button class="btn btn-delete" onclick="showFeedback('Delete feature is a placeholder. File: ${h.name}')">Delete</button>
+                <button class="btn-action" onclick="showFeedback('Download feature is a placeholder. File: ${escapeHtml(h.name, true)}')">Download</button>
+                <button class="btn btn-delete" onclick="showFeedback('Delete feature is a placeholder. File: ${escapeHtml(h.name, true)}')">Delete</button>
             </td>
         </tr>`;
     });
