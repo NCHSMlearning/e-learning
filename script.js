@@ -9,7 +9,6 @@ const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const RESOURCES_BUCKET = 'resources';
-// Note: Mapbox is not used in the final version of the script; using Leaflet instead (as per original HTML script tag)
 const IP_API_URL = 'https://api.ipify.org?format=json';
 const DEVICE_ID_KEY = 'nchsm_device_id';
 const SETTINGS_TABLE = 'app_settings'; 
@@ -17,7 +16,7 @@ const MESSAGE_KEY = 'student_welcome';
 
 // Global Variables
 let currentUserProfile = null;
-let attendanceMap = null; // Used for Leaflet instance (adjusting from Mapbox placeholder)
+let attendanceMap = null; // Used for Leaflet instance
 
 /*******************************************************
  * 1. CORE UTILITY FUNCTIONS
@@ -144,14 +143,14 @@ async function loadSectionData(tabId) {
         case 'pending': loadPendingApprovals(); break;
         case 'enroll': loadStudents(); break; 
         case 'courses': loadCourses(); break;
-        case 'sessions': loadScheduledSessions(); populateSessionCourseSelects(); break; // NEW
+        case 'sessions': loadScheduledSessions(); populateSessionCourseSelects(); break;
         case 'attendance': loadAttendance(); populateAttendanceSelects(); break;
-        case 'cats': loadExams(); populateExamCourseSelects(); break; // NEW
+        case 'cats': loadExams(); populateExamCourseSelects(); break;
         case 'messages': loadMessages(); break;
-        case 'calendar': renderFullCalendar(); break; // NEW
+        case 'calendar': renderFullCalendar(); break;
         case 'resources': loadResources(); break;
         case 'welcome-editor': loadWelcomeMessageForEdit(); break; 
-        case 'backup': loadBackupHistory(); break; // NEW
+        case 'backup': loadBackupHistory(); break;
     }
 }
 
@@ -194,29 +193,34 @@ async function initSession() {
     
     // COURSES TAB
     $('add-course-form')?.addEventListener('submit', handleAddCourse);
-    $('course-search')?.addEventListener('keyup', () => filterTable('course-search', 'courses-table', [0, 2, 4]));
+    $('course-search')?.addEventListener('keyup', () => filterTable('course-search', 'courses-table', [0, 1, 3]));
+    $('course-program')?.addEventListener('change', () => { updateBlockTermOptions('course-program', 'course-block'); });
     
-    // SESSIONS TAB (NEW)
+    // SESSIONS TAB
     $('add-session-form')?.addEventListener('submit', handleAddSession);
     $('session_program')?.addEventListener('change', () => { updateTermBlockOptions('session'); populateSessionCourseSelects(); });
-    $('session_intake')?.addEventListener('change', updateTermBlockOptions('session'));
+    $('session_intake')?.addEventListener('change', () => updateTermBlockOptions('session'));
     $('clinical_program')?.addEventListener('change', () => { updateTermBlockOptions('clinical'); });
-    $('clinical_intake')?.addEventListener('change', updateTermBlockOptions('clinical'));
+    $('clinical_intake')?.addEventListener('change', () => updateTermBlockOptions('clinical'));
 
     // CATS/EXAMS TAB
     $('add-exam-form')?.addEventListener('submit', handleAddExam);
     $('exam_program')?.addEventListener('change', () => { filterCoursesByProgram(); updateTermBlockOptions('exam'); });
-    $('exam_intake')?.addEventListener('change', updateTermBlockOptions('exam'));
+    $('exam_intake')?.addEventListener('change', () => updateTermBlockOptions('exam'));
     
     // MESSAGE/WELCOME EDITOR TAB
     $('send-message-form')?.addEventListener('submit', handleSendMessage);
-    $('edit-welcome-form')?.addEventListener('submit', handleSaveWelcomeMessage); // Correct ID from HTML
+    $('edit-welcome-form')?.addEventListener('submit', handleSaveWelcomeMessage); 
     
+    // RESOURCES TAB
+    $('resource_program')?.addEventListener('change', () => { updateBlockTermOptions('resource_program', 'resource_block'); });
+
     // MODAL/EDIT LISTENERS
     $('edit-user-form')?.addEventListener('submit', handleEditUser);
     document.querySelector('#userEditModal .close')?.addEventListener('click', () => { $('userEditModal').style.display = 'none'; });
     document.querySelector('#mapModal .close')?.addEventListener('click', () => { $('mapModal').style.display = 'none'; });
     $('edit-course-form')?.addEventListener('submit', handleEditCourse);
+    $('edit_course_program')?.addEventListener('change', () => { updateBlockTermOptions('edit_course_program', 'edit_course_block'); });
     document.querySelector('#courseEditModal .close')?.addEventListener('click', () => { $('courseEditModal').style.display = 'none'; });
 }
 
@@ -334,7 +338,6 @@ async function loadDashboardData() {
     const { count: studentsCount } = await sb.from('profiles').select('id', { count: 'exact' }).eq('role', 'student');
     $('totalStudents').textContent = studentsCount || 0;
     const today = new Date().toISOString().slice(0, 10);
-    // Note: Assuming check_in_time is a timestamptz field that can be filtered by date string
     const { data: checkinData } = await sb.from('geo_attendance_logs').select('id').gte('check_in_time', today);
     $('todayCheckins').textContent = checkinData?.length || 0;
     
@@ -403,26 +406,41 @@ async function handleSaveWelcomeMessage(e) {
  *******************************************************/
 
 /**
- * Dynamic Block/Term Options based on Program and Intake
+ * Dynamic Block/Term Options based on Program (KRCHN vs TVET).
+ * KRCHN uses Block A/B. TVET uses Term 1/2/3.
  */
 function updateBlockTermOptions(programSelectId, blockTermSelectId) {
-    const program = $(programSelectId).value;
+    const program = $(programSelectId)?.value;
     const blockTermSelect = $(blockTermSelectId);
     
     if (!blockTermSelect) return;
 
-    const options = [
-        { value: 'A', text: 'Block A / Term 1' },
-        { value: 'B', text: 'Block B / Term 2' }
-    ];
+    let options = [];
 
-    if (program === 'TVET') {
-        options.push({ value: 'T3', text: 'Term 3 (TVET)' });
+    if (program === 'KRCHN') {
+        // KRCHN specific: Only uses Block A and Block B
+        options = [
+            { value: 'A', text: 'Block A' },
+            { value: 'B', text: 'Block B' }
+        ];
+    } else if (program === 'TVET') {
+        // TVET specific: Uses Term 1, Term 2, Term 3
+        options = [
+            { value: 'T1', text: 'Term 1' },
+            { value: 'T2', text: 'Term 2' },
+            { value: 'T3', text: 'Term 3' }
+        ];
+    } else {
+        // Default/Other (e.g., if program isn't selected or is Admin)
+        options = [
+            { value: 'A', text: 'Block A / Term 1' },
+            { value: 'B', text: 'Block B / Term 2' }
+        ];
     }
     
     let html = '<option value="">-- Select Block/Term --</option>';
     options.forEach(opt => {
-        html += `<option value="${opt.value}">${opt.text}</option>`;
+        html += `<option value="${opt.value}">${escapeHtml(opt.text)}</option>`;
     });
     blockTermSelect.innerHTML = html;
 }
@@ -431,7 +449,7 @@ function updateEnrollBlockTermOptions() {
     updateBlockTermOptions('account-program', 'account-block-term');
 }
 
-// Functionality moved from the initial script file to better match HTML structure
+
 async function handleAddAccount(e) {
     e.preventDefault();
     const submitButton = e.submitter;
@@ -445,7 +463,7 @@ async function handleAddAccount(e) {
     const phone = $('account-phone').value.trim();
     const program_type = $('account-program').value;
     const intake_year = $('account-intake').value; 
-    const block = $('account-block-term').value; // Corrected ID
+    const block = $('account-block-term').value; 
 
     const userData = { 
         full_name: name, role: role, phone: phone, program_type: program_type, 
@@ -469,14 +487,179 @@ async function handleAddAccount(e) {
     setButtonLoading(submitButton, false, originalText);
 }
 
-// All other User/Enrollment functions (loadAllUsers, loadPendingApprovals, loadStudents, approveUser, updateUserRole, deleteProfile, openEditUserModal, handleEditUser) are functionally correct and retained from your original script.
+
+async function loadAllUsers() {
+    const tbody = $('users-table');
+    tbody.innerHTML = '<tr><td colspan="7">Loading all users...</td></tr>';
+    
+    const { data: users, error } = await fetchData('profiles', '*', {}, 'full_name', true);
+    if (error) { tbody.innerHTML = `<tr><td colspan="7">Error loading users: ${error.message}</td></tr>`; return; }
+    
+    tbody.innerHTML = '';
+    users.forEach(u => {
+        const roleOptions = ['student', 'admin', 'superadmin']
+            .map(role => `<option value="${role}" ${u.role === role ? 'selected' : ''}>${role}</option>`).join('');
+        
+        const isBlocked = u.block_program_year === true;
+        const statusText = isBlocked ? 'BLOCKED' : (u.approved ? 'Approved' : 'Pending');
+        const statusClass = isBlocked ? 'status-danger' : (u.approved ? 'status-approved' : 'status-pending');
+
+        tbody.innerHTML += `<tr>
+            <td>${escapeHtml(u.id.substring(0, 8))}...</td>
+            <td>${escapeHtml(u.full_name)}</td>
+            <td>${escapeHtml(u.email)}</td>
+            <td>
+                <select class="btn" onchange="updateUserRole('${u.id}', this.value)" ${u.role === 'superadmin' ? 'disabled' : ''}>
+                    ${roleOptions}
+                </select>
+            </td>
+            <td>${escapeHtml(u.program_type || 'N/A')}</td>
+            <td class="${statusClass}">${statusText}</td>
+            <td>
+                <button class="btn btn-map" onclick="openEditUserModal('${u.id}')">Edit</button>
+                ${!u.approved ? `<button class="btn btn-approve" onclick="approveUser('${u.id}')">Approve</button>` : ''}
+                <button class="btn btn-delete" onclick="deleteProfile('${u.id}')">Delete</button>
+            </td>
+        </tr>`;
+    });
+    filterTable('user-search', 'users-table', [1, 2, 4]); 
+}
+
+async function loadPendingApprovals() {
+    const tbody = $('pending-table');
+    tbody.innerHTML = '<tr><td colspan="6">Loading pending users...</td></tr>';
+    
+    const { data: pending, error } = await fetchData('profiles', '*', { approved: false }, 'created_at', true);
+    if (error) { tbody.innerHTML = `<tr><td colspan="6">Error loading pending list: ${error.message}</td></tr>`; return; }
+    
+    tbody.innerHTML = '';
+    if (pending.length === 0) { tbody.innerHTML = `<tr><td colspan="6">No pending approvals!</td></tr>`; return; }
+    
+    pending.forEach(p => {
+        const registeredDate = new Date(p.created_at).toLocaleDateString();
+        tbody.innerHTML += `<tr>
+            <td>${escapeHtml(p.full_name)}</td>
+            <td>${escapeHtml(p.email)}</td>
+            <td>${escapeHtml(p.role)}</td>
+            <td>${escapeHtml(p.program_type || 'N/A')}</td>
+            <td>${registeredDate}</td>
+            <td>
+                <button class="btn btn-approve" onclick="approveUser('${p.id}')">Approve</button>
+                <button class="btn btn-reject" onclick="deleteProfile('${p.id}')">Reject & Delete</button>
+            </td>
+        </tr>`;
+    });
+}
+
+async function loadStudents() {
+    const tbody = $('students-table');
+    tbody.innerHTML = '<tr><td colspan="10">Loading students...</td></tr>';
+    
+    const { data: students, error } = await fetchData('profiles', '*', { role: 'student' }, 'full_name', true);
+    if (error) { tbody.innerHTML = `<tr><td colspan="10">Error loading students: ${error.message}</td></tr>`; return; }
+    
+    tbody.innerHTML = '';
+    students.forEach(s => {
+        const isBlocked = s.block_program_year === true;
+        const statusText = isBlocked ? 'BLOCKED' : (s.approved ? 'Approved' : 'Pending');
+        const statusClass = isBlocked ? 'status-danger' : (s.approved ? 'status-approved' : 'status-pending');
+
+        tbody.innerHTML += `<tr>
+            <td>${escapeHtml(s.id.substring(0, 8))}...</td>
+            <td>${escapeHtml(s.full_name)}</td>
+            <td>${escapeHtml(s.email)}</td>
+            <td>${escapeHtml(s.program_type || 'N/A')}</td>
+            <td>${escapeHtml(s.intake_year || 'N/A')}</td>
+            <td>${escapeHtml(s.block || 'N/A')}</td>
+            <td>${escapeHtml(s.phone)}</td>
+            <td class="${statusClass}">${statusText}</td>
+            <td>
+                <button class="btn btn-map" onclick="openEditUserModal('${s.id}')">Edit</button>
+                <button class="btn btn-delete" onclick="deleteProfile('${s.id}')">Delete</button>
+            </td>
+        </tr>`;
+    });
+    filterTable('student-search', 'students-table', [1, 3, 5]); 
+}
+
+async function approveUser(userId) {
+    if (!confirm('Are you sure you want to approve this user?')) return;
+    const { error } = await sb.from('profiles').update({ approved: true }).eq('id', userId);
+    if (error) { showFeedback(`Failed to approve user: ${error.message}`, 'error'); } 
+    else { showFeedback('User approved successfully!'); loadPendingApprovals(); loadAllUsers(); loadDashboardData(); }
+}
+
+async function updateUserRole(userId, newRole) {
+    if (!confirm(`Are you sure you want to change this user's role to ${newRole}?`)) return;
+    const { error } = await sb.from('profiles').update({ role: newRole }).eq('id', userId);
+    if (error) { showFeedback(`Failed to update role: ${error.message}`, 'error'); } 
+    else { showFeedback(`User role updated to ${newRole} successfully!`); loadAllUsers(); }
+}
+
+async function deleteProfile(userId) {
+    if (!confirm('WARNING: Deleting the profile is an irreversible action. Are you absolutely sure?')) return;
+    const { error: profileError } = await sb.from('profiles').delete().eq('id', userId);
+    if (profileError) { showFeedback(`Failed to delete profile: ${profileError.message}`, 'error'); return; }
+    showFeedback('User profile deleted successfully!', 'success');
+    loadAllUsers(); loadPendingApprovals(); loadStudents(); loadDashboardData();
+}
+
+async function openEditUserModal(userId) {
+    try {
+        const { data: user, error } = await sb.from('profiles').select('*').eq('id', userId).single();
+        if (error || !user) throw new Error('User data fetch failed.');
+
+        $('edit_user_id').value = user.id;
+        $('edit_user_name').value = user.full_name || '';
+        $('edit_user_email').value = user.email || '';
+        $('edit_user_role').value = user.role || 'student';
+        $('edit_user_program').value = user.program_type || 'KRCHN';
+        $('edit_user_intake').value = user.intake_year || '2024';
+        $('edit_user_block').value = user.block || 'A';
+        $('edit_user_block_status').value = user.block_program_year === true ? 'true' : 'false';
+
+        $('userEditModal').style.display = 'flex'; 
+    } catch (error) {
+        showFeedback(`Failed to load user data: ${error.message}`, 'error');
+    }
+}
+
+async function handleEditUser(e) {
+    e.preventDefault();
+    const submitButton = e.submitter;
+    const originalText = submitButton.textContent;
+    setButtonLoading(submitButton, true, originalText);
+    
+    const userId = $('edit_user_id').value;
+    const updatedData = {
+        full_name: $('edit_user_name').value.trim(),
+        email: $('edit_user_email').value.trim(),
+        role: $('edit_user_role').value,
+        program_type: $('edit_user_program').value,
+        intake_year: $('edit_user_intake').value,
+        block: $('edit_user_block').value,
+        block_program_year: $('edit_user_block_status').value === 'true' 
+    };
+
+    try {
+        const { error } = await sb.from('profiles').update(updatedData).eq('id', userId);
+        if (error) throw error;
+
+        showFeedback('User profile updated successfully!');
+        $('userEditModal').style.display = 'none';
+        loadAllUsers(); loadStudents(); loadDashboardData();
+    } catch (e) {
+        showFeedback('Failed to update user: ' + (e.message || e), 'error');
+    } finally {
+        setButtonLoading(submitButton, false, originalText);
+    }
+}
 
 
 /*******************************************************
  * 5. Courses Tab
  *******************************************************/
 
-// Functionality moved from the initial script file to better match HTML structure
 async function handleAddCourse(e) {
     e.preventDefault();
     const submitButton = e.submitter;
@@ -484,7 +667,7 @@ async function handleAddCourse(e) {
     setButtonLoading(submitButton, true, originalText);
 
     const course_name = $('course-name').value.trim();
-    const unit_code = $('course-unit-code').value.trim(); // NEW FIELD
+    const unit_code = $('course-unit-code').value.trim(); 
     const description = $('course-description').value.trim();
     const target_program = $('course-program').value; 
     const intake_year = $('course-intake').value; 
@@ -498,7 +681,7 @@ async function handleAddCourse(e) {
 
     const { error } = await sb.from('courses').insert({ 
         course_name, 
-        unit_code, // Insert the new field
+        unit_code, 
         description, 
         target_program, 
         intake_year, 
@@ -521,13 +704,11 @@ async function loadCourses() {
     const tbody = $('courses-table');
     tbody.innerHTML = '<tr><td colspan="6">Loading courses...</td></tr>';
 
-    // Fetch all courses to show the admin everything
     const { data: courses, error } = await fetchData('courses', '*', {}, 'course_name', true);
     if (error) { tbody.innerHTML = `<tr><td colspan="6">Error loading courses: ${error.message}</td></tr>`; return; }
 
     tbody.innerHTML = '';
     courses.forEach(c => {
-        // Updated attribute list for the modal, including unit_code
         const courseNameAttr = escapeHtml(c.course_name, true);
         const unitCodeAttr = escapeHtml(c.unit_code || '', true);
         const descriptionAttr = escapeHtml(c.description || '', true);
@@ -538,7 +719,7 @@ async function loadCourses() {
         tbody.innerHTML += `<tr>
             <td>${escapeHtml(c.course_name)}</td>
             <td>${escapeHtml(c.unit_code || 'N/A')}</td>
-            <td>${escapeHtml(c.description || 'N/A')}</td>
+            <td>${escapeHtml(c.target_program || 'N/A')}</td>
             <td>${escapeHtml(c.intake_year || 'N/A')}</td>
             <td>${escapeHtml(c.block || 'N/A')}</td>
             <td>
@@ -548,20 +729,28 @@ async function loadCourses() {
         </tr>`;
     });
     
-    filterTable('course-search', 'courses-table', [0, 1, 3]); // Name(0), Unit Code (1), Intake(3)
+    filterTable('course-search', 'courses-table', [0, 1, 3]); 
     
     populateExamCourseSelects(courses);
     populateSessionCourseSelects(courses);
 }
 
+async function deleteCourse(courseId) {
+    if (!confirm('Are you sure you want to delete this course? This cannot be undone.')) return;
+    const { error } = await sb.from('courses').delete().eq('id', courseId);
+    if (error) { showFeedback(`Failed to delete course: ${error.message}`, 'error'); } 
+    else { showFeedback('Course deleted successfully!'); loadCourses(); }
+}
+
 function openEditCourseModal(id, name, unit_code, description, target_program, intake_year, block) {
     $('edit_course_id').value = id;
     $('edit_course_name').value = name; 
-    $('edit_course_unit_code').value = unit_code; // NEW FIELD
+    $('edit_course_unit_code').value = unit_code; 
     $('edit_course_description').value = description;
     $('edit_course_program').value = target_program || ''; 
     $('edit_course_intake').value = intake_year; 
     $('edit_course_block').value = block;
+    updateBlockTermOptions('edit_course_program', 'edit_course_block'); // Load correct block options
     $('courseEditModal').style.display = 'flex'; 
 }
 
@@ -573,7 +762,7 @@ async function handleEditCourse(e) {
 
     const id = $('edit_course_id').value;
     const name = $('edit_course_name').value.trim();
-    const unit_code = $('edit_course_unit_code').value.trim(); // NEW FIELD
+    const unit_code = $('edit_course_unit_code').value.trim(); 
     const description = $('edit_course_description').value.trim();
     const target_program = $('edit_course_program').value;
     const intake_year = $('edit_course_intake').value;
@@ -582,7 +771,7 @@ async function handleEditCourse(e) {
     try {
         const updateData = { 
             course_name: name, 
-            unit_code: unit_code, // Update the new field
+            unit_code: unit_code, 
             description: description, 
             target_program: target_program,
             intake_year: intake_year,
@@ -608,29 +797,12 @@ async function handleEditCourse(e) {
  * 6. Manage Sessions Tab (Including Clinical)
  *******************************************************/
 
-/**
- * Utility to update block/term options for Session and Exam tabs
- */
 function updateTermBlockOptions(prefix) {
-    const program = $(`${prefix}_program`).value;
-    const blockTermSelect = $(`${prefix}_block_term`);
-    
-    if (!blockTermSelect) return;
-
-    let options = [
-        { value: 'A', text: 'Block A / Term 1' },
-        { value: 'B', text: 'Block B / Term 2' }
-    ];
-
-    if (program === 'TVET') {
-        options.push({ value: 'T3', text: 'Term 3 (TVET)' });
+    updateBlockTermOptions(`${prefix}_program`, `${prefix}_block_term`);
+    // Special handling for the session course select to ensure it's re-filtered
+    if (prefix === 'session') {
+        populateSessionCourseSelects();
     }
-    
-    let html = '<option value="">-- Select Block/Term --</option>';
-    options.forEach(opt => {
-        html += `<option value="${opt.value}">${opt.text}</option>`;
-    });
-    blockTermSelect.innerHTML = html;
 }
 
 async function populateSessionCourseSelects(courses = null) {
@@ -660,7 +832,6 @@ async function loadScheduledSessions() {
         const dateTime = new Date(s.session_date).toLocaleDateString() + ' ' + (s.session_time || 'N/A');
         const courseName = s.course?.course_name || 'N/A';
         
-        // Determine the session detail
         let detail = s.session_title;
         if (s.session_type === 'clinical' && s.clinical_area) {
             detail += ` (${s.clinical_area})`;
@@ -708,8 +879,6 @@ async function handleAddSession(e) {
         target_program, intake_year, block_term, course_id
     };
 
-    // NOTE: Clinical area name lookup can be implemented here if needed
-
     const { error } = await sb.from('scheduled_sessions').insert([sessionData]);
     
     if (error) {
@@ -724,8 +893,15 @@ async function handleAddSession(e) {
     setButtonLoading(submitButton, false, originalText);
 }
 
+async function deleteSession(sessionId) {
+    if (!confirm('Are you sure you want to delete this session?')) return;
+    const { error } = await sb.from('scheduled_sessions').delete().eq('id', sessionId);
+    if (error) { showFeedback(`Failed to delete session: ${error.message}`, 'error'); } 
+    else { showFeedback('Session deleted successfully!'); loadScheduledSessions(); renderFullCalendar(); }
+}
+
 // Placeholder function for Clinical Name Update
-async function saveClinicalName() {
+function saveClinicalName() {
     const program = $('clinical_program').value;
     const intake = $('clinical_intake').value;
     const block = $('clinical_block_term').value;
@@ -736,17 +912,7 @@ async function saveClinicalName() {
         return;
     }
     
-    // NOTE: This logic requires a 'clinical_areas' table with columns like (program, intake, block, area_name)
-    // For now, it's just a placeholder notification.
     showFeedback(`Clinical Area: "${name}" saved for ${program} ${intake} Block/Term ${block}. (DB logic not implemented)`, 'success');
-}
-
-
-async function deleteSession(sessionId) {
-    if (!confirm('Are you sure you want to delete this session?')) return;
-    const { error } = await sb.from('scheduled_sessions').delete().eq('id', sessionId);
-    if (error) { showFeedback(`Failed to delete session: ${error.message}`, 'error'); } 
-    else { showFeedback('Session deleted successfully!'); loadScheduledSessions(); renderFullCalendar(); }
 }
 
 
@@ -754,38 +920,41 @@ async function deleteSession(sessionId) {
  * 7. Attendance Tab
  *******************************************************/
 
-// Added Admin Check-in (simulating the process)
-async function adminCheckIn() {
-    const ip = await getIPAddress();
-    const deviceId = getDeviceId();
-    
-    if (!currentUserProfile) {
-        showFeedback('User profile not loaded. Cannot check in.', 'error');
-        return;
-    }
+async function populateAttendanceSelects() {
+    const { data: students } = await fetchData('profiles', 'id, full_name', { role: 'student', approved: true }, 'full_name', true);
+    const attStudentSelect = $('att_student_id');
+    if (students) { populateSelect(attStudentSelect, students, 'id', 'full_name', 'Select Student'); }
+}
 
-    const checkinData = {
-        student_id: currentUserProfile.id,
-        session_type: 'admin_checkin',
-        check_in_time: new Date().toISOString(), 
-        is_manual_entry: true, 
-        location_name: 'Admin Self Check-in',
-        ip_address: ip,
-        device_id: deviceId
-    };
-
-    const { error } = await sb.from('geo_attendance_logs').insert([checkinData]);
+function toggleAttendanceFields() {
+    const sessionType = $('att_session_type').value;
+    const departmentInput = $('att_department');
+    const courseSelect = $('att_course_id');
+    const departmentGroup = $('att_department_group');
+    const courseGroup = $('att_course_group');
     
-    if (error) {
-        showFeedback(`Failed to record admin check-in: ${error.message}`, 'error');
+    if (sessionType === 'clinical') {
+        departmentGroup.style.display = 'block';
+        departmentInput.required = true;
+        courseGroup.style.display = 'none';
+        courseSelect.required = false;
+        courseSelect.value = ""; 
+    } else if (sessionType === 'classroom') {
+        departmentGroup.style.display = 'none';
+        departmentInput.required = false;
+        departmentInput.value = ""; 
+        courseGroup.style.display = 'block';
+        courseSelect.required = true;
     } else {
-        showFeedback('Admin self check-in recorded successfully!');
-        loadAttendance(); 
-        loadDashboardData();
+        departmentGroup.style.display = 'block';
+        departmentInput.required = false;
+        departmentInput.placeholder = "Optional Location/Detail";
+        courseGroup.style.display = 'none';
+        courseSelect.required = false;
+        courseSelect.value = "";
     }
 }
 
-// Renamed for clarity
 async function handleManualAttendance(e) {
     e.preventDefault();
     const submitButton = e.submitter;
@@ -841,8 +1010,6 @@ async function handleManualAttendance(e) {
     setButtonLoading(submitButton, false, originalText);
 }
 
-
-// Corrected Load Attendance function to split Today vs. Past History
 async function loadAttendance() {
     const todayBody = $('attendance-table');
     const pastBody = $('past-attendance-table');
@@ -922,22 +1089,20 @@ async function loadAttendance() {
     todayBody.innerHTML = todayHtml || '<tr><td colspan="6">No check-in records for today.</td></tr>';
     pastBody.innerHTML = pastHtml || '<tr><td colspan="5">No past attendance history found.</td></tr>';
 
-    filterTable('attendance-search', 'attendance-table', [0, 1, 2]); // Re-apply filter
+    filterTable('attendance-search', 'attendance-table', [0, 1, 2]); 
 }
 
-// Corrected function to use Leaflet instead of MapboxGL
 function showMap(lat, lng, locationName, studentName, dateTime) {
     const mapModal = $('mapModal');
-    const mapContainer = $('mapbox-map'); // ID retained from HTML for simplicity
+    const mapContainer = $('mapbox-map'); 
     
     $('map-modal-title').textContent = `${studentName}'s Check-in Location`;
     $('map-details').innerHTML = `<strong>Time:</strong> ${dateTime}<br><strong>Location:</strong> ${locationName}<br><strong>Coords:</strong> ${lat}, ${lng}`;
 
     mapModal.style.display = 'flex';
     
-    // Check if map is already initialized
     if (attendanceMap) {
-        attendanceMap.remove(); // Remove old map to avoid duplication issues
+        attendanceMap.remove(); 
     }
     
     // Initialize Leaflet Map
@@ -955,10 +1120,46 @@ function showMap(lat, lng, locationName, studentName, dateTime) {
         .addTo(attendanceMap)
         .openPopup();
         
-    // Invalidate map size after modal becomes visible
     setTimeout(() => { 
         if (attendanceMap) { attendanceMap.invalidateSize(); } 
     }, 100); 
+}
+
+async function deleteAttendanceRecord(recordId) {
+    if (!confirm('Are you sure you want to delete this attendance record?')) return;
+    const { error } = await sb.from('geo_attendance_logs').delete().eq('id', recordId);
+    if (error) { showFeedback(`Failed to delete record: ${error.message}`, 'error'); } 
+    else { showFeedback('Attendance record deleted successfully!'); loadAttendance(); }
+}
+
+async function adminCheckIn() {
+    const ip = await getIPAddress();
+    const deviceId = getDeviceId();
+    
+    if (!currentUserProfile) {
+        showFeedback('User profile not loaded. Cannot check in.', 'error');
+        return;
+    }
+
+    const checkinData = {
+        student_id: currentUserProfile.id,
+        session_type: 'admin_checkin',
+        check_in_time: new Date().toISOString(), 
+        is_manual_entry: true, 
+        location_name: 'Admin Self Check-in',
+        ip_address: ip,
+        device_id: deviceId
+    };
+
+    const { error } = await sb.from('geo_attendance_logs').insert([checkinData]);
+    
+    if (error) {
+        showFeedback(`Failed to record admin check-in: ${error.message}`, 'error');
+    } else {
+        showFeedback('Admin self check-in recorded successfully!');
+        loadAttendance(); 
+        loadDashboardData();
+    }
 }
 
 
@@ -1007,9 +1208,9 @@ async function handleAddExam(e) {
         exam_name: exam_title, 
         course_id, 
         exam_date, 
-        target_program: program, // Saving program type
-        intake_year: intake,     // Saving intake
-        block_term,              // Saving block/term
+        target_program: program, 
+        intake_year: intake,     
+        block_term,              
         status: exam_status
     });
 
@@ -1020,7 +1221,6 @@ async function handleAddExam(e) {
 }
 
 
-// Corrected loadExams to match HTML structure
 async function loadExams() {
     const tbody = $('exams-table');
     tbody.innerHTML = '<tr><td colspan="8">Loading exams/CATs...</td></tr>';
@@ -1050,10 +1250,20 @@ async function loadExams() {
         </tr>`;
     });
     
-    filterTable('exam-search', 'exams-table', [2, 1, 6]); // Title(2), Course(1), Block/Term(6)
+    filterTable('exam-search', 'exams-table', [2, 1, 6]); 
 }
 
-// deleteExam and openGradeModal are retained and correct
+async function deleteExam(examId) {
+    if (!confirm('Are you sure you want to delete this exam? This cannot be undone.')) return;
+    const { error } = await sb.from('exams').delete().eq('id', examId);
+    if (error) { showFeedback(`Failed to delete exam: ${error.message}`, 'error'); } 
+    else { showFeedback('Exam deleted successfully!'); loadExams(); renderFullCalendar(); }
+}
+
+function openGradeModal(examId, examName) {
+    showFeedback(`Grading functionality for: ${examName} (ID: ${examId}) is pending implementation.`, 'success');
+}
+
 
 /*******************************************************
  * 9. Calendar Tab (FullCalendar Integration)
@@ -1062,7 +1272,7 @@ async function loadExams() {
 async function renderFullCalendar() {
     const calendarEl = $('fullCalendarDisplay');
     if (!calendarEl) return;
-    calendarEl.innerHTML = ''; // Clear existing content
+    calendarEl.innerHTML = ''; 
 
     const { data: sessions } = await fetchData('scheduled_sessions', '*', {}, 'session_date', true);
     const { data: exams } = await fetchData('exams', '*, course:course_id(course_name)', {}, 'exam_date', true);
@@ -1074,7 +1284,6 @@ async function renderFullCalendar() {
         let title = `${s.session_type.toUpperCase()}: ${s.session_title}`;
         let color = s.session_type === 'clinical' ? '#2ecc71' : s.session_type === 'event' ? '#9b59b6' : '#3498db';
         
-        // FullCalendar uses 'start' for date/time
         events.push({
             title: title,
             start: s.session_date + (s.session_time ? `T${s.session_time}` : ''),
@@ -1110,7 +1319,6 @@ async function renderFullCalendar() {
 /*******************************************************
  * 10. Messages Tab
  *******************************************************/
-// Note: Adjusted the send form logic to match the new HTML IDs
 
 async function handleSendMessage(e) {
     e.preventDefault();
@@ -1118,11 +1326,10 @@ async function handleSendMessage(e) {
     const originalText = submitButton.textContent;
     setButtonLoading(submitButton, true, originalText);
 
-    // Recipients are determined by the program type for simplicity
     const target_program = $('msg_program').value; 
-    const message_content = $('msg_body').value.trim(); // Corrected ID
+    const message_content = $('msg_body').value.trim(); 
     const subject = `Message to ${target_program}`;
-    const message_type = 'system'; // Default type for admin broadcast
+    const message_type = 'system'; 
 
     if (!message_content) {
         showFeedback('Message content cannot be empty.', 'error');
@@ -1131,8 +1338,8 @@ async function handleSendMessage(e) {
     }
 
     const { error } = await sb.from('notifications').insert({ 
-        recipient_id: null, // Indicates broadcast
-        target_program: target_program === 'ALL' ? null : target_program, // Null for all, value for specific
+        recipient_id: null, 
+        target_program: target_program === 'ALL' ? null : target_program, 
         subject: subject, 
         message_content: message_content, 
         message_type: message_type,
@@ -1145,11 +1352,10 @@ async function handleSendMessage(e) {
     setButtonLoading(submitButton, false, originalText);
 }
 
-// Updated loadMessages to reflect the broadcast nature
 async function loadMessages() {
     const tbody = $('messages-table');
     tbody.innerHTML = '<tr><td colspan="3">Loading messages...</td></tr>';
-    // Fetch system/broadcast messages
+    
     const { data: messages, error } = await fetchData('notifications', '*', { message_type: 'system' }, 'created_at', false);
     
     if (error) { tbody.innerHTML = `<tr><td colspan="3">Error loading messages: ${error.message}</td></tr>`; return; }
@@ -1171,8 +1377,6 @@ async function loadMessages() {
 /*******************************************************
  * 11. Resources Tab
  *******************************************************/
-// Note: Upload logic in the HTML uses target program/intake/block metadata. 
-// We need to pass these as metadata to Supabase storage on upload.
 
 $('upload-resource-form')?.addEventListener('submit', async e => {
     e.preventDefault();
@@ -1193,7 +1397,6 @@ $('upload-resource-form')?.addEventListener('submit', async e => {
     }
 
     const file = fileInput.files[0];
-    // Create folder structure: Program/Intake/Block/Title_Filename.ext
     const filePath = `${program}/${intake}/${block}/${title.replace(/ /g, '_')}_${file.name.replace(/ /g, '_')}`; 
 
     try {
@@ -1201,7 +1404,6 @@ $('upload-resource-form')?.addEventListener('submit', async e => {
             cacheControl: '3600', 
             upsert: true,
             contentType: file.type,
-            // Include metadata for filtering/display
             metadata: {
                 title: title,
                 program: program,
@@ -1220,15 +1422,11 @@ $('upload-resource-form')?.addEventListener('submit', async e => {
     }
 });
 
-// Updated loadResources to retrieve and display metadata
 async function loadResources() {
-    const tableBody = $('resources-list'); // Corrected ID from HTML
+    const tableBody = $('resources-list'); 
     tableBody.innerHTML = '<tr><td colspan="7">Loading resources...</td></tr>';
     
     try {
-        // NOTE: Supabase storage list() doesn't return nested metadata, only file size/name/lastModified. 
-        // For a true dashboard, you'd need a separate DB table to store resource metadata upon upload.
-        // For this script, we'll list the files and infer details from the path/name.
         const { data: { contents: files }, error: listError } = await sb.storage
             .from(RESOURCES_BUCKET).list('', { limit: 1000, offset: 0, sortBy: { column: 'name', order: 'asc' } });
 
@@ -1243,14 +1441,12 @@ async function loadResources() {
             const { data: { publicUrl } } = sb.storage.from(RESOURCES_BUCKET).getPublicUrl(file.name);
             const lastModified = new Date(file.lastModified).toLocaleString();
             
-            // Infer details from the path: Program/Intake/Block/Title_Filename.ext
             const parts = file.name.split('/');
             const program = parts[0] || 'N/A';
             const intake = parts[1] || 'N/A';
             const block = parts[2] || 'N/A';
             const fileName = parts.slice(3).join('/') || file.name;
 
-            // This is a simplified display, but relies on the structure used in upload
             tableBody.innerHTML += `<tr>
                 <td>${escapeHtml(program)}</td>
                 <td>${escapeHtml(fileName)}</td>
@@ -1267,8 +1463,18 @@ async function loadResources() {
     } catch (e) {
         tableBody.innerHTML = `<tr><td colspan="7">Error listing resources: ${e.message}</td></tr>`;
     }
-    // Apply filtering after loading data
-    filterTable('resource-search', 'resources-list', [0, 1]); // Program(0), File Name (1)
+    filterTable('resource-search', 'resources-list', [0, 1]); 
+}
+
+async function deleteResource(fileName) {
+    if (!confirm(`Are you sure you want to delete "${fileName}"? This cannot be undone.`)) return;
+    try {
+        const { error } = await sb.storage.from(RESOURCES_BUCKET).remove([fileName]);
+        if (error) throw error;
+        showFeedback('Resource deleted successfully!'); loadResources();
+    } catch (e) {
+        showFeedback(`Failed to delete resource: ${e.message}`, 'error');
+    }
 }
 
 
@@ -1279,8 +1485,6 @@ async function loadResources() {
 async function loadBackupHistory() {
     const tbody = $('backup-history-table');
     tbody.innerHTML = '<tr><td colspan="4">Loading backup history...</td></tr>';
-    // NOTE: Supabase does not expose a table for backup history or a public API for backup/restore. 
-    // This function is for UI placeholder only.
     
     // Placeholder Data
     const history = [
@@ -1295,19 +1499,17 @@ async function loadBackupHistory() {
             <td>${h.date}</td>
             <td>${h.size}</td>
             <td>
-                <button class="btn-action">Download</button>
-                <button class="btn btn-delete">Delete</button>
+                <button class="btn-action" onclick="showFeedback('Download feature is a placeholder. File: ${h.name}')">Download</button>
+                <button class="btn btn-delete" onclick="showFeedback('Delete feature is a placeholder. File: ${h.name}')">Delete</button>
             </td>
         </tr>`;
     });
 }
 
 function triggerBackup() {
-    // NOTE: True database backup must be done via the Supabase Admin API or Dashboard.
     showFeedback('Backup initiated! Check Supabase Console for status (manual process).', 'success');
 }
 
-// NOTE: Restore logic is also purely informational as it requires a server-side process.
 $('restore-form')?.addEventListener('submit', e => {
     e.preventDefault();
     showFeedback('Database restoration initiated. This is a critical server-side process, check logs for completion.', 'error');
