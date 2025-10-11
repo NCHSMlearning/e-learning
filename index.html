@@ -723,21 +723,69 @@ async function loadGeoAttendanceHistory(userId){
 // *** 6. SUPABASE DATA LOADING FUNCTIONS ***
 // *************************************************************************
 
-async function loadCourses(){
-    const tableBody=document.getElementById('courses-table'); tableBody.innerHTML='<tr><td colspan="2">Loading courses from Supabase...</td></tr>';
-    try{
-        const { program, block, intake_year } = currentUserProfile||{};
-        if(!program||!block||!intake_year){ tableBody.innerHTML='<tr><td colspan="2">Missing enrollment details.</td></tr>'; cachedCourses=[]; return; }
-        const { data: enrollments, error } = await sb.from('student_courses').select('course_id,status,courses(id,name,code)').eq('student_id',currentUserId).order('course_id',{ascending:true});
-        if(error) throw error;
-        tableBody.innerHTML=''; cachedCourses=[];
-        if(enrollments&&enrollments.length>0){ 
-            cachedCourses=enrollments.filter(e=>e.courses).map(e=>({id:e.courses.id,name:e.courses.name,code:e.courses.code,status:e.status}));
-            cachedCourses.forEach(c=>{ tableBody.innerHTML+=`<tr><td>${c.code?c.code+' - ':''}${c.name}</td><td>${c.status||'Active'}</td></tr>`; });
-        } else { tableBody.innerHTML='<tr><td colspan="2">No courses enrolled.</td></tr>'; cachedCourses=[]; }
-    }catch(error){ tableBody.innerHTML=`<tr><td colspan="2" style="color:#EF4444;">Error loading courses: ${error.message}</td></tr>`; cachedCourses=[]; }
-    if(document.getElementById('attendance').classList.contains('active')) updateTargetSelect();
-    document.getElementById('dashboard-active-courses').textContent=cachedCourses.length;
+async function loadCourses() {
+    const tableBody = document.getElementById('courses-table');
+    tableBody.innerHTML = '<tr><td colspan="2">Loading courses from Supabase...</td></tr>';
+
+    try {
+        const program = currentUserProfile?.program;
+        const block = currentUserProfile?.block;
+        const intakeYear = currentUserProfile?.intake_year;
+
+        if (!program || !block || !intakeYear) {
+            tableBody.innerHTML = '<tr><td colspan="2">Missing enrollment details (Program/Block/Year). Cannot load courses.</td></tr>';
+            cachedCourses = [];
+            return;
+        }
+
+        // Load all courses for the student’s program, block, and intake year
+        const { data: courses, error } = await sb
+            .from('courses')
+            .select('*')
+            .eq('target_program', program)
+            .eq('block', block)
+            .eq('intake_year', intakeYear)
+            .order('course_name', { ascending: true });
+
+        if (error) throw error;
+
+        tableBody.innerHTML = '';
+
+        if (courses && courses.length > 0) {
+            cachedCourses = courses.map(c => ({
+                id: c.id,
+                name: c.course_name || c.name,
+                code: c.code,
+                status: c.status || 'Active'
+            }));
+
+            cachedCourses.forEach(c => {
+                const row = `
+                    <tr>
+                        <td>${c.code ? c.code + ' - ' : ''}${c.name}</td>
+                        <td>${c.status}</td>
+                    </tr>
+                `;
+                tableBody.innerHTML += row;
+            });
+        } else {
+            tableBody.innerHTML = '<tr><td colspan="2">No courses found for your cohort.</td></tr>';
+            cachedCourses = [];
+        }
+
+        // Update Attendance target dropdown if attendance tab is active
+        if (document.getElementById('attendance').classList.contains('active')) {
+            updateTargetSelect();
+        }
+
+        // Update dashboard metric
+        document.getElementById('dashboard-active-courses').textContent = cachedCourses.length;
+
+    } catch (error) {
+        console.error("Failed to load courses:", error);
+        tableBody.innerHTML = `<tr><td colspan="2" style="color: #EF4444;">Error loading courses: ${error.message}</td></tr>`;
+        cachedCourses = [];
+    }
 }
 
 async function loadExams(){
