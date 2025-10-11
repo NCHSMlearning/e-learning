@@ -499,31 +499,59 @@ async function handleAddAccount(e) {
     const role = $('account-role').value;
     const phone = $('account-phone').value.trim();
     const program_type = $('account-program').value;
-    const intake_year = $('account-intake').value; 
-    const block = $('account-block-term').value; 
+    const intake_year = $('account-intake').value;
+    const block = $('account-block-term').value;
 
-    const userData = { 
-        full_name: name, role: role, phone: phone, program_type: program_type, 
-        intake_year: intake_year, block: block, approved: true, block_program_year: false 
+    const userData = {
+        full_name: name,
+        role: role,
+        phone: phone,
+        program_type: program_type,
+        intake_year: intake_year,
+        block: block,
+        approved: true,
+        block_program_year: false
     };
 
-    const { data: { user }, error: authError } = await sb.auth.signUp({
-        email: email, password: password, options: { data: userData }
-    });
+    try {
+        // 1. Create Auth User
+        const { data: { user }, error: authError } = await sb.auth.signUp({
+            email: email,
+            password: password,
+            options: { data: userData }
+        });
 
-    if (authError) {
-        showFeedback(`Account Enrollment Error: ${authError.message}`, 'error');
-    } else if (user && user.id) {
-        e.target.reset();
-        showFeedback(`New ${role.toUpperCase()} account successfully enrolled and approved!`, 'success');
-        loadStudents(); loadAllUsers(); loadDashboardData();
-    } else {
-        showFeedback('Enrollment succeeded but Auth user object was not returned. Please check the logs.', 'error');
+        if (authError) {
+            showFeedback(`Account Enrollment Error: ${authError.message}`, 'error');
+            setButtonLoading(submitButton, false, originalText);
+            return;
+        }
+
+        if (user && user.id) {
+            // 2. Insert profile into 'profiles' table
+            const { error: profileError } = await sb.from('profiles').insert([
+                { id: user.id, ...userData }
+            ]);
+
+            if (profileError) {
+                showFeedback(`Profile insertion failed: ${profileError.message}`, 'error');
+            } else {
+                e.target.reset();
+                showFeedback(`New ${role.toUpperCase()} account successfully enrolled and approved!`, 'success');
+                loadStudents();
+                loadAllUsers();
+                loadDashboardData();
+            }
+        } else {
+            showFeedback('Enrollment succeeded but Auth user object was not returned. Please check the logs.', 'error');
+        }
+
+    } catch (err) {
+        showFeedback(`Unexpected error: ${err.message}`, 'error');
+    } finally {
+        setButtonLoading(submitButton, false, originalText);
     }
-
-    setButtonLoading(submitButton, false, originalText);
 }
-
 
 async function loadAllUsers() {
     const tbody = $('users-table');
@@ -666,12 +694,38 @@ async function openEditUserModal(userId) {
     }
 }
 
+async function openEditUserModal(userId) {
+    try {
+        const { data: user, error } = await sb.from('profiles').select('*').eq('id', userId).single();
+        if (error || !user) throw new Error('User data fetch failed.');
+
+        // Fill modal fields
+        $('edit_user_id').value = user.id;
+        $('edit_user_name').value = user.full_name || '';
+        $('edit_user_email').value = user.email || '';
+        $('edit_user_role').value = user.role || 'student';
+        $('edit_user_intake').value = user.intake_year || '2024';
+        $('edit_user_block_status').value = user.block_program_year === true ? 'true' : 'false';
+
+        // Populate program select first
+        $('edit_user_program').value = user.program_type || '';
+        // Then update the block/term options based on selected program
+        updateBlockTermOptions('edit_user_program', 'edit_user_block');
+        // Finally set the block value from the DB
+        $('edit_user_block').value = user.block || 'A';
+
+        $('userEditModal').style.display = 'flex';
+    } catch (error) {
+        showFeedback(`Failed to load user data: ${error.message}`, 'error');
+    }
+}
+
 async function handleEditUser(e) {
     e.preventDefault();
     const submitButton = e.submitter;
     const originalText = submitButton.textContent;
     setButtonLoading(submitButton, true, originalText);
-    
+
     const userId = $('edit_user_id').value;
     const updatedData = {
         full_name: $('edit_user_name').value.trim(),
@@ -680,8 +734,15 @@ async function handleEditUser(e) {
         program_type: $('edit_user_program').value,
         intake_year: $('edit_user_intake').value,
         block: $('edit_user_block').value,
-        block_program_year: $('edit_user_block_status').value === 'true' 
+        block_program_year: $('edit_user_block_status').value === 'true'
     };
+
+    // Simple validation to ensure program is selected
+    if (!updatedData.program_type) {
+        showFeedback('Please select a program for this user.', 'error');
+        setButtonLoading(submitButton, false, originalText);
+        return;
+    }
 
     try {
         const { error } = await sb.from('profiles').update(updatedData).eq('id', userId);
@@ -689,7 +750,9 @@ async function handleEditUser(e) {
 
         showFeedback('User profile updated successfully!');
         $('userEditModal').style.display = 'none';
-        loadAllUsers(); loadStudents(); loadDashboardData();
+        loadAllUsers();
+        loadStudents();
+        loadDashboardData();
     } catch (e) {
         showFeedback('Failed to update user: ' + (e.message || e), 'error');
     } finally {
