@@ -962,44 +962,30 @@
     // *** 6. SUPABASE DATA LOADING FUNCTIONS (SECURE FILTERING APPLIED) ***
     // *************************************************************************
 
+    // ** THIS FUNCTION IS CRITICAL AND HAS BEEN CORRECTED TO TRUST RLS **
     async function loadCourses() {
         const tableBody = document.getElementById('courses-table');
         tableBody.innerHTML = '<tr><td colspan="2">Loading courses from Supabase...</td></tr>';
         
         try {
-            // Step 1: Query all courses visible to the user (filtered by RLS)
-            // The RLS policy for the 'courses' table does the hard work of filtering by cohort.
+            // 1. Query all courses visible to the user (filtered entirely by RLS)
+            // NO WHERE, NO EQ, NO FILTERS needed here. RLS does all the heavy lifting.
             const { data: visibleCourses, error: coursesError } = await sb
                 .from('courses')
-                .select('id, name, code, target_program, block, intake_year')
-                .order('name', { ascending: true });
+                // Select only necessary columns. Note: using 'course_name' to match your schema.
+                .select('id, course_name, code, target_program, block, intake_year') 
+                .order('course_name', { ascending: true }); // Switched order by to 'course_name'
 
             if (coursesError) throw coursesError;
             
-            // Step 2: Query the student's enrollment status for the visible courses
-            // This is necessary because the status (Enrolled/Completed) is NOT in the 'courses' table.
-            const visibleCourseIds = visibleCourses.map(c => c.id);
-
-            const { data: enrollments, error: enrollmentsError } = await sb
-                .from('student_courses')
-                .select('course_id, status')
-                .eq('student_id', currentUserId)
-                .in('course_id', visibleCourseIds);
-                
-            if (enrollmentsError) throw enrollmentsError;
-            
-            // Step 3: Combine course details with enrollment status
-            const enrollmentMap = new Map(enrollments.map(e => [e.course_id, e.status]));
-
-            // Filter out courses the student is NOT enrolled in (optional, but good for 'My Courses' tab)
-            cachedCourses = visibleCourses
-                .filter(c => enrollmentMap.has(c.id)) 
-                .map(c => ({
-                    id: c.id,
-                    name: c.name,
-                    code: c.code,
-                    status: enrollmentMap.get(c.id) || 'Enrolled' // Default to 'Enrolled'
-                }));
+            // 2. TRUST THE RLS: ALL courses returned are the student's active courses for their cohort.
+            // We use a simplified mapping for presentation.
+            cachedCourses = visibleCourses.map(c => ({
+                id: c.id,
+                name: c.course_name, 
+                code: c.code,
+                status: 'Active' // Assume status is active for RLS-filtered courses
+            }));
             
             tableBody.innerHTML = '';
             
@@ -1009,7 +995,7 @@
                     const row = `
                         <tr>
                             <td>${c.code ? c.code + ' - ' : ''}${c.name}</td>
-                            <td>${c.status || 'Active'}</td>
+                            <td>${c.status}</td>
                         </tr>
                     `;
                     tableBody.innerHTML += row;
@@ -1024,6 +1010,7 @@
             cachedCourses = []; 
         }
         
+        // Update dependent UI elements
         if (document.getElementById('attendance').classList.contains('active')) {
             updateTargetSelect();
         }
