@@ -1507,17 +1507,19 @@ $('upload-resource-form')?.addEventListener('submit', async e => {
             .from(RESOURCES_BUCKET)
             .getPublicUrl(filePath);
 
-        // 3️⃣ Insert file metadata into 'resources' table
+  // 3️⃣ Insert file metadata into 'resources' table
 const { error: dbError } = await sb
     .from('resources')
     .insert({
         title: title,
         program_type: program,
+        intake: intake,                     // add this
+        block: block,                       // add this
         file_path: filePath,
         file_name: file.name,
         file_url: publicUrl,
-        uploaded_by: currentUserProfile?.id,               // ✅ Use UUID
-        uploaded_by_name: currentUserProfile?.full_name,   // ✅ Store readable name
+        uploaded_by: currentUserProfile?.id,
+        uploaded_by_name: currentUserProfile?.full_name,
         created_at: new Date().toISOString()
     });
 
