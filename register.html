@@ -66,9 +66,9 @@
 
     <div id="student-fields" style="display:none;">
       <label for="student_id_number">Admission / Student ID</label>
-      <input type="text" id="student_id_number" name="student_id_number" placeholder="e.g. NCHSM2025/001" required>
+      <input type="text" id="student_id_number" name="student_id_number" placeholder="e.g. NCHSM2025/001">
       <label for="program_type">Program</label>
-      <select id="program_type" name="program_type" required>
+      <select id="program_type" name="program_type">
         <option value="">-- Select Your Program --</option>
         <option value="KRCHN">KRCHN Nursing</option>
         <option value="TIVET">TIVET Program</option>
@@ -77,9 +77,9 @@
 
     <div id="lecturer-fields" style="display:none;">
       <label for="staff_id">Staff ID</label>
-      <input type="text" id="staff_id" name="staff_id" placeholder="e.g. NCHSM-LECT-001" required>
+      <input type="text" id="staff_id" name="staff_id" placeholder="e.g. NCHSM-LECT-001">
       <label for="department">Department</label>
-      <select id="department" name="department" required>
+      <select id="department" name="department">
         <option value="">-- Select Department --</option>
         <option value="Nursing">Nursing</option>
         <option value="Clinical Medicine">Clinical Medicine</option>
@@ -119,100 +119,131 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const roleSelect = document.getElementById('role');
-const studentFields = document.getElementById('student-fields');
-const lecturerFields = document.getElementById('lecturer-fields');
-
-roleSelect.addEventListener('change', () => {
-  studentFields.style.display = roleSelect.value==='student'?'block':'none';
-  lecturerFields.style.display = roleSelect.value==='lecturer'?'block':'none';
-});
+const studentFieldsDiv = document.getElementById('student-fields');
+const lecturerFieldsDiv = document.getElementById('lecturer-fields');
+// Get all inputs and selects within the role-specific divs
+const studentInputs = studentFieldsDiv.querySelectorAll('input, select');
+const lecturerInputs = lecturerFieldsDiv.querySelectorAll('input, select');
 
 const form = document.getElementById('register-form');
 const message = document.getElementById('message');
 const registerBtn = document.getElementById('register-btn');
 
+// Function to manage visibility and the 'required' attribute
+const manageRequiredFields = (role) => {
+    const isStudent = role === 'student';
+    const isLecturer = role === 'lecturer';
+
+    // 1. Manage visibility
+    studentFieldsDiv.style.display = isStudent ? 'block' : 'none';
+    lecturerFieldsDiv.style.display = isLecturer ? 'block' : 'none';
+
+    // 2. Dynamically set/remove the 'required' attribute
+    studentInputs.forEach(input => {
+        if (isStudent) {
+            input.setAttribute('required', '');
+        } else {
+            input.removeAttribute('required');
+        }
+    });
+
+    lecturerInputs.forEach(input => {
+        if (isLecturer) {
+            input.setAttribute('required', '');
+        } else {
+            input.removeAttribute('required');
+        }
+    });
+};
+
+// Initial setup and event listener
+roleSelect.addEventListener('change', () => {
+    manageRequiredFields(roleSelect.value);
+});
+
+// Run once on load to ensure hidden fields are not required initially
+manageRequiredFields(roleSelect.value);
+
+
 form.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  message.textContent = '';
-  message.className='message';
-  registerBtn.disabled = true;
-  registerBtn.textContent = 'Registering...';
+    e.preventDefault();
+    message.textContent = '';
+    message.className='message';
+    registerBtn.disabled = true;
+    registerBtn.textContent = 'Registering...';
 
-  const role = roleSelect.value;
-  const full_name = document.getElementById('full_name').value.trim();
-  const email = document.getElementById('email').value.trim();
-  const phone = document.getElementById('phone').value.trim();
-  const password = document.getElementById('password').value.trim();
-  const confirmPassword = document.getElementById('confirm_password').value.trim();
+    const role = roleSelect.value;
+    const full_name = document.getElementById('full_name').value.trim();
+    const email = document.getElementById('email').value.trim();
+    const phone = document.getElementById('phone').value.trim();
+    const password = document.getElementById('password').value.trim();
+    const confirmPassword = document.getElementById('confirm_password').value.trim();
 
-  if(password !== confirmPassword){
-    message.textContent = '❌ Passwords do not match.';
-    message.classList.add('error');
-    registerBtn.disabled=false;
-    registerBtn.textContent='Register';
-    return;
-  }
-
-  // Student & Lecturer fields
-  const student_id_number = document.getElementById('student_id_number').value.trim();
-  const program_type = document.getElementById('program_type').value;
-  const staff_id = document.getElementById('staff_id').value.trim();
-  const department = document.getElementById('department').value;
-
-  // Step 1: Supabase Auth signup
-  const { data, error } = await sb.auth.signUp({
-    email,
-    password,
-    options: { data:{ full_name, role, phone } }
-  });
-
-  if(error){
-    message.textContent = `❌ ${error.message}`;
-    message.classList.add('error');
-    registerBtn.disabled=false;
-    registerBtn.textContent='Register';
-    return;
-  }
-
-  // Step 2: Insert into appropriate table
-  // NOTE: This is the part that will fail if you don't have a correct
-  // Row-Level Security (RLS) policy on your Supabase 'students' and 'lecturers' tables.
-  try{
-    if(role==='student'){
-      await sb.from('students').insert([{
-        user_id: data.user.id,
-        full_name,
-        email,
-        phone,
-        admission_number: student_id_number,
-        course: program_type,
-        status: 'pending'
-      }]);
-    } else if(role==='lecturer'){
-      await sb.from('lecturers').insert([{
-        user_id: data.user.id,
-        full_name,
-        email,
-        phone,
-        staff_id,
-        department,
-        status: 'pending'
-      }]);
+    if(password !== confirmPassword){
+        message.textContent = '❌ Passwords do not match.';
+        message.classList.add('error');
+        registerBtn.disabled=false;
+        registerBtn.textContent='Register';
+        return;
     }
 
-    message.textContent = '✅ Registration successful! Await admin approval before logging in.';
-    message.classList.add('success');
-    form.reset();
-    studentFields.style.display='none';
-    lecturerFields.style.display='none';
-  } catch(dbError){
-    console.error(dbError);
-    message.textContent = `❌ Database error saving new user: ${dbError.message}`;
-    message.classList.add('error');
-  }
+    // Student & Lecturer fields
+    const student_id_number = document.getElementById('student_id_number').value.trim();
+    const program_type = document.getElementById('program_type').value;
+    const staff_id = document.getElementById('staff_id').value.trim();
+    const department = document.getElementById('department').value;
 
-  registerBtn.disabled=false;
-  registerBtn.textContent='Register';
+    // Step 1: Supabase Auth signup
+    const { data, error } = await sb.auth.signUp({
+        email,
+        password,
+        options: { data:{ full_name, role, phone } }
+    });
+
+    if(error){
+        message.textContent = `❌ ${error.message}`;
+        message.classList.add('error');
+        registerBtn.disabled=false;
+        registerBtn.textContent='Register';
+        return;
+    }
+
+    // Step 2: Insert into appropriate table (Requires RLS and NOT NULL fix in Supabase)
+    try{
+        if(role==='student'){
+            await sb.from('students').insert([{
+                user_id: data.user.id,
+                full_name,
+                email,
+                phone,
+                admission_number: student_id_number,
+                course: program_type,
+                status: 'pending'
+            }]);
+        } else if(role==='lecturer'){
+            await sb.from('lecturers').insert([{
+                user_id: data.user.id,
+                full_name,
+                email,
+                phone,
+                staff_id,
+                department,
+                status: 'pending'
+            }]);
+        }
+
+        message.textContent = '✅ Registration successful! Await admin approval before logging in.';
+        message.classList.add('success');
+        form.reset();
+        manageRequiredFields(''); // Reset fields state
+    } catch(dbError){
+        console.error(dbError);
+        message.textContent = `❌ Database error saving new user: ${dbError.message}`;
+        message.classList.add('error');
+    }
+
+    registerBtn.disabled=false;
+    registerBtn.textContent='Register';
 });
 </script>
 </body>
