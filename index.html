@@ -500,54 +500,82 @@
     const sessionTypeSelect = document.getElementById('session-type');
     const attendanceTargetSelect = document.getElementById('attendance-target');
     const welcomeHeader = document.getElementById('welcome-header');
-    
-    // *************************************************************************
-    // *** 2. UI AND NAVIGATION LOGIC ***
-    // *************************************************************************
-    const navLinks = document.querySelectorAll('.nav a');
-    const tabs = document.querySelectorAll('.tab-content');
+  // *************************************************************************
+// *** 2. UI AND NAVIGATION LOGIC ***
+// *************************************************************************
+const navLinks = document.querySelectorAll('.nav a');
+const tabs = document.querySelectorAll('.tab-content');
 
-    function showTab(tabId) {
-        navLinks.forEach(l => l.classList.remove('active'));
-        const activeLink = document.querySelector(`.nav a[data-tab="${tabId}"]`);
-        if(activeLink) activeLink.classList.add('active');
+function showTab(tabId) {
+    // Reset active states
+    navLinks.forEach(l => l.classList.remove('active'));
+    const activeLink = document.querySelector(`.nav a[data-tab="${tabId}"]`);
+    if (activeLink) activeLink.classList.add('active');
 
-        tabs.forEach(tab => tab.classList.remove('active'));
-        const activeTab = document.getElementById(tabId);
-        if(activeTab) activeTab.classList.add('active');
-        
-        // Load data specific to the tab being activated
-        if (tabId === 'profile' && currentUserId) loadProfile(currentUserId); 
-        if (tabId === 'attendance' && currentUserId) {
-            loadGeoAttendanceHistory(currentUserId); 
-            updateTargetSelect();
-        }
-        if (tabId === 'dashboard' && currentUserId) {
-            loadWelcomeDetails(); 
-            const program();
-            loadExams();
-            loadResources();
-            setTimeout(() => loadDashboardMetrics(currentUserId), 500); 
-        }
-        if (tabId === 'courses' && currentUserId) const program(); 
-        if (tabId === 'resources' && currentUserId) loadResources(); 
-        if (tabId === 'cats' && currentUserId) loadExams();
-        if (tabId === 'messages' && currentUserId) loadStudentMessages(); 
-        if (tabId === 'calendar' && currentUserId) loadAcademicCalendar(); 
+    tabs.forEach(tab => tab.classList.remove('active'));
+    const activeTab = document.getElementById(tabId);
+    if (activeTab) activeTab.classList.add('active');
+
+    // Load data specific to the selected tab
+    if (tabId === 'profile' && currentUserId) {
+        loadProfile(currentUserId);
     }
 
-    navLinks.forEach(link => {
-        link.addEventListener('click', e => {
-            e.preventDefault();
-            showTab(link.dataset.tab);
-        });
+    if (tabId === 'attendance' && currentUserId) {
+        loadGeoAttendanceHistory(currentUserId);
+        updateTargetSelect();
+    }
+
+    if (tabId === 'dashboard' && currentUserId) {
+        loadWelcomeDetails();
+        const program = currentUserProfile?.department || currentUserProfile?.program || null;
+
+        // Load data relevant to the dashboard
+        loadCourses();
+        loadExams();
+        loadResources();
+
+        // Load metrics after a slight delay to allow data sync
+        setTimeout(() => loadDashboardMetrics(currentUserId), 500);
+    }
+
+    if (tabId === 'courses' && currentUserId) {
+        const program = currentUserProfile?.department || currentUserProfile?.program || null;
+        loadCourses();
+    }
+
+    if (tabId === 'resources' && currentUserId) {
+        loadResources();
+    }
+
+    if (tabId === 'cats' && currentUserId) {
+        loadExams();
+    }
+
+    if (tabId === 'messages' && currentUserId) {
+        loadStudentMessages();
+    }
+
+    if (tabId === 'calendar' && currentUserId) {
+        loadAcademicCalendar();
+    }
+}
+
+// Navigation click events
+navLinks.forEach(link => {
+    link.addEventListener('click', e => {
+        e.preventDefault();
+        showTab(link.dataset.tab);
     });
+});
 
-    async function logout() {
-        sb.realtime.channels.forEach(channel => sb.removeChannel(channel)); 
-        await sb.auth.signOut();
-        window.location.href = "login.html"; // Redirect to your login page
-    }
+// Logout function
+async function logout() {
+    sb.realtime.channels.forEach(channel => sb.removeChannel(channel));
+    await sb.auth.signOut();
+    window.location.href = "login.html"; // Redirect to login page
+}
+
 
     // *************************************************************************
     // *** 3. CORE DATA AND DASHBOARD FUNCTIONS ***
@@ -1127,28 +1155,36 @@ async function loadUserProfile(email) {
     }
 }
 
-// ✅ Load user courses (uses department instead of program)
+// ✅ Load user courses (Filtered by Department)
 async function loadCourses() {
     const tableBody = document.getElementById('courses-table');
     tableBody.innerHTML = '<tr><td colspan="2">Loading courses from Supabase...</td></tr>';
 
     try {
-        const department = currentUserProfile?.department || null;
+        // Use 'department' instead of 'program' for students
+        const program = currentUserProfile?.department || null;
 
+        if (!program) {
+            tableBody.innerHTML = '<tr><td colspan="2">Missing department info in profile.</td></tr>';
+            document.getElementById('dashboard-active-courses').textContent = '0';
+            return;
+        }
+
+        // Fetch courses that match the student's department or are marked as General
         const { data: visibleCourses, error } = await sb
             .from('courses')
             .select('id, course_name, code, status, target_program')
-            .or(`target_program.eq.${department},target_program.eq.General`)
+            .or(`target_program.eq.${program},target_program.eq.General`)
             .order('course_name', { ascending: true });
 
         if (error) throw error;
 
-        cachedCourses = visibleCourses.map(c => ({
+        const cachedCourses = visibleCourses?.map(c => ({
             id: c.id,
             name: c.course_name,
             code: c.code,
             status: c.status || 'Active'
-        }));
+        })) || [];
 
         tableBody.innerHTML = '';
 
@@ -1162,17 +1198,18 @@ async function loadCourses() {
                 `;
             });
         } else {
-            tableBody.innerHTML = `<tr><td colspan="2">No courses found for your department (${department}) yet.</td></tr>`;
+            tableBody.innerHTML = `<tr><td colspan="2">No courses found for your department (${program}).</td></tr>`;
         }
+
+        document.getElementById('dashboard-active-courses').textContent = cachedCourses.length;
 
     } catch (error) {
         console.error("❌ Failed to load courses:", error);
         tableBody.innerHTML = `<tr><td colspan="2" style="color:#EF4444;">Error loading courses: ${error.message}</td></tr>`;
-        cachedCourses = [];
+        document.getElementById('dashboard-active-courses').textContent = '0';
     }
-
-    document.getElementById('dashboard-active-courses').textContent = cachedCourses.length || 0;
 }
+
 
 // ✅ Load user exams
 async function loadExams() {
