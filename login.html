@@ -208,22 +208,14 @@ if (window.location.pathname.endsWith('.html')) {
 document.addEventListener('DOMContentLoaded', () => {
     const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
-
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-        auth: {
-            persistSession: true,
-            autoRefreshToken: true,
-            detectSessionInUrl: true,
-            storage: window.localStorage,
-        },
-    });
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     const errorMsg = document.getElementById('errorMsg');
     const loginForm = document.getElementById('loginForm');
     const loginButton = document.getElementById('loginButton');
 
     if (!loginForm) {
-        console.error("Login form element not found!");
+        console.error("Login form not found");
         return;
     }
 
@@ -236,99 +228,80 @@ document.addEventListener('DOMContentLoaded', () => {
         const password = document.getElementById('password').value;
 
         try {
-            // 1. SIGN IN
+            // 1️⃣ Sign in
             const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password });
             if (authError || !authData.user) {
-                errorMsg.innerText = authError?.message || 'Login failed: Check your email and password.';
+                errorMsg.innerText = authError?.message || 'Login failed. Check your email and password.';
                 loginButton.disabled = false;
                 return;
             }
 
             const userId = authData.user.id;
 
-            // 2. FETCH APPROVAL & ROLE
+            // 2️⃣ Check profile
             let { data: profileData, error: profileError } = await supabase
-                .from('consolidated_user_profiles_table')
-                .select('role, status, intake_year, block')
-                .eq('user_id', userId)
-                .limit(1);
+                .from('profiles')
+                .select('role, approved, full_name, email, phone')
+                .eq('id', userId)
+                .single();
 
-            // 3. FALLBACK TO profiles (superadmins)
-            if ((!profileData || profileData.length === 0) && userId) {
-                const { data: fallbackData, error: fallbackError } = await supabase
-                    .from('profiles')
-                    .select('role, approved')
-                    .eq('id', userId)
-                    .limit(1);
-
-                if (fallbackError) {
-                    console.error("Fallback profile error:", fallbackError);
-                    errorMsg.innerText = 'Login failed: Profile access denied.';
-                    await supabase.auth.signOut();
-                    loginButton.disabled = false;
-                    return;
-                }
-
-                profileData = fallbackData.map(p => ({
-                    role: p.role,
-                    status: p.approved ? 'approved' : 'pending',
-                    intake_year: 'N/A',
-                    block: 'N/A'
-                }));
+            if (profileError) {
+                console.error('Profile fetch error:', profileError);
+                errorMsg.innerText = 'Login failed: Profile access issue.';
+                await supabase.auth.signOut();
+                loginButton.disabled = false;
+                return;
             }
 
-            // 4. VALIDATE APPROVAL
-            if (!profileData || profileData.length === 0 || profileData[0].status !== 'approved') {
+            const role = profileData?.role?.toLowerCase() || 'student';
+            const isApproved = profileData?.approved;
+
+            // 3️⃣ Superadmin: skip checks, login directly
+            if (role === 'superadmin') {
+                window.location.href = 'superadmin.html';
+                return;
+            }
+
+            // 4️⃣ Regular users: must be approved + exist in consolidated table
+            if (!isApproved) {
                 errorMsg.innerText = 'Login failed: Your account is pending approval.';
                 await supabase.auth.signOut();
                 loginButton.disabled = false;
                 return;
             }
 
-            // 5. FETCH FULL PROFILE
-            const { data: fullProfile, error: fullProfileError } = await supabase
+            // 5️⃣ Load consolidated profile
+            const { data: consolidated } = await supabase
                 .from('consolidated_user_profiles_table')
-                .select(`
-                    full_name,
-                    email,
-                    phone,
-                    role,
-                    role_id,
-                    department,
-                    status,
-                    intake_year,
-                    block,
-                    block_program_year
-                `)
+                .select('*')
                 .eq('user_id', userId)
-                .limit(1);
+                .single();
 
-            if (fullProfileError || !fullProfile || fullProfile.length === 0) {
+            if (!consolidated) {
                 errorMsg.innerText = 'Profile data missing or restricted. Contact Admin.';
                 await supabase.auth.signOut();
                 loginButton.disabled = false;
                 return;
             }
 
-            const profile = fullProfile[0];
+            // 6️⃣ Redirect based on role
+            localStorage.setItem('currentUserProfile', JSON.stringify(consolidated));
 
-            // 6. Store session data for dashboard
-            localStorage.setItem('currentUserProfile', JSON.stringify(profile));
-
-            // 7. Redirect by role
-            const role = profile.role?.toLowerCase() || 'student';
-            let redirectURL = 'index.html';
-            if (role === 'superadmin') redirectURL = 'superadmin.html';
-            else if (role === 'admin') redirectURL = 'admin.html';
-
-            errorMsg.innerText = 'Login successful! Redirecting...';
-            setTimeout(() => {
-                window.location.href = redirectURL;
-            }, 1000);
+            switch (role) {
+                case 'admin':
+                    window.location.href = 'admin.html';
+                    break;
+                case 'student':
+                    window.location.href = 'index.html';
+                    break;
+                default:
+                    window.location.href = 'index.html';
+            }
 
         } catch (err) {
-            console.error('Unexpected System Error:', err);
+            console.error('Unexpected system error:', err);
             errorMsg.innerText = 'A critical system error occurred. Please try again later.';
+        } finally {
             loginButton.disabled = false;
         }
     });
