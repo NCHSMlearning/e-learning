@@ -732,14 +732,16 @@ async function checkAuthAndLoad() {
 
         await loadProfile(currentUserId);
 
+        // ✅ Fix: properly define program using department from profile
+        const program = currentUserProfile?.department || currentUserProfile?.program || null;
+
         // Load all data sources once profile is available
-        await const program();
         await loadExams();
         await loadResources();
         await loadClinicalTargets();
-
         await loadWelcomeDetails();
 
+        // Show dashboard and metrics
         showTab('dashboard');
         setTimeout(() => loadDashboardMetrics(currentUserId), 500);
 
@@ -748,167 +750,6 @@ async function checkAuthAndLoad() {
         window.location.href = "login.html";
     }
 }
-
-const profileForm = document.getElementById('profile-form');
-const passportFileInput = document.getElementById('passport-file-input');
-const passportPreview = document.getElementById('passport-preview');
-const uploadButton = document.getElementById('upload-button');
-const profileStatus = document.getElementById('profile-status');
-const editProfileButton = document.getElementById('edit-profile-button');
-const saveProfileButton = document.getElementById('save-profile-button');
-const uploadLabel = document.getElementById('upload-label');
-
-// ✅ Updated to load from consolidated_user_profiles_table
-async function loadProfile(userId) {
-    profileStatus.textContent = 'Loading profile...';
-
-    const { data: profile, error } = await sb
-        .from('consolidated_user_profiles_table')
-        .select('*')
-        .eq('user_id', userId)
-        .single();
-
-    if (error || !profile) {
-        console.error('Error loading consolidated profile:', error);
-        profileStatus.textContent = 'Profile data missing or restricted. Contact Admin.';
-        currentUserProfile = {
-            full_name: 'Unknown Student',
-            program: 'N/A',
-            block: 'N/A',
-            intake_year: 'N/A',
-            email: 'N/A',
-            phone: 'N/A',
-            role_id: 'N/A'
-        };
-    } else {
-        currentUserProfile = profile;
-        profileStatus.textContent = '';
-    }
-
-    document.getElementById('profile-student-id').value = currentUserProfile.role_id || 'N/A';
-    document.getElementById('profile-name').value = currentUserProfile.full_name || 'N/A';
-    document.getElementById('profile-email').value = currentUserProfile.email || 'N/A';
-    document.getElementById('profile-phone').value = currentUserProfile.phone || 'N/A';
-    document.getElementById('profile-program').value = currentUserProfile.department || 'N/A';
-    document.getElementById('profile-block').value = currentUserProfile.block || 'N/A';
-    document.getElementById('profile-intake-year').value = currentUserProfile.intake_year || 'N/A';
-
-    let photoUrl = 'https://via.placeholder.com/150x150?text=NO+PHOTO';
-    if (currentUserProfile.passport_url) {
-        const publicUrlResponse = sb.storage.from('passports').getPublicUrl(currentUserProfile.passport_url);
-        if (publicUrlResponse.data) {
-            photoUrl = publicUrlResponse.data.publicUrl;
-        }
-    }
-    document.getElementById('passport-preview').src = photoUrl;
-
-    toggleProfileEdit(false);
-    if (!currentUserProfile.passport_url) {
-        uploadLabel.style.display = 'block';
-    }
-}
-
-function toggleProfileEdit(enable) {
-    const editableFields = ['profile-name', 'profile-phone'];
-
-    editableFields.forEach(id => {
-        const input = document.getElementById(id);
-        if (input) input.readOnly = !enable;
-    });
-
-    // Keep core identity fields read-only
-    document.getElementById('profile-student-id').readOnly = true;
-    document.getElementById('profile-email').readOnly = true;
-    document.getElementById('profile-program').readOnly = true;
-    document.getElementById('profile-block').readOnly = true;
-    document.getElementById('profile-intake-year').readOnly = true;
-
-    editProfileButton.style.display = enable ? 'none' : 'block';
-    saveProfileButton.style.display = enable ? 'block' : 'none';
-
-    if (enable || !(currentUserProfile && currentUserProfile.passport_url)) {
-        uploadLabel.style.display = 'block';
-    } else {
-        uploadLabel.style.display = 'none';
-    }
-
-    document.getElementById('upload-button').style.display = 'none';
-}
-
-editProfileButton.addEventListener('click', () => toggleProfileEdit(true));
-
-// ✅ Updated to save back to consolidated_user_profiles_table
-profileForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    profileStatus.textContent = 'Saving changes...';
-
-    const updates = {
-        full_name: document.getElementById('profile-name').value,
-        phone: document.getElementById('profile-phone').value,
-        updated_at: new Date().toISOString()
-    };
-
-    const { error } = await sb
-        .from('consolidated_user_profiles_table')
-        .update(updates)
-        .eq('user_id', currentUserId);
-
-    if (error) {
-        profileStatus.textContent = `Error saving profile: ${error.message}`;
-    } else {
-        profileStatus.textContent = 'Profile updated successfully!';
-        loadProfile(currentUserId);
-    }
-});
-
-passportFileInput.addEventListener('change', () => {
-    const file = passportFileInput.files[0];
-    if (file) {
-        passportPreview.src = URL.createObjectURL(file);
-        uploadButton.style.display = 'block';
-        uploadLabel.style.display = 'none';
-    }
-});
-
-uploadButton.addEventListener('click', async () => {
-    const file = passportFileInput.files[0];
-    if (!file) {
-        profileStatus.textContent = 'Please select a file first.';
-        return;
-    }
-
-    profileStatus.textContent = 'Uploading photo...';
-    uploadButton.disabled = true;
-
-    const fileExt = file.name.split('.').pop();
-    const filePath = `${currentUserId}.${fileExt}`;
-
-    const { error: uploadError } = await sb.storage
-        .from('passports')
-        .upload(filePath, file, { cacheControl: '3600', upsert: true });
-
-    if (uploadError) {
-        profileStatus.textContent = `Upload failed: ${uploadError.message}`;
-        uploadButton.disabled = false;
-        return;
-    }
-
-    const { error: updateError } = await sb
-        .from('consolidated_user_profiles_table')
-        .update({ passport_url: filePath, updated_at: new Date().toISOString() })
-        .eq('user_id', currentUserId);
-
-    if (updateError) {
-        profileStatus.textContent = `Database update failed: ${updateError.message}`;
-    } else {
-        profileStatus.textContent = 'Photo uploaded and saved successfully!';
-        passportFileInput.value = '';
-        uploadButton.style.display = 'none';
-        loadProfile(currentUserId);
-    }
-
-    uploadButton.disabled = false;
-});
 
 
     // *************************************************************************
