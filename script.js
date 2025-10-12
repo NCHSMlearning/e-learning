@@ -160,7 +160,6 @@ async function loadSectionData(tabId) {
         case 'backup': loadBackupHistory(); break;
     }
 }
-
 // --- Session / Init ---
 async function initSession() {
     // 1. CRITICAL FIX: Force the client to check the session storage and token refresh.
@@ -196,7 +195,7 @@ async function initSession() {
         
         document.querySelector('header h1').textContent = `Welcome, ${profile.full_name || 'Super Admin'}!`;
     } else {
-        // Handle case where auth user exists but no profile record is found (should be rare)
+        // Handle case where auth user exists but no profile record is found
         console.error("Profile not found or fetch error:", profileError?.message);
         window.location.href = "login.html";
         return;
@@ -204,10 +203,6 @@ async function initSession() {
     
     // Continue with app initialization
     loadSectionData('dashboard');
-    
-    // Setup Event Listeners
-    // ... (rest of your event listeners here)
-}
     
     // Setup Event Listeners
     
@@ -267,7 +262,8 @@ async function initSession() {
     $('edit_course_program')?.addEventListener('change', () => { updateBlockTermOptions('edit_course_program', 'edit_course_block'); });
     $('edit_course_intake')?.addEventListener('change', () => { updateBlockTermOptions('edit_course_program', 'edit_course_block'); });
     document.querySelector('#courseEditModal .close')?.addEventListener('click', () => { $('courseEditModal').style.display = 'none'; });
-}
+} 
+// <-- THE FUNCTION ENDS HERE. No extra code or } until the next function (logout)
 
 // Logout
 async function logout() {
@@ -275,7 +271,6 @@ async function logout() {
     localStorage.removeItem("loggedInUser");
     window.location.href = "login.html";
 }
-
 /*******************************************************
  * 2. TABLE FILTERING & EXPORT FUNCTIONS
  *******************************************************/
