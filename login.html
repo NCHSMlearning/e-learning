@@ -198,7 +198,6 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
-    
 <script>
 if (window.location.pathname.endsWith('.html')) {
     const cleanPath = window.location.pathname.replace(/\.html$/, '');
@@ -228,7 +227,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const password = document.getElementById('password').value;
 
         try {
-            // 1️⃣ Sign in
+            // 1️⃣ Sign in with Supabase Auth
             const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password });
             if (authError || !authData.user) {
                 errorMsg.innerText = authError?.message || 'Login failed. Check your email and password.';
@@ -238,64 +237,62 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const userId = authData.user.id;
 
-            // 2️⃣ Check profile
-            let { data: profileData, error: profileError } = await supabase
+            // 2️⃣ Check role from profiles
+            const { data: profileData, error: profileError } = await supabase
                 .from('profiles')
                 .select('role, approved, full_name, email, phone')
                 .eq('id', userId)
-                .single();
+                .maybeSingle();
 
-            if (profileError) {
-                console.error('Profile fetch error:', profileError);
+            let role = profileData?.role?.toLowerCase() || 'student';
+
+            // 3️⃣ Superadmin/Admin → use profiles directly
+            if (role === 'superadmin' || role === 'admin') {
+                localStorage.setItem('currentUserProfile', JSON.stringify(profileData));
+
+                if (role === 'superadmin') {
+                    window.location.href = 'superadmin.html';
+                } else {
+                    window.location.href = 'admin.html';
+                }
+                return;
+            }
+
+            // 4️⃣ Students & Lecturers → load from consolidated table
+            const { data: consolidatedData, error: consolidatedError } = await supabase
+                .from('consolidated_user_profiles_table')
+                .select('*')
+                .eq('user_id', userId)
+                .maybeSingle();
+
+            if (consolidatedError || !consolidatedData) {
+                console.error('Consolidated profile fetch error:', consolidatedError);
                 errorMsg.innerText = 'Login failed: Profile access issue.';
                 await supabase.auth.signOut();
                 loginButton.disabled = false;
                 return;
             }
 
-            const role = profileData?.role?.toLowerCase() || 'student';
-            const isApproved = profileData?.approved;
-
-            // 3️⃣ Superadmin: skip checks, login directly
-            if (role === 'superadmin') {
-                window.location.href = 'superadmin.html';
-                return;
-            }
-
-            // 4️⃣ Regular users: must be approved + exist in consolidated table
-            if (!isApproved) {
+            // 5️⃣ Check approval
+            if (consolidatedData.status?.toLowerCase() !== 'approved') {
                 errorMsg.innerText = 'Login failed: Your account is pending approval.';
                 await supabase.auth.signOut();
                 loginButton.disabled = false;
                 return;
             }
 
-            // 5️⃣ Load consolidated profile
-            const { data: consolidated } = await supabase
-                .from('consolidated_user_profiles_table')
-                .select('*')
-                .eq('user_id', userId)
-                .single();
+            // 6️⃣ Save the full profile for dashboard use
+            localStorage.setItem('currentUserProfile', JSON.stringify(consolidatedData));
 
-            if (!consolidated) {
-                errorMsg.innerText = 'Profile data missing or restricted. Contact Admin.';
-                await supabase.auth.signOut();
-                loginButton.disabled = false;
-                return;
-            }
+            // 7️⃣ Redirect based on role
+            const consolidatedRole = consolidatedData.role?.toLowerCase();
 
-            // 6️⃣ Redirect based on role
-            localStorage.setItem('currentUserProfile', JSON.stringify(consolidated));
-
-            switch (role) {
-                case 'admin':
-                    window.location.href = 'admin.html';
-                    break;
-                case 'student':
-                    window.location.href = 'index.html';
-                    break;
-                default:
-                    window.location.href = 'index.html';
+            if (consolidatedRole === 'student') {
+                window.location.href = 'index.html';
+            } else if (consolidatedRole === 'lecturer') {
+                window.location.href = 'lecturer.html';
+            } else {
+                window.location.href = 'index.html';
             }
 
         } catch (err) {
