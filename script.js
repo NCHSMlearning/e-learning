@@ -163,26 +163,51 @@ async function loadSectionData(tabId) {
 
 // --- Session / Init ---
 async function initSession() {
-    const { data: { user } } = await sb.auth.getUser();
-    if (!user) {
+    // 1. CRITICAL FIX: Force the client to check the session storage and token refresh.
+    // This ensures the client is using a fresh JWT with the 'superadmin' role claim.
+    const { data: { session }, error: sessionError } = await sb.auth.getSession();
+    
+    // Check for general session failure
+    if (sessionError || !session) {
+        console.warn("Session check failed, redirecting to login.");
         window.location.href = "login.html";
         return;
     }
 
-    const { data: profile } = await sb.from('profiles').select('*').eq('id', user.id).single();
-    if (profile) {
+    // Explicitly set the session (mostly redundant, but ensures client uses the token)
+    sb.auth.setSession(session);
+    
+    // 2. Get the authenticated user object from the fresh session
+    const user = session.user;
+    
+    // 3. Fetch the profile data (RLS should now pass due to the fresh token)
+    const { data: profile, error: profileError } = await sb.from('profiles').select('*').eq('id', user.id).single();
+    
+    if (profile && !profileError) {
         currentUserProfile = profile;
+        
+        // 4. Role check
         if (currentUserProfile.role !== 'superadmin') {
+            // Redirect non-Super Admins
+            console.warn(`User ${user.email} is not a Super Admin. Redirecting.`);
             window.location.href = "admin.html"; 
             return;
         }
+        
         document.querySelector('header h1').textContent = `Welcome, ${profile.full_name || 'Super Admin'}!`;
     } else {
+        // Handle case where auth user exists but no profile record is found (should be rare)
+        console.error("Profile not found or fetch error:", profileError?.message);
         window.location.href = "login.html";
         return;
     }
     
+    // Continue with app initialization
     loadSectionData('dashboard');
+    
+    // Setup Event Listeners
+    // ... (rest of your event listeners here)
+}
     
     // Setup Event Listeners
     
@@ -460,7 +485,6 @@ function getProfileTable(role) {
 
 /**
  * Dynamic Block/Term Options based on Program (KRCHN vs TVET).
- * (This function remains unchanged as it handles UI logic only)
  */
 function updateBlockTermOptions(programSelectId, blockTermSelectId) {
     const program = $(programSelectId)?.value;
@@ -495,20 +519,11 @@ function updateBlockTermOptions(programSelectId, blockTermSelectId) {
     blockTermSelect.innerHTML = html;
 }
 
-// NOTE: handleAddAccount logic is kept simple here, but your separate registration script
-// should be handling the students/lecturers table insertion. If this function is still 
-// being used for enrollment, it is faulty and needs modification to also insert into 
-// 'students' or 'lecturers' based on role. (Assuming it's minor enrollment only).
 async function handleAddAccount(e) {
     e.preventDefault();
     const submitButton = e.submitter;
     const originalText = submitButton.textContent;
     setButtonLoading(submitButton, true, originalText);
-
-    // ... (Your existing handleAddAccount logic remains here)
-    // NOTE: For a multi-table setup, this function is flawed. It only inserts into 'profiles', 
-    // which should be 'students' or 'lecturers'. Fixing this requires major changes, so we assume
-    // it's a minor admin enrollment tool for now.
 
     const name = $('account-name').value.trim();
     const email = $('account-email').value.trim();
@@ -697,11 +712,31 @@ async function approveUser(userId, role) {
     const table = getProfileTable(role);
     if (!table) { showFeedback(`Invalid role: ${role}`, 'error'); return; }
 
+    // --- CRITICAL FIX: REFRESH SESSION/TOKEN BEFORE UPDATE ---
+    // This forces the client to use the freshest JWT containing the 'superadmin' role claim.
+    const { data: { session }, error: sessionError } = await sb.auth.getSession();
+    
+    if (sessionError || !session || !currentUserProfile || currentUserProfile.role !== 'superadmin') {
+        // Blocks the update if the token is stale or the role check fails client-side.
+        showFeedback('Session expired or role is not Super Admin. Please log out and log back in to refresh permissions.', 'error');
+        return;
+    }
+    // --------------------------------------------------------
+
     // FIX 4: Target the correct table and update 'status' column
     const { error } = await sb.from(table).update({ status: 'approved' }).eq('user_id', userId);
     
-    if (error) { showFeedback(`Failed to approve user: ${error.message}`, 'error'); } 
-    else { showFeedback('User approved successfully!'); loadPendingApprovals(); loadAllUsers(); loadDashboardData(); }
+    if (error) { 
+        console.error("Approval DB Error:", error);
+        // Display the actual DB error to help diagnose any lingering RLS issues
+        showFeedback(`Failed to approve user: ${error.message}`, 'error'); 
+    } 
+    else { 
+        showFeedback('User approved successfully!'); 
+        loadPendingApprovals(); // Refresh pending list
+        loadAllUsers();         // Refresh users list
+        loadDashboardData();    // Refresh counts
+    }
 }
 
 async function updateUserRole(userId, newRole, oldRole) {
@@ -791,10 +826,9 @@ async function handleEditUser(e) {
     setButtonLoading(submitButton, true, originalText);
 
     // FIX 6: Need to know the user's role/table for the update!
-    // We need to fetch the current role or pass it from the modal trigger
-    // Since we don't have the role easily here, let's query the consolidated view first
+    // We query the consolidated view first to determine the role
     const userId = $('edit_user_id').value;
-    const { data: currentUser } = await fetchData('consolidated_user_profiles', 'role', { user_id: userId }, null, true);
+    const { data: currentUser } = await fetchData('consolidated_user_profiles', 'role, email', { user_id: userId }, null, true);
     const role = currentUser?.[0]?.role;
     const table = getProfileTable(role);
 
@@ -848,7 +882,6 @@ async function handleEditUser(e) {
         setButtonLoading(submitButton, false, originalText);
     }
 }
-
 
 /*******************************************************
  * 5. Courses Tab
