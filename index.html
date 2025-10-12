@@ -1133,17 +1133,31 @@ async function loadCourses() {
     tableBody.innerHTML = '<tr><td colspan="2">Loading courses from Supabase...</td></tr>';
 
     try {
+        // Get user details from consolidated profile
         const program = currentUserProfile?.department || null;
+        const block = currentUserProfile?.block || null;
+        const intakeYear = currentUserProfile?.intake_year || null;
 
+        console.log("📘 Loading courses for:", { program, block, intakeYear });
+
+        // Prevent null query
+        if (!program || !block || !intakeYear) {
+            tableBody.innerHTML = '<tr><td colspan="2">Missing department, block, or intake year. Cannot load courses.</td></tr>';
+            return;
+        }
+
+        // Fetch from Supabase
         const { data: visibleCourses, error } = await sb
             .from('courses')
-            .select('id, course_name, code, status, target_program')
+            .select('id, course_name, code, status, target_program, block, intake_year')
             .or(`target_program.eq.${program},target_program.eq.General`)
+            .eq('block', block)
+            .eq('intake_year', intakeYear)
             .order('course_name', { ascending: true });
 
         if (error) throw error;
 
-        cachedCourses = visibleCourses.map(c => ({
+        cachedCourses = (visibleCourses || []).map(c => ({
             id: c.id,
             name: c.course_name,
             code: c.code,
@@ -1173,6 +1187,7 @@ async function loadCourses() {
 
     document.getElementById('dashboard-active-courses').textContent = cachedCourses.length || 0;
 }
+
 
 // ✅ Load user exams
 async function loadExams() {
