@@ -820,15 +820,41 @@ async function handleEditUser(e) {
     const originalText = submitButton.textContent;
     setButtonLoading(submitButton, true, originalText);
 
-    // FIX 6: Need to know the user's role/table for the update!
-    // We query the consolidated view first to determine the role
     const userId = $('edit_user_id').value;
-    const { data: currentUser } = await fetchData('consolidated_user_profiles', 'role, email', { user_id: userId }, null, true);
-    const role = currentUser?.[0]?.role;
-    const table = getProfileTable(role);
+
+    let role;
+    let table;
+    let currentEmail;
+
+    try {
+        // --- FIX: Direct Supabase query to bypass bug in fetchData ---
+        const { data: currentUserData, error: fetchError } = await sb
+            .from('consolidated_user_profiles')
+            .select('role, email') // Select only the required columns
+            .eq('user_id', userId); // Filter by the user's ID
+        // -----------------------------------------------------------
+
+        if (fetchError) throw fetchError;
+        
+        // Ensure data was actually found
+        if (!currentUserData || currentUserData.length === 0) {
+            throw new Error('User profile not found in consolidated view.');
+        }
+
+        role = currentUserData[0].role;
+        currentEmail = currentUserData[0].email;
+        table = getProfileTable(role);
+
+    } catch (e) {
+        // This catch block handles the error if the view lookup failed
+        console.error('Error determining user role:', e);
+        showFeedback('❌ Error: Could not determine user role for update.', 'error'); 
+        setButtonLoading(submitButton, false, originalText);
+        return;
+    }
 
     if (!table || !role) {
-        showFeedback('Could not determine user role for update.', 'error');
+        showFeedback('❌ Error: Invalid role or profile table detected.', 'error');
         setButtonLoading(submitButton, false, originalText);
         return;
     }
@@ -856,23 +882,29 @@ async function handleEditUser(e) {
     }
 
     try {
-        // FIX 7: Update the correct table using 'user_id'
-        const { error } = await sb.from(table).update(updatedData).eq('user_id', userId);
-        if (error) throw error;
+        // Update the correct table using 'user_id'
+        const { error: updateError } = await sb.from(table).update(updatedData).eq('user_id', userId);
+        if (updateError) throw updateError;
 
         // Update the Auth email if it changed
-        const currentEmail = currentUser?.[0]?.email;
         if (updatedData.email && updatedData.email !== currentEmail) {
-            await sb.auth.admin.updateUserById(userId, { email: updatedData.email });
+            const { error: authUpdateError } = await sb.auth.admin.updateUserById(userId, { 
+                email: updatedData.email 
+            });
+            if (authUpdateError) {
+                console.warn('Auth email update failed (Profile updated):', authUpdateError);
+                showFeedback('Profile updated, but failed to update Auth email.', 'warning');
+            }
+        } else {
+             showFeedback('✅ User profile updated successfully!', 'success');
         }
         
-        showFeedback('User profile updated successfully!');
         $('userEditModal').style.display = 'none';
         loadAllUsers();
         loadStudents();
         loadDashboardData();
     } catch (e) {
-        showFeedback('Failed to update user: ' + (e.message || e), 'error');
+        showFeedback('❌ Failed to update user: ' + (e.message || e), 'error');
     } finally {
         setButtonLoading(submitButton, false, originalText);
     }
