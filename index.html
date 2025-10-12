@@ -1085,9 +1085,7 @@ async function geoCheckIn() {
             geoMessage.textContent = `Check-in failed: Error: ${error.message}`;
         } else {
             geoMessage.textContent = `Check-in successful! Logged at ${new Date(checkInTime).toLocaleTimeString()} near **${location.friendly}**.`;
-            // 🛑 NOTE: The 'loadGeoAttendanceHistory is not defined' error comes from this line.
-            // You must ensure the 'loadGeoAttendanceHistory' function is defined 
-            // at the top-level scope of your JavaScript file.
+            // 🛑 This line requires the function definition which was missing.
             loadGeoAttendanceHistory(currentUserId); 
         }
 
@@ -1098,6 +1096,56 @@ async function geoCheckIn() {
         if (button) button.disabled = false;
     }
 }
+
+/**
+ * @fix The missing function definition for loadGeoAttendanceHistory.
+ * This function is responsible for fetching and displaying the student's 
+ * geo check-in history in the 'Attendance' tab.
+ */
+async function loadGeoAttendanceHistory(userId) {
+    const tableBody = document.getElementById('geo-attendance-history');
+    if (!tableBody) return;
+    tableBody.innerHTML = '<tr><td colspan="6">Loading geo check-in history...</td></tr>';
+    
+    try {
+        const { data: logs, error } = await sb
+            .from('geo_attendance_logs')
+            .select('check_in_time, session_type, target_name, location_friendly_name, accuracy_m, is_verified')
+            .eq('student_id', userId)
+            .order('check_in_time', { ascending: false })
+            .limit(100); // Show last 100 logs
+
+        if (error) throw error;
+        
+        tableBody.innerHTML = '';
+        
+        if (logs.length === 0) {
+            tableBody.innerHTML = '<tr><td colspan="6">No check-in logs found.</td></tr>';
+            return;
+        }
+
+        logs.forEach(log => {
+            const timeStr = new Date(log.check_in_time).toLocaleString();
+            const verifiedText = log.is_verified === true ? '✅ Yes' : (log.is_verified === false ? '❌ No' : '⏳ Pending');
+            const row = `
+                <tr>
+                    <td>${timeStr}</td>
+                    <td>${log.session_type}</td>
+                    <td>${log.target_name}</td>
+                    <td>${log.location_friendly_name || 'N/A'}</td>
+                    <td>${log.accuracy_m ? log.accuracy_m.toFixed(1) : 'N/A'}</td>
+                    <td>${verifiedText}</td>
+                </tr>
+            `;
+            tableBody.innerHTML += row;
+        });
+
+    } catch (error) {
+        console.error("Failed to load attendance history:", error);
+        tableBody.innerHTML = `<tr><td colspan="6" style="color:#EF4444;">Error loading attendance logs: ${error.message}</td></tr>`;
+    }
+}
+
 // *************************************************************************
 // *** 6. SUPABASE DATA LOADING FUNCTIONS (Courses, Exams, Resources) ***
 // *************************************************************************
