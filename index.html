@@ -1120,13 +1120,40 @@ async function loadCourses() {
     tableBody.innerHTML = '<tr><td colspan="2">Loading courses from Supabase...</td></tr>';
 
     try {
+        // --- 1. Get ALL necessary filter values from the profile ---
         const program = currentUserProfile?.department || null;
+        const block = currentUserProfile?.current_block || null;  // Assuming profile field is 'current_block'
+        const intakeYear = currentUserProfile?.intake_year || null; // Assuming profile field is 'intake_year'
 
-        const { data: visibleCourses, error } = await sb
+        if (!program) {
+            console.warn("User profile is missing department. Cannot load filtered courses.");
+            tableBody.innerHTML = '<tr><td colspan="2">No program specified in your profile.</td></tr>';
+            return;
+        }
+
+        let query = sb
             .from('courses')
-            .select('id, course_name, code, status, target_program')
-            .or(`target_program.eq.${program},target_program.eq.General`)
-            .order('course_name', { ascending: true });
+            // Add 'block' and 'intake_year' to the select statement for verification if needed
+            .select('id, course_name, code, status, target_program, block, intake_year'); 
+
+        // --- 2. APPLY Block and Intake Year FILTERS ---
+        
+        // Filter by Intake Year (using the CORRECT column name 'intake_year')
+        if (intakeYear) {
+            // Note: If intakeYear is stored as a number in the DB, it may need to be handled differently (e.g., Number(intakeYear))
+            query = query.eq('intake_year', intakeYear); 
+        }
+
+        // Filter by Block (using the CORRECT column name 'block')
+        if (block) {
+            query = query.eq('block', block); 
+        }
+
+        // Filter by Program (This is the existing, working filter)
+        query = query.or(`target_program.eq.${program},target_program.eq.General`);
+        
+        // --- 3. Execute Query ---
+        const { data: visibleCourses, error } = await query.order('course_name', { ascending: true });
 
         if (error) throw error;
 
