@@ -909,7 +909,6 @@ async function loadClinicalTargets() {
 }
  
 // This function loads courses specific to the student's cohort, allowing for NULL blocks (universal courses).
-// NOTE: Assuming this is the correct function for loading 'Class' options.
 async function loadCourses() {
     if (!currentUserProfile || !currentUserProfile.department || !currentUserProfile.intake_year) {
         cachedCourses = [];
@@ -1063,7 +1062,7 @@ async function geoCheckIn() {
 
         // **************************************************************
         // CRITICAL FIX: Use .rpc() to call the database function 
-        // that handles the DEFERRED transaction and FK logic.
+        // that handles the atomic profile check and attendance insert.
         // **************************************************************
         const { error } = await sb.rpc('check_in_and_defer_fk', {
             // Parameter names MUST match the p_ parameter names in the SQL function
@@ -1086,7 +1085,10 @@ async function geoCheckIn() {
             geoMessage.textContent = `Check-in failed: Error: ${error.message}`;
         } else {
             geoMessage.textContent = `Check-in successful! Logged at ${new Date(checkInTime).toLocaleTimeString()} near **${location.friendly}**.`;
-            loadGeoAttendanceHistory(currentUserId);
+            // 🛑 NOTE: The 'loadGeoAttendanceHistory is not defined' error comes from this line.
+            // You must ensure the 'loadGeoAttendanceHistory' function is defined 
+            // at the top-level scope of your JavaScript file.
+            loadGeoAttendanceHistory(currentUserId); 
         }
 
     } catch (e) {
@@ -1096,7 +1098,6 @@ async function geoCheckIn() {
         if (button) button.disabled = false;
     }
 }
-
 // *************************************************************************
 // *** 6. SUPABASE DATA LOADING FUNCTIONS (Courses, Exams, Resources) ***
 // *************************************************************************
