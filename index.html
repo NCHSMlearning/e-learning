@@ -1352,10 +1352,38 @@ async function fetchAllScheduleData() {
             }));
         });
         
+   async function fetchAllScheduleData() {
+    // 1. **CRITICAL:** GET USER PROFILE DATA FOR FILTERING
+    const program = currentUserProfile?.department || null;
+    const block = currentUserProfile?.current_block || null;
+    const intakeYear = currentUserProfile?.intake_year || null;
+
+    // Exit early if essential profile data is missing
+    if (!program || !block || !intakeYear) {
+        console.warn("Missing profile data for filtering calendar events. Returning empty schedule.");
+        return [];
+    }
+
+    // Assuming sessionsPromise and examsPromise are defined earlier and use the same filters
+    // If you need to include the filtering logic for sessionsPromise and examsPromise,
+    // ensure they use: .eq('target_block', block) and .eq('target_intake_year', intakeYear)
+
+    // Example placeholders for sessionsPromise and examsPromise (You need to keep your actual code here)
+    const sessionsPromise = Promise.resolve([]); 
+    const examsPromise = Promise.resolve([]);
+
+
     // 3️⃣ Holidays/Academic Events (Assuming a 'calendar_events' table)
+    // ⚠️ CORRECTED: Added filtering for program, block, and intake year
     const eventsPromise = sb
         .from('calendar_events')
-        .select('event_name, event_date, type, description')
+        .select('event_name, event_date, type, description, target_program, target_block, target_intake_year')
+        // Filter by program OR general events
+        .or(`target_program.eq.${program},target_program.eq.General`)
+        // CRITICAL: Filter by the user's specific block
+        .eq('target_block', block)
+        // CRITICAL: Filter by the user's specific intake year
+        .eq('target_intake_year', intakeYear)
         .then(({ data, error }) => {
             if (error) { console.error("Events error:", error); return []; }
             return (data || []).map(e => ({
@@ -1374,17 +1402,20 @@ async function loadAcademicCalendar() {
     const calendarDiv = document.getElementById('academic-calendar');
     if (!calendarDiv) return;
     calendarDiv.innerHTML = 'Loading academic schedule...';
-    
+
     try {
         const allEvents = await fetchAllScheduleData();
-        
+
         // Simple display logic for demonstration (you would integrate a library like FullCalendar here)
         let html = '<h4>Upcoming Events</h4>';
         if (allEvents.length === 0) {
-            html += '<p>No scheduled events for your cohort.</p>';
+            html += '<p>No scheduled events found for your cohort.</p>';
         } else {
-            const sortedEvents = allEvents.sort((a, b) => new Date(a.date) - new Date(b.date)).filter(e => new Date(e.date) >= new Date()).slice(0, 10);
-            
+            const sortedEvents = allEvents
+                .sort((a, b) => new Date(a.date) - new Date(b.date))
+                .filter(e => new Date(e.date) >= new Date()) // Only show future events
+                .slice(0, 10); // Limit to the next 10 events
+
             html += '<ul>';
             sortedEvents.forEach(event => {
                 html += `<li><strong>${event.title} (${event.type})</strong>: ${new Date(event.date).toLocaleDateString()} - ${event.details}</li>`;
@@ -1392,7 +1423,7 @@ async function loadAcademicCalendar() {
             html += '</ul>';
         }
         calendarDiv.innerHTML = html;
-        
+
     } catch (error) {
         console.error("Failed to load academic calendar:", error);
         calendarDiv.innerHTML = '<p style="color:#EF4444;">Error loading calendar data.</p>';
