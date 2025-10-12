@@ -909,8 +909,7 @@ async function loadClinicalTargets() {
 }
  
 // This function loads courses specific to the student's cohort, allowing for NULL blocks (universal courses).
-// NOTE: This function is only used to populate the attendance target dropdown for 'Class'
-async function loadCoursesForAttendance() {
+async function loadCourses() {
     if (!currentUserProfile || !currentUserProfile.department || !currentUserProfile.intake_year) {
         cachedCourses = [];
         return;
@@ -921,17 +920,20 @@ async function loadCoursesForAttendance() {
     const intakeYear = currentUserProfile.intake_year;
 
     try {
+        // Step 1: Base query must match program and intake year
         let query = sb
-            // 🎯 FIXED: Changed 'course' to 'courses' to match the database table list.
-            .from('courses') 
+            .from('courses_sections') // 💡 Ensure this is your correct course table name
             .select('id, name, code')
             .eq('program', program)
             .eq('intake_year', intakeYear);
             
+        // Step 2: CRITICAL FIX - Apply flexible filter for 'block' using .or()
         if (block) {
+             // Load courses specific to the block OR courses marked as universal (NULL)
              const blockFilter = `block.eq.${block},block.is.null`; 
              query = query.or(blockFilter);
         } else {
+             // If student has no block, only load courses where block is NULL
              query = query.is('block', null); 
         }
 
@@ -939,7 +941,6 @@ async function loadCoursesForAttendance() {
 
         if (error) throw error;
         
-        // This caches the data, which loadCourses() will then use if it runs later.
         cachedCourses = data.map(course => ({ 
             id: course.id, 
             name: course.name,
@@ -947,7 +948,7 @@ async function loadCoursesForAttendance() {
         }));
         
     } catch (error) {
-        console.error("Error loading courses for attendance target:", error);
+        console.error("Error loading courses:", error);
         cachedCourses = [];
     }
 }
@@ -1097,51 +1098,6 @@ async function geoCheckIn() {
         if (button) button.disabled = false;
     }
 }
-
-// ⚠️ IMPORTANT: Add the missing loadGeoAttendanceHistory function here (needed for checkIn)
-async function loadGeoAttendanceHistory(userId) {
-    const tableBody = document.getElementById('geo-attendance-history');
-    if (!tableBody) return;
-    tableBody.innerHTML = '<tr><td colspan="6">Loading check-in history...</td></tr>';
-    
-    try {
-        const { data: logs, error } = await sb
-            .from('geo_attendance_logs')
-            .select('*')
-            .eq('student_id', userId)
-            .order('check_in_time', { ascending: false })
-            .limit(10); // Show last 10 logs
-
-        if (error) throw error;
-        
-        tableBody.innerHTML = '';
-        if (logs.length === 0) {
-            tableBody.innerHTML = '<tr><td colspan="6">No recent check-in history found.</td></tr>';
-            return;
-        }
-
-        logs.forEach(log => {
-            const timeStr = new Date(log.check_in_time).toLocaleString();
-            const accuracy = log.accuracy_m ? log.accuracy_m.toFixed(1) : 'N/A';
-            const verified = log.is_verified === true ? '✅ Yes' : log.is_verified === false ? '❌ No' : '🕒 Pending';
-            
-            tableBody.innerHTML += `
-                <tr>
-                    <td>${timeStr}</td>
-                    <td>${log.session_type}</td>
-                    <td>${log.target_name}</td>
-                    <td>${log.location_friendly_name.substring(0, 40)}...</td>
-                    <td>${accuracy}</td>
-                    <td>${verified}</td>
-                </tr>
-            `;
-        });
-
-    } catch (error) {
-        console.error("Error loading attendance history:", error);
-        tableBody.innerHTML = `<tr><td colspan="6" style="color:#EF4444;">Error loading history: ${error.message}</td></tr>`;
-    }
-}
 // *************************************************************************
 // *** 6. SUPABASE DATA LOADING FUNCTIONS (Courses, Exams, Resources) ***
 // *************************************************************************
@@ -1149,80 +1105,68 @@ async function loadGeoAttendanceHistory(userId) {
 // ✅ Load user courses
 async function loadCourses() {
     const tableBody = document.getElementById('courses-table');
-    const isGlobalCache = true; // Use a flag for consistency if needed, but the main logic is the UI update
-    if (!tableBody && !isGlobalCache) return;
-    if (tableBody) tableBody.innerHTML = '<tr><td colspan="2">Loading courses from Supabase...</td></tr>';
-
-    
-    // Check if profile data is available (needed for filtering)
-    if (!currentUserProfile || !currentUserProfile.department || !currentUserProfile.intake_year) {
-        cachedCourses = [];
-        if (tableBody) tableBody.innerHTML = '<tr><td colspan="2">No profile info to load courses.</td></tr>';
-        return;
-    }
-
-    const program = currentUserProfile.department; 
-    const block = currentUserProfile.block; 
-    const intakeYear = currentUserProfile.intake_year;
+    if (!tableBody) return;
+    tableBody.innerHTML = '<tr><td colspan="2">Loading courses from Supabase...</td></tr>';
 
     try {
-        let query = sb
-            // 🎯 FIXED: Changed table name to 'courses' (plural)
-            .from('courses') 
-            .select('id, name, code') 
-            .eq('program', program)
-            .eq('intake_year', intakeYear);
-            
-        // Apply flexible filter for 'block'
-        if (block) {
-             // Load courses specific to the block OR courses marked as universal (NULL)
-             const blockFilter = `block.eq.${block},block.is.null`; 
-             query = query.or(blockFilter);
-        } else {
-             // If student has no block, only load courses where block is NULL
-             query = query.is('block', null); 
+        // --- 1. Get ALL necessary filter values from the profile ---
+        const program = currentUserProfile?.department || null;
+        // 💡 CRITICAL FIX: Ensure 'block' is used consistently with loadProfile
+        const block = currentUserProfile?.block || null;  
+        const intakeYear = currentUserProfile?.intake_year || null; 
+
+        if (!program || !block || !intakeYear) {
+            console.warn("User profile is missing department, block, or intake year. Cannot load filtered courses.");
+            tableBody.innerHTML = '<tr><td colspan="2">No program, block, or intake year specified in your profile.</td></tr>';
+            return;
         }
 
-        const { data, error } = await query.order('name');
+        let query = sb
+            .from('courses')
+            .select('id, course_name, code, status, target_program, block, intake_year'); 
+
+        // --- 2. APPLY Block and Intake Year FILTERS ---
+        
+        query = query.eq('intake_year', intakeYear); 
+        query = query.eq('block', block); 
+
+        // Filter by Program 
+        query = query.or(`target_program.eq.${program},target_program.eq.General`);
+        
+        // --- 3. Execute Query ---
+        const { data: visibleCourses, error } = await query.order('course_name', { ascending: true });
 
         if (error) throw error;
-        
-        // Cache the data using the correct column names (name, code)
-        cachedCourses = data.map(course => ({ 
-            id: course.id, 
-            name: course.name,
-            code: course.code 
+
+        cachedCourses = visibleCourses.map(c => ({
+            id: c.id,
+            name: c.course_name,
+            code: c.code,
+            status: c.status || 'Active'
         }));
-        
-        // Update the courses table UI
-        if (tableBody) {
-             tableBody.innerHTML = '';
-             if (cachedCourses.length > 0) {
-                 cachedCourses.forEach(c => {
-                     tableBody.innerHTML += `
-                         <tr>
-                             <td>${c.code ? c.code + ' - ' : ''}${c.name}</td>
-                             <td>Active</td>
-                         </tr>
-                     `;
-                 });
-             } else {
-                 tableBody.innerHTML = '<tr><td colspan="2">No courses found for your block/year.</td></tr>';
-             }
+
+        tableBody.innerHTML = '';
+
+        if (cachedCourses.length > 0) {
+            cachedCourses.forEach(c => {
+                tableBody.innerHTML += `
+                    <tr>
+                        <td>${c.code ? c.code + ' - ' : ''}${c.name}</td>
+                        <td>${c.status}</td>
+                    </tr>
+                `;
+            });
+        } else {
+            tableBody.innerHTML = '<tr><td colspan="2">No courses found for your block/year.</td></tr>';
         }
-        
+
     } catch (error) {
-        console.error("Error loading courses:", error);
-        if (tableBody) tableBody.innerHTML = `<tr style="color:#EF4444;"><td colspan="2">❌ Error loading courses: ${error.message}</td></tr>`;
+        console.error("❌ Failed to load courses:", error);
+        tableBody.innerHTML = `<tr><td colspan="2" style="color:#EF4444;">Error loading courses: ${error.message}</td></tr>`;
         cachedCourses = [];
     }
-    
-    // Update the dashboard card metric
-    if (document.getElementById('dashboard-active-courses')) document.getElementById('dashboard-active-courses').textContent = cachedCourses.length || 0;
 
-    // After loading the courses for the Courses tab, reload the target list for attendance
-    // using the newly loaded and cached list.
-    loadCoursesForAttendance(); 
+    if (document.getElementById('dashboard-active-courses')) document.getElementById('dashboard-active-courses').textContent = cachedCourses.length || 0;
 }
 
 
