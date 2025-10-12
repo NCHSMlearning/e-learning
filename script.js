@@ -822,7 +822,7 @@ async function handleEditUser(e) {
 
     const userId = $('edit_user_id').value;
     const newEmail = $('edit_user_email').value.trim();
-    const newRole = $('edit_user_role').value; // Value for the profiles table update
+    const newRole = $('edit_user_role').value;
 
     let role; // Original role
     let table; // Target table ('students' or 'lecturers')
@@ -861,10 +861,11 @@ async function handleEditUser(e) {
     // 2. DATA: Prepare data ONLY for the specific profile table (students/lecturers)
     const profileSpecificData = {
         full_name: $('edit_user_name').value.trim(),
-        // Note: 'email' and 'role' are EXCLUDED here to prevent the schema error.
         intake_year: $('edit_user_intake').value,
         block: $('edit_user_block').value,
-        block_program_year: $('edit_user_block_status').value === 'true'
+        block_program_year: $('edit_user_block_status').value === 'true',
+        // ⭐ FINAL FIX: Explicitly set status to approved when Super Admin saves the profile.
+        status: 'approved' 
     };
 
     // Use the appropriate program/course field name based on the original role
@@ -887,14 +888,14 @@ async function handleEditUser(e) {
         if (newRole && newRole !== role) {
             const { error: profileUpdateError } = await sb.from('profiles')
                 .update({ role: newRole })
-                .eq('id', userId); // The 'profiles' table uses 'id' for the Auth ID
+                .eq('id', userId); 
             if (profileUpdateError) throw profileUpdateError;
         }
 
-        // B. UPDATE 2: Update the specific profile table (students/lecturers)
+        // B. UPDATE 2: Update the specific profile table (students/lecturers), including the new 'approved' status
         const { error: specificTableError } = await sb.from(table)
-            .update(profileSpecificData)
-            .eq('user_id', userId); // Use 'user_id' as confirmed by schema
+            .update(profileSpecificData) 
+            .eq('user_id', userId); 
         
         if (specificTableError) throw specificTableError;
 
@@ -921,7 +922,6 @@ async function handleEditUser(e) {
         setButtonLoading(submitButton, false, originalText);
     }
 }
-
 /*******************************************************
  * 5. Courses Tab
  *******************************************************/
