@@ -199,119 +199,126 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
     
-    <script>
-          // Hides the .html extension in the URL
-        if (window.location.pathname.endsWith('.html')) {
-            const cleanPath = window.location.pathname.replace(/\.html$/, '');
-            window.history.replaceState({}, '', cleanPath);
-        }
-        document.addEventListener('DOMContentLoaded', () => {
-            // =========================================================================
-            // *** SUPABASE CONFIGURATION - Using the keys you provided ***
-            // =========================================================================
-            const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co'; 
-            const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk'; 
-            // =========================================================================
-            
-            // Create the Supabase client instance
-            const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-                auth: {
-                    persistSession: true, 
-                    autoRefreshToken: true,
-                    detectSessionInUrl: true,
-                    storage: window.localStorage, 
-                },
-            });
-
-            const errorMsg = document.getElementById('errorMsg');
-            const loginForm = document.getElementById('loginForm');
-            const loginButton = document.getElementById('loginButton');
-
-            if (!loginForm) {
-                console.error("Login form element not found!");
-                return;
-            }
-
-            loginForm.addEventListener('submit', async e => {
-                e.preventDefault();
-                errorMsg.innerText = '';
-                loginButton.disabled = true;
-
-                const email = document.getElementById('email').value.trim();
-                const password = document.getElementById('password').value;
-
-                try {
-                    // 1. SIGN IN (Authenticates the user and gets a session)
-                    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password });
-                    
-                    if (authError || !authData.user) {
-                        errorMsg.innerText = authError?.message || 'Login failed: Check your username and password.';
-                        loginButton.disabled = false;
-                        return;
-                    }
-
-                    const userId = authData.user.id;
-                    
-                    // 2. GET ROLE AND CRITICAL APPROVAL STATUS
-                    const { data: profile, error: profileError } = await supabase
-                        .from('profiles')
-                        .select('role, approved') 
-                        .eq('id', userId)
-                        .single();
-
-                    if (profileError) {
-                        errorMsg.innerText = 'Login failed: Profile access denied. Check database RLS.';
-                        console.error("Profile Retrieval Error:", profileError);
-                        await supabase.auth.signOut();
-                        loginButton.disabled = false;
-                        return;
-                    }
-                    
-                    if (!profile) {
-                        errorMsg.innerText = 'Login failed: User profile missing. Please contact system admin.';
-                        await supabase.auth.signOut();
-                        loginButton.disabled = false;
-                        return;
-                    }
-                    
-                    // --- CRITICAL SECURITY CHECK: HARDENED ---
-                    // Blocks if 'approved' is false, null, undefined, or anything other than explicitly true.
-                    if (profile.approved !== true) {
-                        console.warn("[SECURITY BLOCKED] Unapproved user attempted login. Status:", profile.approved);
-                        
-                        // 1. Block access message
-                        errorMsg.innerText = 'Login failed: Your account is pending approval from an administrator.';
-                        
-                        // 2. Destroy the active session 
-                        await supabase.auth.signOut(); 
-                        
-                        loginButton.disabled = false;
-                        return;
-                    }
-
-                    // 3. REDIRECT (ONLY runs if approved is TRUE)
-                    const userRole = profile.role.toLowerCase();
-                    
-                    switch (userRole) {
-                        case 'superadmin':
-                            window.location.href = 'superadmin.html';
-                            break;
-                        case 'admin':
-                            window.location.href = 'admin.html';
-                            break;
-                        case 'student':
-                        default:
-                            window.location.href = 'index.html'; 
-                            break;
-                    }
-
-                } catch (err) {
-                    console.error('Unexpected System Error:', err);
-                    errorMsg.innerText = 'A critical system error occurred. Please try again later.';
-                    loginButton.disabled = false;
-                }
-            });
+  <script>
+    // Hides the .html extension in the URL
+    if (window.location.pathname.endsWith('.html')) {
+        const cleanPath = window.location.pathname.replace(/\.html$/, '');
+        window.history.replaceState({}, '', cleanPath);
+    }
+    
+    document.addEventListener('DOMContentLoaded', () => {
+        // =========================================================================
+        // *** SUPABASE CONFIGURATION - Use your project keys ***
+        // =========================================================================
+        const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co'; 
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk'; 
+        // =========================================================================
+        
+        // Create the Supabase client instance
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+            auth: {
+                persistSession: true, 
+                autoRefreshToken: true,
+                detectSessionInUrl: true,
+                storage: window.localStorage, 
+            },
         });
-    </script>
+
+        const errorMsg = document.getElementById('errorMsg');
+        const loginForm = document.getElementById('loginForm');
+        const loginButton = document.getElementById('loginButton');
+
+        if (!loginForm) {
+            console.error("Login form element not found!");
+            return;
+        }
+
+        loginForm.addEventListener('submit', async e => {
+            e.preventDefault();
+            errorMsg.innerText = '';
+            loginButton.disabled = true;
+
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+
+            try {
+                // 1. SIGN IN (Authenticates the user and gets a session)
+                const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+                
+                if (authError || !authData.user) {
+                    errorMsg.innerText = authError?.message || 'Login failed: Check your username and password.';
+                    loginButton.disabled = false;
+                    return;
+                }
+
+                const userId = authData.user.id;
+                
+                // 2. GET ROLE AND CRITICAL APPROVAL STATUS
+                // FIX: Use .limit(1) to prevent the 406 Not Acceptable error
+                const { data: profileData, error: profileError } = await supabase
+                    .from('profiles')
+                    .select('role, approved') 
+                    .eq('id', userId)
+                    .limit(1); // ⭐ The critical fix for the 406 error
+
+                // --- ERROR HANDLING ---
+                if (profileError) {
+                    errorMsg.innerText = 'Login failed: Profile access denied. Check database RLS.';
+                    console.error("Profile Retrieval Error:", profileError);
+                    await supabase.auth.signOut();
+                    loginButton.disabled = false;
+                    return;
+                }
+                
+                // Check if the profile was found (array will be empty if RLS blocked it)
+                if (!profileData || profileData.length === 0) {
+                    errorMsg.innerText = 'Login failed: User profile missing (RLS block or data error).';
+                    console.error("Profile Data Missing. RLS likely denied access.");
+                    await supabase.auth.signOut();
+                    loginButton.disabled = false;
+                    return;
+                }
+                
+                // Access the actual profile object from the array
+                const profile = profileData[0];
+                
+                // --- CRITICAL SECURITY CHECK: HARDENED ---
+                if (profile.approved !== true) {
+                    console.warn("[SECURITY BLOCKED] Unapproved user attempted login. Status:", profile.approved);
+                    
+                    // 1. Block access message
+                    errorMsg.innerText = 'Login failed: Your account is pending approval from an administrator.';
+                    
+                    // 2. Destroy the active session 
+                    await supabase.auth.signOut(); 
+                    
+                    loginButton.disabled = false;
+                    return;
+                }
+
+                // 3. REDIRECT (ONLY runs if approved is TRUE)
+                const userRole = profile.role.toLowerCase();
+                
+                switch (userRole) {
+                    case 'superadmin':
+                        window.location.href = 'superadmin.html';
+                        break;
+                    case 'admin':
+                        window.location.href = 'admin.html';
+                        break;
+                    case 'student':
+                    default:
+                        window.location.href = 'index.html'; 
+                        break;
+                }
+
+            } catch (err) {
+                console.error('Unexpected System Error:', err);
+                errorMsg.innerText = 'A critical system error occurred. Please try again later.';
+                loginButton.disabled = false;
+            }
+        });
+    });
+</script>
 </body>
 </html>
