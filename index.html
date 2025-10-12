@@ -524,12 +524,12 @@
         }
         if (tabId === 'dashboard' && currentUserId) {
             loadWelcomeDetails(); 
-            loadCourses();
+            const program();
             loadExams();
             loadResources();
             setTimeout(() => loadDashboardMetrics(currentUserId), 500); 
         }
-        if (tabId === 'courses' && currentUserId) loadCourses(); 
+        if (tabId === 'courses' && currentUserId) const program(); 
         if (tabId === 'resources' && currentUserId) loadResources(); 
         if (tabId === 'cats' && currentUserId) loadExams();
         if (tabId === 'messages' && currentUserId) loadStudentMessages(); 
@@ -705,7 +705,7 @@ async function checkAuthAndLoad() {
         await loadProfile(currentUserId);
 
         // Load all data sources once profile is available
-        await loadCourses();
+        await const program();
         await loadExams();
         await loadResources();
         await loadClinicalTargets();
@@ -1127,37 +1127,23 @@ async function loadUserProfile(email) {
     }
 }
 
-// ✅ Load user courses
+// ✅ Load user courses (uses department instead of program)
 async function loadCourses() {
     const tableBody = document.getElementById('courses-table');
     tableBody.innerHTML = '<tr><td colspan="2">Loading courses from Supabase...</td></tr>';
 
     try {
-        // Get user details from consolidated profile
-        const program = currentUserProfile?.department || null;
-        const block = currentUserProfile?.block || null;
-        const intakeYear = currentUserProfile?.intake_year || null;
+        const department = currentUserProfile?.department || null;
 
-        console.log("📘 Loading courses for:", { program, block, intakeYear });
-
-        // Prevent null query
-        if (!program || !block || !intakeYear) {
-            tableBody.innerHTML = '<tr><td colspan="2">Missing department, block, or intake year. Cannot load courses.</td></tr>';
-            return;
-        }
-
-        // Fetch from Supabase
         const { data: visibleCourses, error } = await sb
             .from('courses')
-            .select('id, course_name, code, status, target_program, block, intake_year')
-            .or(`target_program.eq.${program},target_program.eq.General`)
-            .eq('block', block)
-            .eq('intake_year', intakeYear)
+            .select('id, course_name, code, status, target_program')
+            .or(`target_program.eq.${department},target_program.eq.General`)
             .order('course_name', { ascending: true });
 
         if (error) throw error;
 
-        cachedCourses = (visibleCourses || []).map(c => ({
+        cachedCourses = visibleCourses.map(c => ({
             id: c.id,
             name: c.course_name,
             code: c.code,
@@ -1176,7 +1162,7 @@ async function loadCourses() {
                 `;
             });
         } else {
-            tableBody.innerHTML = '<tr><td colspan="2">No courses found for your block/year.</td></tr>';
+            tableBody.innerHTML = `<tr><td colspan="2">No courses found for your department (${department}) yet.</td></tr>`;
         }
 
     } catch (error) {
@@ -1187,7 +1173,6 @@ async function loadCourses() {
 
     document.getElementById('dashboard-active-courses').textContent = cachedCourses.length || 0;
 }
-
 
 // ✅ Load user exams
 async function loadExams() {
