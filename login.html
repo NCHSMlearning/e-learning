@@ -246,14 +246,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const userId = authData.user.id;
 
-            // 2. FETCH APPROVAL & ROLE (consolidated table)
+            // 2. FETCH APPROVAL & ROLE
             let { data: profileData, error: profileError } = await supabase
                 .from('consolidated_user_profiles_table')
                 .select('role, status, intake_year, block')
                 .eq('user_id', userId)
                 .limit(1);
 
-            // 3. FALLBACK TO profiles TABLE (superadmins)
+            // 3. FALLBACK TO profiles (superadmins)
             if ((!profileData || profileData.length === 0) && userId) {
                 const { data: fallbackData, error: fallbackError } = await supabase
                     .from('profiles')
@@ -285,7 +285,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // 5. FETCH FULL PROFILE FOR DASHBOARD
+            // 5. FETCH FULL PROFILE
             const { data: fullProfile, error: fullProfileError } = await supabase
                 .from('consolidated_user_profiles_table')
                 .select(`
@@ -310,28 +310,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // 6. POPULATE DASHBOARD FIELDS (optional)
             const profile = fullProfile[0];
-            document.getElementById('fullName').innerText = profile.full_name || 'Unknown Student';
-            document.getElementById('email').innerText = profile.email || 'N/A';
-            document.getElementById('phone').innerText = profile.phone || 'N/A';
-            document.getElementById('program').innerText = profile.department || 'N/A';
-            document.getElementById('block').innerText = profile.block || 'N/A';
-            document.getElementById('intakeYear').innerText = profile.intake_year || 'N/A';
 
-            // 7. REDIRECT BASED ON ROLE
-            switch (profile.role.toLowerCase()) {
-                case 'superadmin':
-                    window.location.href = 'superadmin.html';
-                    break;
-                case 'admin':
-                    window.location.href = 'admin.html';
-                    break;
-                case 'student':
-                default:
-                    window.location.href = 'index.html';
-                    break;
-            }
+            // 6. Store session data for dashboard
+            localStorage.setItem('currentUserProfile', JSON.stringify(profile));
+
+            // 7. Redirect by role
+            const role = profile.role?.toLowerCase() || 'student';
+            let redirectURL = 'index.html';
+            if (role === 'superadmin') redirectURL = 'superadmin.html';
+            else if (role === 'admin') redirectURL = 'admin.html';
+
+            errorMsg.innerText = 'Login successful! Redirecting...';
+            setTimeout(() => {
+                window.location.href = redirectURL;
+            }, 1000);
 
         } catch (err) {
             console.error('Unexpected System Error:', err);
