@@ -466,233 +466,167 @@
     }
 
     // *************************************************************************
-    // *** 1. CONFIGURATION: UPDATE THESE VALUES ***
-    // *************************************************************************
+// *** 2. UI AND NAVIGATION LOGIC ***
+// *************************************************************************
+const navLinks = document.querySelectorAll('.nav a');
+const tabs = document.querySelectorAll('.tab-content');
+
+function showTab(tabId) {
+    navLinks.forEach(l => l.classList.remove('active'));
+    const activeLink = document.querySelector(`.nav a[data-tab="${tabId}"]`);
+    if (activeLink) activeLink.classList.add('active');
+
+    tabs.forEach(tab => tab.classList.remove('active'));
+    const activeTab = document.getElementById(tabId);
+    if (activeTab) activeTab.classList.add('active');
     
-    // ** SUPABASE CONFIGURATION **
-    // !!! IMPORTANT: REPLACE THESE KEYS WITH YOUR ACTUAL SUPABASE DETAILS !!!
-    const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co'; 
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk'; 
-    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-    // ** LOCATIONIQ CONFIGURATION (Geocoding API) **
-    const LOCATIONIQ_API_KEY = 'pk.cbe61eae35ecbe1d1d682c347d81381c'; 
-    const LOCATIONIQ_API_URL = 'https://us1.locationiq.com/v1/reverse.php';
-    
-    // ** FALLBACK LOCATION **
-    const FALLBACK_LAT = -1.286389; 
-    const FALLBACK_LON = 36.817223;
-    const FALLBACK_ACCURACY = 500; 
-
-    // ** SUPABASE TABLE NAMES FOR WELCOME MESSAGE **
-    const SETTINGS_TABLE = 'app_settings'; 
-    const MESSAGE_KEY = 'student_welcome_message'; 
-
-    let currentUserId = null;
-    let currentUserProfile = null;
-    let cachedCourses = []; 
-    let cachedExams = [];
-    let cachedClinicalAreas = []; 
-    let cachedSchedule = []; 
-
-    // DOM Elements
-    const geoMessage = document.getElementById('geo-message');
-    const sessionTypeSelect = document.getElementById('session-type');
-    const attendanceTargetSelect = document.getElementById('attendance-target');
-    const welcomeHeader = document.getElementById('welcome-header');
-
-      
-    // *************************************************************************
-    // *** 2. UI AND NAVIGATION LOGIC ***
-    // *************************************************************************
-    const navLinks = document.querySelectorAll('.nav a');
-    const tabs = document.querySelectorAll('.tab-content');
-
-    function showTab(tabId) {
-        navLinks.forEach(l => l.classList.remove('active'));
-        const activeLink = document.querySelector(`.nav a[data-tab="${tabId}"]`);
-        if(activeLink) activeLink.classList.add('active');
-
-        tabs.forEach(tab => tab.classList.remove('active'));
-        const activeTab = document.getElementById(tabId);
-        if(activeTab) activeTab.classList.add('active');
-        
-        // Load data specific to the tab being activated
-        if (tabId === 'profile' && currentUserId) loadProfile(currentUserId); 
-        if (tabId === 'attendance' && currentUserId) {
-            loadGeoAttendanceHistory(currentUserId); 
-            updateTargetSelect();
-        }
-        if (tabId === 'dashboard' && currentUserId) {
-            loadWelcomeDetails(); 
-            const program();
-            loadExams();
-            loadResources();
-            setTimeout(() => loadDashboardMetrics(currentUserId), 500); 
-        }
-        if (tabId === 'courses' && currentUserId) const program(); 
-        if (tabId === 'resources' && currentUserId) loadResources(); 
-        if (tabId === 'cats' && currentUserId) loadExams();
-        if (tabId === 'messages' && currentUserId) loadStudentMessages(); 
-        if (tabId === 'calendar' && currentUserId) loadAcademicCalendar(); 
+    // Load data specific to the tab being activated
+    if (tabId === 'profile' && currentUserId) loadProfile(currentUserId);
+    if (tabId === 'attendance' && currentUserId) {
+        loadGeoAttendanceHistory(currentUserId);
+        updateTargetSelect();
     }
-
-    navLinks.forEach(link => {
-        link.addEventListener('click', e => {
-            e.preventDefault();
-            showTab(link.dataset.tab);
-        });
-    });
-
-    async function logout() {
-        sb.realtime.channels.forEach(channel => sb.removeChannel(channel)); 
-        await sb.auth.signOut();
-        window.location.href = "login.html"; // Redirect to your login page
+    if (tabId === 'dashboard' && currentUserId) {
+        loadWelcomeDetails();
+        loadProgram();      // ✅ correct function to load program data
+        loadExams();
+        loadResources();
+        setTimeout(() => loadDashboardMetrics(currentUserId), 500);
     }
-
-    // *************************************************************************
-    // *** 3. CORE DATA AND DASHBOARD FUNCTIONS ***
-    // *************************************************************************
-    
-    async function loadWelcomeDetails() {
-        // 1. Update Name in Header
-        let studentName = 'Student'; // Default name
-
-        if (currentUserProfile && currentUserProfile.full_name) {
-            // Pick only the first word/name
-            const parts = currentUserProfile.full_name.trim().split(/\s+/);
-            if (parts.length > 0) {
-                 studentName = parts[0];
-            }
-        }
-        
-        // Update the main welcome header using the first name
-        welcomeHeader.textContent = `Welcome, ${studentName}!`; 
-
-        // 2. Load Admin Message
-        await loadStudentWelcomeMessage();
-    }
-    
-    async function loadStudentWelcomeMessage() {
-        const messageDiv = document.getElementById('student-welcome-message');
-        if (!messageDiv) return;
-
-        messageDiv.textContent = 'Loading official announcement...';
-
-        // 1. Fetch initial message
-        const { data, error } = await sb
-            .from(SETTINGS_TABLE)
-            .select('value')
-            .eq('key', MESSAGE_KEY)
-            .single();
-
-        if (!error && data) {
-            messageDiv.innerHTML = data.value;
-        } else {
-            messageDiv.innerHTML =
-                'Welcome to the Student Portal! Stay informed and use the navigation on the left. (Default Message)';
-        }
-
-        // 2. Listen for live updates (Realtime setup)
-        sb.channel('student_welcome_updates')
-            .on(
-                'postgres_changes',
-                {
-                    event: 'UPDATE', 
-                    schema: 'public',
-                    table: SETTINGS_TABLE,
-                    filter: `key=eq.${MESSAGE_KEY}`,
-                },
-                (payload) => {
-                    const newValue = payload.new?.value;
-                    if (newValue) {
-                        messageDiv.innerHTML = newValue;
-                        console.log("Admin message updated in real-time.");
-                    }
-                }
-            )
-            .subscribe();
-    }
-    
-    async function loadDashboardMetrics(userId) {
-        // --- 1. Load Active Courses Count (uses cachedCourses) ---
-        document.getElementById('dashboard-active-courses').textContent = cachedCourses.length;
-
-      // --- 2. Load Attendance Rate (Weekly, Real-time) ---
-try {
-    const now = new Date();
-    const dayOfWeek = now.getDay(); // 0=Sunday, 1=Monday, ...
-    
-    // Compute Monday of this week
-    const monday = new Date(now);
-    monday.setDate(now.getDate() - ((dayOfWeek + 6) % 7)); // Monday = 0 offset if today is Monday
-    monday.setHours(0,0,0,0);
-
-    // Compute Sunday of this week
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-    sunday.setHours(23,59,59,999);
-
-    const { data: logs, error } = await sb
-        .from('geo_attendance_logs')
-        .select('check_in_time, is_verified')
-        .eq('student_id', userId)
-        .gte('check_in_time', monday.toISOString())
-        .lte('check_in_time', sunday.toISOString());
-
-    if (error) throw error;
-
-    const totalSessions = logs.length;
-    const attended = logs.filter(l => l.is_verified !== false).length;
-
-    const attendanceRate = totalSessions > 0
-        ? Math.round((attended / totalSessions) * 100)
-        : 0;
-
-    document.getElementById('dashboard-attendance-rate').textContent = `${attendanceRate}%`;
-
-} catch (err) {
-    console.error("Failed to load weekly attendance:", err);
-    document.getElementById('dashboard-attendance-rate').textContent = 'N/A';
+    if (tabId === 'courses' && currentUserId) loadProgram();
+    if (tabId === 'resources' && currentUserId) loadResources();
+    if (tabId === 'cats' && currentUserId) loadExams();
+    if (tabId === 'messages' && currentUserId) loadStudentMessages();
+    if (tabId === 'calendar' && currentUserId) loadAcademicCalendar();
 }
 
+navLinks.forEach(link => {
+    link.addEventListener('click', e => {
+        e.preventDefault();
+        showTab(link.dataset.tab);
+    });
+});
 
-        // --- 3. Load Upcoming Exam (uses cachedExams) ---
-        let nextExamText = 'None Scheduled';
-        if (cachedExams && cachedExams.length > 0) {
-             const now = new Date();
-             const upcomingExam = cachedExams.find(e => new Date(e.exam_date) >= now);
-             if (upcomingExam) {
-                 nextExamText = `${new Date(upcomingExam.exam_date).toLocaleDateString()} (${upcomingExam.exam_name})`;
-             } else {
-                 nextExamText = 'Semester Complete';
-             }
-        }
-        document.getElementById('dashboard-upcoming-exam').textContent = nextExamText;
+async function logout() {
+    sb.realtime.channels.forEach(channel => sb.removeChannel(channel));
+    await sb.auth.signOut();
+    window.location.href = "login.html";
+}
 
-        // --- 4. Load New Resources (Handled in loadResources) ---
+// *************************************************************************
+// *** 3. CORE DATA AND DASHBOARD FUNCTIONS ***
+// *************************************************************************
 
-        // --- 5. Conditional Action Required Section ---
-        const passportCard = document.getElementById('action-passport');
-        let profileIncomplete = !(currentUserProfile && currentUserProfile.passport_url); 
-        
-        passportCard.style.display = profileIncomplete ? 'block' : 'none';
-        
-        const actionsContainer = document.getElementById('dashboard-actions');
-        const actionTitle = document.getElementById('actions-title');
-        
-        if (actionTitle) {
-            // Check if only the 'Review New Course Material' card is showing
-            const visibleActions = Array.from(actionsContainer.children).filter(child => child.style.display !== 'none').length;
-            
-            if (visibleActions === 0) { 
-                 actionTitle.style.display = 'none';
-            } else {
-                 actionTitle.style.display = 'block';
-            }
+async function loadWelcomeDetails() {
+    let studentName = 'Student'; // Default name
+
+    if (currentUserProfile && currentUserProfile.full_name) {
+        const parts = currentUserProfile.full_name.trim().split(/\s+/);
+        if (parts.length > 0) {
+            studentName = parts[0];
         }
     }
-    
+
+    welcomeHeader.textContent = `Welcome, ${studentName}!`;
+    await loadStudentWelcomeMessage();
+}
+
+async function loadStudentWelcomeMessage() {
+    const messageDiv = document.getElementById('student-welcome-message');
+    if (!messageDiv) return;
+
+    messageDiv.textContent = 'Loading official announcement...';
+
+    const { data, error } = await sb
+        .from(SETTINGS_TABLE)
+        .select('value')
+        .eq('key', MESSAGE_KEY)
+        .single();
+
+    if (!error && data) {
+        messageDiv.innerHTML = data.value;
+    } else {
+        messageDiv.innerHTML = 'Welcome to the Student Portal! Stay informed and use the navigation on the left.';
+    }
+
+    sb.channel('student_welcome_updates')
+        .on(
+            'postgres_changes',
+            {
+                event: 'UPDATE',
+                schema: 'public',
+                table: SETTINGS_TABLE,
+                filter: `key=eq.${MESSAGE_KEY}`,
+            },
+            (payload) => {
+                const newValue = payload.new?.value;
+                if (newValue) {
+                    messageDiv.innerHTML = newValue;
+                    console.log("Admin message updated in real-time.");
+                }
+            }
+        )
+        .subscribe();
+}
+
+async function loadDashboardMetrics(userId) {
+    document.getElementById('dashboard-active-courses').textContent = cachedCourses.length;
+
+    try {
+        const now = new Date();
+        const dayOfWeek = now.getDay();
+        const monday = new Date(now);
+        monday.setDate(now.getDate() - ((dayOfWeek + 6) % 7));
+        monday.setHours(0, 0, 0, 0);
+
+        const sunday = new Date(monday);
+        sunday.setDate(monday.getDate() + 6);
+        sunday.setHours(23, 59, 59, 999);
+
+        const { data: logs, error } = await sb
+            .from('geo_attendance_logs')
+            .select('check_in_time, is_verified')
+            .eq('student_id', userId)
+            .gte('check_in_time', monday.toISOString())
+            .lte('check_in_time', sunday.toISOString());
+
+        if (error) throw error;
+
+        const totalSessions = logs.length;
+        const attended = logs.filter(l => l.is_verified !== false).length;
+        const attendanceRate = totalSessions > 0 ? Math.round((attended / totalSessions) * 100) : 0;
+
+        document.getElementById('dashboard-attendance-rate').textContent = `${attendanceRate}%`;
+    } catch (err) {
+        console.error("Failed to load weekly attendance:", err);
+        document.getElementById('dashboard-attendance-rate').textContent = 'N/A';
+    }
+
+    let nextExamText = 'None Scheduled';
+    if (cachedExams && cachedExams.length > 0) {
+        const now = new Date();
+        const upcomingExam = cachedExams.find(e => new Date(e.exam_date) >= now);
+        if (upcomingExam) {
+            nextExamText = `${new Date(upcomingExam.exam_date).toLocaleDateString()} (${upcomingExam.exam_name})`;
+        } else {
+            nextExamText = 'Semester Complete';
+        }
+    }
+    document.getElementById('dashboard-upcoming-exam').textContent = nextExamText;
+
+    const passportCard = document.getElementById('action-passport');
+    let profileIncomplete = !(currentUserProfile && currentUserProfile.passport_url);
+    passportCard.style.display = profileIncomplete ? 'block' : 'none';
+
+    const actionsContainer = document.getElementById('dashboard-actions');
+    const actionTitle = document.getElementById('actions-title');
+
+    if (actionTitle) {
+        const visibleActions = Array.from(actionsContainer.children).filter(child => child.style.display !== 'none').length;
+        actionTitle.style.display = visibleActions === 0 ? 'none' : 'block';
+    }
+}
+
 // *************************************************************************
 // *** 4. AUTHENTICATION AND PROFILE MANAGEMENT ***
 // *************************************************************************
@@ -705,20 +639,18 @@ async function checkAuthAndLoad() {
 
         await loadProfile(currentUserId);
 
-        // ✅ Fix: properly define program using department from profile
-        const program = currentUserProfile?.department || currentUserProfile?.program || null;
+        // ✅ Keep program reference simple — profile already includes it
+        const program = currentUserProfile?.program || null;
 
-       // Load all data sources once profile is available
-        await const program();
+        // Load all data sources once profile is available
+        await loadProgram();
         await loadExams();
         await loadResources();
         await loadClinicalTargets();
-
         await loadWelcomeDetails();
 
         showTab('dashboard');
         setTimeout(() => loadDashboardMetrics(currentUserId), 500);
-
     } else {
         console.warn("No active user session found. Redirecting to login.");
         window.location.href = "login.html";
