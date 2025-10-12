@@ -821,32 +821,31 @@ async function handleEditUser(e) {
     setButtonLoading(submitButton, true, originalText);
 
     const userId = $('edit_user_id').value;
+    const newEmail = $('edit_user_email').value.trim();
+    const newRole = $('edit_user_role').value; // Value for the profiles table update
 
-    let role;
-    let table;
+    let role; // Original role
+    let table; // Target table ('students' or 'lecturers')
     let currentEmail;
 
     try {
-        // --- FIX: Direct Supabase query to bypass bug in fetchData ---
+        // 1. FETCH: Determine original role/email to figure out the target table and check for changes
         const { data: currentUserData, error: fetchError } = await sb
             .from('consolidated_user_profiles')
-            .select('role, email') // Select only the required columns
-            .eq('user_id', userId); // Filter by the user's ID
-        // -----------------------------------------------------------
+            .select('role, email')
+            .eq('user_id', userId); 
 
         if (fetchError) throw fetchError;
         
-        // Ensure data was actually found
         if (!currentUserData || currentUserData.length === 0) {
             throw new Error('User profile not found in consolidated view.');
         }
 
         role = currentUserData[0].role;
         currentEmail = currentUserData[0].email;
-        table = getProfileTable(role);
+        table = getProfileTable(role); // 'students' or 'lecturers'
 
     } catch (e) {
-        // This catch block handles the error if the view lookup failed
         console.error('Error determining user role:', e);
         showFeedback('❌ Error: Could not determine user role for update.', 'error'); 
         setButtonLoading(submitButton, false, originalText);
@@ -859,46 +858,59 @@ async function handleEditUser(e) {
         return;
     }
 
-    const updatedData = {
+    // 2. DATA: Prepare data ONLY for the specific profile table (students/lecturers)
+    const profileSpecificData = {
         full_name: $('edit_user_name').value.trim(),
-        email: $('edit_user_email').value.trim(),
-        role: $('edit_user_role').value,
+        // Note: 'email' and 'role' are EXCLUDED here to prevent the schema error.
         intake_year: $('edit_user_intake').value,
         block: $('edit_user_block').value,
         block_program_year: $('edit_user_block_status').value === 'true'
     };
 
-    // Use the appropriate program/course field name based on the role
+    // Use the appropriate program/course field name based on the original role
     if (role === 'student') {
-        updatedData.course = $('edit_user_program').value;
+        profileSpecificData.course = $('edit_user_program').value;
     } else {
-        updatedData.program_type = $('edit_user_program').value;
+        profileSpecificData.program_type = $('edit_user_program').value;
     }
 
-    if (!updatedData.course && !updatedData.program_type) {
+    if (!profileSpecificData.course && !profileSpecificData.program_type) {
         showFeedback('Please select a program/course for this user.', 'error');
         setButtonLoading(submitButton, false, originalText);
         return;
     }
 
     try {
-        // Update the correct table using 'user_id'
-        const { error: updateError } = await sb.from(table).update(updatedData).eq('user_id', userId);
-        if (updateError) throw updateError;
+        let successMessage = '✅ User profile updated successfully!';
+        
+        // A. UPDATE 1: Update the role in the 'profiles' table
+        if (newRole && newRole !== role) {
+            const { error: profileUpdateError } = await sb.from('profiles')
+                .update({ role: newRole })
+                .eq('id', userId); // The 'profiles' table uses 'id' for the Auth ID
+            if (profileUpdateError) throw profileUpdateError;
+        }
 
-        // Update the Auth email if it changed
-        if (updatedData.email && updatedData.email !== currentEmail) {
+        // B. UPDATE 2: Update the specific profile table (students/lecturers)
+        const { error: specificTableError } = await sb.from(table)
+            .update(profileSpecificData)
+            .eq('user_id', userId); // Use 'user_id' as confirmed by schema
+        
+        if (specificTableError) throw specificTableError;
+
+        // C. UPDATE 3: Update the Auth email if it changed
+        if (newEmail && newEmail !== currentEmail) {
             const { error: authUpdateError } = await sb.auth.admin.updateUserById(userId, { 
-                email: updatedData.email 
+                email: newEmail 
             });
             if (authUpdateError) {
                 console.warn('Auth email update failed (Profile updated):', authUpdateError);
-                showFeedback('Profile updated, but failed to update Auth email.', 'warning');
+                successMessage = 'Profile updated, but failed to update Auth email.';
             }
-        } else {
-             showFeedback('✅ User profile updated successfully!', 'success');
         }
         
+        // 3. SUCCESS CLEANUP
+        showFeedback(successMessage, successMessage.startsWith('Profile') ? 'warning' : 'success');
         $('userEditModal').style.display = 'none';
         loadAllUsers();
         loadStudents();
