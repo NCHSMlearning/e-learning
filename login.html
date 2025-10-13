@@ -196,8 +196,9 @@
             </div>
         </div>
     </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+    
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+    
 <script>
 if (window.location.pathname.endsWith('.html')) {
     const cleanPath = window.location.pathname.replace(/\.html$/, '');
@@ -235,6 +236,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
+            // 🛑 CRITICAL FIX: Force session refresh to stabilize the token before database queries
+            // This is the definitive fix for RLS race conditions right after sign-in.
+            const { error: refreshError } = await supabase.auth.refreshSession();
+            if (refreshError) {
+                console.warn('Warning: Session refresh failed. Proceeding with existing token.', refreshError);
+                // We proceed here because the token might still be usable, but we've tried to stabilize it.
+            }
+
             const userId = authData.user.id;
 
             // 2️⃣ Check role from profiles (Primary profile for Superadmin/Admin)
@@ -263,10 +272,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const { data: consolidatedData, error: consolidatedError } = await supabase
                 .from('consolidated_user_profiles_table')
                 .select('*')
-                .eq('id', userId) // <-- FIXED: Querying by 'id' to prevent RLS block/race condition
+                .eq('id', userId) // <-- FIXED: Querying by 'id'
                 .maybeSingle();
 
-            // ⚠️ FIX: If an error occurs OR the profile is NOT found, block login and sign out.
+            // ⚠️ FIX: This block handles the "Profile access issue" by catching the null result
             if (consolidatedError || !consolidatedData) {
                 console.error('Consolidated profile fetch error:', consolidatedError);
                 errorMsg.innerText = 'Login failed: Profile access issue. (Profile not found or access denied)';
@@ -276,7 +285,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // 5️⃣ Check approval (FIX: Use null coalescing to safely check status)
-            // Safely read the status, defaulting to 'pending' if status is null in the DB
             const currentStatus = consolidatedData.status?.toLowerCase() ?? 'pending'; 
             
             if (currentStatus !== 'approved') {
@@ -290,7 +298,6 @@ document.addEventListener('DOMContentLoaded', () => {
             localStorage.setItem('currentUserProfile', JSON.stringify(consolidatedData));
 
             // 7️⃣ Redirect based on role (FIX: Use null coalescing to safely read role)
-            // Safely read the role, defaulting to 'student' if null
             const consolidatedRole = consolidatedData.role?.toLowerCase() ?? 'student'; 
 
             if (consolidatedRole === 'student') {
@@ -311,5 +318,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 </script>
+   
 </body>
 </html>
