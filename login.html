@@ -237,14 +237,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const userId = authData.user.id;
 
-            // 2️⃣ Check role from profiles
+            // 2️⃣ Check role from profiles (Primary profile for Superadmin/Admin)
             const { data: profileData, error: profileError } = await supabase
                 .from('profiles')
                 .select('role, approved, full_name, email, phone')
                 .eq('id', userId)
                 .maybeSingle();
 
-            let role = profileData?.role?.toLowerCase() || 'student';
+            // Safely default the role to 'student' if profile data is missing or role is null
+            let role = profileData?.role?.toLowerCase() ?? 'student';
 
             // 3️⃣ Superadmin/Admin → use profiles directly
             if (role === 'superadmin' || role === 'admin') {
@@ -258,23 +259,27 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // 4️⃣ Students & Lecturers → load from consolidated table
+            // 4️⃣ Students & Lecturers → load from consolidated table (CRITICAL FIXES APPLIED)
             const { data: consolidatedData, error: consolidatedError } = await supabase
                 .from('consolidated_user_profiles_table')
                 .select('*')
-                .eq('id', userId) // <--- Query by the primary key 'id'
+                .eq('id', userId) // <-- FIXED: Querying by 'id' to prevent RLS block/race condition
                 .maybeSingle();
 
+            // ⚠️ FIX: If an error occurs OR the profile is NOT found, block login and sign out.
             if (consolidatedError || !consolidatedData) {
                 console.error('Consolidated profile fetch error:', consolidatedError);
-                errorMsg.innerText = 'Login failed: Profile access issue.';
+                errorMsg.innerText = 'Login failed: Profile access issue. (Profile not found or access denied)';
                 await supabase.auth.signOut();
                 loginButton.disabled = false;
                 return;
             }
 
-            // 5️⃣ Check approval
-            if (consolidatedData.status?.toLowerCase() !== 'approved') {
+            // 5️⃣ Check approval (FIX: Use null coalescing to safely check status)
+            // Safely read the status, defaulting to 'pending' if status is null in the DB
+            const currentStatus = consolidatedData.status?.toLowerCase() ?? 'pending'; 
+            
+            if (currentStatus !== 'approved') {
                 errorMsg.innerText = 'Login failed: Your account is pending approval.';
                 await supabase.auth.signOut();
                 loginButton.disabled = false;
@@ -284,14 +289,16 @@ document.addEventListener('DOMContentLoaded', () => {
             // 6️⃣ Save the full profile for dashboard use
             localStorage.setItem('currentUserProfile', JSON.stringify(consolidatedData));
 
-            // 7️⃣ Redirect based on role
-            const consolidatedRole = consolidatedData.role?.toLowerCase();
+            // 7️⃣ Redirect based on role (FIX: Use null coalescing to safely read role)
+            // Safely read the role, defaulting to 'student' if null
+            const consolidatedRole = consolidatedData.role?.toLowerCase() ?? 'student'; 
 
             if (consolidatedRole === 'student') {
                 window.location.href = 'index.html';
             } else if (consolidatedRole === 'lecturer') {
                 window.location.href = 'lecturer.html';
             } else {
+                // Fallback for any other unexpected role
                 window.location.href = 'index.html';
             }
 
