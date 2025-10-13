@@ -1310,10 +1310,18 @@ async function loadAttendance() {
     
     const todayISO = new Date().toISOString().slice(0, 10);
 
+    // **************************************************************
+    // 🛑 CRITICAL FIX: Corrected the select string for JOINING
+    // 1. Used 'consolidated_user_profiles_table' (from SQL check) instead of 'profile'.
+    // 2. Used 'courses' (from SQL check) instead of 'course'.
+    // 3. Added 'department' to the joined profile fields for location logic.
+    // **************************************************************
     const { data: allRecords, error } = await fetchData(
         'geo_attendance_logs', 
-        '*, profile:student_id(full_name, role), course:course_id(course_name)', 
-        {}, 'check_in_time', false 
+        '*, consolidated_user_profiles_table:student_id(full_name, role, department), courses:course_id(course_name)', 
+        {}, 
+        'check_in_time', 
+        false 
     );
 
     if (error) { 
@@ -1326,17 +1334,27 @@ async function loadAttendance() {
     let pastHtml = '';
     
     allRecords.forEach(r => {
-        const userName = r.profile?.full_name || 'N/A User';
-        const userRole = r.profile?.role || 'N/A';
+        // 🛑 FIX: Access data using the correct relationship names
+        const userProfile = r.consolidated_user_profiles_table;
+        const courseDetails = r.courses; 
+
+        // Use the correctly named joined objects
+        const userName = userProfile?.full_name || 'N/A User';
+        const userRole = userProfile?.role || 'N/A';
         const dateTime = new Date(r.check_in_time).toLocaleString();
         
         let locationDetail;
-        if (r.session_type === 'clinical' && r.department) {
-            locationDetail = escapeHtml(r.department);
-        } else if (r.session_type === 'classroom' && r.course?.course_name) {
-            locationDetail = escapeHtml(r.course.course_name);
+        const profileDepartment = userProfile?.department; // Get department from the profile
+
+        // 🛑 FIX: Clinical/Classroom logic now correctly uses joined data
+        if (r.session_type === 'clinical' && profileDepartment) {
+            locationDetail = escapeHtml(profileDepartment);
+        } else if (r.session_type === 'classroom' && courseDetails?.course_name) {
+            locationDetail = escapeHtml(courseDetails.course_name);
         } else {
-            locationDetail = escapeHtml(r.location_name || r.department || 'N/A Location');
+            // Fallback: use raw location name from the log
+            // Note: The original code used r.location_name, but geo logs typically store r.location_friendly_name.
+            locationDetail = escapeHtml(r.location_friendly_name || profileDepartment || 'N/A Location');
         }
         
         const recordDate = new Date(r.check_in_time).toISOString().slice(0, 10);
@@ -1347,7 +1365,8 @@ async function loadAttendance() {
             let mapButton = '';
             if (r.latitude && r.longitude) {
                 geoStatus = 'Yes (Geo-Logged)';
-                mapButton = `<button class="btn btn-map" onclick="showMap('${r.latitude}', '${r.longitude}', '${escapeHtml(r.location_name || 'Check-in Location', true)}', '${escapeHtml(userName, true)}', '${dateTime}')">View Map</button>`;
+                // 🛑 FIX: Changed r.location_name to r.location_friendly_name for the map button if it's the correct field
+                mapButton = `<button class="btn btn-map" onclick="showMap('${r.latitude}', '${r.longitude}', '${escapeHtml(r.location_friendly_name || 'Check-in Location', true)}', '${escapeHtml(userName, true)}', '${dateTime}')">View Map</button>`;
             } else {
                 geoStatus = 'No (Manual)';
             }
@@ -1383,18 +1402,19 @@ async function loadAttendance() {
     filterTable('attendance-search', 'attendance-table', [0, 1, 2]); 
 }
 
+// -------------------------------------------------------------
+// Supporting Functions (Minor Corrections Applied)
+// -------------------------------------------------------------
+
 function showMap(lat, lng, locationName, studentName, dateTime) {
     const mapModal = $('mapModal');
     const mapContainer = $('mapbox-map'); 
-    
-    // NOTE: map-modal-title element is missing in the provided HTML, using mapModal.querySelector if possible or omitting.
-    // Assuming the title is set by the H2 in the modal content which is static.
     
     $('map-details').innerHTML = `<strong>Time:</strong> ${dateTime}<br><strong>Location:</strong> ${locationName}<br><strong>Coords:</strong> ${lat}, ${lng}`;
 
     mapModal.style.display = 'flex';
     
-    if (attendanceMap) {
+    if (attendanceMap) { 
         attendanceMap.remove(); 
     }
     
@@ -1439,7 +1459,8 @@ async function adminCheckIn() {
         session_type: 'admin_checkin',
         check_in_time: new Date().toISOString(), 
         is_manual_entry: true, 
-        location_name: 'Admin Self Check-in',
+        // 🛑 MINOR FIX: Using location_friendly_name for consistency if that's the main log column
+        location_friendly_name: 'Admin Self Check-in', 
         ip_address: ip,
         device_id: deviceId
     };
@@ -1454,7 +1475,6 @@ async function adminCheckIn() {
         loadDashboardData();
     }
 }
-
 
 /*******************************************************
  * 8. CATS/Exams Tab
