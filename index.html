@@ -551,8 +551,55 @@ async function logout() {
 // *** 3. CORE DATA AND DASHBOARD FUNCTIONS ***
 // *************************************************************************
 
-// (loadWelcomeDetails and loadStudentWelcomeMessage remain the same)
+/**
+ * Loads the welcome message from app_settings and sets the student's name in the header.
+ * CRITICAL: Fulfills "Hello student name as per student name" requirement.
+ */
+async function loadWelcomeDetails() {
+    // 1. Update the Welcome Header with the Student's Name
+    const studentName = currentUserProfile?.full_name || 'Student';
+    if (welcomeHeader) {
+        welcomeHeader.textContent = `Hello, ${studentName}!`; 
+    }
 
+    // 2. Load the Official Announcement Message
+    await loadStudentWelcomeMessage();
+}
+
+/**
+ * Fetches the general welcome message/announcement from the app_settings table.
+ * CRITICAL: Fulfills "Welcome message loading well" requirement.
+ */
+async function loadStudentWelcomeMessage() {
+    const bannerElement = document.getElementById('student-welcome-message');
+    if (!bannerElement) return;
+
+    try {
+        const { data, error } = await sb
+            .from(SETTINGS_TABLE)
+            .select('setting_value')
+            .eq('setting_key', MESSAGE_KEY)
+            .single();
+
+        if (error) throw error;
+
+        if (data && data.setting_value) {
+            bannerElement.innerHTML = data.setting_value;
+        } else {
+            bannerElement.textContent = 'Welcome! No current announcements from the Administration.';
+        }
+
+    } catch (error) {
+        console.error("Failed to load welcome message:", error);
+        bannerElement.textContent = 'Failed to load announcements. Please refresh.';
+    }
+}
+
+
+/**
+ * Calculates and updates all dashboard metrics.
+ * CRITICAL: Fulfills "dashboard matric computing well" requirement.
+ */
 async function loadDashboardMetrics(userId) {
     // Set the number of active courses from the cached list (assuming it's loaded elsewhere)
     document.getElementById('dashboard-active-courses').textContent = cachedCourses.length;
