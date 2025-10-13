@@ -114,14 +114,8 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-  // Hides the .html extension in the URL
-    if (window.location.pathname.endsWith('.html')) {
-        const cleanPath = window.location.pathname.replace(/\.html$/, '');
-        window.history.replaceState({}, '', cleanPath);
-    }
-  
 const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
+const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const roleSelect = document.getElementById('role');
@@ -134,37 +128,17 @@ const form = document.getElementById('register-form');
 const message = document.getElementById('message');
 const registerBtn = document.getElementById('register-btn');
 
-// Function to manage visibility and the 'required' attribute (KEEP AS IS)
 const manageRequiredFields = (role) => {
     const isStudent = role === 'student';
     const isLecturer = role === 'lecturer';
-
     studentFieldsDiv.style.display = isStudent ? 'block' : 'none';
     lecturerFieldsDiv.style.display = isLecturer ? 'block' : 'none';
-
-    studentInputs.forEach(input => {
-        if (isStudent) {
-            input.setAttribute('required', '');
-        } else {
-            input.removeAttribute('required');
-        }
-    });
-
-    lecturerInputs.forEach(input => {
-        if (isLecturer) {
-            input.setAttribute('required', '');
-        } else {
-            input.removeAttribute('required');
-        }
-    });
+    studentInputs.forEach(input => isStudent ? input.setAttribute('required','') : input.removeAttribute('required'));
+    lecturerInputs.forEach(input => isLecturer ? input.setAttribute('required','') : input.removeAttribute('required'));
 };
 
-// Initial setup and event listener
-roleSelect.addEventListener('change', () => {
-    manageRequiredFields(roleSelect.value);
-});
+roleSelect.addEventListener('change', () => { manageRequiredFields(roleSelect.value); });
 manageRequiredFields(roleSelect.value);
-
 
 form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -179,6 +153,10 @@ form.addEventListener('submit', async (e) => {
     const phone = document.getElementById('phone').value.trim();
     const password = document.getElementById('password').value.trim();
     const confirmPassword = document.getElementById('confirm_password').value.trim();
+    const student_id_number = document.getElementById('student_id_number').value.trim();
+    const program_type = document.getElementById('program_type').value;
+    const staff_id = document.getElementById('staff_id').value.trim();
+    const department = document.getElementById('department').value;
 
     if(password !== confirmPassword){
         message.textContent = '❌ Passwords do not match.';
@@ -188,55 +166,42 @@ form.addEventListener('submit', async (e) => {
         return;
     }
 
-    // Capture ALL student and lecturer fields
-    const student_id_number = document.getElementById('student_id_number').value.trim();
-    const program_type = document.getElementById('program_type').value;
-    const staff_id = document.getElementById('staff_id').value.trim();
-    const department = document.getElementById('department').value;
+    try {
+        // Create Supabase Auth user
+        const { data: authData, error: authError } = await sb.auth.signUp({
+            email,
+            password
+        });
 
-    // --- CRITICAL FIX: STEP 1 (The only step needed) ---
-    // Pass ALL profile data into the options.data object. 
-    // The PostgreSQL trigger will read this data securely.
-    const customData = {
-        full_name,
-        role,
-        phone,
-        // Student-specific fields (will be null/empty for lecturers, but sent)
-        admission_number: student_id_number, 
-        course: program_type,
-        // Lecturer-specific fields (will be null/empty for students, but sent)
-        staff_id, 
-        department
-    };
-    
-    // Step 1: Supabase Auth signup
-    const { data, error } = await sb.auth.signUp({
-        email,
-        password,
-        options: { data: customData } // <-- All profile data is passed here
-    });
+        if(authError) throw authError;
 
-    if(error){
-        message.textContent = `❌ ${error.message}`;
+        // Insert into consolidated_user_profile_table
+        const { data, error } = await sb.from('consolidated_user_profile_table').insert([{
+            user_id: authData.user.id,
+            full_name,
+            email,
+            phone,
+            role,
+            admission_number: role==='student'? student_id_number : null,
+            course: role==='student'? program_type : null,
+            staff_id: role==='lecturer'? staff_id : null,
+            department: role==='lecturer'? department : null,
+            created_at: new Date()
+        }]);
+
+        if(error) throw error;
+
+        message.textContent = '✅ Registration successful! Await admin approval.';
+        message.classList.add('success');
+        form.reset();
+        manageRequiredFields('');
+    } catch (err) {
+        message.textContent = `❌ ${err.message}`;
         message.classList.add('error');
+    } finally {
         registerBtn.disabled=false;
         registerBtn.textContent='Register';
-        return;
     }
-
-    // --- CRITICAL FIX: STEP 2 ---
-    // The entire client-side INSERT block is DELETED.
-    // The PostgreSQL trigger runs automatically upon successful sign-up (above).
-
-    // --- SUCCESS LOGIC ---
-    // If the code reaches here, the user was created, AND the trigger ran successfully.
-    message.textContent = '✅ Registration successful! Await admin approval before logging in.';
-    message.classList.add('success');
-    form.reset();
-    manageRequiredFields(''); // Reset fields state
-
-    registerBtn.disabled=false;
-    registerBtn.textContent='Register';
 });
 </script>
 </body>
