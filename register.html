@@ -115,7 +115,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
+const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY_HERE';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const roleSelect = document.getElementById('role');
@@ -128,24 +128,22 @@ const form = document.getElementById('register-form');
 const message = document.getElementById('message');
 const registerBtn = document.getElementById('register-btn');
 
+// Toggle required fields
 const manageRequiredFields = (role) => {
     const isStudent = role === 'student';
     const isLecturer = role === 'lecturer';
     studentFieldsDiv.style.display = isStudent ? 'block' : 'none';
     lecturerFieldsDiv.style.display = isLecturer ? 'block' : 'none';
-    studentInputs.forEach(input => isStudent ? input.setAttribute('required','') : input.removeAttribute('required'));
-    lecturerInputs.forEach(input => isLecturer ? input.setAttribute('required','') : input.removeAttribute('required'));
+    studentInputs.forEach(i => isStudent ? i.setAttribute('required','') : i.removeAttribute('required'));
+    lecturerInputs.forEach(i => isLecturer ? i.setAttribute('required','') : i.removeAttribute('required'));
 };
-
-roleSelect.addEventListener('change', () => { manageRequiredFields(roleSelect.value); });
+roleSelect.addEventListener('change', ()=>manageRequiredFields(roleSelect.value));
 manageRequiredFields(roleSelect.value);
 
 form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    message.textContent = '';
-    message.className='message';
-    registerBtn.disabled = true;
-    registerBtn.textContent = 'Registering...';
+    message.textContent=''; message.className='message';
+    registerBtn.disabled=true; registerBtn.textContent='Registering...';
 
     const role = roleSelect.value;
     const full_name = document.getElementById('full_name').value.trim();
@@ -153,55 +151,48 @@ form.addEventListener('submit', async (e) => {
     const phone = document.getElementById('phone').value.trim();
     const password = document.getElementById('password').value.trim();
     const confirmPassword = document.getElementById('confirm_password').value.trim();
+
+    if(password !== confirmPassword){
+        message.textContent='❌ Passwords do not match.';
+        message.classList.add('error');
+        registerBtn.disabled=false; registerBtn.textContent='Register';
+        return;
+    }
+
     const student_id_number = document.getElementById('student_id_number').value.trim();
     const program_type = document.getElementById('program_type').value;
     const staff_id = document.getElementById('staff_id').value.trim();
     const department = document.getElementById('department').value;
 
-    if(password !== confirmPassword){
-        message.textContent = '❌ Passwords do not match.';
-        message.classList.add('error');
-        registerBtn.disabled=false;
-        registerBtn.textContent='Register';
-        return;
-    }
-
     try {
-        // Create Supabase Auth user
+        // 1️⃣ Signup Auth
         const { data: authData, error: authError } = await sb.auth.signUp({
-            email,
-            password
+            email, password
         });
-
         if(authError) throw authError;
 
-        // Insert into consolidated_user_profile_table
-        const { data, error } = await sb.from('consolidated_user_profile_table').insert([{
-            user_id: authData.user.id,
-            full_name,
-            email,
-            phone,
-            role,
-            admission_number: role==='student'? student_id_number : null,
-            course: role==='student'? program_type : null,
-            staff_id: role==='lecturer'? staff_id : null,
-            department: role==='lecturer'? department : null,
-            created_at: new Date()
-        }]);
+        // 2️⃣ Insert into consolidated_user_profile_table
+        const { data: profileData, error: profileError } = await sb
+            .from('consolidated_user_profile_table')
+            .insert([{
+                auth_uid: authData.user.id,
+                email, full_name, role, phone,
+                admission_number: student_id_number || null,
+                course: program_type || null,
+                staff_id: staff_id || null,
+                department: department || null,
+                created_at: new Date().toISOString()
+            }]);
+        if(profileError) throw profileError;
 
-        if(error) throw error;
-
-        message.textContent = '✅ Registration successful! Await admin approval.';
+        message.textContent='✅ Registration successful! Await admin approval.';
         message.classList.add('success');
-        form.reset();
-        manageRequiredFields('');
-    } catch (err) {
-        message.textContent = `❌ ${err.message}`;
+        form.reset(); manageRequiredFields('');
+    } catch(err){
+        message.textContent=`❌ ${err.message}`;
         message.classList.add('error');
-    } finally {
-        registerBtn.disabled=false;
-        registerBtn.textContent='Register';
     }
+    registerBtn.disabled=false; registerBtn.textContent='Register';
 });
 </script>
 </body>
