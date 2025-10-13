@@ -999,7 +999,7 @@ async function geoCheckIn() {
         );
     });
 
-    try {
+   try {
         let location = await getLocation();
 
         // --- Geocoding Logic ---
@@ -1014,14 +1014,25 @@ async function geoCheckIn() {
             }
         }
         
+        // --- Prepare Final Variables for RPC ---
         const [targetId, targetName] = targetSelect.split('|');
 
-    // **************************************************************
-        // CRITICAL FIX: Use .rpc() to call the database function 
-        // that handles the atomic profile check and attendance insert.
+        // 1. LOCATION SAFEGUARD (Fixes "N/A Location" and defines the variable)
+        // This MUST be defined before the RPC call.
+        let locationFriendlyName = location.friendly;
+        if (!locationFriendlyName) {
+            locationFriendlyName = `GPS Loc: ${location.lat.toFixed(4)}, ${location.lon.toFixed(4)}`;
+        }
+
+        // 2. NAME EXTRACTION (Fixes "Unknown Student")
+        // This MUST be defined before the RPC call.
+        const studentName = currentUserProfile?.full_name ?? 'Unknown Student';
+
+        // **************************************************************
+        // CRITICAL FIX: The RPC call with corrected, single parameter mapping
         // **************************************************************
         const { error } = await sb.rpc('check_in_and_defer_fk', {
-            // Parameter names MUST match the p_ parameter names in the SQL function
+            // Core check-in data
             p_student_id: currentUserId,
             p_check_in_time: checkInTime,
             p_session_type: sessionType === 'Clinical' ? 'Clinical' : 'Class',
@@ -1030,14 +1041,9 @@ async function geoCheckIn() {
             p_latitude: location.lat,
             p_longitude: location.lon,
             p_accuracy_m: location.acc,
-
-            // 👇 USING THE DEFINED VARIABLE
-             p_location_friendly_name: locationFriendlyName, 
             
-            // 👇 PASS THE SAFEGUARDED LOCATION STRING
+            // 👇 USING THE CORRECTLY DEFINED VARIABLES
             p_location_friendly_name: locationFriendlyName, 
-            
-            // 👇 PASS THE NEW STUDENT NAME PARAMETER
             p_student_name: studentName, 
             
             // Cohort data
@@ -1050,11 +1056,10 @@ async function geoCheckIn() {
             console.error("Check-in failed:", error);
             geoMessage.textContent = `Check-in failed: Error: ${error.message}`;
         } else {
-            // Display message uses the safeguarded name
+            // Display message uses the correctly defined variable.
             geoMessage.textContent = `Check-in successful! Logged at ${new Date(checkInTime).toLocaleTimeString()} near **${locationFriendlyName}**.`;
             
-            // 🛑 CRITICAL: Define the loadGeoAttendanceHistory function 
-            // globally in your script file to fix the 'not defined' error.
+            // 🛑 REMINDER: You still need to ensure loadGeoAttendanceHistory is a global function.
             loadGeoAttendanceHistory(currentUserId); 
         }
 
@@ -1064,7 +1069,6 @@ async function geoCheckIn() {
     } finally {
         if (button) button.disabled = false;
     }
-}
 /**
  * @fix The missing function definition for loadGeoAttendanceHistory.
  * This function is responsible for fetching and displaying the student's 
