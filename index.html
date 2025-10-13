@@ -552,6 +552,57 @@ async function logout() {
 // *************************************************************************
 
 // (loadWelcomeDetails and loadStudentWelcomeMessage remain the same)
+    async function loadWelcomeDetails() {
+    let studentName = 'Student'; // Default name
+
+    if (currentUserProfile && currentUserProfile.full_name) {
+        const parts = currentUserProfile.full_name.trim().split(/\s+/);
+        if (parts.length > 0) {
+            studentName = parts[0];
+        }
+    }
+
+    if (welcomeHeader) welcomeHeader.textContent = Welcome, ${studentName}!;
+    await loadStudentWelcomeMessage();
+}
+
+async function loadStudentWelcomeMessage() {
+    const messageDiv = document.getElementById('student-welcome-message');
+    if (!messageDiv) return;
+
+    messageDiv.textContent = 'Loading official announcement...';
+
+    const { data, error } = await sb
+        .from(SETTINGS_TABLE)
+        .select('value')
+        .eq('key', MESSAGE_KEY)
+        .single();
+
+    if (!error && data) {
+messageDiv.innerHTML = data.value;
+    } else {
+        messageDiv.innerHTML = 'Welcome to the Student Portal! Stay informed and use the navigation on the left.';
+    }
+
+    sb.channel('student_welcome_updates')
+        .on(
+            'postgres_changes',
+            {
+                event: 'UPDATE',
+                schema: 'public',
+                table: SETTINGS_TABLE,
+                filter: key=eq.${MESSAGE_KEY},
+            },
+            (payload) => {
+                const newValue = payload.new?.value;
+                if (newValue) {
+                    messageDiv.innerHTML = newValue;
+                    console.log("Admin message updated in real-time.");
+                }
+            }
+        )
+ .subscribe();
+}
 
 async function loadDashboardMetrics(userId) {
     // Set the number of active courses from the cached list (assuming it's loaded elsewhere)
