@@ -375,7 +375,7 @@
             
            <section id="courses" class="tab-content">
                 <h2 style="color: #4C1D95;">My Courses (Real-Time Enrollment)</h2>
-                <p>Courses shown here are filtered by your *Program, **Block, and **Intake Year* for relevance.</p>
+                <p>Courses shown here are filtered by your **Program**, **Block**, and **Intake Year** for relevance.</p>
                 <table>
                     <thead><tr><th>Course Name</th><th>Status</th></tr></thead>
                     <tbody id="courses-table">
@@ -419,23 +419,23 @@
             </section>
 
            <section id="cats" class="tab-content">
-    <h2 style="color: #4C1D95;">CATS / Exams Schedule</h2>
-    <table border="1" cellpadding="8" cellspacing="0" style="width:100%; border-collapse: collapse; text-align: left;">
-        <thead style="background-color: #f3f4f6;">
-            <tr>
-                <th>Exam Name</th>
-                <th>Block</th>
-                <th>Date</th>
-                <th>Status</th>
-            </tr>
-        </thead>
-        <tbody id="exams-table">
-            <tr>
-                <td colspan="4">Loading exam schedule...</td>
-            </tr>
-        </tbody>
-    </table>
-</section>
+                <h2 style="color: #4C1D95;">CATS / Exams Schedule</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Exam Name</th>
+                            <th>Block</th>
+                            <th>Date</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="exams-table">
+                        <tr>
+                            <td colspan="4">Loading exam schedule...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
 
             <section id="resources" class="tab-content">
                 <h2 style="color: #4C1D95;">Learning Resources</h2>
@@ -581,32 +581,22 @@ async function loadDashboardMetrics(userId) {
         document.getElementById('dashboard-attendance-rate').textContent = 'N/A';
     }
 
-    // --- FIX 2: UPCOMING EXAM ---
+    // --- FIX 2: UPCOMING EXAM (Using cachedExams which is loaded by loadExams()) ---
     let nextExamText = 'None Scheduled';
-    const now = new Date().toISOString(); 
-    try {
-        const { data: exams, error: examsError } = await sb
-            .from('exams')
-            .select('exam_name, exam_date')
-            .eq('student_id', userId) // Assuming exams are tied to student_id
-            .gte('exam_date', now) // Filter to only include future dates
-            .order('exam_date', { ascending: true }) // Find the closest date
-            .limit(1);
+    const now = new Date(); 
+    
+    // Filter cached exams to only include future dates
+    const upcomingExams = cachedExams
+        .filter(exam => new Date(exam.exam_date) > now)
+        .sort((a, b) => new Date(a.exam_date) - new Date(b.exam_date));
 
-        if (examsError) throw examsError;
-
-        if (exams && exams.length > 0) {
-            const upcomingExam = exams[0];
-            const examDate = new Date(upcomingExam.exam_date).toLocaleDateString();
-            nextExamText = `${examDate} (${upcomingExam.exam_name})`;
-        } else {
-             // Only display 'Semester Complete' if there were no future exams found
-             nextExamText = 'Semester Complete'; 
-        }
-
-    } catch (err) {
-        console.error("Failed to load upcoming exam:", err);
-        nextExamText = 'Error Loading';
+    if (upcomingExams.length > 0) {
+        const upcomingExam = upcomingExams[0];
+        const examDate = new Date(upcomingExam.exam_date).toLocaleDateString();
+        nextExamText = `${examDate} (${upcomingExam.exam_name || 'Exam'})`;
+    } else {
+        // Only display 'Semester Complete' if there were no future exams found
+        nextExamText = 'Semester Complete'; 
     }
 
     document.getElementById('dashboard-upcoming-exam').textContent = nextExamText;
@@ -642,7 +632,7 @@ async function checkAuthAndLoad() {
 
         // Load all data sources once profile is available
         await loadCourses(); 
-        await loadExams();
+        await loadExams(); // CRITICAL: Ensure loadExams() is called to populate cachedExams
         await loadResources();
         await loadClinicalTargets(); // Loads data needed by updateTargetSelect()
 
@@ -1205,9 +1195,10 @@ async function loadExams() {
             return;
         }
 
+        // --- CRITICAL FIX: The correct filter logic for exams ---
         const { data: exams, error } = await sb
-            .from('exams_with_courses')
-            .select('exam_name, exam_date, status, block_term, program_type, intake_year')
+            .from('exams_with_courses') // Assumed view/table
+            .select('exam_name, exam_date, status, block_term, program_type')
             .or(`program_type.eq.${program},program_type.eq.General`)
             .eq('block_term', block)
             .eq('intake_year', intakeYear)
@@ -1220,13 +1211,15 @@ async function loadExams() {
 
         if (cachedExams.length > 0) {
             cachedExams.forEach(exam => {
-                const dateStr = exam.exam_date ? new Date(exam.exam_date).toLocaleDateString() : 'N/A';
+                const dateStr = exam.exam_date ? new Date(exam.exam_date).toLocaleDateString('en-US', { 
+                    weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' 
+                }) : 'N/A';
                 tableBody.innerHTML += `
                     <tr>
                         <td>${exam.exam_name || 'N/A'}</td>
                         <td>${exam.block_term || 'N/A'}</td>
                         <td>${dateStr}</td>
-                        <td>${exam.status || 'N/A'}</td>
+                        <td>${exam.status || 'Scheduled'}</td>
                     </tr>
                 `;
             });
@@ -1240,6 +1233,7 @@ async function loadExams() {
         cachedExams = [];
     }
 
+    // Update dashboard metrics to reflect the latest exams data
     loadDashboardMetrics(currentUserId);
 }
 
@@ -1314,6 +1308,8 @@ async function fetchAllScheduleData() {
     if (!program || !block || !intakeYear) return [];
     
     // --- Simplified Promises (Original logic for sessions/exams is complex, using placeholders) ---
+    // The previous implementation used placeholder promises for sessions/exams, which is fine
+    // as long as they are re-implemented later.
     const sessionsPromise = Promise.resolve([]); 
     const examsPromise = Promise.resolve([]);
 
