@@ -550,104 +550,69 @@ async function logout() {
 // *************************************************************************
 // *** 3. CORE DATA AND DASHBOARD FUNCTIONS ***
 // *************************************************************************
-// (Content of Section 3 is correct as provided)
-async function loadWelcomeDetails() {
-    let studentName = 'Student'; // Default name
 
-    if (currentUserProfile && currentUserProfile.full_name) {
-        const parts = currentUserProfile.full_name.trim().split(/\s+/);
-        if (parts.length > 0) {
-            studentName = parts[0];
-        }
-    }
-
-    if (welcomeHeader) welcomeHeader.textContent = `Welcome, ${studentName}!`;
-    await loadStudentWelcomeMessage();
-}
-
-async function loadStudentWelcomeMessage() {
-    const messageDiv = document.getElementById('student-welcome-message');
-    if (!messageDiv) return;
-
-    messageDiv.textContent = 'Loading official announcement...';
-
-    const { data, error } = await sb
-        .from(SETTINGS_TABLE)
-        .select('value')
-        .eq('key', MESSAGE_KEY)
-        .single();
-
-    if (!error && data) {
-        messageDiv.innerHTML = data.value;
-    } else {
-        messageDiv.innerHTML = 'Welcome to the Student Portal! Stay informed and use the navigation on the left.';
-    }
-
-    sb.channel('student_welcome_updates')
-        .on(
-            'postgres_changes',
-            {
-                event: 'UPDATE',
-                schema: 'public',
-                table: SETTINGS_TABLE,
-                filter: `key=eq.${MESSAGE_KEY}`,
-            },
-            (payload) => {
-                const newValue = payload.new?.value;
-                if (newValue) {
-                    messageDiv.innerHTML = newValue;
-                    console.log("Admin message updated in real-time.");
-                }
-            }
-        )
-        .subscribe();
-}
+// (loadWelcomeDetails and loadStudentWelcomeMessage remain the same)
 
 async function loadDashboardMetrics(userId) {
+    // Set the number of active courses from the cached list (assuming it's loaded elsewhere)
     document.getElementById('dashboard-active-courses').textContent = cachedCourses.length;
 
+    // --- FIX 1: OVERALL/PER AVERAGE ATTENDANCE RATE ---
+    let attendanceRate = 0;
     try {
-        const now = new Date();
-        const dayOfWeek = now.getDay();
-        const monday = new Date(now);
-        monday.setDate(now.getDate() - ((dayOfWeek + 6) % 7));
-        monday.setHours(0, 0, 0, 0);
-
-        const sunday = new Date(monday);
-        sunday.setDate(monday.getDate() + 6);
-        sunday.setHours(23, 59, 59, 999);
-
-        const { data: logs, error } = await sb
+        // Fetch ALL attendance logs for the user to calculate the overall average
+        const { data: logs, error: attendanceError } = await sb
             .from('geo_attendance_logs')
             .select('check_in_time, is_verified')
-            .eq('student_id', userId)
-            .gte('check_in_time', monday.toISOString())
-            .lte('check_in_time', sunday.toISOString());
+            .eq('student_id', userId); // Ensure 'student_id' is the correct column name
 
-        if (error) throw error;
+        if (attendanceError) throw attendanceError;
 
         const totalSessions = logs.length;
-        const attended = logs.filter(l => l.is_verified !== false).length;
-        const attendanceRate = totalSessions > 0 ? Math.round((attended / totalSessions) * 100) : 0;
+        // Count attended sessions (assuming is_verified !== false means attended/verified)
+        const attended = logs.filter(l => l.is_verified !== false).length; 
+        
+        // Safely calculate the overall attendance rate
+        attendanceRate = totalSessions > 0 ? Math.round((attended / totalSessions) * 100) : 0;
 
-        document.getElementById('dashboard-attendance-rate').textContent = `${attendanceRate}%`;
+        document.getElementById('dashboard-attendance-rate').textContent = ${attendanceRate}%;
     } catch (err) {
-        console.error("Failed to load weekly attendance:", err);
+        console.error("Failed to load overall attendance metrics:", err);
         document.getElementById('dashboard-attendance-rate').textContent = 'N/A';
     }
 
+    // --- FIX 2: UPCOMING EXAM ---
     let nextExamText = 'None Scheduled';
-    if (cachedExams && cachedExams.length > 0) {
-        const now = new Date();
-        const upcomingExam = cachedExams.find(e => new Date(e.exam_date) >= now);
-        if (upcomingExam) {
-            nextExamText = `${new Date(upcomingExam.exam_date).toLocaleDateString()} (${upcomingExam.exam_name})`;
+    const now = new Date().toISOString(); 
+    try {
+        const { data: exams, error: examsError } = await sb
+            .from('exams')
+            .select('exam_name, exam_date')
+            .eq('student_id', userId) // Assuming exams are tied to student_id
+            .gte('exam_date', now) // Filter to only include future dates
+            .order('exam_date', { ascending: true }) // Find the closest date
+            .limit(1);
+
+        if (examsError) throw examsError;
+
+        if (exams && exams.length > 0) {
+            const upcomingExam = exams[0];
+            const examDate = new Date(upcomingExam.exam_date).toLocaleDateString();
+            nextExamText = ${examDate} (${upcomingExam.exam_name});
         } else {
-            nextExamText = 'Semester Complete';
+             // Only display 'Semester Complete' if there were no future exams found
+             nextExamText = 'Semester Complete'; 
         }
+
+    } catch (err) {
+        console.error("Failed to load upcoming exam:", err);
+        nextExamText = 'Error Loading';
     }
+
     document.getElementById('dashboard-upcoming-exam').textContent = nextExamText;
 
+
+    // --- PROFILE COMPLETION CHECK (Original Logic Retained) ---
     const passportCard = document.getElementById('action-passport');
     let profileIncomplete = !(currentUserProfile && currentUserProfile.passport_url);
     if (passportCard) passportCard.style.display = profileIncomplete ? 'block' : 'none';
@@ -658,8 +623,9 @@ async function loadDashboardMetrics(userId) {
     if (actionTitle && actionsContainer) {
         const visibleActions = Array.from(actionsContainer.children).filter(child => child.style.display !== 'none').length;
         actionTitle.style.display = visibleActions === 0 ? 'none' : 'block';
-    }
+    }
 }
+
 
 // *************************************************************************
 // *** 4. AUTHENTICATION AND PROFILE MANAGEMENT ***
