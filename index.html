@@ -551,9 +551,9 @@ async function logout() {
 // *** 3. CORE DATA AND DASHBOARD FUNCTIONS ***
 // *************************************************************************
 
-// (loadWelcomeDetails and loadStudentWelcomeMessage remain the same)
-    async function loadWelcomeDetails() {
+async function loadWelcomeDetails() {
     let studentName = 'Student'; // Default name
+    const welcomeHeader = document.getElementById('welcome-header'); // Ensure you get the header element
 
     if (currentUserProfile && currentUserProfile.full_name) {
         const parts = currentUserProfile.full_name.trim().split(/\s+/);
@@ -562,10 +562,52 @@ async function logout() {
         }
     }
 
+    // FIX 1: Corrected Syntax to use backticks (`) for the template literal
     if (welcomeHeader) welcomeHeader.textContent = `Welcome, ${studentName}!`;
+    
     await loadStudentWelcomeMessage();
-}
+} // <--- CRITICAL: This brace must be present to close the loadWelcomeDetails function.
 
+async function loadStudentWelcomeMessage() {
+    const messageDiv = document.getElementById('student-welcome-message');
+    // Ensure constants SETTINGS_TABLE and MESSAGE_KEY are defined globally
+    if (!messageDiv) return;
+
+    messageDiv.textContent = 'Loading official announcement...';
+
+    const { data, error } = await sb
+        .from(SETTINGS_TABLE)
+        .select('value')
+        .eq('key', MESSAGE_KEY)
+        .single();
+
+    if (!error && data) {
+        messageDiv.innerHTML = data.value;
+    } else {
+        messageDiv.innerHTML = 'Welcome to the Student Portal! Stay informed and use the navigation on the left.';
+    }
+
+    sb.channel('student_welcome_updates')
+        .on(
+            'postgres_changes',
+            {
+                event: 'UPDATE',
+                schema: 'public',
+                table: SETTINGS_TABLE,
+                // FIX 2: Corrected Syntax to use backticks (`) for the template literal filter
+                filter: `key=eq.${MESSAGE_KEY}`,
+            },
+            (payload) => {
+                const newValue = payload.new?.value;
+                if (newValue) {
+                    messageDiv.innerHTML = newValue;
+                    console.log("Admin message updated in real-time.");
+                }
+            }
+        )
+        .subscribe();
+} // <--- CRITICAL: This brace must be present to close the loadStudentWelcomeMessage function.
+    
 async function loadStudentWelcomeMessage() {
     const messageDiv = document.getElementById('student-welcome-message');
     if (!messageDiv) return;
