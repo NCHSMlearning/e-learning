@@ -466,16 +466,15 @@ async function handleSaveWelcomeMessage(e) {
 }
 
 /*******************************************************
- * 4. Users/Enroll Tab (Approvals, EDIT, Delete Logic)
+ * 4. Users/Enroll Tab (Full Consolidated Logic)
  *******************************************************/
 
 // ==========================================================
-// *** HELPER FUNCTION TO DETERMINE TARGET TABLE ***
+// *** HELPER FUNCTION TO DETERMINE ROLE-SPECIFIC FIELDS ***
 // ==========================================================
-function getProfileTable(role) {
-    if (role === 'student') return 'students';
-    if (['lecturer', 'admin', 'superadmin'].includes(role)) return 'lecturers';
-    return null;
+function getRoleFields(role) {
+    if (role === 'student') return { programField: 'program', extraField: 'course' };
+    return { programField: 'program', extraField: null };
 }
 
 // ==========================================================
@@ -517,40 +516,31 @@ async function handleAddAccount(e) {
 
     const userData = {
         full_name: name,
-        role: role,
-        phone: phone,
-        program: program,
-        intake_year: intake_year,
-        block: block,
+        role,
+        phone,
+        program,
+        intake_year,
+        block,
         status: 'approved',
         block_program_year: false
     };
 
-    const targetTable = getProfileTable(role);
-    if (!targetTable) {
-        showFeedback('Invalid role selected.', 'error');
-        setButtonLoading(submitButton, false, originalText);
-        return;
-    }
-
     try {
         const { data: { user }, error: authError } = await sb.auth.signUp({
-            email: email,
-            password: password,
-            options: { data: userData }
+            email, password, options: { data: userData }
         });
         if (authError) throw authError;
 
         if (user && user.id) {
-            const profileData = { user_id: user.id, email: email, ...userData };
-            const { error: profileError } = await sb.from(targetTable).insert([profileData]);
-            if (profileError) {
+            const profileData = { user_id: user.id, email, ...userData };
+            const { error: insertError } = await sb.from('consolidated_user_profiles_table').insert([profileData]);
+            if (insertError) {
                 await sb.auth.admin.deleteUser(user.id);
-                throw profileError;
+                throw insertError;
             }
             e.target.reset();
             showFeedback(`New ${role.toUpperCase()} account successfully enrolled!`, 'success');
-            loadStudents(); loadAllUsers(); loadDashboardData();
+            loadAllUsers(); loadStudents(); loadDashboardData();
         }
     } catch (err) {
         showFeedback(`Account creation failed: ${err.message}`, 'error');
@@ -560,22 +550,19 @@ async function handleAddAccount(e) {
 }
 
 // ==========================================================
-// *** READ OPERATIONS (Using consolidated_user_profiles_table) ***
+// *** READ OPERATIONS (Consolidated Table) ***
 // ==========================================================
 async function loadAllUsers() {
     const tbody = $('users-table');
     tbody.innerHTML = '<tr><td colspan="7">Loading all users...</td></tr>';
 
-    const { data: users, error } = await fetchData('consolidated_user_profiles_table', '*', {}, 'full_name', true);
-    if (error) {
-        tbody.innerHTML = `<tr><td colspan="7">Error loading users: ${error.message}</td></tr>`;
-        return;
-    }
+    const { data: users, error } = await sb.from('consolidated_user_profiles_table').select('*').order('full_name', { ascending: true });
+    if (error) { tbody.innerHTML = `<tr><td colspan="7">Error loading users: ${error.message}</td></tr>`; return; }
 
     tbody.innerHTML = '';
     users.forEach(u => {
-        const roleOptions = ['student', 'lecturer', 'admin', 'superadmin']
-            .map(role => `<option value="${role}" ${u.role === role ? 'selected' : ''}>${role}</option>`).join('');
+        const roleOptions = ['student','lecturer','admin','superadmin']
+            .map(r => `<option value="${r}" ${u.role === r ? 'selected' : ''}>${r}</option>`).join('');
 
         const isBlocked = u.block_program_year === true;
         const isApproved = u.status === 'approved';
@@ -587,64 +574,38 @@ async function loadAllUsers() {
             <td>${escapeHtml(u.full_name)}</td>
             <td>${escapeHtml(u.email)}</td>
             <td>
-                <select class="btn" onchange="updateUserRole('${u.user_id}', this.value, '${u.role}')" ${u.role === 'superadmin' ? 'disabled' : ''}>
+                <select class="btn" onchange="updateUserRole('${u.user_id}', this.value)" ${u.role==='superadmin'?'disabled':''}>
                     ${roleOptions}
                 </select>
             </td>
             <td>${escapeHtml(u.department || u.program || 'N/A')}</td>
             <td class="${statusClass}">${statusText}</td>
             <td>
-                <button class="btn btn-map" onclick="openEditUserModal('${u.user_id}', '${u.role}')">Edit</button>
-                ${!isApproved ? `<button class="btn btn-approve" onclick="approveUser('${u.user_id}', '${u.role}')">Approve</button>` : ''}
-                <button class="btn btn-delete" onclick="deleteProfile('${u.user_id}', '${u.role}')">Delete</button>
+                <button class="btn btn-map" onclick="openEditUserModal('${u.user_id}')">Edit</button>
+                ${!isApproved ? `<button class="btn btn-approve" onclick="approveUser('${u.user_id}')">Approve</button>` : ''}
+                <button class="btn btn-delete" onclick="deleteProfile('${u.user_id}')">Delete</button>
             </td>
         </tr>`;
     });
 
-    filterTable('user-search', 'users-table', [1, 2, 4]);
-}
-
-async function loadPendingApprovals() {
-    const tbody = $('pending-table');
-    tbody.innerHTML = '<tr><td colspan="6">Loading pending users...</td></tr>';
-
-    const { data: pending, error } = await fetchData('consolidated_user_profiles_table', '*', { status: 'pending' }, 'created_at', true);
-    if (error) { tbody.innerHTML = `<tr><td colspan="6">Error loading pending list: ${error.message}</td></tr>`; return; }
-
-    tbody.innerHTML = '';
-    if (!pending.length) { tbody.innerHTML = `<tr><td colspan="6">No pending approvals!</td></tr>`; return; }
-
-    pending.forEach(p => {
-        const registeredDate = new Date(p.created_at).toLocaleDateString();
-        tbody.innerHTML += `<tr>
-            <td>${escapeHtml(p.full_name)}</td>
-            <td>${escapeHtml(p.email)}</td>
-            <td>${escapeHtml(p.role)}</td>
-            <td>${escapeHtml(p.department || p.program || 'N/A')}</td>
-            <td>${registeredDate}</td>
-            <td>
-                <button class="btn btn-approve" onclick="approveUser('${p.user_id}', '${p.role}')">Approve</button>
-                <button class="btn btn-reject" onclick="deleteProfile('${p.user_id}', '${p.role}')">Reject & Delete</button>
-            </td>
-        </tr>`;
-    });
+    filterTable('user-search', 'users-table', [1,2,4]);
 }
 
 async function loadStudents() {
     const tbody = $('students-table');
     tbody.innerHTML = '<tr><td colspan="10">Loading students...</td></tr>';
 
-    const { data: students, error } = await fetchData('consolidated_user_profiles_table', '*', { role: 'student' }, 'full_name', true);
+    const { data: students, error } = await sb.from('consolidated_user_profiles_table').select('*').eq('role','student').order('full_name', { ascending: true });
     if (error) { tbody.innerHTML = `<tr><td colspan="10">Error loading students: ${error.message}</td></tr>`; return; }
 
     tbody.innerHTML = '';
     students.forEach(s => {
         const isBlocked = s.block_program_year === true;
-        const statusText = isBlocked ? 'BLOCKED' : (s.status === 'approved' ? 'Approved' : 'Pending');
-        const statusClass = isBlocked ? 'status-danger' : (s.status === 'approved' ? 'status-approved' : 'status-pending');
+        const statusText = isBlocked ? 'BLOCKED' : (s.status==='approved' ? 'Approved' : 'Pending');
+        const statusClass = isBlocked ? 'status-danger' : (s.status==='approved' ? 'status-approved' : 'status-pending');
 
         tbody.innerHTML += `<tr>
-            <td>${escapeHtml(s.user_id.substring(0, 8))}...</td>
+            <td>${escapeHtml(s.user_id.substring(0,8))}...</td>
             <td>${escapeHtml(s.full_name)}</td>
             <td>${escapeHtml(s.email)}</td>
             <td>${escapeHtml(s.program || 'N/A')}</td>
@@ -653,63 +614,48 @@ async function loadStudents() {
             <td>${escapeHtml(s.phone)}</td>
             <td class="${statusClass}">${statusText}</td>
             <td>
-                <button class="btn btn-map" onclick="openEditUserModal('${s.user_id}', '${s.role}')">Edit</button>
-                <button class="btn btn-delete" onclick="deleteProfile('${s.user_id}', '${s.role}')">Delete</button>
+                <button class="btn btn-map" onclick="openEditUserModal('${s.user_id}')">Edit</button>
+                <button class="btn btn-delete" onclick="deleteProfile('${s.user_id}')">Delete</button>
             </td>
         </tr>`;
     });
 
-    filterTable('student-search', 'students-table', [1, 3, 5]);
+    filterTable('student-search','students-table',[1,3,5]);
 }
 
 // ==========================================================
 // *** WRITE OPERATIONS (Approve / Role Change / Delete / Edit) ***
 // ==========================================================
-async function approveUser(userId, role) {
-    if (!confirm('Are you sure you want to approve this user?')) return;
-    const table = getProfileTable(role);
-    if (!table) { showFeedback(`Invalid role: ${role}`, 'error'); return; }
-
-    const { error } = await sb.from(table).update({ status: 'approved' }).eq('user_id', userId);
-    if (error) showFeedback(`Failed to approve user: ${error.message}`, 'error');
-    else { showFeedback('User approved successfully!'); loadPendingApprovals(); loadAllUsers(); loadDashboardData(); }
+async function approveUser(userId) {
+    if (!confirm('Approve this user?')) return;
+    const { error } = await sb.from('consolidated_user_profiles_table').update({ status:'approved' }).eq('user_id',userId);
+    if (error) showFeedback(`Failed: ${error.message}`,'error');
+    else { showFeedback('User approved successfully!'); loadAllUsers(); loadStudents(); loadDashboardData(); }
 }
 
-async function updateUserRole(userId, newRole, oldRole) {
-    if (!confirm(`Change user role from ${oldRole} to ${newRole}?`)) return;
-
-    const table = getProfileTable(oldRole);
-    if (!table) { showFeedback(`Invalid role: ${oldRole}`, 'error'); return; }
-
-    const { error: profileError } = await sb.from(table).update({ role: newRole }).eq('user_id', userId);
-    if (profileError) { showFeedback(`Failed to update role: ${profileError.message}`, 'error'); return; }
-
-    const { error: authError } = await sb.auth.admin.updateUserById(userId, { user_metadata: { role: newRole } });
-    if (authError) showFeedback(`Warning: Auth role not updated: ${authError.message}`, 'warning');
-
-    showFeedback(`User role updated to ${newRole} successfully!`);
-    loadAllUsers();
+async function updateUserRole(userId,newRole) {
+    if (!confirm(`Change user role to ${newRole}?`)) return;
+    const { error } = await sb.from('consolidated_user_profiles_table').update({ role:newRole }).eq('user_id',userId);
+    if (error) showFeedback(`Failed: ${error.message}`,'error');
+    else { showFeedback('Role updated!'); loadAllUsers(); loadStudents(); loadDashboardData(); }
 }
 
-async function deleteProfile(userId, role) {
+async function deleteProfile(userId) {
     if (!confirm('Deleting this profile is irreversible. Continue?')) return;
-    const table = getProfileTable(role);
-    if (!table) { showFeedback(`Invalid role: ${role}`, 'error'); return; }
-
-    const { error: profileError } = await sb.from(table).delete().eq('user_id', userId);
-    if (profileError) { showFeedback(`Failed to delete profile: ${profileError.message}`, 'error'); return; }
-
-    const { error: authError } = await sb.auth.admin.deleteUser(userId);
-    if (authError) { showFeedback(`Profile deleted, but Auth user deletion failed: ${authError.message}`, 'error'); return; }
-
-    showFeedback('User profile and login deleted successfully!', 'success');
-    loadAllUsers(); loadPendingApprovals(); loadStudents(); loadDashboardData();
+    const { error } = await sb.from('consolidated_user_profiles_table').delete().eq('user_id',userId);
+    if (error) showFeedback(`Failed: ${error.message}`,'error');
+    else { 
+        const authErr = await sb.auth.admin.deleteUser(userId);
+        if (authErr) showFeedback('Deleted from table, but auth deletion failed','warning');
+        else showFeedback('User deleted successfully!','success');
+        loadAllUsers(); loadStudents(); loadDashboardData(); 
+    }
 }
 
-async function openEditUserModal(userId, role) {
+async function openEditUserModal(userId) {
     try {
-        const { data: user, error } = await sb.from('consolidated_user_profiles_table').select('*').eq('user_id', userId).single();
-        if (error || !user) throw new Error('User data fetch failed.');
+        const { data:user, error } = await sb.from('consolidated_user_profiles_table').select('*').eq('user_id',userId).single();
+        if (error || !user) throw new Error('User fetch failed.');
 
         $('edit_user_id').value = user.user_id;
         $('edit_user_name').value = user.full_name || '';
@@ -717,68 +663,52 @@ async function openEditUserModal(userId, role) {
         $('edit_user_role').value = user.role || 'student';
         $('edit_user_program').value = user.program || 'KRCHN';
         $('edit_user_intake').value = user.intake_year || '2024';
-        $('edit_user_block_status').value = user.block_program_year === true ? 'true' : 'false';
-        updateBlockTermOptions('edit_user_program', 'edit_user_block');
+        $('edit_user_block_status').value = user.block_program_year ? 'true':'false';
+        updateBlockTermOptions('edit_user_program','edit_user_block');
         $('edit_user_block').value = user.block || 'A';
         $('userEditModal').style.display = 'flex';
-    } catch (error) {
-        showFeedback(`Failed to load user: ${error.message}`, 'error');
-    }
+    } catch(e) { showFeedback(`Failed to load user: ${e.message}`,'error'); }
 }
 
 async function handleEditUser(e) {
     e.preventDefault();
     const submitButton = e.submitter;
     const originalText = submitButton.textContent;
-    setButtonLoading(submitButton, true, originalText);
+    setButtonLoading(submitButton,true,originalText);
 
     const userId = $('edit_user_id').value;
     const newEmail = $('edit_user_email').value.trim();
     const newRole = $('edit_user_role').value;
+    const updatedData = {
+        full_name: $('edit_user_name').value.trim(),
+        program: $('edit_user_program').value,
+        intake_year: $('edit_user_intake').value,
+        block: $('edit_user_block').value,
+        block_program_year: $('edit_user_block_status').value==='true',
+        status: 'approved'
+    };
 
     try {
-        const { data: currentUserData, error: fetchError } = await sb
-            .from('consolidated_user_profiles_table')
-            .select('*')
-            .eq('user_id', userId);
+        const { error } = await sb.from('consolidated_user_profiles_table').update(updatedData).eq('user_id',userId);
+        if (error) throw error;
 
-        if (fetchError) throw fetchError;
-        if (!currentUserData || !currentUserData.length) throw new Error('User not found.');
-
-        const currentRole = currentUserData[0].role;
-        const currentEmail = currentUserData[0].email;
-
-        const table = getProfileTable(currentRole);
-        const profileSpecificData = {
-            full_name: $('edit_user_name').value.trim(),
-            intake_year: $('edit_user_intake').value,
-            block: $('edit_user_block').value,
-            block_program_year: $('edit_user_block_status').value === 'true',
-            status: 'approved',
-            program: $('edit_user_program').value
-        };
-
-        if (newRole && newRole !== currentRole) {
-            const { error: roleError } = await sb.from(table).update({ role: newRole }).eq('user_id', userId);
-            if (roleError) throw roleError;
+        if (newRole) {
+            const { error: roleErr } = await sb.from('consolidated_user_profiles_table').update({ role:newRole }).eq('user_id',userId);
+            if (roleErr) showFeedback(`Role update failed: ${roleErr.message}`,'warning');
         }
 
-        const { error: tableError } = await sb.from(table).update(profileSpecificData).eq('user_id', userId);
-        if (tableError) throw tableError;
-
-        if (newEmail && newEmail !== currentEmail) {
-            const { error: authError } = await sb.auth.admin.updateUserById(userId, { email: newEmail });
-            if (authError) showFeedback('Profile updated, but Auth email not updated.', 'warning');
+        if (newEmail) {
+            const { error: emailErr } = await sb.auth.admin.updateUserById(userId,{email:newEmail});
+            if (emailErr) showFeedback('Profile updated, but Auth email not updated.','warning');
         }
 
-        showFeedback('User profile updated successfully!', 'success');
-        $('userEditModal').style.display = 'none';
+        showFeedback('User profile updated successfully!','success');
+        $('userEditModal').style.display='none';
         loadAllUsers(); loadStudents(); loadDashboardData();
-
-    } catch (e) {
-        showFeedback('Failed to update user: ' + (e.message || e), 'error');
+    } catch(e) {
+        showFeedback('Failed to update user: '+(e.message||e),'error');
     } finally {
-        setButtonLoading(submitButton, false, originalText);
+        setButtonLoading(submitButton,false,originalText);
     }
 }
 
