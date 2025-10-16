@@ -465,52 +465,34 @@ async function handleSaveWelcomeMessage(e) {
  *******************************************************/
 
 // ==========================================================
-// *** NEW HELPER FUNCTION TO DETERMINE TARGET TABLE ***
+// *** HELPER FUNCTION TO DETERMINE TARGET TABLE ***
 // ==========================================================
 function getProfileTable(role) {
     if (role === 'student') return 'students';
-    // Assumes lecturers, admins, and superadmins are all stored in the 'lecturers' table
     if (['lecturer', 'admin', 'superadmin'].includes(role)) return 'lecturers';
-    return null; // Should not happen if roles are defined
+    return null;
 }
 
 // ==========================================================
 // *** CORE LOGIC FUNCTIONS ***
 // ==========================================================
 
-/**
- * Dynamic Block/Term Options based on Program (KRCHN vs TVET).
- */
 function updateBlockTermOptions(programSelectId, blockTermSelectId) {
     const program = $(programSelectId)?.value;
     const blockTermSelect = $(blockTermSelectId);
-    
     if (!blockTermSelect) return;
 
     let options = [];
+    if (program === 'KRCHN') options = [{ value: 'A', text: 'Block A' }, { value: 'B', text: 'Block B' }];
+    else if (program === 'TVET') options = [
+        { value: 'T1', text: 'Term 1' },
+        { value: 'T2', text: 'Term 2' },
+        { value: 'T3', text: 'Term 3' }
+    ];
+    else options = [{ value: 'A', text: 'Block A / Term 1' }, { value: 'B', text: 'Block B / Term 2' }];
 
-    if (program === 'KRCHN') {
-        options = [
-            { value: 'A', text: 'Block A' },
-            { value: 'B', text: 'Block B' }
-        ];
-    } else if (program === 'TVET') {
-        options = [
-            { value: 'T1', text: 'Term 1' },
-            { value: 'T2', text: 'Term 2' },
-            { value: 'T3', text: 'Term 3' }
-        ];
-    } else {
-        options = [
-            { value: 'A', text: 'Block A / Term 1' },
-            { value: 'B', text: 'Block B / Term 2' }
-        ];
-    }
-    
     let html = '<option value="">-- Select Block/Term --</option>';
-    options.forEach(opt => {
-        html += `<option value="${opt.value}">${escapeHtml(opt.text)}</option>`;
-    });
+    options.forEach(opt => html += `<option value="${opt.value}">${escapeHtml(opt.text)}</option>`);
     blockTermSelect.innerHTML = html;
 }
 
@@ -529,7 +511,6 @@ async function handleAddAccount(e) {
     const intake_year = $('account-intake').value;
     const block = $('account-block-term').value;
 
-    // Use status: 'approved' instead of approved: true
     const userData = {
         full_name: name,
         role: role,
@@ -537,78 +518,63 @@ async function handleAddAccount(e) {
         program_type: program_type,
         intake_year: intake_year,
         block: block,
-        status: 'approved', // Use 'status' column
+        status: 'approved',
         block_program_year: false
     };
 
     const targetTable = getProfileTable(role);
-    if (!targetTable) { showFeedback('Invalid role selected.', 'error'); setButtonLoading(submitButton, false, originalText); return; }
+    if (!targetTable) {
+        showFeedback('Invalid role selected.', 'error');
+        setButtonLoading(submitButton, false, originalText);
+        return;
+    }
 
     try {
-        // 1. Create Auth User
         const { data: { user }, error: authError } = await sb.auth.signUp({
             email: email,
             password: password,
-            options: { data: userData } // Still adds role metadata
+            options: { data: userData }
         });
-
-        if (authError) {
-            showFeedback(`Account Enrollment Error: ${authError.message}`, 'error');
-            setButtonLoading(submitButton, false, originalText);
-            return;
-        }
+        if (authError) throw authError;
 
         if (user && user.id) {
-            // 2. Insert profile into the CORRECT table ('students' or 'lecturers')
             const profileData = { user_id: user.id, email: email, ...userData };
-            // Ensure you map all fields correctly for the target table here!
-            
-            const { error: profileError } = await sb.from(targetTable).insert([
-                profileData 
-            ]);
-
+            const { error: profileError } = await sb.from(targetTable).insert([profileData]);
             if (profileError) {
-                showFeedback(`Profile insertion failed: ${profileError.message}`, 'error');
-                // IMPORTANT: You should delete the Auth user if this fails to avoid orphans!
                 await sb.auth.admin.deleteUser(user.id);
-            } else {
-                e.target.reset();
-                showFeedback(`New ${role.toUpperCase()} account successfully enrolled and approved!`, 'success');
-                loadStudents();
-                loadAllUsers();
-                loadDashboardData();
+                throw profileError;
             }
-        } else {
-            showFeedback('Enrollment succeeded but Auth user object was not returned.', 'error');
+            e.target.reset();
+            showFeedback(`New ${role.toUpperCase()} account successfully enrolled!`, 'success');
+            loadStudents(); loadAllUsers(); loadDashboardData();
         }
-
     } catch (err) {
-        showFeedback(`Unexpected error: ${err.message}`, 'error');
+        showFeedback(`Account creation failed: ${err.message}`, 'error');
     } finally {
         setButtonLoading(submitButton, false, originalText);
     }
 }
 
-
 // ==========================================================
-// *** READ OPERATIONS (Using the View) ***
+// *** READ OPERATIONS (Using consolidated_user_profiles_table) ***
 // ==========================================================
 
 async function loadAllUsers() {
     const tbody = $('users-table');
     tbody.innerHTML = '<tr><td colspan="7">Loading all users...</td></tr>';
-    
-    // FIX 1: Query the CONSOLIDATED VIEW for ALL users
-    const { data: users, error } = await fetchData('consolidated_user_profiles', '*', {}, 'full_name', true);
-    
-    if (error) { tbody.innerHTML = `<tr><td colspan="7">Error loading users: ${error.message}</td></tr>`; return; }
-    
+
+    const { data: users, error } = await fetchData('consolidated_user_profiles_table', '*', {}, 'full_name', true);
+
+    if (error) {
+        tbody.innerHTML = `<tr><td colspan="7">Error loading users: ${error.message}</td></tr>`;
+        return;
+    }
+
     tbody.innerHTML = '';
     users.forEach(u => {
         const roleOptions = ['student', 'lecturer', 'admin', 'superadmin']
             .map(role => `<option value="${role}" ${u.role === role ? 'selected' : ''}>${role}</option>`).join('');
-        
-        // Use 'status' column from the view
+
         const isBlocked = u.block_program_year === true;
         const isApproved = u.status === 'approved';
         const statusText = isBlocked ? 'BLOCKED' : (isApproved ? 'Approved' : 'Pending');
@@ -632,21 +598,21 @@ async function loadAllUsers() {
             </td>
         </tr>`;
     });
-    filterTable('user-search', 'users-table', [1, 2, 4]); 
+
+    filterTable('user-search', 'users-table', [1, 2, 4]);
 }
 
 async function loadPendingApprovals() {
     const tbody = $('pending-table');
     tbody.innerHTML = '<tr><td colspan="6">Loading pending users...</td></tr>';
-    
-    // FIX 2: Query the CONSOLIDATED VIEW, filtering by 'status: pending'
-    const { data: pending, error } = await fetchData('consolidated_user_profiles', '*', { status: 'pending' }, 'created_at', true);
-    
+
+    const { data: pending, error } = await fetchData('consolidated_user_profiles_table', '*', { status: 'pending' }, 'created_at', true);
+
     if (error) { tbody.innerHTML = `<tr><td colspan="6">Error loading pending list: ${error.message}</td></tr>`; return; }
-    
+
     tbody.innerHTML = '';
-    if (pending.length === 0) { tbody.innerHTML = `<tr><td colspan="6">No pending approvals!</td></tr>`; return; }
-    
+    if (!pending.length) { tbody.innerHTML = `<tr><td colspan="6">No pending approvals!</td></tr>`; return; }
+
     pending.forEach(p => {
         const registeredDate = new Date(p.created_at).toLocaleDateString();
         tbody.innerHTML += `<tr>
@@ -666,15 +632,13 @@ async function loadPendingApprovals() {
 async function loadStudents() {
     const tbody = $('students-table');
     tbody.innerHTML = '<tr><td colspan="10">Loading students...</td></tr>';
-    
-    // FIX 3: Query the CONSOLIDATED VIEW, filter by role
-    const { data: students, error } = await fetchData('consolidated_user_profiles', '*', { role: 'student' }, 'full_name', true);
-    
+
+    const { data: students, error } = await fetchData('consolidated_user_profiles_table', '*', { role: 'student' }, 'full_name', true);
+
     if (error) { tbody.innerHTML = `<tr><td colspan="10">Error loading students: ${error.message}</td></tr>`; return; }
-    
+
     tbody.innerHTML = '';
     students.forEach(s => {
-        // Use the 'status' column from the view
         const isBlocked = s.block_program_year === true;
         const statusText = isBlocked ? 'BLOCKED' : (s.status === 'approved' ? 'Approved' : 'Pending');
         const statusClass = isBlocked ? 'status-danger' : (s.status === 'approved' ? 'status-approved' : 'status-pending');
@@ -694,12 +658,12 @@ async function loadStudents() {
             </td>
         </tr>`;
     });
-    filterTable('student-search', 'students-table', [1, 3, 5]); 
+
+    filterTable('student-search', 'students-table', [1, 3, 5]);
 }
 
-
 // ==========================================================
-// *** WRITE OPERATIONS (Using Helper Function) ***
+// *** WRITE OPERATIONS (Approve / Role Change / Delete / Edit) ***
 // ==========================================================
 
 async function approveUser(userId, role) {
@@ -707,78 +671,38 @@ async function approveUser(userId, role) {
     const table = getProfileTable(role);
     if (!table) { showFeedback(`Invalid role: ${role}`, 'error'); return; }
 
-    // --- CRITICAL FIX: REFRESH SESSION/TOKEN BEFORE UPDATE ---
-    // This forces the client to use the freshest JWT containing the 'superadmin' role claim.
-    const { data: { session }, error: sessionError } = await sb.auth.getSession();
-    
-    if (sessionError || !session || !currentUserProfile || currentUserProfile.role !== 'superadmin') {
-        // Blocks the update if the token is stale or the role check fails client-side.
-        showFeedback('Session expired or role is not Super Admin. Please log out and log back in to refresh permissions.', 'error');
-        return;
-    }
-    // --------------------------------------------------------
-
-    // FIX 4: Target the correct table and update 'status' column
     const { error } = await sb.from(table).update({ status: 'approved' }).eq('user_id', userId);
-    
-    if (error) { 
-        console.error("Approval DB Error:", error);
-        // Display the actual DB error to help diagnose any lingering RLS issues
-        showFeedback(`Failed to approve user: ${error.message}`, 'error'); 
-    } 
-    else { 
-        showFeedback('User approved successfully!'); 
-        loadPendingApprovals(); // Refresh pending list
-        loadAllUsers();         // Refresh users list
-        loadDashboardData();    // Refresh counts
-    }
+
+    if (error) showFeedback(`Failed to approve user: ${error.message}`, 'error');
+    else { showFeedback('User approved successfully!'); loadPendingApprovals(); loadAllUsers(); loadDashboardData(); }
 }
 
 async function updateUserRole(userId, newRole, oldRole) {
-    if (!confirm(`Are you sure you want to change this user's role from ${oldRole} to ${newRole}?`)) return;
-    
-    // NOTE: Changing roles between Student and Lecturer requires moving data between tables, 
-    // which is complex. This only updates the role in the current table and Auth metadata.
-    // For full conversion, you need a server-side function.
-    
-    const table = getProfileTable(oldRole); // Use oldRole to find current table
+    if (!confirm(`Change user role from ${oldRole} to ${newRole}?`)) return;
+
+    const table = getProfileTable(oldRole);
     if (!table) { showFeedback(`Invalid role: ${oldRole}`, 'error'); return; }
 
     const { error: profileError } = await sb.from(table).update({ role: newRole }).eq('user_id', userId);
+    if (profileError) { showFeedback(`Failed to update role: ${profileError.message}`, 'error'); return; }
 
-    if (profileError) {
-        showFeedback(`Failed to update role in profile: ${profileError.message}`, 'error');
-        return;
-    }
-
-    // Also update the role in Auth metadata (optional but recommended)
     const { error: authError } = await sb.auth.admin.updateUserById(userId, { user_metadata: { role: newRole } });
+    if (authError) showFeedback(`Warning: Auth role not updated: ${authError.message}`, 'warning');
 
-    if (authError) {
-        showFeedback(`Warning: Failed to update role in Auth system: ${authError.message}`, 'warning');
-    }
-    
-    showFeedback(`User role updated to ${newRole} successfully!`); 
-    loadAllUsers(); 
+    showFeedback(`User role updated to ${newRole} successfully!`);
+    loadAllUsers();
 }
 
 async function deleteProfile(userId, role) {
-    if (!confirm('WARNING: Deleting the profile is an irreversible action. Are you absolutely sure? This will delete the profile AND the user login!')) return;
+    if (!confirm('Deleting this profile is irreversible. Continue?')) return;
     const table = getProfileTable(role);
     if (!table) { showFeedback(`Invalid role: ${role}`, 'error'); return; }
 
-    // 1. Delete from the correct profile table using 'user_id'
     const { error: profileError } = await sb.from(table).delete().eq('user_id', userId);
-    
     if (profileError) { showFeedback(`Failed to delete profile: ${profileError.message}`, 'error'); return; }
 
-    // 2. Delete the user from the Supabase Auth system
     const { error: authError } = await sb.auth.admin.deleteUser(userId);
-
-    if (authError) {
-        showFeedback(`Profile deleted, but failed to delete Auth user: ${authError.message}`, 'error');
-        return;
-    }
+    if (authError) { showFeedback(`Profile deleted, but Auth user deletion failed: ${authError.message}`, 'error'); return; }
 
     showFeedback('User profile and login deleted successfully!', 'success');
     loadAllUsers(); loadPendingApprovals(); loadStudents(); loadDashboardData();
@@ -786,31 +710,21 @@ async function deleteProfile(userId, role) {
 
 async function openEditUserModal(userId, role) {
     try {
-        const table = getProfileTable(role);
-        if (!table) throw new Error(`Invalid role: ${role}`);
-
-        // FIX 5: Select from the correct table using 'user_id'
-        const { data: user, error } = await sb.from(table).select('*').eq('user_id', userId).single();
+        const { data: user, error } = await sb.from('consolidated_user_profiles_table').select('*').eq('user_id', userId).single();
         if (error || !user) throw new Error('User data fetch failed.');
 
-        // Fill modal fields using 'user_id'
-        $('edit_user_id').value = user.user_id; // Use user_id for updates
+        $('edit_user_id').value = user.user_id;
         $('edit_user_name').value = user.full_name || '';
         $('edit_user_email').value = user.email || '';
         $('edit_user_role').value = user.role || 'student';
-
-        // NOTE: program_type is called 'course' in the students table, but we use the shared column name
-        $('edit_user_program').value = user.program_type || user.course || 'KRCHN'; 
+        $('edit_user_program').value = user.program_type || user.course || 'KRCHN';
         $('edit_user_intake').value = user.intake_year || '2024';
         $('edit_user_block_status').value = user.block_program_year === true ? 'true' : 'false';
-
-        // Populate and set block/term
         updateBlockTermOptions('edit_user_program', 'edit_user_block');
         $('edit_user_block').value = user.block || 'A';
-
-        $('userEditModal').style.display = 'flex'; 
+        $('userEditModal').style.display = 'flex';
     } catch (error) {
-        showFeedback(`Failed to load user data: ${error.message}`, 'error');
+        showFeedback(`Failed to load user: ${error.message}`, 'error');
     }
 }
 
@@ -824,104 +738,60 @@ async function handleEditUser(e) {
     const newEmail = $('edit_user_email').value.trim();
     const newRole = $('edit_user_role').value;
 
-    let role; // Original role
-    let table; // Target table ('students' or 'lecturers')
-    let currentEmail;
-
     try {
-        // 1. FETCH: Determine original role/email to figure out the target table and check for changes
         const { data: currentUserData, error: fetchError } = await sb
-            .from('consolidated_user_profiles')
+            .from('consolidated_user_profiles_table')
             .select('role, email')
-            .eq('user_id', userId); 
+            .eq('user_id', userId);
 
         if (fetchError) throw fetchError;
-        
-        if (!currentUserData || currentUserData.length === 0) {
-            throw new Error('User profile not found in consolidated view.');
+        if (!currentUserData || !currentUserData.length) throw new Error('User not found.');
+
+        const role = currentUserData[0].role;
+        const currentEmail = currentUserData[0].email;
+        const table = getProfileTable(role);
+
+        const profileSpecificData = {
+            full_name: $('edit_user_name').value.trim(),
+            intake_year: $('edit_user_intake').value,
+            block: $('edit_user_block').value,
+            block_program_year: $('edit_user_block_status').value === 'true',
+            status: 'approved'
+        };
+
+        if (role === 'student') profileSpecificData.course = $('edit_user_program').value;
+        else profileSpecificData.program_type = $('edit_user_program').value;
+
+        if (!profileSpecificData.course && !profileSpecificData.program_type) {
+            showFeedback('Please select a program/course.', 'error');
+            setButtonLoading(submitButton, false, originalText);
+            return;
         }
 
-        role = currentUserData[0].role;
-        currentEmail = currentUserData[0].email;
-        table = getProfileTable(role); // 'students' or 'lecturers'
-
-    } catch (e) {
-        console.error('Error determining user role:', e);
-        showFeedback('❌ Error: Could not determine user role for update.', 'error'); 
-        setButtonLoading(submitButton, false, originalText);
-        return;
-    }
-
-    if (!table || !role) {
-        showFeedback('❌ Error: Invalid role or profile table detected.', 'error');
-        setButtonLoading(submitButton, false, originalText);
-        return;
-    }
-
-    // 2. DATA: Prepare data ONLY for the specific profile table (students/lecturers)
-    const profileSpecificData = {
-        full_name: $('edit_user_name').value.trim(),
-        intake_year: $('edit_user_intake').value,
-        block: $('edit_user_block').value,
-        block_program_year: $('edit_user_block_status').value === 'true',
-        // ⭐ FINAL FIX: Explicitly set status to approved when Super Admin saves the profile.
-        status: 'approved' 
-    };
-
-    // Use the appropriate program/course field name based on the original role
-    if (role === 'student') {
-        profileSpecificData.course = $('edit_user_program').value;
-    } else {
-        profileSpecificData.program_type = $('edit_user_program').value;
-    }
-
-    if (!profileSpecificData.course && !profileSpecificData.program_type) {
-        showFeedback('Please select a program/course for this user.', 'error');
-        setButtonLoading(submitButton, false, originalText);
-        return;
-    }
-
-    try {
-        let successMessage = '✅ User profile updated successfully!';
-        
-        // A. UPDATE 1: Update the role in the 'profiles' table
         if (newRole && newRole !== role) {
-            const { error: profileUpdateError } = await sb.from('profiles')
-                .update({ role: newRole })
-                .eq('id', userId); 
-            if (profileUpdateError) throw profileUpdateError;
+            const { error: roleError } = await sb.from(table).update({ role: newRole }).eq('user_id', userId);
+            if (roleError) throw roleError;
         }
 
-        // B. UPDATE 2: Update the specific profile table (students/lecturers), including the new 'approved' status
-        const { error: specificTableError } = await sb.from(table)
-            .update(profileSpecificData) 
-            .eq('user_id', userId); 
-        
-        if (specificTableError) throw specificTableError;
+        const { error: tableError } = await sb.from(table).update(profileSpecificData).eq('user_id', userId);
+        if (tableError) throw tableError;
 
-        // C. UPDATE 3: Update the Auth email if it changed
         if (newEmail && newEmail !== currentEmail) {
-            const { error: authUpdateError } = await sb.auth.admin.updateUserById(userId, { 
-                email: newEmail 
-            });
-            if (authUpdateError) {
-                console.warn('Auth email update failed (Profile updated):', authUpdateError);
-                successMessage = 'Profile updated, but failed to update Auth email.';
-            }
+            const { error: authError } = await sb.auth.admin.updateUserById(userId, { email: newEmail });
+            if (authError) showFeedback('Profile updated, but Auth email not updated.', 'warning');
         }
-        
-        // 3. SUCCESS CLEANUP
-        showFeedback(successMessage, successMessage.startsWith('Profile') ? 'warning' : 'success');
+
+        showFeedback('User profile updated successfully!', 'success');
         $('userEditModal').style.display = 'none';
-        loadAllUsers();
-        loadStudents();
-        loadDashboardData();
+        loadAllUsers(); loadStudents(); loadDashboardData();
+
     } catch (e) {
-        showFeedback('❌ Failed to update user: ' + (e.message || e), 'error');
+        showFeedback('Failed to update user: ' + (e.message || e), 'error');
     } finally {
         setButtonLoading(submitButton, false, originalText);
     }
 }
+
 /*******************************************************
  * 5. Courses Tab
  *******************************************************/
