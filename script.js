@@ -674,41 +674,56 @@ async function handleEditUser(e) {
     e.preventDefault();
     const submitButton = e.submitter;
     const originalText = submitButton.textContent;
-    setButtonLoading(submitButton,true,originalText);
+    setButtonLoading(submitButton, true, originalText);
 
     const userId = $('edit_user_id').value;
     const newEmail = $('edit_user_email').value.trim();
     const newRole = $('edit_user_role').value;
+
+    // Prepare the data to update, matching consolidated_user_profiles_table columns
     const updatedData = {
         full_name: $('edit_user_name').value.trim(),
-        program: $('edit_user_program').value,
-        intake_year: $('edit_user_intake').value,
-        block: $('edit_user_block').value,
-        block_program_year: $('edit_user_block_status').value==='true',
+        program: $('edit_user_program').value || null,
+        intake_year: $('edit_user_intake').value || null,
+        block: $('edit_user_block').value || null,
+        block_program_year: $('edit_user_block_status').value === 'true',
         status: 'approved'
     };
 
     try {
-        const { error } = await sb.from('consolidated_user_profiles_table').update(updatedData).eq('user_id',userId);
-        if (error) throw error;
+        // Update user profile in consolidated_user_profiles_table
+        const { error: updateError } = await sb
+            .from('consolidated_user_profiles_table')
+            .update(updatedData)
+            .eq('user_id', userId);
 
+        if (updateError) throw updateError;
+
+        // Update role if changed
         if (newRole) {
-            const { error: roleErr } = await sb.from('consolidated_user_profiles_table').update({ role:newRole }).eq('user_id',userId);
-            if (roleErr) showFeedback(`Role update failed: ${roleErr.message}`,'warning');
+            const { error: roleError } = await sb
+                .from('consolidated_user_profiles_table')
+                .update({ role: newRole })
+                .eq('user_id', userId);
+            if (roleError) showFeedback(`Role update failed: ${roleError.message}`, 'warning');
         }
 
+        // Update email in Supabase Auth
         if (newEmail) {
-            const { error: emailErr } = await sb.auth.admin.updateUserById(userId,{email:newEmail});
-            if (emailErr) showFeedback('Profile updated, but Auth email not updated.','warning');
+            const { error: emailError } = await sb.auth.admin.updateUserById(userId, { email: newEmail });
+            if (emailError) showFeedback('Profile updated, but Auth email not updated.', 'warning');
         }
 
-        showFeedback('User profile updated successfully!','success');
-        $('userEditModal').style.display='none';
-        loadAllUsers(); loadStudents(); loadDashboardData();
-    } catch(e) {
-        showFeedback('Failed to update user: '+(e.message||e),'error');
+        showFeedback('User profile updated successfully!', 'success');
+        $('userEditModal').style.display = 'none';
+        loadAllUsers();
+        loadStudents();
+        loadDashboardData();
+
+    } catch (err) {
+        showFeedback('Failed to update user: ' + (err.message || err), 'error');
     } finally {
-        setButtonLoading(submitButton,false,originalText);
+        setButtonLoading(submitButton, false, originalText);
     }
 }
 
