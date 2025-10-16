@@ -214,10 +214,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const loginForm = document.getElementById('loginForm');
     const loginButton = document.getElementById('loginButton');
 
-    if (!loginForm) {
-        console.error("Login form not found");
-        return;
-    }
+    if (!loginForm) return;
 
     loginForm.addEventListener('submit', async e => {
         e.preventDefault();
@@ -236,57 +233,29 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // 🛑 CRITICAL FIX: Force session refresh to stabilize the token before database queries
-            // This is the definitive fix for RLS race conditions right after sign-in.
+            // 2️⃣ Stabilize session
             const { error: refreshError } = await supabase.auth.refreshSession();
-            if (refreshError) {
-                console.warn('Warning: Session refresh failed. Proceeding with existing token.', refreshError);
-                // We proceed here because the token might still be usable, but we've tried to stabilize it.
-            }
+            if (refreshError) console.warn('Session refresh failed, proceeding.', refreshError);
 
             const userId = authData.user.id;
 
-            // 2️⃣ Check role from profiles (Primary profile for Superadmin/Admin)
-            const { data: profileData, error: profileError } = await supabase
-                .from('profiles')
-                .select('role, approved, full_name, email, phone')
-                .eq('id', userId)
-                .maybeSingle();
-
-            // Safely default the role to 'student' if profile data is missing or role is null
-            let role = profileData?.role?.toLowerCase() ?? 'student';
-
-            // 3️⃣ Superadmin/Admin → use profiles directly
-            if (role === 'superadmin' || role === 'admin') {
-                localStorage.setItem('currentUserProfile', JSON.stringify(profileData));
-
-                if (role === 'superadmin') {
-                    window.location.href = 'superadmin.html';
-                } else {
-                    window.location.href = 'admin.html';
-                }
-                return;
-            }
-
-            // 4️⃣ Students & Lecturers → load from consolidated table (CRITICAL FIXES APPLIED)
+            // 3️⃣ Fetch consolidated profile
             const { data: consolidatedData, error: consolidatedError } = await supabase
                 .from('consolidated_user_profiles_table')
                 .select('*')
-               .eq('user_id', userId)
+                .eq('user_id', userId)
                 .maybeSingle();
 
-            // ⚠️ FIX: This block handles the "Profile access issue" by catching the null result
             if (consolidatedError || !consolidatedData) {
                 console.error('Consolidated profile fetch error:', consolidatedError);
-                errorMsg.innerText = 'Login failed: Profile access issue. (Profile not found or access denied)';
+                errorMsg.innerText = 'Login failed: Profile access issue.';
                 await supabase.auth.signOut();
                 loginButton.disabled = false;
                 return;
             }
 
-            // 5️⃣ Check approval (FIX: Use null coalescing to safely check status)
-            const currentStatus = consolidatedData.status?.toLowerCase() ?? 'pending'; 
-            
+            // 4️⃣ Check approval
+            const currentStatus = consolidatedData.status?.toLowerCase() ?? 'pending';
             if (currentStatus !== 'approved') {
                 errorMsg.innerText = 'Login failed: Your account is pending approval.';
                 await supabase.auth.signOut();
@@ -294,18 +263,32 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // 6️⃣ Save the full profile for dashboard use
-            localStorage.setItem('currentUserProfile', JSON.stringify(consolidatedData));
+            // 5️⃣ Save full profile including student_id
+            const profileToStore = {
+                id: consolidatedData.id,
+                user_id: consolidatedData.user_id,
+                full_name: consolidatedData.full_name,
+                role: consolidatedData.role,
+                email: consolidatedData.email,
+                phone: consolidatedData.phone,
+                student_id: consolidatedData.student_id, // ✅ Fix: now captured
+                program: consolidatedData.program,
+                department: consolidatedData.department,
+                status: consolidatedData.status
+            };
+            localStorage.setItem('currentUserProfile', JSON.stringify(profileToStore));
 
-            // 7️⃣ Redirect based on role (FIX: Use null coalescing to safely read role)
-            const consolidatedRole = consolidatedData.role?.toLowerCase() ?? 'student'; 
-
-            if (consolidatedRole === 'student') {
+            // 6️⃣ Redirect based on role
+            const role = consolidatedData.role?.toLowerCase() ?? 'student';
+            if (role === 'student') {
                 window.location.href = 'index.html';
-            } else if (consolidatedRole === 'lecturer') {
+            } else if (role === 'lecturer') {
                 window.location.href = 'lecturer.html';
+            } else if (role === 'admin') {
+                window.location.href = 'admin.html';
+            } else if (role === 'superadmin') {
+                window.location.href = 'superadmin.html';
             } else {
-                // Fallback for any other unexpected role
                 window.location.href = 'index.html';
             }
 
@@ -318,6 +301,5 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 </script>
-   
 </body>
 </html>
