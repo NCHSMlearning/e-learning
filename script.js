@@ -371,18 +371,23 @@ function exportTableToCSV(tableId, filename) {
  *******************************************************/
 
 async function loadDashboardData() {
-    const { count: allUsersCount } = await sb.from('profiles').select('id', { count: 'exact' });
+    // Total users
+    const { count: allUsersCount } = await sb
+        .from('consolidated_user_profiles_table')
+        .select('user_id', { count: 'exact' });
     $('totalUsers').textContent = allUsersCount || 0;
 
+    // Pending approvals
     const { count: pendingCount } = await sb
-        .from('profiles')
-        .select('id', { count: 'exact' })
-        .eq('approved', false);
+        .from('consolidated_user_profiles_table')
+        .select('user_id', { count: 'exact' })
+        .eq('status', 'pending');
     $('pendingApprovals').textContent = pendingCount || 0;
 
+    // Total students
     const { count: studentsCount } = await sb
-        .from('profiles')
-        .select('id', { count: 'exact' })
+        .from('consolidated_user_profiles_table')
+        .select('user_id', { count: 'exact' })
         .eq('role', 'student');
     $('totalStudents').textContent = studentsCount || 0;
 
