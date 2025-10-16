@@ -680,7 +680,7 @@ async function handleEditUser(e) {
     const newEmail = $('edit_user_email').value.trim();
     const newRole = $('edit_user_role').value;
 
-    // Prepare the data to update, matching consolidated_user_profiles_table columns
+    // Updated data to match current table columns
     const updatedData = {
         full_name: $('edit_user_name').value.trim(),
         program: $('edit_user_program').value || null,
@@ -692,12 +692,12 @@ async function handleEditUser(e) {
 
     try {
         // Update user profile in consolidated_user_profiles_table
-        const { error: updateError } = await sb
+        const { error: profileError } = await sb
             .from('consolidated_user_profiles_table')
             .update(updatedData)
             .eq('user_id', userId);
 
-        if (updateError) throw updateError;
+        if (profileError) throw profileError;
 
         // Update role if changed
         if (newRole) {
@@ -708,7 +708,7 @@ async function handleEditUser(e) {
             if (roleError) showFeedback(`Role update failed: ${roleError.message}`, 'warning');
         }
 
-        // Update email in Supabase Auth
+        // Update Auth email if changed
         if (newEmail) {
             const { error: emailError } = await sb.auth.admin.updateUserById(userId, { email: newEmail });
             if (emailError) showFeedback('Profile updated, but Auth email not updated.', 'warning');
@@ -720,8 +720,8 @@ async function handleEditUser(e) {
         loadStudents();
         loadDashboardData();
 
-    } catch (err) {
-        showFeedback('Failed to update user: ' + (err.message || err), 'error');
+    } catch (e) {
+        showFeedback('Failed to update user: ' + (e.message || e), 'error');
     } finally {
         setButtonLoading(submitButton, false, originalText);
     }
