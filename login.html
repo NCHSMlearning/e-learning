@@ -236,57 +236,42 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // 🛑 CRITICAL FIX: Force session refresh to stabilize the token before database queries
-            // This is the definitive fix for RLS race conditions right after sign-in.
-            const { error: refreshError } = await supabase.auth.refreshSession();
+            // 2️⃣ Refresh session to stabilize JWT claims
+            const { data: refreshedData, error: refreshError } = await supabase.auth.refreshSession();
             if (refreshError) {
-                console.warn('Warning: Session refresh failed. Proceeding with existing token.', refreshError);
-                // We proceed here because the token might still be usable, but we've tried to stabilize it.
+                console.warn('Session refresh failed', refreshError);
             }
+            const sessionUser = refreshedData?.session?.user ?? authData.user;
 
-            const userId = authData.user.id;
+            // 3️⃣ Read role from refreshed user metadata
+            let role = sessionUser.user_metadata?.role?.toLowerCase() ?? 'student';
 
-            // 2️⃣ Check role from profiles (Primary profile for Superadmin/Admin)
-            const { data: profileData, error: profileError } = await supabase
-                .from('profiles')
-                .select('role, approved, full_name, email, phone')
-                .eq('id', userId)
-                .maybeSingle();
-
-            // Safely default the role to 'student' if profile data is missing or role is null
-            let role = profileData?.role?.toLowerCase() ?? 'student';
-
-            // 3️⃣ Superadmin/Admin → use profiles directly
-            if (role === 'superadmin' || role === 'admin') {
-                localStorage.setItem('currentUserProfile', JSON.stringify(profileData));
-
-                if (role === 'superadmin') {
-                    window.location.href = 'superadmin.html';
-                } else {
-                    window.location.href = 'admin.html';
-                }
+            // 4️⃣ Handle superadmin/admin redirect immediately
+            if (role === 'superadmin') {
+                window.location.href = 'superadmin.html';
+                return;
+            } else if (role === 'admin') {
+                window.location.href = 'admin.html';
                 return;
             }
 
-            // 4️⃣ Students & Lecturers → load from consolidated table (CRITICAL FIXES APPLIED)
-            const { data: consolidatedData, error: consolidatedError } = await supabase
+            // 5️⃣ Students & Lecturers → fetch full profile
+            const { data: profileData, error: profileError } = await supabase
                 .from('consolidated_user_profiles_table')
                 .select('*')
-               .eq('user_id', userId)
+                .eq('user_id', sessionUser.id)
                 .maybeSingle();
 
-            // ⚠️ FIX: This block handles the "Profile access issue" by catching the null result
-            if (consolidatedError || !consolidatedData) {
-                console.error('Consolidated profile fetch error:', consolidatedError);
-                errorMsg.innerText = 'Login failed: Profile access issue. (Profile not found or access denied)';
+            if (profileError || !profileData) {
+                console.error('Consolidated profile fetch error:', profileError);
+                errorMsg.innerText = 'Login failed: Profile access issue.';
                 await supabase.auth.signOut();
                 loginButton.disabled = false;
                 return;
             }
 
-            // 5️⃣ Check approval (FIX: Use null coalescing to safely check status)
-            const currentStatus = consolidatedData.status?.toLowerCase() ?? 'pending'; 
-            
+            // 6️⃣ Check approval status
+            const currentStatus = profileData.status?.toLowerCase() ?? 'pending';
             if (currentStatus !== 'approved') {
                 errorMsg.innerText = 'Login failed: Your account is pending approval.';
                 await supabase.auth.signOut();
@@ -294,18 +279,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // 6️⃣ Save the full profile for dashboard use
-            localStorage.setItem('currentUserProfile', JSON.stringify(consolidatedData));
+            // 7️⃣ Save profile for dashboard
+            localStorage.setItem('currentUserProfile', JSON.stringify(profileData));
 
-            // 7️⃣ Redirect based on role (FIX: Use null coalescing to safely read role)
-            const consolidatedRole = consolidatedData.role?.toLowerCase() ?? 'student'; 
-
-            if (consolidatedRole === 'student') {
+            // 8️⃣ Redirect based on profile role
+            const profileRole = profileData.role?.toLowerCase() ?? 'student';
+            if (profileRole === 'student') {
                 window.location.href = 'index.html';
-            } else if (consolidatedRole === 'lecturer') {
+            } else if (profileRole === 'lecturer') {
                 window.location.href = 'lecturer.html';
             } else {
-                // Fallback for any other unexpected role
                 window.location.href = 'index.html';
             }
 
@@ -318,6 +301,5 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 </script>
-   
 </body>
 </html>
