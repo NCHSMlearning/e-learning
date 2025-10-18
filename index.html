@@ -1171,7 +1171,9 @@ async function loadCourses() {
             : currentUserProfile?.program;
 
         const block = currentUserProfile?.block || null;
-        const intakeYear = currentUserProfile?.intake_year || null;
+        const intakeYear = currentUserProfile?.intake_year
+            ? parseInt(currentUserProfile.intake_year) // ✅ ensure numeric for Supabase match
+            : null;
 
         // --- 2. Validate ---
         if (!program || !block || !intakeYear) {
@@ -1186,14 +1188,14 @@ async function loadCourses() {
         }
 
         // --- 3. Query Supabase ---
-        let query = sb
+        const { data: visibleCourses, error } = await sb
             .from('courses')
             .select('id, course_name, code, status, target_program, block, intake_year')
             .eq('intake_year', intakeYear)
             .eq('block', block)
-            .or(`target_program.eq.${program},target_program.eq.General`);
+            .or(`target_program.eq.${program},target_program.eq.General`)
+            .order('course_name', { ascending: true });
 
-        const { data: visibleCourses, error } = await query.order('course_name', { ascending: true });
         if (error) throw error;
 
         // --- 4. Cache and render ---
