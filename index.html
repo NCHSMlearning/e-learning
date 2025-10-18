@@ -373,16 +373,22 @@
                 </table>
             </section>
             
-           <section id="courses" class="tab-content">
-                <h2 style="color: #4C1D95;">My Courses (Real-Time Enrollment)</h2>
-                <p>Courses shown here are filtered by your **Program**, **Block**, and **Intake Year** for relevance.</p>
-                <table>
-                    <thead><tr><th>Course Name</th><th>Status</th></tr></thead>
-                    <tbody id="courses-table">
-                        <tr><td colspan="2">Loading courses...</td></tr>
-                    </tbody>
-                </table>
-            </section>
+         <section id="courses" class="tab-content">
+    <h2 style="color: #4C1D95;">My Courses</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Course Name</th>
+                <th>Unit Code</th>
+                <th>Description</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody id="courses-table">
+            <tr><td colspan="4">Loading courses...</td></tr>
+        </tbody>
+    </table>
+</section>
 
 
          <section id="attendance" class="tab-content">
@@ -1206,72 +1212,53 @@ async function geoCheckIn() {
 // *** 6. SUPABASE DATA LOADING FUNCTIONS (Courses, Exams, Resources) ***
 // *************************************************************************
 
-// ✅ Load user courses (student & lecturer)
 async function loadCourses() {
     const tableBody = document.getElementById('courses-table');
-    if (!tableBody) {
-        console.error("❌ Missing <tbody id='courses-table'> in HTML");
-        return;
-    }
-
-    tableBody.innerHTML = '<tr><td colspan="2">Loading courses...</td></tr>';
+    if (!tableBody) return;
+    tableBody.innerHTML = '<tr><td colspan="4">Loading courses from Supabase...</td></tr>';
 
     try {
-        const role = currentUserProfile?.role;
-        const program = role === 'lecturer' 
-            ? currentUserProfile?.department 
+        const role = currentUserProfile?.role?.toLowerCase() || 'student';
+        const program = role === 'lecturer'
+            ? currentUserProfile?.department
             : currentUserProfile?.program;
+        const block = currentUserProfile?.block || null;
+        const intakeYear = currentUserProfile?.intake_year || null;
 
-        const block = currentUserProfile?.block;
-        const intakeYear = currentUserProfile?.intake_year;
+        console.log("🔍 Filters used:", { role, program, block, intakeYear });
 
         if (!program || !block || !intakeYear) {
-            tableBody.innerHTML = `
-                <tr><td colspan="2">
-                    Missing program/department, block, or intake year info. Cannot load courses.
-                </td></tr>`;
-            cachedCourses = [];
+            tableBody.innerHTML = `<tr><td colspan="4">No program, block, or intake year specified in your profile.</td></tr>`;
             return;
         }
 
-        // ✅ Query courses table
-        const { data: courses, error } = await sb
+        const { data: visibleCourses, error } = await sb
             .from('courses')
-            .select('id, course_name, code, status, target_program, block, intake_year')
-            .or(`target_program.eq.${program},target_program.eq.General`)
+            .select('course_name, unit_code, description, status, block, intake_year, target_program')
             .eq('block', block)
-            .eq('intake_year', intakeYear)
+            .eq('intake_year', String(intakeYear))
+            .or(`target_program.eq.${program},target_program.eq.General`)
             .order('course_name', { ascending: true });
 
         if (error) throw error;
 
-        cachedCourses = courses || [];
         tableBody.innerHTML = '';
-
-        if (cachedCourses.length > 0) {
-            cachedCourses.forEach(course => {
+        if (visibleCourses.length > 0) {
+            visibleCourses.forEach(c => {
                 tableBody.innerHTML += `
                     <tr>
-                        <td>${course.code ? course.code + ' - ' : ''}${course.course_name}</td>
-                        <td>${course.status || 'Active'}</td>
+                        <td>${c.course_name}</td>
+                        <td>${c.unit_code || 'N/A'}</td>
+                        <td>${c.description || 'N/A'}</td>
+                        <td>${c.status || 'Active'}</td>
                     </tr>`;
             });
         } else {
-            tableBody.innerHTML = `
-                <tr><td colspan="2">
-                    No courses found for ${program}, Block ${block}, Intake ${intakeYear}.
-                </td></tr>`;
+            tableBody.innerHTML = `<tr><td colspan="4">No courses found for ${program}, Block ${block}, ${intakeYear}.</td></tr>`;
         }
-
     } catch (error) {
         console.error("❌ Failed to load courses:", error);
-        tableBody.innerHTML = `<tr><td colspan="2" style="color:#EF4444;">Error loading courses: ${error.message}</td></tr>`;
-        cachedCourses = [];
-    }
-
-    // --- Update dashboard metric ---
-    if (document.getElementById('dashboard-active-courses')) {
-        document.getElementById('dashboard-active-courses').textContent = cachedCourses.length || 0;
+        tableBody.innerHTML = `<tr><td colspan="4" style="color:#EF4444;">Error loading courses: ${error.message}</td></tr>`;
     }
 }
 
