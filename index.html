@@ -1155,44 +1155,49 @@ async function geoCheckIn() {
 // *** 6. SUPABASE DATA LOADING FUNCTIONS (Courses, Exams, Resources) ***
 // *************************************************************************
 
-// ✅ Load user courses (The main course loader for the Courses Tab and Dashboard)
+// ✅ Load user courses (Supports both students and lecturers)
 async function loadCourses() {
     const tableBody = document.getElementById('courses-table');
     if (!tableBody) return;
     tableBody.innerHTML = '<tr><td colspan="2">Loading courses from Supabase...</td></tr>';
 
     try {
-        // --- 1. Get ALL necessary filter values from the profile ---
-        const program = currentUserProfile?.department || null;
-        const block = currentUserProfile?.block || null;  
-        const intakeYear = currentUserProfile?.intake_year || null; 
+        // --- 1. Get all necessary filter values from profile ---
+        const role = currentUserProfile?.role?.toLowerCase() || 'student';
 
+        // If lecturer → use department; if student → use program
+        const program = role === 'lecturer'
+            ? currentUserProfile?.department
+            : currentUserProfile?.program;
+
+        const block = currentUserProfile?.block || null;
+        const intakeYear = currentUserProfile?.intake_year || null;
+
+        // --- 2. Validate ---
         if (!program || !block || !intakeYear) {
-            console.warn("User profile is missing department, block, or intake year. Cannot load filtered courses.");
-            tableBody.innerHTML = '<tr><td colspan="2">No program, block, or intake year specified in your profile.</td></tr>';
+            console.warn("Missing program/department, block, or intake year:", { program, block, intakeYear });
+            tableBody.innerHTML = `
+                <tr>
+                    <td colspan="2">
+                        No program, block, or intake year specified in your profile.
+                    </td>
+                </tr>`;
             return;
         }
 
+        // --- 3. Query Supabase ---
         let query = sb
             .from('courses')
-            .select('id, course_name, code, status, target_program, block, intake_year'); 
+            .select('id, course_name, code, status, target_program, block, intake_year')
+            .eq('intake_year', intakeYear)
+            .eq('block', block)
+            .or(`target_program.eq.${program},target_program.eq.General`);
 
-        // --- 2. APPLY Block and Intake Year FILTERS ---
-        
-        query = query.eq('intake_year', intakeYear); 
-        query = query.eq('block', block); 
-
-        // Filter by Program 
-        query = query.or(`target_program.eq.${program},target_program.eq.General`);
-        
-        // --- 3. Execute Query ---
         const { data: visibleCourses, error } = await query.order('course_name', { ascending: true });
-
         if (error) throw error;
 
-        // NOTE: This cachedCourses is used for Dashboard metrics (course count), 
-        // and is also populated by loadClassTargets for the attendance dropdown.
-        cachedCourses = visibleCourses.map(c => ({
+        // --- 4. Cache and render ---
+        cachedCourses = (visibleCourses || []).map(c => ({
             id: c.id,
             name: c.course_name,
             code: c.code,
@@ -1207,11 +1212,10 @@ async function loadCourses() {
                     <tr>
                         <td>${c.code ? c.code + ' - ' : ''}${c.name}</td>
                         <td>${c.status}</td>
-                    </tr>
-                `;
+                    </tr>`;
             });
         } else {
-            tableBody.innerHTML = '<tr><td colspan="2">No courses found for your block/year.</td></tr>';
+            tableBody.innerHTML = `<tr><td colspan="2">No courses found for ${program}, Block ${block}, ${intakeYear}.</td></tr>`;
         }
 
     } catch (error) {
@@ -1220,8 +1224,11 @@ async function loadCourses() {
         cachedCourses = [];
     }
 
-    if (document.getElementById('dashboard-active-courses')) document.getElementById('dashboard-active-courses').textContent = cachedCourses.length || 0;
-} // <<< SYNTAX FIX: This bracket was missing.
+    // --- 5. Update dashboard metrics ---
+    if (document.getElementById('dashboard-active-courses')) {
+        document.getElementById('dashboard-active-courses').textContent = cachedCourses.length || 0;
+    }
+}
 
 
 // ✅ Load user exams
@@ -1235,19 +1242,23 @@ async function loadExams() {
     tableBody.innerHTML = '<tr><td colspan="4">Loading exam schedule...</td></tr>';
 
     try {
-        const program = currentUserProfile?.department;
+        const role = currentUserProfile?.role;
+        const program = role === 'lecturer' 
+            ? currentUserProfile?.department 
+            : currentUserProfile?.program;
+
         const block = currentUserProfile?.block;
         const intakeYear = currentUserProfile?.intake_year;
 
         if (!program || !block || !intakeYear) {
-            tableBody.innerHTML = '<tr><td colspan="4">Missing department, block, or intake year info. Cannot load exams.</td></tr>';
+            tableBody.innerHTML = '<tr><td colspan="4">Missing program/department, block, or intake year info. Cannot load exams.</td></tr>';
             cachedExams = [];
             return;
         }
 
-        // --- CRITICAL FIX: The correct filter logic for exams ---
+        // ✅ Query exams table/view
         const { data: exams, error } = await sb
-            .from('exams_with_courses') // Assumed view/table
+            .from('exams_with_courses')
             .select('exam_name, exam_date, status, block_term, program_type')
             .or(`program_type.eq.${program},program_type.eq.General`)
             .eq('block_term', block)
@@ -1261,9 +1272,12 @@ async function loadExams() {
 
         if (cachedExams.length > 0) {
             cachedExams.forEach(exam => {
-                const dateStr = exam.exam_date ? new Date(exam.exam_date).toLocaleDateString('en-US', { 
-                    weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' 
-                }) : 'N/A';
+                const dateStr = exam.exam_date 
+                    ? new Date(exam.exam_date).toLocaleDateString('en-US', { 
+                        weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' 
+                    }) 
+                    : 'N/A';
+
                 tableBody.innerHTML += `
                     <tr>
                         <td>${exam.exam_name || 'N/A'}</td>
@@ -1274,7 +1288,12 @@ async function loadExams() {
                 `;
             });
         } else {
-            tableBody.innerHTML = '<tr><td colspan="4">No exams or CATs scheduled for your department, block, and intake year yet.</td></tr>';
+            tableBody.innerHTML = `
+                <tr>
+                    <td colspan="4">
+                        No exams or CATs scheduled for ${program}, Block ${block}, Intake ${intakeYear}.
+                    </td>
+                </tr>`;
         }
 
     } catch (error) {
@@ -1283,9 +1302,11 @@ async function loadExams() {
         cachedExams = [];
     }
 
-    // Update dashboard metrics to reflect the latest exams data
-    loadDashboardMetrics(currentUserId);
+    if (typeof loadDashboardMetrics === "function") {
+        loadDashboardMetrics(currentUserId);
+    }
 }
+
 
 // ✅ Load learning resources
 async function loadResources() {
@@ -1294,11 +1315,15 @@ async function loadResources() {
     resourceList.innerHTML = 'Loading resources from Supabase...';
 
     try {
-        const program = currentUserProfile?.department;
+        const role = currentUserProfile?.role;
+        const program = role === 'lecturer' 
+            ? currentUserProfile?.department 
+            : currentUserProfile?.program;
+
         const block = currentUserProfile?.block;
 
         if (!program || !block) {
-            resourceList.innerHTML = '<p>Missing enrollment details (department or block).</p>';
+            resourceList.innerHTML = '<p>Missing enrollment details (program/department or block).</p>';
             return;
         }
 
@@ -1314,36 +1339,44 @@ async function loadResources() {
         resourceList.innerHTML = '';
         if (!resources.length) {
             resourceList.innerHTML = `<p>No learning resources found for ${program}, Block ${block}.</p>`;
-            if (document.getElementById('dashboard-new-resources')) document.getElementById('dashboard-new-resources').textContent = '0';
+            if (document.getElementById('dashboard-new-resources')) 
+                document.getElementById('dashboard-new-resources').textContent = '0';
             return;
         }
 
         resources.forEach(res => {
-            const publicUrl = sb.storage.from('materials').getPublicUrl(res.file_path).data.publicUrl;
+            const { data: { publicUrl } } = sb.storage
+                .from('materials')
+                .getPublicUrl(res.file_path);
+
             resourceList.innerHTML += `
                 <div class="resource-item">
                     <div>
                         <a href="${publicUrl}" target="_blank">${res.title}</a>
                         <p style="margin:5px 0 0;font-size:0.9em;color:#6B7280;">
-                            ${res.program_type === 'General' ? 'General' : `${res.program_type}, Block ${res.block_term}`} - 
-                            Uploaded: ${new Date(res.created_at).toLocaleDateString()}
+                            ${res.program_type === 'General' ? 'General' : `${res.program_type}, Block ${res.block_term}`} 
+                            • Uploaded: ${new Date(res.created_at).toLocaleDateString()}
                         </p>
                     </div>
-                    <span style="font-size:1.5em;">&#x1F4C4;</span>
+                    <span style="font-size:1.5em;">📄</span>
                 </div>
             `;
         });
 
+        // ✅ Dashboard resource metric
         const oneWeekAgo = new Date();
         oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
         const newCount = resources.filter(r => new Date(r.created_at) > oneWeekAgo).length;
-        if (document.getElementById('dashboard-new-resources')) document.getElementById('dashboard-new-resources').textContent = newCount;
+
+        if (document.getElementById('dashboard-new-resources')) 
+            document.getElementById('dashboard-new-resources').textContent = newCount;
 
     } catch (error) {
         console.error("❌ Failed to load resources:", error);
         resourceList.innerHTML = `<p style="color:#EF4444;">Error loading resources: ${error.message}</p>`;
     }
 }
+
 
 // *************************************************************************
 // *** 7. ACADEMIC CALENDAR LOGIC ***
