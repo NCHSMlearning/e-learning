@@ -485,7 +485,7 @@
     // ** GLOBAL STATE VARIABLES **
     let currentUserId = null;
     let currentUserProfile = null;
-    // NOTE: cachedCourses will now be populated by loadClassTargets() and loadCourses()
+    // NOTE: cachedCourses will now be populated by loadClassTargets() and ()
     let cachedCourses = []; 
     let cachedExams = [];
     let cachedClinicalAreas = [];
@@ -1220,7 +1220,7 @@ async function loadCourses() {
         return;
     }
 
-    tableBody.innerHTML = '<tr><td colspan="3">Loading courses...</td></tr>';
+    tableBody.innerHTML = '<tr><td colspan="4">Loading courses...</td></tr>';
 
     try {
         const program = currentUserProfile?.program;
@@ -1228,44 +1228,43 @@ async function loadCourses() {
         const intakeYear = currentUserProfile?.intake_year;
 
         if (!program || !block || !intakeYear) {
-            tableBody.innerHTML = `<tr><td colspan="3">Missing program, block, or intake year info. Cannot load courses.</td></tr>`;
-            cachedCourses = [];
+            tableBody.innerHTML = `<tr><td colspan="4">Missing program, block, or intake year info. Cannot load courses.</td></tr>`;
             return;
         }
 
-        // Fetch courses student is enrolled in
+        // Fetch enrolled courses with a safe join to the courses table
         const { data: courses, error } = await sb
-  .from('student_courses')
-  .select(`
-    status,
-    courses(course_name)
-  `)
-  .eq('student_id', currentUserProfile.user_id)
-  .order('course_id');
+            .from('student_courses')
+            .select(`
+                status,
+                courses!inner(course_name)
+            `)
+            .eq('student_id', currentUserProfile.user_id)
+            .order('course_id');
 
         if (error) throw error;
 
-        cachedCourses = courses || [];
         tableBody.innerHTML = '';
 
-        if (cachedCourses.length > 0) {
-            cachedCourses.forEach(course => {
+        if (courses && courses.length > 0) {
+            courses.forEach(c => {
+                const name = c.courses?.course_name || 'Unknown';
                 tableBody.innerHTML += `
                     <tr>
-                        <td>${course.courses.course_name || 'N/A'}</td>
-                        <td>${course.course_id}</td>
-                        <td>${course.status || 'enrolled'}</td>
+                        <td>${name}</td>
+                        <td>${c.course_id}</td>
+                        <td>N/A</td>
+                        <td>${c.status || 'Enrolled'}</td>
                     </tr>
                 `;
             });
         } else {
-            tableBody.innerHTML = `<tr><td colspan="3">No courses found for ${program}, Block ${block}, Intake ${intakeYear}.</td></tr>`;
+            tableBody.innerHTML = `<tr><td colspan="4">No courses found for ${program}, Block ${block}, Intake ${intakeYear}.</td></tr>`;
         }
 
     } catch (err) {
-        console.error('❌ Failed to load courses:', err);
-        tableBody.innerHTML = `<tr><td colspan="3" style="color:red;">Error loading courses: ${err.message}</td></tr>`;
-        cachedCourses = [];
+        console.error("❌ Error loading courses:", err);
+        tableBody.innerHTML = `<tr><td colspan="4" style="color:#EF4444;">Error loading courses: ${err.message}</td></tr>`;
     }
 
     // Update dashboard metrics after courses load
