@@ -377,12 +377,18 @@ async function loadDashboardData() {
         .select('user_id', { count: 'exact' });
     $('totalUsers').textContent = allUsersCount || 0;
 
-    // Pending approvals
-    const { count: pendingCount } = await sb
-        .from('consolidated_user_profiles_table')
-        .select('user_id', { count: 'exact' })
-        .eq('status', 'pending');
-    $('pendingApprovals').textContent = pendingCount || 0;
+  // Pending approvals
+const { count: pendingCount, error } = await sb
+  .from('consolidated_user_profiles_table')
+  .select('user_id', { count: 'exact', head: true })
+  .eq('status', 'pending');
+
+if (error) {
+  console.error('Error counting pending approvals:', error.message);
+  $('pendingApprovals').textContent = '0';
+} else {
+  $('pendingApprovals').textContent = pendingCount || 0;
+}
 
     // Total students
     const { count: studentsCount } = await sb
@@ -627,10 +633,22 @@ async function loadStudents() {
 // *** WRITE OPERATIONS (Approve / Role Change / Delete / Edit) ***
 // ==========================================================
 async function approveUser(userId) {
-    if (!confirm('Approve this user?')) return;
-    const { error } = await sb.from('consolidated_user_profiles_table').update({ status:'approved' }).eq('user_id',userId);
-    if (error) showFeedback(`Failed: ${error.message}`,'error');
-    else { showFeedback('User approved successfully!'); loadAllUsers(); loadStudents(); loadDashboardData(); }
+  if (!confirm('Approve this user?')) return;
+
+  const { error } = await supabase
+    .from('consolidated_user_profiles_table')
+    .update({ status: 'approved' })
+    .eq('user_id', userId);
+
+  if (error) {
+    showFeedback(`Failed: ${error.message}`, 'error');
+  } else {
+    showFeedback('User approved successfully!');
+    loadPendingApprovals(); // refresh pending list
+    loadAllUsers?.();       // safe optional chaining if defined
+    loadStudents?.();
+    loadDashboardData?.();
+  }
 }
 
 async function updateUserRole(userId,newRole) {
