@@ -1171,9 +1171,9 @@ async function loadCourses() {
             : currentUserProfile?.program;
 
         const block = currentUserProfile?.block || null;
-        const intakeYear = currentUserProfile?.intake_year
-            ? parseInt(currentUserProfile.intake_year) // ✅ ensure numeric for Supabase match
-            : null;
+        const intakeYear = currentUserProfile?.intake_year || null; // ✅ no parseInt()
+
+        console.log("🔍 Filters used:", { role, program, block, intakeYear });
 
         // --- 2. Validate ---
         if (!program || !block || !intakeYear) {
@@ -1193,7 +1193,6 @@ async function loadCourses() {
             .select('id, course_name, code, status, target_program, block, intake_year')
             .eq('intake_year', intakeYear)
             .eq('block', block)
-            // ✅ FIXED: Proper string quoting for Supabase .or() filter
             .or(`target_program.eq."${program}",target_program.eq.General`)
             .order('course_name', { ascending: true });
 
