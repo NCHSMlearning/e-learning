@@ -1212,12 +1212,15 @@ async function geoCheckIn() {
 // *** 6. SUPABASE DATA LOADING FUNCTIONS (Courses, Exams, Resources) ***
 // *************************************************************************
 
-// ✅ Load user courses
+// ✅ Load user courses directly from courses table
 async function loadCourses() {
     const tableBody = document.getElementById('courses-table');
-    if (!tableBody) return;
+    if (!tableBody) {
+        console.error("❌ Missing <tbody id='courses-table'> in HTML");
+        return;
+    }
 
-    tableBody.innerHTML = '<tr><td colspan="3">Loading courses...</td></tr>';
+    tableBody.innerHTML = '<tr><td colspan="4">Loading courses...</td></tr>';
 
     try {
         const program = currentUserProfile?.program;
@@ -1225,47 +1228,45 @@ async function loadCourses() {
         const intakeYear = currentUserProfile?.intake_year;
 
         if (!program || !block || !intakeYear) {
-            tableBody.innerHTML = '<tr><td colspan="3">Missing program, block, or intake year info.</td></tr>';
+            tableBody.innerHTML = `<tr><td colspan="4">Missing program, block, or intake year info. Cannot load courses.</td></tr>`;
             return;
         }
 
-        // Fetch courses directly from courses table
+        // Fetch courses for the student's program, block, and intake year
         const { data: courses, error } = await sb
-            .from('courses') // make sure this matches your table name
-            .select('id, course_name, course_code, description')
-            .eq('program_type', program)
-            .eq('block_term', block)
+            .from('courses')
+            .select('*')
+            .eq('target_program', program)
+            .eq('block', block)
             .eq('intake_year', intakeYear)
-            .order('course_name');
+            .order('course_name', { ascending: true });
 
         if (error) throw error;
 
         tableBody.innerHTML = '';
-        if (courses && courses.length > 0) {
+        if (courses.length > 0) {
             courses.forEach(c => {
                 tableBody.innerHTML += `
                     <tr>
-                        <td>${c.course_name}</td>
-                        <td>${c.course_code || '-'}</td>
-                        <td>${c.description || '-'}</td>
+                        <td>${c.course_name || 'N/A'}</td>
+                        <td>${c.unit_code || 'N/A'}</td>
+                        <td>${c.description || 'N/A'}</td>
+                        <td>${c.status || 'N/A'}</td>
                     </tr>
                 `;
             });
         } else {
-            tableBody.innerHTML = `<tr><td colspan="3">No courses found for ${program}, Block ${block}, Intake ${intakeYear}.</td></tr>`;
+            tableBody.innerHTML = `<tr><td colspan="4">No courses found for ${program}, Block ${block}, Intake ${intakeYear}.</td></tr>`;
         }
-
-    } catch (err) {
-        console.error("Error loading courses:", err);
-        tableBody.innerHTML = `<tr><td colspan="3" style="color:red;">Error loading courses. Check console.</td></tr>`;
+    } catch (error) {
+        console.error("❌ Failed to load courses:", error);
+        tableBody.innerHTML = `<tr><td colspan="4" style="color:#EF4444;">Error loading courses: ${error.message}</td></tr>`;
     }
-
-    // Update dashboard metrics after courses load
-    if (typeof loadDashboardMetrics === "function") {
+    
+ if (typeof loadDashboardMetrics === "function") {
         loadDashboardMetrics(currentUserId);
     }
 }
-
 
 // ✅ Load user exams
 async function loadExams() {
