@@ -1155,72 +1155,61 @@ async function geoCheckIn() {
 // *** 6. SUPABASE DATA LOADING FUNCTIONS (Courses, Exams, Resources) ***
 // *************************************************************************
 
-// ✅ Load user courses (Supports both students and lecturers)
+// ✅ Load user courses (student & lecturer)
 async function loadCourses() {
     const tableBody = document.getElementById('courses-table');
-    if (!tableBody) return;
-    tableBody.innerHTML = '<tr><td colspan="2">Loading courses from Supabase...</td></tr>';
+    if (!tableBody) {
+        console.error("❌ Missing <tbody id='courses-table'> in HTML");
+        return;
+    }
+
+    tableBody.innerHTML = '<tr><td colspan="2">Loading courses...</td></tr>';
 
     try {
-        // --- 1. Get all necessary filter values from profile ---
-        const role = currentUserProfile?.role?.toLowerCase() || 'student';
-
-        // If lecturer → use department; if student → use program
-        const program = role === 'lecturer'
-            ? currentUserProfile?.department
+        const role = currentUserProfile?.role;
+        const program = role === 'lecturer' 
+            ? currentUserProfile?.department 
             : currentUserProfile?.program;
 
-        const block = currentUserProfile?.block || null;
-        const intakeYear = currentUserProfile?.intake_year || null;
+        const block = currentUserProfile?.block;
+        const intakeYear = currentUserProfile?.intake_year;
 
-        console.log("🔍 Filters used:", { role, program, block, intakeYear });
-
-        // --- 2. Validate ---
         if (!program || !block || !intakeYear) {
-            console.warn("Missing program/department, block, or intake year:", { program, block, intakeYear });
             tableBody.innerHTML = `
-                <tr>
-                    <td colspan="2">
-                        No program, block, or intake year specified in your profile.
-                    </td>
-                </tr>`;
+                <tr><td colspan="2">
+                    Missing program/department, block, or intake year info. Cannot load courses.
+                </td></tr>`;
+            cachedCourses = [];
             return;
         }
 
-        // --- 3. Query Supabase ---
-        const { data: visibleCourses, error } = await sb
+        // ✅ Query courses table
+        const { data: courses, error } = await sb
             .from('courses')
             .select('id, course_name, code, status, target_program, block, intake_year')
-            .eq('intake_year', String(intakeYear)) // cast to string if column is text
+            .or(`target_program.eq.${program},target_program.eq.General`)
             .eq('block', block)
-            // ✅ Correctly quote string values in the OR filter
-            .or(`target_program.eq."${program}",target_program.eq."General"`)
+            .eq('intake_year', intakeYear)
             .order('course_name', { ascending: true });
 
         if (error) throw error;
 
-        console.log("📚 Courses fetched:", visibleCourses);
-
-        // --- 4. Cache and render ---
-        cachedCourses = (visibleCourses || []).map(c => ({
-            id: c.id,
-            name: c.course_name,
-            code: c.code,
-            status: c.status || 'Active'
-        }));
-
+        cachedCourses = courses || [];
         tableBody.innerHTML = '';
 
         if (cachedCourses.length > 0) {
-            cachedCourses.forEach(c => {
+            cachedCourses.forEach(course => {
                 tableBody.innerHTML += `
                     <tr>
-                        <td>${c.code ? c.code + ' - ' : ''}${c.name}</td>
-                        <td>${c.status}</td>
+                        <td>${course.code ? course.code + ' - ' : ''}${course.course_name}</td>
+                        <td>${course.status || 'Active'}</td>
                     </tr>`;
             });
         } else {
-            tableBody.innerHTML = `<tr><td colspan="2">No courses found for ${program}, Block ${block}, ${intakeYear}.</td></tr>`;
+            tableBody.innerHTML = `
+                <tr><td colspan="2">
+                    No courses found for ${program}, Block ${block}, Intake ${intakeYear}.
+                </td></tr>`;
         }
 
     } catch (error) {
@@ -1229,7 +1218,7 @@ async function loadCourses() {
         cachedCourses = [];
     }
 
-    // --- 5. Update dashboard metrics ---
+    // --- Update dashboard metric ---
     if (document.getElementById('dashboard-active-courses')) {
         document.getElementById('dashboard-active-courses').textContent = cachedCourses.length || 0;
     }
