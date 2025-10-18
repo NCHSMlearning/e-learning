@@ -552,47 +552,99 @@ async function logout() {
 // *************************************************************************
 
 /**
- * Loads the welcome message from app_settings and sets the student's name in the header.
- * CRITICAL: Fulfills "Hello student name as per student name" requirement.
+ * Load the student header and welcome message.
  */
 async function loadWelcomeDetails() {
-    // 1. Update the Welcome Header with the Student's Name
     const studentName = currentUserProfile?.full_name || 'Student';
-    if (welcomeHeader) {
-        welcomeHeader.textContent = `Hello, ${studentName}!`; 
-    }
+    if (welcomeHeader) welcomeHeader.textContent = `Hello, ${studentName}!`;
 
-    // 2. Load the Official Announcement Message
     await loadStudentWelcomeMessage();
 }
 
 /**
- * Fetches the general welcome message/announcement from the app_settings table.
+ * Load welcome message from app_settings safely.
  */
 async function loadStudentWelcomeMessage() {
     const bannerElement = document.getElementById('student-welcome-message');
-    if (!bannerElement) return;
+    const inputElement = document.getElementById('welcome-input');
+    if (!bannerElement || !inputElement) return;
+
+    bannerElement.textContent = 'Loading live preview...';
 
     try {
         const { data, error } = await sb
             .from(SETTINGS_TABLE)
             .select('value')
             .eq('key', MESSAGE_KEY)
-            .maybeSingle(); // safer than single()
+            .maybeSingle(); // safe for 0 or 1 row
 
         if (error) throw error;
 
         if (data && data.value) {
             bannerElement.innerHTML = data.value;
+            inputElement.value = data.value;
         } else {
             bannerElement.textContent = 'Welcome! No current announcements from the Administration.';
+            inputElement.value = '';
         }
-
-    } catch (error) {
-        console.error("Failed to load welcome message:", error);
+    } catch (err) {
+        console.error('Failed to load welcome message:', err);
         bannerElement.textContent = 'Failed to load announcements. Please refresh.';
+        inputElement.value = '';
     }
 }
+
+/**
+ * Save welcome message, updating existing row or inserting if missing.
+ */
+async function saveStudentWelcomeMessage() {
+    const bannerElement = document.getElementById('student-welcome-message');
+    const inputElement = document.getElementById('welcome-input');
+    if (!inputElement || !bannerElement) return;
+
+    const newMessage = inputElement.value.trim();
+    if (!newMessage) return alert('Please enter a welcome message.');
+
+    try {
+        // Try updating existing row
+        const { count, error: updateError } = await sb
+            .from(SETTINGS_TABLE)
+            .update({ value: newMessage })
+            .eq('key', MESSAGE_KEY)
+            .select();
+
+        if (updateError) throw updateError;
+
+        // If no rows were updated, insert new
+        if (!count || count === 0) {
+            const { error: insertError } = await sb
+                .from(SETTINGS_TABLE)
+                .insert({ key: MESSAGE_KEY, value: newMessage });
+            if (insertError) throw insertError;
+        }
+
+        // Update live preview
+        bannerElement.innerHTML = newMessage;
+        alert('Welcome message updated successfully!');
+    } catch (err) {
+        console.error('Failed to save welcome message:', err);
+        alert('Error saving message. Check console.');
+    }
+}
+
+/**
+ * Live preview as admin types
+ */
+const inputElement = document.getElementById('welcome-input');
+if (inputElement) {
+    inputElement.addEventListener('input', () => {
+        const bannerElement = document.getElementById('student-welcome-message');
+        if (bannerElement) bannerElement.innerHTML = inputElement.value;
+    });
+}
+
+const saveButton = document.getElementById('save-welcome-btn');
+if (saveButton) saveButton.addEventListener('click', saveStudentWelcomeMessage);
 
 
 /**
