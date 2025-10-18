@@ -1212,27 +1212,30 @@ async function geoCheckIn() {
 // *** 6. SUPABASE DATA LOADING FUNCTIONS (Courses, Exams, Resources) ***
 // *************************************************************************
 
+// ✅ Load user courses (Supports both students and lecturers)
 async function loadCourses() {
     const tableBody = document.getElementById('courses-table');
     if (!tableBody) return;
-    tableBody.innerHTML = '<tr><td colspan="4">Loading courses from Supabase...</td></tr>';
+
+    tableBody.innerHTML = '<tr><td colspan="4">Loading courses...</td></tr>';
 
     try {
-        const role = currentUserProfile?.role?.toLowerCase() || 'student';
+        const role = currentUserProfile?.role || 'student';
         const program = role === 'lecturer'
             ? currentUserProfile?.department
             : currentUserProfile?.program;
-        const block = currentUserProfile?.block || null;
-        const intakeYear = currentUserProfile?.intake_year || null;
+        const block = currentUserProfile?.block;
+        const intakeYear = currentUserProfile?.intake_year;
 
         console.log("🔍 Filters used:", { role, program, block, intakeYear });
 
         if (!program || !block || !intakeYear) {
-            tableBody.innerHTML = `<tr><td colspan="4">No program, block, or intake year specified in your profile.</td></tr>`;
+            tableBody.innerHTML = `<tr><td colspan="4">Missing program/department, block, or intake year info.</td></tr>`;
             return;
         }
 
-        const { data: visibleCourses, error } = await sb
+        // ✅ Query Supabase
+        const { data: courses, error } = await sb
             .from('courses')
             .select('course_name, unit_code, description, status, block, intake_year, target_program')
             .eq('block', block)
@@ -1243,11 +1246,12 @@ async function loadCourses() {
         if (error) throw error;
 
         tableBody.innerHTML = '';
-        if (visibleCourses.length > 0) {
-            visibleCourses.forEach(c => {
+
+        if (courses && courses.length > 0) {
+            courses.forEach(c => {
                 tableBody.innerHTML += `
                     <tr>
-                        <td>${c.course_name}</td>
+                        <td>${c.course_name || 'N/A'}</td>
                         <td>${c.unit_code || 'N/A'}</td>
                         <td>${c.description || 'N/A'}</td>
                         <td>${c.status || 'Active'}</td>
@@ -1256,12 +1260,12 @@ async function loadCourses() {
         } else {
             tableBody.innerHTML = `<tr><td colspan="4">No courses found for ${program}, Block ${block}, ${intakeYear}.</td></tr>`;
         }
-    } catch (error) {
-        console.error("❌ Failed to load courses:", error);
-        tableBody.innerHTML = `<tr><td colspan="4" style="color:#EF4444;">Error loading courses: ${error.message}</td></tr>`;
+
+    } catch (err) {
+        console.error("❌ Failed to load courses:", err);
+        tableBody.innerHTML = `<tr><td colspan="4" style="color:#EF4444;">Error loading courses: ${err.message}</td></tr>`;
     }
 }
-
 
 // ✅ Load user exams
 async function loadExams() {
