@@ -1212,60 +1212,69 @@ async function geoCheckIn() {
 // *** 6. SUPABASE DATA LOADING FUNCTIONS (Courses, Exams, Resources) ***
 // *************************************************************************
 
-// ✅ Load user courses (Supports both students and lecturers)
+// ✅ Load user courses
 async function loadCourses() {
     const tableBody = document.getElementById('courses-table');
-    if (!tableBody) return;
+    if (!tableBody) {
+        console.error("❌ Missing <tbody id='courses-table'> in HTML");
+        return;
+    }
 
-    tableBody.innerHTML = '<tr><td colspan="4">Loading courses...</td></tr>';
+    tableBody.innerHTML = '<tr><td colspan="3">Loading courses...</td></tr>';
 
     try {
-        const role = currentUserProfile?.role || 'student';
-        const program = role === 'lecturer'
-            ? currentUserProfile?.department
-            : currentUserProfile?.program;
+        const program = currentUserProfile?.program;
         const block = currentUserProfile?.block;
         const intakeYear = currentUserProfile?.intake_year;
 
-        console.log("🔍 Filters used:", { role, program, block, intakeYear });
-
         if (!program || !block || !intakeYear) {
-            tableBody.innerHTML = `<tr><td colspan="4">Missing program/department, block, or intake year info.</td></tr>`;
+            tableBody.innerHTML = `<tr><td colspan="3">Missing program, block, or intake year info. Cannot load courses.</td></tr>`;
+            cachedCourses = [];
             return;
         }
 
-        // ✅ Query Supabase
+        // Fetch courses student is enrolled in
         const { data: courses, error } = await sb
-            .from('courses')
-            .select('course_name, unit_code, description, status, block, intake_year, target_program')
-            .eq('block', block)
-            .eq('intake_year', String(intakeYear))
-            .or(`target_program.eq.${program},target_program.eq.General`)
-            .order('course_name', { ascending: true });
+            .from('student_courses')
+            .select(`
+                course_id,
+                status,
+                courses!inner(course_name)
+            `)
+            .eq('student_id', currentUserId)
+            .order('course_id');
 
         if (error) throw error;
 
+        cachedCourses = courses || [];
         tableBody.innerHTML = '';
 
-        if (courses && courses.length > 0) {
-            courses.forEach(c => {
+        if (cachedCourses.length > 0) {
+            cachedCourses.forEach(course => {
                 tableBody.innerHTML += `
                     <tr>
-                        <td>${c.course_name || 'N/A'}</td>
-                        <td>${c.unit_code || 'N/A'}</td>
-                        <td>${c.description || 'N/A'}</td>
-                        <td>${c.status || 'Active'}</td>
-                    </tr>`;
+                        <td>${course.courses.course_name || 'N/A'}</td>
+                        <td>${course.course_id}</td>
+                        <td>${course.status || 'enrolled'}</td>
+                    </tr>
+                `;
             });
         } else {
-            tableBody.innerHTML = `<tr><td colspan="4">No courses found for ${program}, Block ${block}, ${intakeYear}.</td></tr>`;
+            tableBody.innerHTML = `<tr><td colspan="3">No courses found for ${program}, Block ${block}, Intake ${intakeYear}.</td></tr>`;
         }
 
     } catch (err) {
-        console.error("❌ Failed to load courses:", err);
-        tableBody.innerHTML = `<tr><td colspan="4" style="color:#EF4444;">Error loading courses: ${err.message}</td></tr>`;
+        console.error('❌ Failed to load courses:', err);
+        tableBody.innerHTML = `<tr><td colspan="3" style="color:red;">Error loading courses: ${err.message}</td></tr>`;
+        cachedCourses = [];
+    }
+
+    // Update dashboard metrics after courses load
+    if (typeof loadDashboardMetrics === "function") {
+        loadDashboardMetrics(currentUserId);
     }
 }
+
 
 // ✅ Load user exams
 async function loadExams() {
