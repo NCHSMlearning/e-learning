@@ -1233,19 +1233,18 @@ async function loadCourses() {
         }
 
         // Fetch courses for the student's program, block, and intake year
-       const { data: courses, error } = await sb
-  .from('courses')
-  .select('*')
-  .or(`target_program.eq.'${program}',target_program.eq.'General'`)
-  .eq('intake_year', intakeYear)
-  .eq('block', block)
-  .order('course_name', { ascending: true });
+        const { data: courses, error } = await sb
+            .from('courses')
+            .select('*')
+            .or(`target_program.eq.'${program}',target_program.eq.'General'`)
+            .eq('intake_year', intakeYear)
+            .eq('block', block)
+            .order('course_name', { ascending: true });
 
-        
         if (error) throw error;
 
         tableBody.innerHTML = '';
-        if (courses.length > 0) {
+        if (courses && courses.length > 0) {
             courses.forEach(c => {
                 tableBody.innerHTML += `
                     <tr>
@@ -1259,15 +1258,18 @@ async function loadCourses() {
         } else {
             tableBody.innerHTML = `<tr><td colspan="4">No courses found for ${program}, Block ${block}, Intake ${intakeYear}.</td></tr>`;
         }
+
     } catch (error) {
         console.error("❌ Failed to load courses:", error);
         tableBody.innerHTML = `<tr><td colspan="4" style="color:#EF4444;">Error loading courses: ${error.message}</td></tr>`;
     }
-    
- if (typeof loadDashboardMetrics === "function") {
+
+    // Optionally update dashboard metrics if this function exists
+    if (typeof loadDashboardMetrics === "function") {
         loadDashboardMetrics(currentUserId);
     }
 }
+
 
 // ✅ Load user exams
 async function loadExams() {
