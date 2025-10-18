@@ -605,10 +605,13 @@ async function loadStudentWelcomeMessage() {
  */
 async function loadDashboardMetrics(userId) {
     // Ensure data caches are populated before proceeding (safety check)
+    // Note: loadCourses() and loadExams() are called in checkAuthAndLoad/showTab('dashboard')
     if (cachedCourses.length === 0) await loadCourses();
     if (cachedExams.length === 0) await loadExams();
 
     // --- ACTIVE COURSES ---
+    // NOTE: If the list is showing 8 and the metric 6, you need to align the filters 
+    // in loadCourses() to match the intended "Active" filter for the metric.
     document.getElementById('dashboard-active-courses').textContent = cachedCourses.length;
 
     // --- OVERALL ATTENDANCE RATE ---
@@ -633,25 +636,26 @@ async function loadDashboardMetrics(userId) {
     }
 
     // --- UPCOMING EXAM (FIXED LOGIC) ---
-    let nextExamText = 'None Scheduled';
-    const now = new Date(); 
-    
-    // Filter cached exams to only include future dates and sort them
-    const upcomingExams = cachedExams
-        .filter(exam => new Date(exam.exam_date) > now)
-        .sort((a, b) => new Date(a.exam_date) - new Date(b.exam_date));
+    let nextExamText = 'No Exams Data'; // Default assumption: No data loaded/RLS failure
 
-    if (upcomingExams.length > 0) {
-        const upcomingExam = upcomingExams[0];
-        const examDate = new Date(upcomingExam.exam_date).toLocaleDateString();
-        nextExamText = `${upcomingExam.exam_name || 'Exam'} on ${examDate}`;
-    } else if (cachedExams.length > 0) {
-        // If there are exams in the cache but none are in the future, the semester is likely completed
-        nextExamText = 'Semester Completed'; 
-    } else {
-        // If there are no exams at all
-        nextExamText = 'No Exams Data'; 
-    }
+    if (cachedExams.length > 0) {
+        // Filter cached exams to only include future dates and sort them
+        const now = new Date(); 
+        const upcomingExams = cachedExams
+            .filter(exam => new Date(exam.exam_date) > now)
+            .sort((a, b) => new Date(a.exam_date) - new Date(b.exam_date));
+
+        if (upcomingExams.length > 0) {
+            const upcomingExam = upcomingExams[0];
+            // Format the date for the dashboard snapshot
+            const examDate = new Date(upcomingExam.exam_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            // Show the next exam name and date
+            nextExamText = `${upcomingExam.exam_name || 'Exam'} on ${examDate}`;
+        } else {
+            // Exam data exists, but all dates are in the past
+            nextExamText = 'Semester Completed'; 
+        }
+    } 
 
     document.getElementById('dashboard-upcoming-exam').textContent = nextExamText;
 
@@ -750,6 +754,7 @@ async function loadProfile(userId) {
             email: 'N/A',
             phone: 'N/A',
             role_id: 'N/A',
+            student_id: 'N/A', // Added student_id fallback
             department: 'N/A' // Default/Fallback
         };
     } else {
@@ -1414,7 +1419,12 @@ async function fetchAllScheduleData() {
     
     // Note: sessionPromise and examsPromise are currently empty/placeholder in the HTML's logic.
     const sessionsPromise = Promise.resolve([]); 
-    const examsPromise = Promise.resolve([]);
+    const examsPromise = Promise.resolve(cachedExams.map(e => ({ // Use cached exams for calendar
+        date: e.exam_date,
+        title: e.exam_name,
+        type: 'Exam',
+        details: `${e.status || 'Scheduled'} - Block ${e.block_term}`
+    })));
 
     // Holidays/Academic Events
     const eventsPromise = sb
