@@ -472,161 +472,223 @@ async function handleSaveWelcomeMessage(e) {
 }
 
 /*******************************************************
- * 4. Users/Enroll Tab (Full Consolidated Logic)
+ * 4. Users / Enroll Tab (Full Consolidated Logic)
  *******************************************************/
 
 // ==========================================================
 // *** HELPER FUNCTION TO DETERMINE ROLE-SPECIFIC FIELDS ***
 // ==========================================================
 function getRoleFields(role) {
-    if (role === 'student') return { programField: 'program', extraField: 'course' };
-    return { programField: 'program', extraField: null };
+  if (role === 'student') return { programField: 'program', extraField: 'course' };
+  return { programField: 'program', extraField: null };
 }
 
 // ==========================================================
 // *** CORE LOGIC FUNCTIONS ***
 // ==========================================================
 function updateBlockTermOptions(programSelectId, blockTermSelectId) {
-    const program = $(programSelectId)?.value;
-    const blockTermSelect = $(blockTermSelectId);
-    if (!blockTermSelect) return;
+  const program = $(programSelectId)?.value;
+  const blockTermSelect = $(blockTermSelectId);
+  if (!blockTermSelect) return;
 
-    let options = [];
-    if (program === 'KRCHN') options = [{ value: 'A', text: 'Block A' }, { value: 'B', text: 'Block B' }];
-    else if (program === 'TVET') options = [
-        { value: 'T1', text: 'Term 1' },
-        { value: 'T2', text: 'Term 2' },
-        { value: 'T3', text: 'Term 3' }
-    ];
-    else options = [{ value: 'A', text: 'Block A / Term 1' }, { value: 'B', text: 'Block B / Term 2' }];
+  let options = [];
+  if (program === 'KRCHN') options = [{ value: 'A', text: 'Block A' }, { value: 'B', text: 'Block B' }];
+  else if (program === 'TVET') options = [
+    { value: 'T1', text: 'Term 1' },
+    { value: 'T2', text: 'Term 2' },
+    { value: 'T3', text: 'Term 3' }
+  ];
+  else options = [{ value: 'A', text: 'Block A / Term 1' }, { value: 'B', text: 'Block B / Term 2' }];
 
-    let html = '<option value="">-- Select Block/Term --</option>';
-    options.forEach(opt => html += `<option value="${opt.value}">${escapeHtml(opt.text)}</option>`);
-    blockTermSelect.innerHTML = html;
+  let html = '<option value="">-- Select Block/Term --</option>';
+  options.forEach(opt => html += `<option value="${opt.value}">${escapeHtml(opt.text)}</option>`);
+  blockTermSelect.innerHTML = html;
 }
 
 async function handleAddAccount(e) {
-    e.preventDefault();
-    const submitButton = e.submitter;
-    const originalText = submitButton.textContent;
-    setButtonLoading(submitButton, true, originalText);
+  e.preventDefault();
+  const submitButton = e.submitter;
+  const originalText = submitButton.textContent;
+  setButtonLoading(submitButton, true, originalText);
 
-    const name = $('account-name').value.trim();
-    const email = $('account-email').value.trim();
-    const password = $('account-password').value.trim();
-    const role = $('account-role').value;
-    const phone = $('account-phone').value.trim();
-    const program = $('account-program').value;
-    const intake_year = $('account-intake').value;
-    const block = $('account-block-term').value;
+  const name = $('account-name').value.trim();
+  const email = $('account-email').value.trim();
+  const password = $('account-password').value.trim();
+  const role = $('account-role').value;
+  const phone = $('account-phone').value.trim();
+  const program = $('account-program').value;
+  const intake_year = $('account-intake').value;
+  const block = $('account-block-term').value;
 
-    const userData = {
-        full_name: name,
-        role,
-        phone,
-        program,
-        intake_year,
-        block,
-        status: 'approved',
-        block_program_year: false
-    };
+  const userData = {
+    full_name: name,
+    role,
+    phone,
+    program,
+    intake_year,
+    block,
+    status: 'approved',
+    block_program_year: false
+  };
 
-    try {
-        const { data: { user }, error: authError } = await sb.auth.signUp({
-            email, password, options: { data: userData }
-        });
-        if (authError) throw authError;
+  try {
+    const { data: { user }, error: authError } = await sb.auth.signUp({
+      email, password, options: { data: userData }
+    });
+    if (authError) throw authError;
 
-        if (user && user.id) {
-            const profileData = { user_id: user.id, email, ...userData };
-            const { error: insertError } = await sb.from('consolidated_user_profiles_table').insert([profileData]);
-            if (insertError) {
-                await sb.auth.admin.deleteUser(user.id);
-                throw insertError;
-            }
-            e.target.reset();
-            showFeedback(`New ${role.toUpperCase()} account successfully enrolled!`, 'success');
-            loadAllUsers(); loadStudents(); loadDashboardData();
-        }
-    } catch (err) {
-        showFeedback(`Account creation failed: ${err.message}`, 'error');
-    } finally {
-        setButtonLoading(submitButton, false, originalText);
+    if (user && user.id) {
+      const profileData = { user_id: user.id, email, ...userData };
+      const { error: insertError } = await sb.from('consolidated_user_profiles_table').insert([profileData]);
+      if (insertError) {
+        await sb.auth.admin.deleteUser(user.id);
+        throw insertError;
+      }
+      e.target.reset();
+      showFeedback(`New ${role.toUpperCase()} account successfully enrolled!`, 'success');
+      loadAllUsers();
+      loadStudents();
+      loadDashboardData();
     }
+  } catch (err) {
+    showFeedback(`Account creation failed: ${err.message}`, 'error');
+  } finally {
+    setButtonLoading(submitButton, false, originalText);
+  }
 }
 
 // ==========================================================
 // *** READ OPERATIONS (Consolidated Table) ***
 // ==========================================================
+
+// ✅ NEW FUNCTION: Load Pending Approvals (SuperAdmin)
+async function loadPendingApprovals() {
+  const tbody = $('pending-table');
+  if (!tbody) {
+    console.error("Missing <tbody id='pending-table'> element in your HTML.");
+    return;
+  }
+
+  tbody.innerHTML = '<tr><td colspan="7">Loading pending approvals...</td></tr>';
+
+  const { data: pending, error } = await sb
+    .from('consolidated_user_profiles_table')
+    .select('*')
+    .eq('status', 'pending')
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    tbody.innerHTML = `<tr><td colspan="7">Error: ${error.message}</td></tr>`;
+    return;
+  }
+
+  if (!pending || pending.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7">No pending approvals.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = '';
+  pending.forEach(u => {
+    tbody.innerHTML += `
+      <tr>
+        <td>${escapeHtml(u.user_id.substring(0, 8))}...</td>
+        <td>${escapeHtml(u.full_name)}</td>
+        <td>${escapeHtml(u.email)}</td>
+        <td>${escapeHtml(u.role || 'N/A')}</td>
+        <td>${escapeHtml(u.program || 'N/A')}</td>
+        <td class="status-pending">Pending</td>
+        <td>
+          <button class="btn btn-approve" onclick="approveUser('${u.user_id}')">Approve</button>
+          <button class="btn btn-delete" onclick="deleteProfile('${u.user_id}')">Reject</button>
+        </td>
+      </tr>`;
+  });
+
+  filterTable('pending-search', 'pending-table', [1, 2, 4]);
+}
+
 async function loadAllUsers() {
-    const tbody = $('users-table');
-    tbody.innerHTML = '<tr><td colspan="7">Loading all users...</td></tr>';
+  const tbody = $('users-table');
+  tbody.innerHTML = '<tr><td colspan="7">Loading all users...</td></tr>';
 
-    const { data: users, error } = await sb.from('consolidated_user_profiles_table').select('*').order('full_name', { ascending: true });
-    if (error) { tbody.innerHTML = `<tr><td colspan="7">Error loading users: ${error.message}</td></tr>`; return; }
+  const { data: users, error } = await sb.from('consolidated_user_profiles_table')
+    .select('*')
+    .order('full_name', { ascending: true });
+  if (error) {
+    tbody.innerHTML = `<tr><td colspan="7">Error loading users: ${error.message}</td></tr>`;
+    return;
+  }
 
-    tbody.innerHTML = '';
-    users.forEach(u => {
-        const roleOptions = ['student','lecturer','admin','superadmin']
-            .map(r => `<option value="${r}" ${u.role === r ? 'selected' : ''}>${r}</option>`).join('');
+  tbody.innerHTML = '';
+  users.forEach(u => {
+    const roleOptions = ['student', 'lecturer', 'admin', 'superadmin']
+      .map(r => `<option value="${r}" ${u.role === r ? 'selected' : ''}>${r}</option>`).join('');
 
-        const isBlocked = u.block_program_year === true;
-        const isApproved = u.status === 'approved';
-        const statusText = isBlocked ? 'BLOCKED' : (isApproved ? 'Approved' : 'Pending');
-        const statusClass = isBlocked ? 'status-danger' : (isApproved ? 'status-approved' : 'status-pending');
+    const isBlocked = u.block_program_year === true;
+    const isApproved = u.status === 'approved';
+    const statusText = isBlocked ? 'BLOCKED' : (isApproved ? 'Approved' : 'Pending');
+    const statusClass = isBlocked ? 'status-danger' : (isApproved ? 'status-approved' : 'status-pending');
 
-        tbody.innerHTML += `<tr>
-            <td>${escapeHtml(u.user_id.substring(0, 8))}...</td>
-            <td>${escapeHtml(u.full_name)}</td>
-            <td>${escapeHtml(u.email)}</td>
-            <td>
-                <select class="btn" onchange="updateUserRole('${u.user_id}', this.value)" ${u.role==='superadmin'?'disabled':''}>
-                    ${roleOptions}
-                </select>
-            </td>
-            <td>${escapeHtml(u.department || u.program || 'N/A')}</td>
-            <td class="${statusClass}">${statusText}</td>
-            <td>
-                <button class="btn btn-map" onclick="openEditUserModal('${u.user_id}')">Edit</button>
-                ${!isApproved ? `<button class="btn btn-approve" onclick="approveUser('${u.user_id}')">Approve</button>` : ''}
-                <button class="btn btn-delete" onclick="deleteProfile('${u.user_id}')">Delete</button>
-            </td>
-        </tr>`;
-    });
+    tbody.innerHTML += `
+      <tr>
+        <td>${escapeHtml(u.user_id.substring(0, 8))}...</td>
+        <td>${escapeHtml(u.full_name)}</td>
+        <td>${escapeHtml(u.email)}</td>
+        <td>
+          <select class="btn" onchange="updateUserRole('${u.user_id}', this.value)" ${u.role === 'superadmin' ? 'disabled' : ''}>
+            ${roleOptions}
+          </select>
+        </td>
+        <td>${escapeHtml(u.department || u.program || 'N/A')}</td>
+        <td class="${statusClass}">${statusText}</td>
+        <td>
+          <button class="btn btn-map" onclick="openEditUserModal('${u.user_id}')">Edit</button>
+          ${!isApproved ? `<button class="btn btn-approve" onclick="approveUser('${u.user_id}')">Approve</button>` : ''}
+          <button class="btn btn-delete" onclick="deleteProfile('${u.user_id}')">Delete</button>
+        </td>
+      </tr>`;
+  });
 
-    filterTable('user-search', 'users-table', [1,2,4]);
+  filterTable('user-search', 'users-table', [1, 2, 4]);
 }
 
 async function loadStudents() {
-    const tbody = $('students-table');
-    tbody.innerHTML = '<tr><td colspan="10">Loading students...</td></tr>';
+  const tbody = $('students-table');
+  tbody.innerHTML = '<tr><td colspan="10">Loading students...</td></tr>';
 
-    const { data: students, error } = await sb.from('consolidated_user_profiles_table').select('*').eq('role','student').order('full_name', { ascending: true });
-    if (error) { tbody.innerHTML = `<tr><td colspan="10">Error loading students: ${error.message}</td></tr>`; return; }
+  const { data: students, error } = await sb.from('consolidated_user_profiles_table')
+    .select('*')
+    .eq('role', 'student')
+    .order('full_name', { ascending: true });
+  if (error) {
+    tbody.innerHTML = `<tr><td colspan="10">Error loading students: ${error.message}</td></tr>`;
+    return;
+  }
 
-    tbody.innerHTML = '';
-    students.forEach(s => {
-        const isBlocked = s.block_program_year === true;
-        const statusText = isBlocked ? 'BLOCKED' : (s.status==='approved' ? 'Approved' : 'Pending');
-        const statusClass = isBlocked ? 'status-danger' : (s.status==='approved' ? 'status-approved' : 'status-pending');
+  tbody.innerHTML = '';
+  students.forEach(s => {
+    const isBlocked = s.block_program_year === true;
+    const statusText = isBlocked ? 'BLOCKED' : (s.status === 'approved' ? 'Approved' : 'Pending');
+    const statusClass = isBlocked ? 'status-danger' : (s.status === 'approved' ? 'status-approved' : 'status-pending');
 
-        tbody.innerHTML += `<tr>
-            <td>${escapeHtml(s.user_id.substring(0,8))}...</td>
-            <td>${escapeHtml(s.full_name)}</td>
-            <td>${escapeHtml(s.email)}</td>
-            <td>${escapeHtml(s.program || 'N/A')}</td>
-            <td>${escapeHtml(s.intake_year || 'N/A')}</td>
-            <td>${escapeHtml(s.block || 'N/A')}</td>
-            <td>${escapeHtml(s.phone)}</td>
-            <td class="${statusClass}">${statusText}</td>
-            <td>
-                <button class="btn btn-map" onclick="openEditUserModal('${s.user_id}')">Edit</button>
-                <button class="btn btn-delete" onclick="deleteProfile('${s.user_id}')">Delete</button>
-            </td>
-        </tr>`;
-    });
+    tbody.innerHTML += `
+      <tr>
+        <td>${escapeHtml(s.user_id.substring(0, 8))}...</td>
+        <td>${escapeHtml(s.full_name)}</td>
+        <td>${escapeHtml(s.email)}</td>
+        <td>${escapeHtml(s.program || 'N/A')}</td>
+        <td>${escapeHtml(s.intake_year || 'N/A')}</td>
+        <td>${escapeHtml(s.block || 'N/A')}</td>
+        <td>${escapeHtml(s.phone)}</td>
+        <td class="${statusClass}">${statusText}</td>
+        <td>
+          <button class="btn btn-map" onclick="openEditUserModal('${s.user_id}')">Edit</button>
+          <button class="btn btn-delete" onclick="deleteProfile('${s.user_id}')">Delete</button>
+        </td>
+      </tr>`;
+  });
 
-    filterTable('student-search','students-table',[1,3,5]);
+  filterTable('student-search', 'students-table', [1, 3, 5]);
 }
 
 // ==========================================================
@@ -635,7 +697,7 @@ async function loadStudents() {
 async function approveUser(userId) {
   if (!confirm('Approve this user?')) return;
 
-  const { error } = await supabase
+  const { error } = await sb
     .from('consolidated_user_profiles_table')
     .update({ status: 'approved' })
     .eq('user_id', userId);
@@ -643,106 +705,117 @@ async function approveUser(userId) {
   if (error) {
     showFeedback(`Failed: ${error.message}`, 'error');
   } else {
-    showFeedback('User approved successfully!');
-    loadPendingApprovals(); // refresh pending list
-    loadAllUsers?.();       // safe optional chaining if defined
+    showFeedback('User approved successfully!', 'success');
+    loadPendingApprovals();
+    loadAllUsers?.();
     loadStudents?.();
     loadDashboardData?.();
   }
 }
 
-async function updateUserRole(userId,newRole) {
-    if (!confirm(`Change user role to ${newRole}?`)) return;
-    const { error } = await sb.from('consolidated_user_profiles_table').update({ role:newRole }).eq('user_id',userId);
-    if (error) showFeedback(`Failed: ${error.message}`,'error');
-    else { showFeedback('Role updated!'); loadAllUsers(); loadStudents(); loadDashboardData(); }
+async function updateUserRole(userId, newRole) {
+  if (!confirm(`Change user role to ${newRole}?`)) return;
+  const { error } = await sb.from('consolidated_user_profiles_table')
+    .update({ role: newRole })
+    .eq('user_id', userId);
+  if (error) showFeedback(`Failed: ${error.message}`, 'error');
+  else {
+    showFeedback('Role updated!', 'success');
+    loadAllUsers();
+    loadStudents();
+    loadDashboardData();
+  }
 }
 
 async function deleteProfile(userId) {
-    if (!confirm('Deleting this profile is irreversible. Continue?')) return;
-    const { error } = await sb.from('consolidated_user_profiles_table').delete().eq('user_id',userId);
-    if (error) showFeedback(`Failed: ${error.message}`,'error');
-    else { 
-        const authErr = await sb.auth.admin.deleteUser(userId);
-        if (authErr) showFeedback('Deleted from table, but auth deletion failed','warning');
-        else showFeedback('User deleted successfully!','success');
-        loadAllUsers(); loadStudents(); loadDashboardData(); 
-    }
+  if (!confirm('Deleting this profile is irreversible. Continue?')) return;
+
+  const { error } = await sb.from('consolidated_user_profiles_table').delete().eq('user_id', userId);
+  if (error) {
+    showFeedback(`Failed: ${error.message}`, 'error');
+  } else {
+    const authErr = await sb.auth.admin.deleteUser(userId);
+    if (authErr) showFeedback('Deleted from table, but auth deletion failed', 'warning');
+    else showFeedback('User deleted successfully!', 'success');
+    loadAllUsers();
+    loadStudents();
+    loadDashboardData();
+  }
 }
 
 async function openEditUserModal(userId) {
-    try {
-        const { data:user, error } = await sb.from('consolidated_user_profiles_table').select('*').eq('user_id',userId).single();
-        if (error || !user) throw new Error('User fetch failed.');
+  try {
+    const { data: user, error } = await sb
+      .from('consolidated_user_profiles_table')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+    if (error || !user) throw new Error('User fetch failed.');
 
-        $('edit_user_id').value = user.user_id;
-        $('edit_user_name').value = user.full_name || '';
-        $('edit_user_email').value = user.email || '';
-        $('edit_user_role').value = user.role || 'student';
-        $('edit_user_program').value = user.program || 'KRCHN';
-        $('edit_user_intake').value = user.intake_year || '2024';
-        $('edit_user_block_status').value = user.block_program_year ? 'true':'false';
-        updateBlockTermOptions('edit_user_program','edit_user_block');
-        $('edit_user_block').value = user.block || 'A';
-        $('userEditModal').style.display = 'flex';
-    } catch(e) { showFeedback(`Failed to load user: ${e.message}`,'error'); }
+    $('edit_user_id').value = user.user_id;
+    $('edit_user_name').value = user.full_name || '';
+    $('edit_user_email').value = user.email || '';
+    $('edit_user_role').value = user.role || 'student';
+    $('edit_user_program').value = user.program || 'KRCHN';
+    $('edit_user_intake').value = user.intake_year || '2024';
+    $('edit_user_block_status').value = user.block_program_year ? 'true' : 'false';
+    updateBlockTermOptions('edit_user_program', 'edit_user_block');
+    $('edit_user_block').value = user.block || 'A';
+    $('userEditModal').style.display = 'flex';
+  } catch (e) {
+    showFeedback(`Failed to load user: ${e.message}`, 'error');
+  }
 }
 
 async function handleEditUser(e) {
-    e.preventDefault();
-    const submitButton = e.submitter;
-    const originalText = submitButton.textContent;
-    setButtonLoading(submitButton, true, originalText);
+  e.preventDefault();
+  const submitButton = e.submitter;
+  const originalText = submitButton.textContent;
+  setButtonLoading(submitButton, true, originalText);
 
-    const userId = $('edit_user_id').value;
-    const newEmail = $('edit_user_email').value.trim();
-    const newRole = $('edit_user_role').value;
+  const userId = $('edit_user_id').value;
+  const newEmail = $('edit_user_email').value.trim();
+  const newRole = $('edit_user_role').value;
 
-    // Updated data to match current table columns
-    const updatedData = {
-        full_name: $('edit_user_name').value.trim(),
-        program: $('edit_user_program').value || null,
-        intake_year: $('edit_user_intake').value || null,
-        block: $('edit_user_block').value || null,
-        block_program_year: $('edit_user_block_status').value === 'true',
-        status: 'approved'
-    };
+  const updatedData = {
+    full_name: $('edit_user_name').value.trim(),
+    program: $('edit_user_program').value || null,
+    intake_year: $('edit_user_intake').value || null,
+    block: $('edit_user_block').value || null,
+    block_program_year: $('edit_user_block_status').value === 'true',
+    status: 'approved'
+  };
 
-    try {
-        // Update user profile in consolidated_user_profiles_table
-        const { error: profileError } = await sb
-            .from('consolidated_user_profiles_table')
-            .update(updatedData)
-            .eq('user_id', userId);
+  try {
+    const { error: profileError } = await sb
+      .from('consolidated_user_profiles_table')
+      .update(updatedData)
+      .eq('user_id', userId);
+    if (profileError) throw profileError;
 
-        if (profileError) throw profileError;
-
-        // Update role if changed
-        if (newRole) {
-            const { error: roleError } = await sb
-                .from('consolidated_user_profiles_table')
-                .update({ role: newRole })
-                .eq('user_id', userId);
-            if (roleError) showFeedback(`Role update failed: ${roleError.message}`, 'warning');
-        }
-
-        // Update Auth email if changed
-        if (newEmail) {
-            const { error: emailError } = await sb.auth.admin.updateUserById(userId, { email: newEmail });
-            if (emailError) showFeedback('Profile updated, but Auth email not updated.', 'warning');
-        }
-
-        showFeedback('User profile updated successfully!', 'success');
-        $('userEditModal').style.display = 'none';
-        loadAllUsers();
-        loadStudents();
-        loadDashboardData();
-
-    } catch (e) {
-        showFeedback('Failed to update user: ' + (e.message || e), 'error');
-    } finally {
-        setButtonLoading(submitButton, false, originalText);
+    if (newRole) {
+      const { error: roleError } = await sb
+        .from('consolidated_user_profiles_table')
+        .update({ role: newRole })
+        .eq('user_id', userId);
+      if (roleError) showFeedback(`Role update failed: ${roleError.message}`, 'warning');
     }
+
+    if (newEmail) {
+      const { error: emailError } = await sb.auth.admin.updateUserById(userId, { email: newEmail });
+      if (emailError) showFeedback('Profile updated, but Auth email not updated.', 'warning');
+    }
+
+    showFeedback('User profile updated successfully!', 'success');
+    $('userEditModal').style.display = 'none';
+    loadAllUsers();
+    loadStudents();
+    loadDashboardData();
+  } catch (e) {
+    showFeedback('Failed to update user: ' + (e.message || e), 'error');
+  } finally {
+    setButtonLoading(submitButton, false, originalText);
+  }
 }
 
 
