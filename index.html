@@ -1215,12 +1215,9 @@ async function geoCheckIn() {
 // ✅ Load user courses
 async function loadCourses() {
     const tableBody = document.getElementById('courses-table');
-    if (!tableBody) {
-        console.error("❌ Missing <tbody id='courses-table'> in HTML");
-        return;
-    }
+    if (!tableBody) return;
 
-    tableBody.innerHTML = '<tr><td colspan="4">Loading courses...</td></tr>';
+    tableBody.innerHTML = '<tr><td colspan="3">Loading courses...</td></tr>';
 
     try {
         const program = currentUserProfile?.program;
@@ -1228,43 +1225,39 @@ async function loadCourses() {
         const intakeYear = currentUserProfile?.intake_year;
 
         if (!program || !block || !intakeYear) {
-            tableBody.innerHTML = `<tr><td colspan="4">Missing program, block, or intake year info. Cannot load courses.</td></tr>`;
+            tableBody.innerHTML = '<tr><td colspan="3">Missing program, block, or intake year info.</td></tr>';
             return;
         }
 
-        // Fetch enrolled courses with a safe join to the courses table
+        // Fetch courses directly from courses table
         const { data: courses, error } = await sb
-            .from('student_courses')
-            .select(`
-                status,
-                courses!inner(course_name)
-            `)
-            .eq('student_id', currentUserProfile.user_id)
-            .order('course_id');
+            .from('courses') // make sure this matches your table name
+            .select('id, course_name, course_code, description')
+            .eq('program_type', program)
+            .eq('block_term', block)
+            .eq('intake_year', intakeYear)
+            .order('course_name');
 
         if (error) throw error;
 
         tableBody.innerHTML = '';
-
         if (courses && courses.length > 0) {
             courses.forEach(c => {
-                const name = c.courses?.course_name || 'Unknown';
                 tableBody.innerHTML += `
                     <tr>
-                        <td>${name}</td>
-                        <td>${c.course_id}</td>
-                        <td>N/A</td>
-                        <td>${c.status || 'Enrolled'}</td>
+                        <td>${c.course_name}</td>
+                        <td>${c.course_code || '-'}</td>
+                        <td>${c.description || '-'}</td>
                     </tr>
                 `;
             });
         } else {
-            tableBody.innerHTML = `<tr><td colspan="4">No courses found for ${program}, Block ${block}, Intake ${intakeYear}.</td></tr>`;
+            tableBody.innerHTML = `<tr><td colspan="3">No courses found for ${program}, Block ${block}, Intake ${intakeYear}.</td></tr>`;
         }
 
     } catch (err) {
-        console.error("❌ Error loading courses:", err);
-        tableBody.innerHTML = `<tr><td colspan="4" style="color:#EF4444;">Error loading courses: ${err.message}</td></tr>`;
+        console.error("Error loading courses:", err);
+        tableBody.innerHTML = `<tr><td colspan="3" style="color:red;">Error loading courses. Check console.</td></tr>`;
     }
 
     // Update dashboard metrics after courses load
