@@ -909,7 +909,7 @@ function getDeviceId() {
     return deviceId;
 }
 
-// Load user profile from consolidated_user_profiles_table
+// Load user profile
 async function loadProfile(userId) {
     const { data, error } = await sb
         .from('consolidated_user_profiles_table')
@@ -926,7 +926,7 @@ async function loadProfile(userId) {
     return data;
 }
 
-// Load clinical areas for the student
+// Load clinical areas
 async function loadClinicalTargets() {
     if (!currentUserProfile) await loadProfile(currentUserId);
 
@@ -946,11 +946,8 @@ async function loadClinicalTargets() {
             .eq('program', program)
             .eq('intake_year', intakeYear);
 
-        if (block) {
-            query = query.or(`block.eq.${block},block.is.null`);
-        } else {
-            query = query.is('block', null);
-        }
+        if (block) query = query.or(`block.eq.${block},block.is.null`);
+        else query = query.is('block', null);
 
         const { data, error } = await query.order('name');
         if (error) throw error;
@@ -961,7 +958,7 @@ async function loadClinicalTargets() {
     }
 }
 
-// Load courses for 'Class' session
+// Load courses for 'Class'
 async function loadClassTargets() {
     if (!currentUserProfile) await loadProfile(currentUserId);
 
@@ -981,11 +978,8 @@ async function loadClassTargets() {
             .eq('program', program)
             .eq('intake_year', intakeYear);
 
-        if (block) {
-            query = query.or(`block.eq.${block},block.is.null,block.eq.General`);
-        } else {
-            query = query.is('block', null);
-        }
+        if (block) query = query.or(`block.eq.${block},block.is.null,block.eq.General`);
+        else query = query.is('block', null);
 
         const { data, error } = await query.order('name');
         if (error) throw error;
@@ -996,7 +990,7 @@ async function loadClassTargets() {
     }
 }
 
-// Update dropdown based on session type
+// Update target dropdown
 function updateTargetSelect() {
     if (!sessionTypeSelect || !attendanceTargetSelect || !geoMessage) return;
 
@@ -1036,7 +1030,7 @@ function updateTargetSelect() {
     geoMessage.innerHTML = `Please select a specific **${label.replace(':', '')}** to check in.`;
 }
 
-// Load attendance history
+// Load geo attendance history
 async function loadGeoAttendanceHistory(userId) {
     const tableBody = document.getElementById('geo-attendance-history');
     if (!tableBody) return;
@@ -1080,9 +1074,8 @@ async function loadGeoAttendanceHistory(userId) {
 
 // Geo check-in
 async function geoCheckIn() {
-    if (!currentUserProfile) {
-        await loadProfile(currentUserId);
-    }
+    if (!currentUserProfile) await loadProfile(currentUserId);
+
     const studentProfile = currentUserProfile;
     const deviceId = getDeviceId();
     const sessionType = sessionTypeSelect.value;
@@ -1104,7 +1097,6 @@ async function geoCheckIn() {
     if (button) button.disabled = true;
     geoMessage.textContent = 'Attempting to get high-accuracy location...';
 
-    // Get location
     const getLocation = () => new Promise(resolve => {
         if (!navigator.geolocation) return resolve({ lat: FALLBACK_LAT, lon: FALLBACK_LON, acc: FALLBACK_ACCURACY, friendly: 'Fallback Location' });
         navigator.geolocation.getCurrentPosition(
@@ -1123,7 +1115,6 @@ async function geoCheckIn() {
             location.friendly = geoData?.display_name || `Lat:${location.lat.toFixed(4)}, Lon:${location.lon.toFixed(4)}`;
         }
 
-        // Prevent same device for multiple accounts
         const { data: existing, error: deviceError } = await sb
             .from('geo_attendance_logs')
             .select('student_id')
@@ -1137,7 +1128,7 @@ async function geoCheckIn() {
             return;
         }
 
-        // Call RPC (updated to only use the parameters your function expects)
+        // Call RPC with correct parameters
         const { error } = await sb.rpc('check_in_and_defer_fk', {
             p_student_uuid: studentProfile.student_uuid,
             p_session_type: sessionType,
