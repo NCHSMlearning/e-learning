@@ -1107,7 +1107,22 @@ function saveClinicalName() {
  * 7. Super Admin Attendance Tab (Fully Corrected)
  *******************************************************/
 
-// --- Helper: Haversine distance in meters ---
+/*******************************************************
+ * Super Admin Attendance Tab - Full Integration
+ *******************************************************/
+
+// ------------------------- Helpers -------------------------
+const $ = id => document.getElementById(id);
+
+function getDeviceId() {
+    let deviceId = localStorage.getItem('device_id');
+    if (!deviceId) {
+        deviceId = crypto.randomUUID();
+        localStorage.setItem('device_id', deviceId);
+    }
+    return deviceId;
+}
+
 function getDistanceInMeters(lat1, lon1, lat2, lon2) {
     if (!lat1 || !lon1 || !lat2 || !lon2) return null;
     const R = 6371000;
@@ -1119,141 +1134,194 @@ function getDistanceInMeters(lat1, lon1, lat2, lon2) {
     return R * c;
 }
 
-// --- Global functions required by buttons ---
-function showMap(lat, lng, locationName, studentName, dateTime) {
-    // Implement your map logic here (e.g., Leaflet or Google Maps)
-    console.log('Map:', lat, lng, locationName, studentName, dateTime);
+function escapeHtml(unsafe) {
+    return unsafe?.replace(/[&<"']/g, m => ({ '&':'&amp;','<':'&lt;','"':'&quot;',"'":'&#039;' }[m])) || '';
 }
 
+function showFeedback(msg, type='info') {
+    alert(msg); // replace with nicer toast/feedback if desired
+}
+
+// --------------------- Form Field Toggle -------------------
+function toggleAttendanceFields() {
+    const sessionType = $('att_session_type')?.value;
+    const departmentInput = $('att_department');
+    const courseSelect = $('att_course_id');
+
+    if (sessionType === 'clinical') {
+        if (departmentInput) { departmentInput.placeholder = "Clinical Department/Area"; departmentInput.required = true; }
+        if (courseSelect) { courseSelect.required = false; courseSelect.value = ""; }
+    } else if (sessionType === 'classroom') {
+        if (departmentInput) { departmentInput.placeholder = "Classroom Location/Room (Optional)"; departmentInput.required = false; }
+        if (courseSelect) { courseSelect.required = true; }
+    } else {
+        if (departmentInput) { departmentInput.placeholder = "Location/Detail"; departmentInput.required = false; }
+        if (courseSelect) { courseSelect.required = false; courseSelect.value = ""; }
+    }
+}
+
+// ------------------ Populate Students Select ----------------
+async function populateAttendanceSelects() {
+    const { data: students } = await fetchData('profiles', 'id, full_name', { role:'student', approved:true }, 'full_name', true);
+    const attStudentSelect = $('att_student_id');
+    if (students && attStudentSelect) {
+        attStudentSelect.innerHTML = '';
+        const defaultOption = document.createElement('option');
+        defaultOption.value = '';
+        defaultOption.textContent = 'Select Student';
+        attStudentSelect.appendChild(defaultOption);
+        students.forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s.id;
+            opt.textContent = s.full_name;
+            attStudentSelect.appendChild(opt);
+        });
+    }
+}
+
+// -------------------- Manual Attendance --------------------
+async function handleManualAttendance(e) {
+    e.preventDefault();
+    const submitButton = e.submitter;
+    const student_id = $('att_student_id')?.value;
+    const session_type = $('att_session_type')?.value;
+    const date = $('att_date')?.value;
+    const time = $('att_time')?.value;
+    const course_id = session_type === 'classroom' ? $('att_course_id')?.value : null;
+    const department = $('att_department')?.value?.trim() || null;
+    const location_name = $('att_location')?.value?.trim() || 'Manual Admin Entry';
+    let check_in_time = new Date().toISOString();
+    if (date && time) check_in_time = new Date(`${date}T${time}`).toISOString();
+    else if (date) check_in_time = new Date(date).toISOString();
+
+    if (!student_id || (session_type === 'classroom' && !course_id)) {
+        showFeedback('Please select a student and required fields.', 'error');
+        return;
+    }
+
+    const attendanceData = {
+        student_id, session_type, check_in_time,
+        department, course_id, is_manual_entry:true,
+        latitude:null, longitude:null,
+        location_name, ip_address:await getIPAddress(),
+        device_id:getDeviceId()
+    };
+
+    const { error } = await sb.from('geo_attendance_logs').insert([attendanceData]);
+    if (error) showFeedback(`Failed: ${error.message}`, 'error');
+    else { showFeedback('Manual attendance recorded!'); e.target.reset(); loadAttendance(); toggleAttendanceFields(); }
+}
+
+// -------------------- Core Actions -------------------------
 async function approveAttendanceRecord(recordId) {
     if (!confirm('Approve this attendance record?')) return;
-    const { error } = await sb.from('geo_attendance_logs')
-        .update({ is_verified: true, verified_at: new Date().toISOString(), verified_by_id: currentUserId })
-        .eq('id', recordId);
-    if (error) return alert(`Approve failed: ${error.message}`);
+    const { error } = await sb.from('geo_attendance_logs').update({ is_verified:true, verified_by_id:currentUserId, verified_at:new Date().toISOString() }).eq('id', recordId);
+    if (error) return showFeedback(`Approve failed: ${error.message}`, 'error');
     loadAttendance();
 }
 
 async function deleteAttendanceRecord(recordId) {
     if (!confirm('Delete this attendance record?')) return;
     const { error } = await sb.from('geo_attendance_logs').delete().eq('id', recordId);
-    if (error) return alert(`Delete failed: ${error.message}`);
+    if (error) return showFeedback(`Delete failed: ${error.message}`, 'error');
     loadAttendance();
 }
 
-// --- Load Attendance Table ---
+function showMap(lat,lng,locationName,studentName,dateTime){
+    console.log('Show map:', lat,lng,locationName,studentName,dateTime);
+}
+
+// ---------------------- Load Attendance ---------------------
 async function loadAttendance() {
     const todayBody = $('attendance-table');
     const pastBody = $('past-attendance-table');
-
-    todayBody.innerHTML = '<tr><td colspan="8">Loading today\'s records...</td></tr>';
-    pastBody.innerHTML = '<tr><td colspan="7">Loading history...</td></tr>';
-
+    todayBody.innerHTML = '<tr><td colspan="8">Loading...</td></tr>';
+    pastBody.innerHTML = '<tr><td colspan="7">Loading...</td></tr>';
     const todayISO = new Date().toISOString().slice(0,10);
 
-    const { data: allRecords, error } = await fetchData(
-        'geo_attendance_logs', 
-        '*, target_name, is_verified, latitude, longitude, target_latitude, target_longitude, consolidated_user_profiles_table:student_id(full_name, role, department), courses:course_id(course_name)', 
-        {}, 'check_in_time', false
-    );
-
+    const { data: allRecords, error } = await fetchData('geo_attendance_logs','*, target_name, is_verified, latitude, longitude, consolidated_user_profiles_table:student_id(full_name,role,department), courses:course_id(course_name)','', 'check_in_time', false);
     if (error) {
-        todayBody.innerHTML = `<tr><td colspan="8">Error loading records: ${error.message}</td></tr>`;
-        pastBody.innerHTML = `<tr><td colspan="7">Error loading records: ${error.message}</td></tr>`;
+        todayBody.innerHTML = `<tr><td colspan="8">Error: ${error.message}</td></tr>`;
+        pastBody.innerHTML = `<tr><td colspan="7">Error: ${error.message}</td></tr>`;
         return;
     }
 
     todayBody.innerHTML = '';
     pastBody.innerHTML = '';
 
-    allRecords.forEach(r => {
+    allRecords.forEach(r=>{
         const userProfile = r.consolidated_user_profiles_table;
         const courseDetails = r.courses;
-        const userName = userProfile?.full_name || 'N/A User';
+        const userName = userProfile?.full_name || 'N/A';
         const userRole = userProfile?.role || 'N/A';
         const dateTime = new Date(r.check_in_time).toLocaleString();
         const locationDisplay = r.department || r.location_name || r.location_friendly_name || 'N/A';
 
-        // Target column
         const targetDetail = r.target_name || 
-            (r.session_type === 'clinical' ? userProfile?.department || 'N/A Department' 
-                                           : r.session_type === 'classroom' ? courseDetails?.course_name || 'N/A Course'
-                                           : 'N/A Target');
-
-        // Distance check
-        let distanceText = 'N/A';
-        if (r.latitude && r.longitude && r.target_latitude && r.target_longitude) {
-            const distance = getDistanceInMeters(r.latitude, r.longitude, r.target_latitude, r.target_longitude);
-            distanceText = `${distance.toFixed(1)} m`;
-            distanceText += distance <= 50 ? ' ✅ Within 50m' : ' ❌ Too far';
-        }
+            (r.session_type==='clinical'?userProfile?.department||'N/A Dept':
+            r.session_type==='classroom'?courseDetails?.course_name||'N/A Course':'N/A Target');
 
         const tr = document.createElement('tr');
 
-        // Columns
-        ['Name','Session','Target','Location','DateTime','GeoStatus','Distance'].forEach((_, idx) => {
-            const td = document.createElement('td');
-            switch(idx){
-                case 0: td.textContent = userName; break;
-                case 1: td.textContent = r.session_type || 'N/A'; break;
-                case 2: td.textContent = targetDetail; break;
-                case 3: td.textContent = locationDisplay; break;
-                case 4: td.textContent = dateTime; break;
-                case 5: td.textContent = (r.latitude && r.longitude) ? 'Yes (Geo-Logged)' : 'No (Manual)'; break;
-                case 6: td.textContent = distanceText; break;
-            }
-            tr.appendChild(td);
+        // Today vs past separation
+        const recordDate = new Date(r.check_in_time).toISOString().slice(0,10);
+
+        const cols = [
+            userName, r.session_type||'N/A', targetDetail, locationDisplay, dateTime,
+            (r.latitude && r.longitude)?'Yes (Geo-Logged)':'No (Manual)'
+        ];
+        cols.forEach(c=>{
+            const td = document.createElement('td'); td.textContent = c; tr.appendChild(td);
         });
 
-        // Actions column
+        // Actions
         const tdActions = document.createElement('td');
 
         const mapBtn = document.createElement('button');
-        mapBtn.className = 'btn btn-map btn-small';
-        mapBtn.textContent = 'View Map';
+        mapBtn.className='btn btn-map btn-small';
+        mapBtn.textContent='View Map';
         mapBtn.disabled = !(r.latitude && r.longitude);
-        if (!mapBtn.disabled) mapBtn.addEventListener('click', () => showMap(r.latitude, r.longitude, r.location_friendly_name || 'Check-in Location', userName, dateTime));
+        if(!mapBtn.disabled) mapBtn.addEventListener('click',()=>showMap(r.latitude,r.longitude,r.location_friendly_name||'Location',userName,dateTime));
         tdActions.appendChild(mapBtn);
 
-        if (!r.is_verified) {
+        if(!r.is_verified){
             const approveBtn = document.createElement('button');
-            approveBtn.className = 'btn btn-approve btn-small';
-            approveBtn.textContent = 'Approve';
-            approveBtn.style.marginLeft = '5px';
-            approveBtn.addEventListener('click', () => approveAttendanceRecord(r.id));
+            approveBtn.className='btn btn-approve btn-small';
+            approveBtn.textContent='Approve';
+            approveBtn.style.marginLeft='5px';
+            approveBtn.addEventListener('click',()=>approveAttendanceRecord(r.id));
             tdActions.appendChild(approveBtn);
         } else {
             const span = document.createElement('span');
-            span.className = 'text-success';
-            span.style.marginLeft = '10px';
-            span.textContent = '✅ Approved';
+            span.className='text-success'; span.style.marginLeft='10px'; span.textContent='✅ Approved';
             tdActions.appendChild(span);
         }
 
         const deleteBtn = document.createElement('button');
-        deleteBtn.className = 'btn btn-delete btn-small';
-        deleteBtn.textContent = 'Delete';
-        deleteBtn.style.marginLeft = '10px';
-        deleteBtn.addEventListener('click', () => deleteAttendanceRecord(r.id));
+        deleteBtn.className='btn btn-delete btn-small';
+        deleteBtn.textContent='Delete';
+        deleteBtn.style.marginLeft='10px';
+        deleteBtn.addEventListener('click',()=>deleteAttendanceRecord(r.id));
         tdActions.appendChild(deleteBtn);
 
         tr.appendChild(tdActions);
 
-        // Append to today or past
-        const recordDate = new Date(r.check_in_time).toISOString().slice(0,10);
-        if(recordDate === todayISO) todayBody.appendChild(tr);
+        if(recordDate===todayISO) todayBody.appendChild(tr);
         else pastBody.appendChild(tr);
     });
-
-    if (!todayBody.hasChildNodes()) todayBody.innerHTML = '<tr><td colspan="8">No check-in records for today.</td></tr>';
-    if (!pastBody.hasChildNodes()) pastBody.innerHTML = '<tr><td colspan="7">No past attendance history found.</td></tr>';
-
-    // Optional filter
-    filterTable('attendance-search','attendance-table',[0,1,2,3]);
 }
 
+// ---------------------- Event Wiring -----------------------
+document.addEventListener('DOMContentLoaded',async()=>{
+    $('att_session_type')?.addEventListener('change', toggleAttendanceFields);
+    toggleAttendanceFields();
+    $('manual-attendance-form')?.addEventListener('submit', handleManualAttendance);
+    $('attendance-search')?.addEventListener('keyup',()=>filterTable('attendance-search','attendance-table',[0,1,2]));
+    await populateAttendanceSelects();
+    await loadAttendance();
+});
 
-/*******************************************************
+/********************************
  * 8. CATS/Exams Tab
  *******************************************************/
 async function populateExamCourseSelects(courses = null) {
