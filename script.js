@@ -1348,35 +1348,28 @@ $('attendance-search')?.addEventListener('keyup',()=>filterTable('attendance-sea
 /********************************
  * 8. CATS/Exams Tab
  *******************************************************/
+
+// Populate course select based on program
 async function populateExamCourseSelects(courses = null) {
     const courseSelect = $('exam_course_id');
     const program = $('exam_program').value;
-    
+
     let filteredCourses = [];
-    
-    if (!program) {
-        // If no program is selected, show no courses initially
-        filteredCourses = []; 
-    } else {
+
+    if (!program) filteredCourses = [];
+    else {
         if (!courses) {
-            // Fetch courses if not already provided
-            const { data } = await fetchData('courses', 'id, course_name', { target_program: program }, 'course_name', true);
+            const { data } = await fetchData('courses', 'id, course_name, target_program', { target_program: program }, 'course_name', true);
             filteredCourses = data || [];
         } else {
-            // Filter courses if provided (e.g., from loadCourses call)
             filteredCourses = courses.filter(c => c.target_program === program);
         }
     }
-    
-    // The select box for courses is now populated only with courses matching the selected program.
+
     populateSelect(courseSelect, filteredCourses, 'id', 'course_name', 'Select Course');
 }
 
-function filterCoursesByProgram() {
-    // This is the simplified function called by the exam_program onchange handler.
-    populateExamCourseSelects();
-}
-
+// Add Exam
 async function handleAddExam(e) {
     e.preventDefault();
     const submitButton = e.submitter;
@@ -1407,19 +1400,27 @@ async function handleAddExam(e) {
         status: exam_status
     });
 
-    if (error) { showFeedback(`Failed to add exam: ${error.message}`, 'error'); } 
-    else { showFeedback('Exam added successfully!'); e.target.reset(); loadExams(); renderFullCalendar(); }
+    if (error) showFeedback(`Failed to add exam: ${error.message}`, 'error');
+    else {
+        showFeedback('Exam added successfully!');
+        e.target.reset();
+        loadExams();
+        renderFullCalendar();
+    }
 
     setButtonLoading(submitButton, false, originalText);
 }
 
-
+// Load Exams Table
 async function loadExams() {
     const tbody = $('exams-table');
     tbody.innerHTML = '<tr><td colspan="8">Loading exams/CATs...</td></tr>';
-    
+
     const { data: exams, error } = await fetchData('exams', '*, course:course_id(course_name)', {}, 'exam_date', false);
-    if (error) { tbody.innerHTML = `<tr><td colspan="8">Error loading exams: ${error.message}</td></tr>`; return; }
+    if (error) {
+        tbody.innerHTML = `<tr><td colspan="8">Error loading exams: ${error.message}</td></tr>`;
+        return;
+    }
 
     tbody.innerHTML = '';
     exams.forEach(e => {
@@ -1437,25 +1438,110 @@ async function loadExams() {
             <td>${escapeHtml(intake)}</td>
             <td>${escapeHtml(e.block_term || 'N/A')}</td>
             <td>
+                <button class="btn-action" onclick="openEditExamModal('${e.id}', '${escapeHtml(e.exam_name, true)}', '${e.exam_date}', '${e.status}')">Edit</button>
                 <button class="btn-action" onclick="openGradeModal('${e.id}', '${escapeHtml(e.exam_name, true)}')">Grade</button>
                 <button class="btn btn-delete" onclick="deleteExam('${e.id}')">Delete</button>
             </td>
         </tr>`;
     });
-    
-    filterTable('exam-search', 'exams-table', [2, 1, 6]); 
+
+    filterTable('exam-search', 'exams-table', [2,1,6]);
+    populateStudentExams(exams); // Update student-facing exam cards
 }
 
+// Delete Exam
 async function deleteExam(examId) {
     if (!confirm('Are you sure you want to delete this exam? This cannot be undone.')) return;
     const { error } = await sb.from('exams').delete().eq('id', examId);
-    if (error) { showFeedback(`Failed to delete exam: ${error.message}`, 'error'); } 
-    else { showFeedback('Exam deleted successfully!'); loadExams(); renderFullCalendar(); }
+    if (error) showFeedback(`Failed to delete exam: ${error.message}`, 'error');
+    else {
+        showFeedback('Exam deleted successfully!');
+        loadExams();
+        renderFullCalendar();
+    }
 }
 
+// Open Edit Modal
+function openEditExamModal(examId, examName, examDate, examStatus) {
+    const modal = $('examEditModal');
+    modal.style.display = 'block';
+
+    $('edit_exam_id').value = examId;
+    $('edit_exam_title').value = examName;
+    $('edit_exam_date').value = examDate;
+    $('edit_exam_status').value = examStatus;
+
+    // Close button
+    modal.querySelector('.close').onclick = () => { modal.style.display = 'none'; };
+}
+
+// Save Exam Changes
+async function handleEditExam(e) {
+    e.preventDefault();
+    const examId = $('edit_exam_id').value;
+    const examName = $('edit_exam_title').value.trim();
+    const examDate = $('edit_exam_date').value;
+    const examStatus = $('edit_exam_status').value;
+
+    if (!examId || !examName || !examDate) {
+        showFeedback('All fields are required to edit exam.', 'error');
+        return;
+    }
+
+    const { error } = await sb.from('exams').update({
+        exam_name: examName,
+        exam_date: examDate,
+        status: examStatus
+    }).eq('id', examId);
+
+    if (error) showFeedback(`Failed to update exam: ${error.message}`, 'error');
+    else {
+        showFeedback('Exam updated successfully!');
+        $('examEditModal').style.display = 'none';
+        loadExams();
+        renderFullCalendar();
+    }
+}
+
+// Grade Modal Placeholder
 function openGradeModal(examId, examName) {
     showFeedback(`Grading functionality for: ${examName} (ID: ${examId}) is pending implementation.`, 'success');
 }
+
+// Populate Student Exams
+function populateStudentExams(exams) {
+    const container = $('student-exams');
+    container.innerHTML = '';
+
+    if (!exams || exams.length === 0) {
+        container.innerHTML = '<p>No available exams at the moment.</p>';
+        return;
+    }
+
+    exams.forEach(e => {
+        if (e.status !== 'Upcoming') return; // Only show upcoming exams
+
+        const examCard = document.createElement('div');
+        examCard.className = 'exam-card';
+        examCard.innerHTML = `
+            <h4>${escapeHtml(e.course?.course_name || 'N/A')} - ${escapeHtml(e.exam_name)}</h4>
+            <p>Date: ${new Date(e.exam_date).toLocaleDateString()} | Status: ${escapeHtml(e.status)}</p>
+            <button onclick="startExam('${e.id}')">Start Exam</button>
+        `;
+        container.appendChild(examCard);
+    });
+}
+
+// Placeholder for starting exam
+function startExam(examId) {
+    showFeedback(`Starting exam ID: ${examId}. Student exam interface not yet implemented.`, 'info');
+}
+
+// Event listeners
+$('add-exam-form').addEventListener('submit', handleAddExam);
+$('edit-exam-form').addEventListener('submit', handleEditExam);
+$('exam_program').addEventListener('change', populateExamCourseSelects);
+
 
 
 /*******************************************************
