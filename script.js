@@ -1227,8 +1227,15 @@ async function deleteAttendanceRecord(recordId) {
     loadAttendance();
 }
 
-function showMap(lat,lng,locationName,studentName,dateTime){
-    console.log('Show map:', lat,lng,locationName,studentName,dateTime);
+function showMap(lat, lng, locationName, studentName, dateTime) {
+    const mapDiv = document.getElementById('mapModal'); // your modal container
+    mapDiv.innerHTML = ""; // clear previous map
+    const map = L.map(mapDiv).setView([lat, lng], 18);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    L.marker([lat, lng]).addTo(map)
+      .bindPopup(`<b>${studentName}</b><br>${locationName}<br>${dateTime}`)
+      .openPopup();
+    // Show modal if using a modal library
 }
 
 // ---------------------- Load Attendance ---------------------
