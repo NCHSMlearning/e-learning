@@ -1103,31 +1103,63 @@ function saveClinicalName() {
     showFeedback(`Clinical Area: "${name}" saved for ${program} ${intake} Block/Term ${block}. (DB logic not implemented)`, 'success');
 }
 
-
 /*******************************************************
- * 7. Attendance Tab (Corrected)
+ * 7. Super Admin Attendance Tab (Fully Corrected)
  *******************************************************/
 
+// --- Helper: Haversine distance in meters ---
+function getDistanceInMeters(lat1, lon1, lat2, lon2) {
+    if (!lat1 || !lon1 || !lat2 || !lon2) return null;
+    const R = 6371000;
+    const toRad = deg => deg * Math.PI / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+}
+
+// --- Global functions required by buttons ---
+function showMap(lat, lng, locationName, studentName, dateTime) {
+    // Implement your map logic here (e.g., Leaflet or Google Maps)
+    console.log('Map:', lat, lng, locationName, studentName, dateTime);
+}
+
+async function approveAttendanceRecord(recordId) {
+    if (!confirm('Approve this attendance record?')) return;
+    const { error } = await sb.from('geo_attendance_logs')
+        .update({ is_verified: true, verified_at: new Date().toISOString(), verified_by_id: currentUserId })
+        .eq('id', recordId);
+    if (error) return alert(`Approve failed: ${error.message}`);
+    loadAttendance();
+}
+
+async function deleteAttendanceRecord(recordId) {
+    if (!confirm('Delete this attendance record?')) return;
+    const { error } = await sb.from('geo_attendance_logs').delete().eq('id', recordId);
+    if (error) return alert(`Delete failed: ${error.message}`);
+    loadAttendance();
+}
+
+// --- Load Attendance Table ---
 async function loadAttendance() {
     const todayBody = $('attendance-table');
     const pastBody = $('past-attendance-table');
 
-    todayBody.innerHTML = '<tr><td colspan="7">Loading today\'s records...</td></tr>';
-    pastBody.innerHTML = '<tr><td colspan="6">Loading history...</td></tr>';
+    todayBody.innerHTML = '<tr><td colspan="8">Loading today\'s records...</td></tr>';
+    pastBody.innerHTML = '<tr><td colspan="7">Loading history...</td></tr>';
 
-    const todayISO = new Date().toISOString().slice(0, 10);
+    const todayISO = new Date().toISOString().slice(0,10);
 
     const { data: allRecords, error } = await fetchData(
         'geo_attendance_logs', 
-        '*, is_verified, latitude, longitude, target_name, consolidated_user_profiles_table:student_id(full_name, role, department), courses:course_id(course_name)', 
-        {}, 
-        'check_in_time', 
-        false
+        '*, target_name, is_verified, latitude, longitude, target_latitude, target_longitude, consolidated_user_profiles_table:student_id(full_name, role, department), courses:course_id(course_name)', 
+        {}, 'check_in_time', false
     );
 
     if (error) {
-        todayBody.innerHTML = `<tr><td colspan="7">Error loading records: ${error.message}</td></tr>`;
-        pastBody.innerHTML = `<tr><td colspan="6">Error loading records: ${error.message}</td></tr>`;
+        todayBody.innerHTML = `<tr><td colspan="8">Error loading records: ${error.message}</td></tr>`;
+        pastBody.innerHTML = `<tr><td colspan="7">Error loading records: ${error.message}</td></tr>`;
         return;
     }
 
@@ -1137,76 +1169,52 @@ async function loadAttendance() {
     allRecords.forEach(r => {
         const userProfile = r.consolidated_user_profiles_table;
         const courseDetails = r.courses;
-
         const userName = userProfile?.full_name || 'N/A User';
         const userRole = userProfile?.role || 'N/A';
         const dateTime = new Date(r.check_in_time).toLocaleString();
+        const locationDisplay = r.department || r.location_name || r.location_friendly_name || 'N/A';
 
-        const locationDisplay = escapeHtml(r.department || r.location_name || r.location_friendly_name || 'N/A');
-        const profileDepartment = userProfile?.department;
-
-        // -------------------------------
-        // Target column logic
-        // -------------------------------
+        // Target column
         const targetDetail = r.target_name || 
-            (r.session_type === 'clinical' ? escapeHtml(profileDepartment || 'N/A Department') 
-                                           : r.session_type === 'classroom' ? escapeHtml(courseDetails?.course_name || 'N/A Course')
+            (r.session_type === 'clinical' ? userProfile?.department || 'N/A Department' 
+                                           : r.session_type === 'classroom' ? courseDetails?.course_name || 'N/A Course'
                                            : 'N/A Target');
 
-        const recordDate = new Date(r.check_in_time).toISOString().slice(0, 10);
+        // Distance check
+        let distanceText = 'N/A';
+        if (r.latitude && r.longitude && r.target_latitude && r.target_longitude) {
+            const distance = getDistanceInMeters(r.latitude, r.longitude, r.target_latitude, r.target_longitude);
+            distanceText = `${distance.toFixed(1)} m`;
+            distanceText += distance <= 50 ? ' ✅ Within 50m' : ' ❌ Too far';
+        }
 
-        // -------------------------------
-        // Build table row
-        // -------------------------------
         const tr = document.createElement('tr');
 
-        const tdName = document.createElement('td');
-        tdName.textContent = userName;
-        tr.appendChild(tdName);
-
-        const tdSession = document.createElement('td');
-        tdSession.textContent = escapeHtml(r.session_type || 'N/A');
-        tr.appendChild(tdSession);
-
-        const tdTarget = document.createElement('td');
-        tdTarget.textContent = targetDetail;
-        tr.appendChild(tdTarget);
-
-        const tdLocation = document.createElement('td');
-        tdLocation.textContent = locationDisplay;
-        tr.appendChild(tdLocation);
-
-        const tdDateTime = document.createElement('td');
-        tdDateTime.textContent = dateTime;
-        tr.appendChild(tdDateTime);
-
-        // Geo status
-        const tdGeo = document.createElement('td');
-        tdGeo.textContent = (r.latitude && r.longitude) ? 'Yes (Geo-Logged)' : 'No (Manual)';
-        tr.appendChild(tdGeo);
+        // Columns
+        ['Name','Session','Target','Location','DateTime','GeoStatus','Distance'].forEach((_, idx) => {
+            const td = document.createElement('td');
+            switch(idx){
+                case 0: td.textContent = userName; break;
+                case 1: td.textContent = r.session_type || 'N/A'; break;
+                case 2: td.textContent = targetDetail; break;
+                case 3: td.textContent = locationDisplay; break;
+                case 4: td.textContent = dateTime; break;
+                case 5: td.textContent = (r.latitude && r.longitude) ? 'Yes (Geo-Logged)' : 'No (Manual)'; break;
+                case 6: td.textContent = distanceText; break;
+            }
+            tr.appendChild(td);
+        });
 
         // Actions column
         const tdActions = document.createElement('td');
 
-        // View Map button
         const mapBtn = document.createElement('button');
         mapBtn.className = 'btn btn-map btn-small';
         mapBtn.textContent = 'View Map';
         mapBtn.disabled = !(r.latitude && r.longitude);
-        if (!mapBtn.disabled) {
-            mapBtn.addEventListener('click', () => {
-                showMap(
-                    r.latitude,
-                    r.longitude,
-                    r.location_friendly_name || 'Check-in Location',
-                    userName,
-                    dateTime
-                );
-            });
-        }
+        if (!mapBtn.disabled) mapBtn.addEventListener('click', () => showMap(r.latitude, r.longitude, r.location_friendly_name || 'Check-in Location', userName, dateTime));
         tdActions.appendChild(mapBtn);
 
-        // Approve button / status
         if (!r.is_verified) {
             const approveBtn = document.createElement('button');
             approveBtn.className = 'btn btn-approve btn-small';
@@ -1215,14 +1223,13 @@ async function loadAttendance() {
             approveBtn.addEventListener('click', () => approveAttendanceRecord(r.id));
             tdActions.appendChild(approveBtn);
         } else {
-            const approvedSpan = document.createElement('span');
-            approvedSpan.className = 'text-success';
-            approvedSpan.style.marginLeft = '10px';
-            approvedSpan.textContent = '✅ Approved';
-            tdActions.appendChild(approvedSpan);
+            const span = document.createElement('span');
+            span.className = 'text-success';
+            span.style.marginLeft = '10px';
+            span.textContent = '✅ Approved';
+            tdActions.appendChild(span);
         }
 
-        // Delete button
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'btn btn-delete btn-small';
         deleteBtn.textContent = 'Delete';
@@ -1232,25 +1239,19 @@ async function loadAttendance() {
 
         tr.appendChild(tdActions);
 
-        // Append row to today or past
-        if (recordDate === todayISO) {
-            todayBody.appendChild(tr);
-        } else {
-            pastBody.appendChild(tr);
-        }
+        // Append to today or past
+        const recordDate = new Date(r.check_in_time).toISOString().slice(0,10);
+        if(recordDate === todayISO) todayBody.appendChild(tr);
+        else pastBody.appendChild(tr);
     });
 
-    if (!todayBody.hasChildNodes()) {
-        todayBody.innerHTML = '<tr><td colspan="7">No check-in records for today.</td></tr>';
-    }
+    if (!todayBody.hasChildNodes()) todayBody.innerHTML = '<tr><td colspan="8">No check-in records for today.</td></tr>';
+    if (!pastBody.hasChildNodes()) pastBody.innerHTML = '<tr><td colspan="7">No past attendance history found.</td></tr>';
 
-    if (!pastBody.hasChildNodes()) {
-        pastBody.innerHTML = '<tr><td colspan="6">No past attendance history found.</td></tr>';
-    }
-
-    // Optional: update search/filter table
-    filterTable('attendance-search', 'attendance-table', [0,1,2,3]);
+    // Optional filter
+    filterTable('attendance-search','attendance-table',[0,1,2,3]);
 }
+
 
 /*******************************************************
  * 8. CATS/Exams Tab
