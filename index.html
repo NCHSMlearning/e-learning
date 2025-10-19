@@ -909,7 +909,7 @@ function getDeviceId() {
     return deviceId;
 }
 
-// Load user profile
+// Load user profile from consolidated_user_profiles_table
 async function loadProfile(userId) {
     const { data, error } = await sb
         .from('consolidated_user_profiles_table')
@@ -926,9 +926,11 @@ async function loadProfile(userId) {
     return data;
 }
 
-// Load clinical areas
+// Load clinical areas for the student
 async function loadClinicalTargets() {
-    if (!currentUserProfile) await loadProfile(currentUserId);
+    if (!currentUserProfile || (!currentUserProfile.program && !currentUserProfile.department) || !currentUserProfile.intake_year) {
+        await loadProfile(currentUserId);
+    }
 
     const program = currentUserProfile?.program || currentUserProfile?.department;
     if (!program || !currentUserProfile.intake_year) {
@@ -946,11 +948,15 @@ async function loadClinicalTargets() {
             .eq('program', program)
             .eq('intake_year', intakeYear);
 
-        if (block) query = query.or(`block.eq.${block},block.is.null`);
-        else query = query.is('block', null);
+        if (block) {
+            query = query.or(`block.eq.${block},block.is.null`);
+        } else {
+            query = query.is('block', null);
+        }
 
         const { data, error } = await query.order('name');
         if (error) throw error;
+
         cachedClinicalAreas = data.map(area => ({ id: area.id, name: area.name }));
     } catch (e) {
         console.error('Error loading clinical areas:', e);
@@ -958,9 +964,11 @@ async function loadClinicalTargets() {
     }
 }
 
-// Load courses for 'Class'
+// Load courses for 'Class' session
 async function loadClassTargets() {
-    if (!currentUserProfile) await loadProfile(currentUserId);
+    if (!currentUserProfile || (!currentUserProfile.program && !currentUserProfile.department) || !currentUserProfile.intake_year) {
+        await loadProfile(currentUserId);
+    }
 
     const program = currentUserProfile?.program || currentUserProfile?.department;
     if (!program || !currentUserProfile.intake_year) {
@@ -978,19 +986,23 @@ async function loadClassTargets() {
             .eq('program', program)
             .eq('intake_year', intakeYear);
 
-        if (block) query = query.or(`block.eq.${block},block.is.null,block.eq.General`);
-        else query = query.is('block', null);
+        if (block) {
+            query = query.or(`block.eq.${block},block.is.null,block.eq.General`);
+        } else {
+            query = query.is('block', null);
+        }
 
         const { data, error } = await query.order('name');
         if (error) throw error;
+
         cachedCourses = data.map(course => ({ id: course.id, name: course.name, code: course.code }));
     } catch (e) {
-        console.error('Error loading courses:', e);
+        console.error('Error loading class targets:', e);
         cachedCourses = [];
     }
 }
 
-// Update target dropdown
+// Update dropdown based on session type
 function updateTargetSelect() {
     if (!sessionTypeSelect || !attendanceTargetSelect || !geoMessage) return;
 
@@ -1030,7 +1042,7 @@ function updateTargetSelect() {
     geoMessage.innerHTML = `Please select a specific **${label.replace(':', '')}** to check in.`;
 }
 
-// Load geo attendance history
+// Load attendance history
 async function loadGeoAttendanceHistory(userId) {
     const tableBody = document.getElementById('geo-attendance-history');
     if (!tableBody) return;
@@ -1076,14 +1088,13 @@ async function loadGeoAttendanceHistory(userId) {
 async function geoCheckIn() {
     if (!currentUserProfile) await loadProfile(currentUserId);
 
-    const studentProfile = currentUserProfile;
     const deviceId = getDeviceId();
     const sessionType = sessionTypeSelect.value;
     const targetSelect = attendanceTargetSelect.value;
     const checkInTime = new Date().toISOString();
     const button = document.getElementById('check-in-button');
 
-    if (!studentProfile || !sessionType || !targetSelect || targetSelect === '') {
+    if (!currentUserProfile || !sessionType || !targetSelect || targetSelect === '') {
         geoMessage.textContent = 'Error: Select session type and target, and ensure profile is loaded.';
         return;
     }
@@ -1115,6 +1126,7 @@ async function geoCheckIn() {
             location.friendly = geoData?.display_name || `Lat:${location.lat.toFixed(4)}, Lon:${location.lon.toFixed(4)}`;
         }
 
+        // Prevent same device for multiple accounts
         const { data: existing, error: deviceError } = await sb
             .from('geo_attendance_logs')
             .select('student_id')
@@ -1128,9 +1140,9 @@ async function geoCheckIn() {
             return;
         }
 
-        // Call RPC with correct parameters
+        // Call RPC with updated parameters
         const { error } = await sb.rpc('check_in_and_defer_fk', {
-            p_student_uuid: studentProfile.student_uuid,
+            p_student_uuid: currentUserProfile.student_uuid,
             p_session_type: sessionType,
             p_target_id: targetId,
             p_target_name: targetName,
@@ -1156,6 +1168,7 @@ async function geoCheckIn() {
         if (button) button.disabled = false;
     }
 }
+
 
     
 // *************************************************************************
