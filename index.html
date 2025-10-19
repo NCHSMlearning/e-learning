@@ -896,7 +896,7 @@ if (uploadButton) {
 }
 
 // *************************************************************************
-// *** 5. ATTENDANCE LOGIC (GeoCheckIn with Device Check & Profile Verification) ***
+// *** 5. ATTENDANCE LOGIC (GeoCheckIn with Device Verification) ***
 // *************************************************************************
 
 // Persistent device ID
@@ -909,32 +909,31 @@ function getDeviceId() {
     return deviceId;
 }
 
-// Check if user exists in consolidated_user_profiles_table by email
-async function checkUserExistsByEmail(email) {
+// ---------------------- Helper: Check if user exists ----------------------
+async function checkUserExists(email) {
     const { data, error } = await sb
         .from('consolidated_user_profiles_table')
-        .select('id')
+        .select('id, full_name, role, program, department, block, intake_year, email')
         .eq('email', email)
         .limit(1);
 
     if (error) {
         console.error('Error checking user existence:', error);
-        return false;
+        return null;
     }
-    return data && data.length > 0;
+    return data && data.length > 0 ? data[0] : null;
 }
 
-
-// Loads clinical areas for the student's cohort
+// ---------------------- Load clinical areas ----------------------
 async function loadClinicalTargets() {
-    if (!currentUserProfile || (!currentUserProfile.program && !currentUserProfile.department) || !currentUserProfile.intake_year) {
-        await loadProfile(currentUserId); 
-    }
+    if (!currentUserProfile) await loadProfile(currentUserId);
+
     const program = currentUserProfile?.program || currentUserProfile?.department;
     if (!program || !currentUserProfile.intake_year) {
         cachedClinicalAreas = [];
         return;
     }
+
     const block = currentUserProfile.block;
     const intakeYear = currentUserProfile.intake_year;
 
@@ -944,9 +943,9 @@ async function loadClinicalTargets() {
             .select('id, name')
             .eq('program', program)
             .eq('intake_year', intakeYear);
+
         if (block) {
-            const blockFilter = `block.eq.${block},block.is.null`;
-            query = query.or(blockFilter);
+            query = query.or(`block.eq.${block},block.is.null`);
         } else {
             query = query.is('block', null);
         }
@@ -955,23 +954,22 @@ async function loadClinicalTargets() {
         if (error) throw error;
 
         cachedClinicalAreas = data.map(area => ({ id: area.id, name: area.name }));
-
     } catch (error) {
         console.error("Error loading clinical areas:", error);
         cachedClinicalAreas = [];
     }
 }
 
-// Loads courses for 'Class' session
+// ---------------------- Load class courses ----------------------
 async function loadClassTargets() {
-    if (!currentUserProfile || (!currentUserProfile.program && !currentUserProfile.department) || !currentUserProfile.intake_year) {
-        await loadProfile(currentUserId); 
-    }
+    if (!currentUserProfile) await loadProfile(currentUserId);
+
     const program = currentUserProfile?.program || currentUserProfile?.department;
     if (!program || !currentUserProfile.intake_year) {
         cachedCourses = [];
         return;
     }
+
     const block = currentUserProfile.block;
     const intakeYear = currentUserProfile.intake_year;
 
@@ -981,9 +979,9 @@ async function loadClassTargets() {
             .select('id, name, code')
             .eq('program', program)
             .eq('intake_year', intakeYear);
+
         if (block) {
-            const blockFilter = `block.eq.${block},block.is.null,block.eq.General`;
-            query = query.or(blockFilter);
+            query = query.or(`block.eq.${block},block.is.null,block.eq.General`);
         } else {
             query = query.is('block', null);
         }
@@ -991,22 +989,22 @@ async function loadClassTargets() {
         const { data, error } = await query.order('name');
         if (error) throw error;
 
-        cachedCourses = data.map(course => ({ 
-            id: course.id, 
+        cachedCourses = data.map(course => ({
+            id: course.id,
             name: course.name,
-            code: course.code 
+            code: course.code
         }));
-
     } catch (error) {
         console.error("Error loading class targets:", error);
         cachedCourses = [];
     }
 }
 
-// Loads geo check-in history
+// ---------------------- Load geo attendance history ----------------------
 async function loadGeoAttendanceHistory(userId) {
     const tableBody = document.getElementById('geo-attendance-history');
     if (!tableBody) return;
+
     tableBody.innerHTML = '<tr><td colspan="6">Loading geo check-in history...</td></tr>';
 
     try {
@@ -1015,7 +1013,7 @@ async function loadGeoAttendanceHistory(userId) {
             .select('check_in_time, session_type, target_name, location_friendly_name, accuracy_m, is_verified')
             .eq('student_id', userId)
             .order('check_in_time', { ascending: false })
-            .limit(100); 
+            .limit(100);
 
         if (error) throw error;
 
@@ -1038,16 +1036,15 @@ async function loadGeoAttendanceHistory(userId) {
                     <td>${verifiedText}</td>
                 </tr>`;
         });
-
     } catch (error) {
         console.error("Failed to load attendance history:", error);
         tableBody.innerHTML = `<tr><td colspan="6" style="color:#EF4444;">Error loading attendance logs: ${error.message}</td></tr>`;
     }
 }
 
-// Updates target select based on session type
+// ---------------------- Update target select ----------------------
 function updateTargetSelect() {
-    if (!sessionTypeSelect || !attendanceTargetSelect || !geoMessage) return; 
+    if (!sessionTypeSelect || !attendanceTargetSelect || !geoMessage) return;
 
     const sessionType = sessionTypeSelect.value;
     attendanceTargetSelect.innerHTML = '';
@@ -1056,19 +1053,10 @@ function updateTargetSelect() {
     let label = 'Department/Course:';
 
     if (sessionType === 'Clinical') {
-        targetList = cachedClinicalAreas.map(d => ({ 
-            id: d.id, 
-            name: d.name,
-            text: `${d.name} (Clinical)` 
-        }));
+        targetList = cachedClinicalAreas.map(d => ({ id: d.id, name: d.name, text: `${d.name} (Clinical)` }));
         label = 'Department/Area:';
     } else if (sessionType === 'Class') {
-        targetList = cachedCourses.map(c => ({ 
-            id: c.id, 
-            name: c.name,
-            code: c.code,
-            text: `${c.code ? c.code + ' - ' : ''}${c.name} (Class)` 
-        }));
+        targetList = cachedCourses.map(c => ({ id: c.id, name: c.name, code: c.code, text: `${c.code ? c.code + ' - ' : ''}${c.name} (Class)` }));
         label = 'Course/Subject:';
     }
 
@@ -1090,10 +1078,11 @@ function updateTargetSelect() {
             attendanceTargetSelect.appendChild(option);
         });
     }
+
     geoMessage.innerHTML = `Please select a specific **${label.replace(':', '')}** to check in.`;
 }
 
-// GeoCheckIn with device verification & profile existence check
+// ---------------------- GeoCheckIn with Device Verification ----------------------
 async function geoCheckIn() {
     const sessionType = sessionTypeSelect.value;
     const targetSelect = attendanceTargetSelect.value;
@@ -1104,22 +1093,22 @@ async function geoCheckIn() {
     if (!currentUserProfile) await loadProfile(currentUserId);
     const studentProfile = currentUserProfile;
 
-    if (!sessionType || !targetSelect || !studentProfile) {
+    if (!studentProfile || !targetSelect || !sessionType) {
         geoMessage.textContent = 'Error: Select session type/target and ensure profile is loaded.';
         return;
     }
 
-   if (!await checkUserExists(studentProfile.email)) {
-    geoMessage.textContent = 'Error: Your account is not registered in the consolidated user profiles table.';
-    if (button) button.disabled = false;
-    return;
-}
-
+    // ✅ Check user existence in consolidated_user_profiles_table
+    const registeredUser = await checkUserExists(studentProfile.email);
+    if (!registeredUser) {
+        geoMessage.textContent = 'Error: Your account is not registered in the consolidated user profiles table.';
+        return;
+    }
 
     if (button) button.disabled = true;
     geoMessage.textContent = 'Getting high-accuracy location...';
 
-    // Get location
+    // ---------------------- Get Location ----------------------
     const getLocation = () => new Promise((resolve) => {
         if (!navigator.geolocation) return resolve({ lat: FALLBACK_LAT, lon: FALLBACK_LON, acc: FALLBACK_ACCURACY, friendly: 'Fallback Location' });
         navigator.geolocation.getCurrentPosition(
@@ -1143,7 +1132,7 @@ async function geoCheckIn() {
 
         const [targetId, targetName] = targetSelect.split('|');
 
-        // Check if device already used by another student
+        // ✅ Prevent multiple accounts on same device
         const { data: existing, error: deviceError } = await sb
             .from('geo_attendance_logs')
             .select('student_id')
@@ -1158,12 +1147,12 @@ async function geoCheckIn() {
             return;
         }
 
-        // Proceed with check-in
+        // ---------------------- Proceed with check-in ----------------------
         const { error } = await sb.rpc('check_in_and_defer_fk', {
             p_student_id: currentUserId,
-            p_student_email: studentProfile.email,
-            p_full_name: studentProfile.full_name,
-            p_role: studentProfile.role,
+            p_student_email: registeredUser.email,
+            p_full_name: registeredUser.full_name,
+            p_role: registeredUser.role,
             p_check_in_time: checkInTime,
             p_session_type: sessionType === 'Clinical' ? 'Clinical' : 'Class',
             p_target_id: targetId,
@@ -1172,10 +1161,10 @@ async function geoCheckIn() {
             p_longitude: location.lon,
             p_accuracy_m: location.acc,
             p_location_friendly_name: location.friendly,
-            p_department: studentProfile.department || studentProfile.program,
-            p_program: studentProfile.program || studentProfile.department,
-            p_block: studentProfile.block,
-            p_intake_year: studentProfile.intake_year,
+            p_department: registeredUser.department || registeredUser.program,
+            p_program: registeredUser.program || registeredUser.department,
+            p_block: registeredUser.block,
+            p_intake_year: registeredUser.intake_year,
             p_device_id: deviceId
         });
 
