@@ -1301,27 +1301,23 @@ async function geoCheckIn() {
             return;
         }
 
-        // Get target coordinates from cached arrays
-        let targetLat = null, targetLon = null;
+        // Get all locations for the selected target
+        let allTargetLocations = [];
         if (sessionType === 'Clinical') {
-            const target = cachedClinicalAreas.find(c => c.id == targetId);
-            targetLat = target?.latitude;
-            targetLon = target?.longitude;
+            allTargetLocations = cachedClinicalAreas.filter(c => c.id == targetId);
         } else if (sessionType === 'Class') {
-            const target = cachedCourses.find(c => c.id == targetId);
-            targetLat = target?.latitude;
-            targetLon = target?.longitude;
+            allTargetLocations = cachedCourses.filter(c => c.id == targetId);
         }
 
-        if (targetLat == null || targetLon == null) {
+        if (allTargetLocations.length === 0) {
             geoMessage.textContent = 'Error: Target location coordinates not found.';
             if (button) button.disabled = false;
             return;
         }
 
-        // Haversine formula for distance in meters
+        // Pick the closest location
         const getDistanceMeters = (lat1, lon1, lat2, lon2) => {
-            const R = 6371000; // meters
+            const R = 6371000;
             const toRad = x => x * Math.PI / 180;
             const dLat = toRad(lat2 - lat1);
             const dLon = toRad(lon2 - lon1);
@@ -1330,10 +1326,23 @@ async function geoCheckIn() {
             return R * c;
         };
 
-        const distanceToTarget = getDistanceMeters(location.lat, location.lon, targetLat, targetLon);
+        let closestTarget = allTargetLocations[0];
+        let minDist = getDistanceMeters(location.lat, location.lon, closestTarget.latitude, closestTarget.longitude);
+
+        for (const loc of allTargetLocations) {
+            const dist = getDistanceMeters(location.lat, location.lon, loc.latitude, loc.longitude);
+            if (dist < minDist) {
+                minDist = dist;
+                closestTarget = loc;
+            }
+        }
+
+        const targetLat = closestTarget.latitude;
+        const targetLon = closestTarget.longitude;
+        const distanceToTarget = minDist;
 
         // 50 meters + GPS accuracy buffer
-        const MAX_RADIUS = 50; // meters
+        const MAX_RADIUS = 50;
         const effectiveDistance = distanceToTarget - location.acc;
         if (effectiveDistance > MAX_RADIUS) {
             geoMessage.textContent = `You are too far from the target (${distanceToTarget.toFixed(1)} m, GPS accuracy ±${location.acc.toFixed(1)} m). Move closer to check in.`;
@@ -1341,7 +1350,7 @@ async function geoCheckIn() {
             return;
         }
 
-        // Proceed with RPC logging
+        // Call RPC to log attendance
         const studentProgram = studentProfile.program || studentProfile.department;
         const { error } = await sb.rpc('check_in_and_defer_fk', {
             p_student_id: currentUserId,
