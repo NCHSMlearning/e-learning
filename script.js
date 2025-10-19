@@ -1104,153 +1104,246 @@ function saveClinicalName() {
 }
 
 /*******************************************************
- * 7. Attendance Tab (Corrected)
+ * 7. Attendance Tab (Super Admin)
  *******************************************************/
+
+// ----------------------- Supporting Functions -----------------------
+
+function $(id) {
+    return document.getElementById(id);
+}
+
+function toggleAttendanceFields() {
+    const sessionType = $('att_session_type')?.value;
+    const departmentInput = $('att_department');
+    const courseSelect = $('att_course_id');
+
+    if (!departmentInput) return;
+
+    if (sessionType === 'clinical') {
+        departmentInput.placeholder = "Clinical Department/Area";
+        departmentInput.required = true;
+        if (courseSelect) { courseSelect.required = false; courseSelect.value = ""; }
+    } else if (sessionType === 'classroom') {
+        departmentInput.placeholder = "Classroom Location/Room (Optional)";
+        departmentInput.required = false;
+        if (courseSelect) courseSelect.required = true;
+    } else {
+        departmentInput.placeholder = "Location/Detail (Optional)";
+        departmentInput.required = false;
+        if (courseSelect) { courseSelect.required = false; courseSelect.value = ""; }
+    }
+}
+
+function showFeedback(message, type='info') {
+    const el = $('attendance-feedback');
+    if (!el) return;
+    el.textContent = message;
+    el.className = type==='error' ? 'feedback-error' : type==='success' ? 'feedback-success' : 'feedback-info';
+}
+
+async function getIPAddress() {
+    try {
+        const res = await fetch('https://api.ipify.org?format=json');
+        const data = await res.json();
+        return data.ip || 'N/A';
+    } catch (e) {
+        return 'N/A';
+    }
+}
+
+function getDeviceId() {
+    let deviceId = localStorage.getItem('device_id');
+    if (!deviceId) {
+        deviceId = crypto.randomUUID();
+        localStorage.setItem('device_id', deviceId);
+    }
+    return deviceId;
+}
+
+// ----------------------- Admin Actions -----------------------
+
+async function approveAttendanceRecord(recordId) {
+    if (typeof currentUserId === 'undefined' || !currentUserId) {
+        showFeedback('Error: Admin ID not found.', 'error');
+        return;
+    }
+    if (!confirm('Approve this attendance record?')) return;
+
+    try {
+        const { error } = await sb
+            .from('geo_attendance_logs')
+            .update({
+                is_verified: true,
+                verified_by_id: currentUserId,
+                verified_at: new Date().toISOString()
+            })
+            .eq('id', recordId);
+
+        if (error) throw error;
+        showFeedback('Attendance approved successfully!', 'success');
+        loadAttendance();
+    } catch (err) {
+        console.error('Approval failed:', err);
+        showFeedback(`Failed to approve record: ${err.message}`, 'error');
+    }
+}
+
+async function deleteAttendanceRecord(recordId) {
+    if (!confirm('Permanently delete this attendance record?')) return;
+    try {
+        const { error } = await sb.from('geo_attendance_logs').delete().eq('id', recordId);
+        if (error) throw error;
+        showFeedback('Attendance record deleted.', 'success');
+        loadAttendance();
+    } catch (err) {
+        console.error('Delete failed:', err);
+        showFeedback(`Failed to delete record: ${err.message}`, 'error');
+    }
+}
+
+function showMap(lat, lng, locationName, studentName, dateTime) {
+    const modal = $('map-modal');
+    const mapContainer = $('map-container');
+    if (!modal || !mapContainer) return;
+
+    modal.style.display = 'block';
+    mapContainer.innerHTML = '';
+
+    const map = L.map('map-container').setView([lat, lng], 17);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    L.marker([lat, lng])
+        .addTo(map)
+        .bindPopup(`<b>${studentName}</b><br>${locationName}<br>${dateTime}`)
+        .openPopup();
+}
+
+// ----------------------- Manual Attendance -----------------------
+
+async function handleManualAttendance(e) {
+    e.preventDefault();
+    const submitButton = e.submitter;
+    const originalText = submitButton.textContent;
+    submitButton.disabled = true;
+    submitButton.textContent = 'Saving...';
+
+    const student_id = $('att_student_id').value;
+    const session_type = $('att_session_type').value;
+    const date = $('att_date').value;
+    const time = $('att_time').value;
+    const course_id = session_type==='classroom'? $('att_course_id').value : null;
+    const department = $('att_department').value.trim() || null;
+    const location_name = $('att_location').value.trim() || 'Manual Admin Entry';
+
+    let check_in_time = new Date().toISOString();
+    if (date && time) check_in_time = new Date(`${date}T${time}`).toISOString();
+    else if (date) check_in_time = new Date(date).toISOString();
+
+    if (!student_id || (session_type==='classroom' && !course_id)) {
+        showFeedback('Please select a student and required fields.', 'error');
+        submitButton.disabled = false; submitButton.textContent = originalText;
+        return;
+    }
+
+    const attendanceData = {
+        student_id,
+        session_type,
+        check_in_time,
+        department,
+        course_id,
+        is_manual_entry: true,
+        latitude: null,
+        longitude: null,
+        location_name,
+        ip_address: await getIPAddress(),
+        device_id: getDeviceId(),
+        target_name: session_type==='clinical'? department : $('att_course_id')?.selectedOptions[0]?.text || null
+    };
+
+    const { error } = await sb.from('geo_attendance_logs').insert([attendanceData]);
+    if (error) showFeedback(`Failed to record attendance: ${error.message}`, 'error');
+    else { showFeedback('Manual attendance recorded successfully!', 'success'); e.target.reset(); loadAttendance(); toggleAttendanceFields(); }
+
+    submitButton.disabled = false;
+    submitButton.textContent = originalText;
+}
+
+// ----------------------- Load Attendance -----------------------
 
 async function loadAttendance() {
     const todayBody = $('attendance-table');
     const pastBody = $('past-attendance-table');
-
     todayBody.innerHTML = '<tr><td colspan="7">Loading today\'s records...</td></tr>';
     pastBody.innerHTML = '<tr><td colspan="6">Loading history...</td></tr>';
 
-    const todayISO = new Date().toISOString().slice(0, 10);
+    const todayISO = new Date().toISOString().slice(0,10);
 
-    const { data: allRecords, error } = await fetchData(
-        'geo_attendance_logs', 
-        '*, is_verified, latitude, longitude, target_name, consolidated_user_profiles_table:student_id(full_name, role, department), courses:course_id(course_name)', 
-        {}, 
-        'check_in_time', 
-        false
-    );
+    const { data: allRecords, error } = await sb
+        .from('geo_attendance_logs')
+        .select(`
+            *,
+            is_verified,
+            latitude,
+            longitude,
+            target_name,
+            consolidated_user_profiles_table:student_id(full_name, role, department)
+        `)
+        .order('check_in_time', { ascending: false });
 
-    if (error) {
-        todayBody.innerHTML = <tr><td colspan="7">Error loading records: ${error.message}</td></tr>;
-        pastBody.innerHTML = <tr><td colspan="6">Error loading records: ${error.message}</td></tr>;
+    if (error) { 
+        todayBody.innerHTML = `<tr><td colspan="7">Error: ${error.message}</td></tr>`;
+        pastBody.innerHTML = `<tr><td colspan="6">Error: ${error.message}</td></tr>`;
         return;
     }
 
-    todayBody.innerHTML = '';
-    pastBody.innerHTML = '';
+    let todayHtml='', pastHtml='';
 
-    allRecords.forEach(r => {
+    allRecords.forEach(r=>{
         const userProfile = r.consolidated_user_profiles_table;
-        const courseDetails = r.courses;
-
         const userName = userProfile?.full_name || 'N/A User';
-        const userRole = userProfile?.role || 'N/A';
         const dateTime = new Date(r.check_in_time).toLocaleString();
+        const targetDetail = r.target_name || 'N/A Target';
+        const locationDisplay = r.department || r.location_name || r.location_friendly_name || 'N/A';
+        const geoStatus = (r.latitude && r.longitude)?'Yes (Geo-Logged)':'No (Manual)';
 
-        const locationDisplay = escapeHtml(r.department || r.location_name || r.location_friendly_name || 'N/A');
-        const profileDepartment = userProfile?.department;
+        let actionsHtml = '';
+        const mapAvailable = r.latitude && r.longitude;
+        actionsHtml += `<button class="btn btn-map btn-small" ${mapAvailable?'':'disabled'} onclick="${mapAvailable?`showMap(${r.latitude},${r.longitude},'${locationDisplay.replace(/'/g,"\\'")}','${userName.replace(/'/g,"\\'")}','${dateTime}')`:''}">View Map</button>`;
 
-        // -------------------------------
-        // Target column logic
-        // -------------------------------
-        const targetDetail = r.target_name || 
-            (r.session_type === 'clinical' ? escapeHtml(profileDepartment || 'N/A Department') 
-                                           : r.session_type === 'classroom' ? escapeHtml(courseDetails?.course_name || 'N/A Course')
-                                           : 'N/A Target');
-
-        const recordDate = new Date(r.check_in_time).toISOString().slice(0, 10);
-
-        // -------------------------------
-        // Build table row
-        // -------------------------------
-        const tr = document.createElement('tr');
-
-        const tdName = document.createElement('td');
-        tdName.textContent = userName;
-        tr.appendChild(tdName);
-
-        const tdSession = document.createElement('td');
-        tdSession.textContent = escapeHtml(r.session_type || 'N/A');
-        tr.appendChild(tdSession);
-
-        const tdTarget = document.createElement('td');
-        tdTarget.textContent = targetDetail;
-        tr.appendChild(tdTarget);
-
-        const tdLocation = document.createElement('td');
-        tdLocation.textContent = locationDisplay;
-        tr.appendChild(tdLocation);
-
-        const tdDateTime = document.createElement('td');
-        tdDateTime.textContent = dateTime;
-        tr.appendChild(tdDateTime);
-
-        // Geo status
-        const tdGeo = document.createElement('td');
-        tdGeo.textContent = (r.latitude && r.longitude) ? 'Yes (Geo-Logged)' : 'No (Manual)';
-        tr.appendChild(tdGeo);
-
-        // Actions column
-        const tdActions = document.createElement('td');
-
-        // View Map button
-        const mapBtn = document.createElement('button');
-        mapBtn.className = 'btn btn-map btn-small';
-        mapBtn.textContent = 'View Map';
-        mapBtn.disabled = !(r.latitude && r.longitude);
-        if (!mapBtn.disabled) {
-            mapBtn.addEventListener('click', () => {
-                showMap(
-                    r.latitude,
-                    r.longitude,
-                    r.location_friendly_name || 'Check-in Location',
-                    userName,
-                    dateTime
-                );
-            });
-        }
-        tdActions.appendChild(mapBtn);
-
-        // Approve button / status
-        if (!r.is_verified) {
-            const approveBtn = document.createElement('button');
-            approveBtn.className = 'btn btn-approve btn-small';
-            approveBtn.textContent = 'Approve';
-            approveBtn.style.marginLeft = '5px';
-            approveBtn.addEventListener('click', () => approveAttendanceRecord(r.id));
-            tdActions.appendChild(approveBtn);
-        } else {
-            const approvedSpan = document.createElement('span');
-            approvedSpan.className = 'text-success';
-            approvedSpan.style.marginLeft = '10px';
-            approvedSpan.textContent = '✅ Approved';
-            tdActions.appendChild(approvedSpan);
+        if (new Date(r.check_in_time).toISOString().slice(0,10)===todayISO){
+            if (!r.is_verified) actionsHtml += `<button class="btn btn-approve btn-small" onclick="approveAttendanceRecord('${r.id}')" style="margin-left:5px;">Approve</button>`;
+            else actionsHtml += `<span class="text-success" style="margin-left:10px;">✅ Approved</span>`;
         }
 
-        // Delete button
-        const deleteBtn = document.createElement('button');
-        deleteBtn.className = 'btn btn-delete btn-small';
-        deleteBtn.textContent = 'Delete';
-        deleteBtn.style.marginLeft = '10px';
-        deleteBtn.addEventListener('click', () => deleteAttendanceRecord(r.id));
-        tdActions.appendChild(deleteBtn);
+        actionsHtml += `<button class="btn btn-delete btn-small" onclick="deleteAttendanceRecord('${r.id}')" style="margin-left:10px;">Delete</button>`;
 
-        tr.appendChild(tdActions);
+        const rowHtml = `<tr>
+            <td>${userName}</td>
+            <td>${r.session_type || 'N/A'}</td>
+            <td>${targetDetail}</td>
+            <td>${locationDisplay}</td>
+            <td>${dateTime}</td>
+            <td>${geoStatus}</td>
+            <td>${actionsHtml}</td>
+        </tr>`;
 
-        // Append row to today or past
-        if (recordDate === todayISO) {
-            todayBody.appendChild(tr);
-        } else {
-            pastBody.appendChild(tr);
-        }
+        if (new Date(r.check_in_time).toISOString().slice(0,10)===todayISO) todayHtml+=rowHtml;
+        else pastHtml+=rowHtml;
     });
 
-    if (!todayBody.hasChildNodes()) {
-        todayBody.innerHTML = '<tr><td colspan="7">No check-in records for today.</td></tr>';
-    }
-
-    if (!pastBody.hasChildNodes()) {
-        pastBody.innerHTML = '<tr><td colspan="6">No past attendance history found.</td></tr>';
-    }
-
-    // Optional: update search/filter table
-    filterTable('attendance-search', 'attendance-table', [0,1,2,3]);
+    todayBody.innerHTML = todayHtml||'<tr><td colspan="7">No check-in records for today.</td></tr>';
+    pastBody.innerHTML = pastHtml||'<tr><td colspan="6">No past attendance history found.</td></tr>';
 }
 
+// ----------------------- Event Listeners -----------------------
+
+$('att_session_type')?.addEventListener('change', toggleAttendanceFields);
+toggleAttendanceFields();
+$('manual-attendance-form')?.addEventListener('submit', handleManualAttendance);
+$('attendance-search')?.addEventListener('keyup',()=>filterTable('attendance-search','attendance-table',[0,1,2,3]));
 
 /********************************
  * 8. CATS/Exams Tab
