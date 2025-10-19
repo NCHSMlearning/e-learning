@@ -1244,7 +1244,6 @@ function getDeviceId() {
     return deviceId;
 }
 
-
 async function geoCheckIn() {
     if (!currentUserProfile) await loadProfile(currentUserId);
     const studentProfile = currentUserProfile;
@@ -1281,6 +1280,7 @@ async function geoCheckIn() {
     try {
         const location = await getLocation();
 
+        // Resolve friendly address
         if (!location.friendly) {
             const res = await fetch(`${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${location.lat}&lon=${location.lon}&format=json`);
             const geoData = res.ok ? await res.json() : null;
@@ -1301,9 +1301,48 @@ async function geoCheckIn() {
             return;
         }
 
-        const studentProgram = studentProfile.program || studentProfile.department;
+        // Get target coordinates from cached arrays
+        let targetLat = null, targetLon = null;
+        if (sessionType === 'Clinical') {
+            const target = cachedClinicalAreas.find(c => c.id == targetId);
+            targetLat = target?.latitude;
+            targetLon = target?.longitude;
+        } else if (sessionType === 'Class') {
+            const target = cachedCourses.find(c => c.id == targetId);
+            targetLat = target?.latitude;
+            targetLon = target?.longitude;
+        }
 
-        // Call RPC to log attendance
+        if (targetLat == null || targetLon == null) {
+            geoMessage.textContent = 'Error: Target location coordinates not found.';
+            if (button) button.disabled = false;
+            return;
+        }
+
+        // Haversine formula for distance in meters
+        const getDistanceMeters = (lat1, lon1, lat2, lon2) => {
+            const R = 6371000; // meters
+            const toRad = x => x * Math.PI / 180;
+            const dLat = toRad(lat2 - lat1);
+            const dLon = toRad(lon2 - lon1);
+            const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        };
+
+        const distanceToTarget = getDistanceMeters(location.lat, location.lon, targetLat, targetLon);
+
+        // 50 meters + GPS accuracy buffer
+        const MAX_RADIUS = 50; // meters
+        const effectiveDistance = distanceToTarget - location.acc;
+        if (effectiveDistance > MAX_RADIUS) {
+            geoMessage.textContent = `You are too far from the target (${distanceToTarget.toFixed(1)} m, GPS accuracy ±${location.acc.toFixed(1)} m). Move closer to check in.`;
+            if (button) button.disabled = false;
+            return;
+        }
+
+        // Proceed with RPC logging
+        const studentProgram = studentProfile.program || studentProfile.department;
         const { error } = await sb.rpc('check_in_and_defer_fk', {
             p_student_id: currentUserId,
             p_check_in_time: checkInTime,
@@ -1324,9 +1363,10 @@ async function geoCheckIn() {
             console.error('Check-in failed:', error);
             geoMessage.textContent = `Check-in failed: ${error.message}`;
         } else {
-            geoMessage.textContent = `Check-in successful at ${new Date(checkInTime).toLocaleTimeString()} near **${location.friendly}**.`;
+            geoMessage.textContent = `Check-in successful at ${new Date(checkInTime).toLocaleTimeString()} near **${location.friendly}**. Distance to target: ${distanceToTarget.toFixed(1)} m.`;
             loadGeoAttendanceHistory(currentUserId);
         }
+
     } catch (e) {
         console.error('GeoCheckIn error:', e);
         geoMessage.textContent = `Critical error during check-in: ${e.message}`;
@@ -1334,6 +1374,7 @@ async function geoCheckIn() {
         if (button) button.disabled = false;
     }
 }
+
 
 
 // *************************************************************************
