@@ -1109,6 +1109,10 @@ function saveClinicalName() {
 
 // ----------------------- Supporting Functions -----------------------
 
+function $(id) {
+    return document.getElementById(id);
+}
+
 // Toggle fields depending on session type
 function toggleAttendanceFields() {
     const sessionType = $('att_session_type').value;
@@ -1132,6 +1136,14 @@ function toggleAttendanceFields() {
     }
 }
 
+// Simple feedback display
+function showFeedback(message, type = 'info') {
+    const el = $('attendance-feedback');
+    if (!el) return;
+    el.textContent = message;
+    el.className = type === 'error' ? 'feedback-error' : (type === 'success' ? 'feedback-success' : 'feedback-info');
+}
+
 // Fetch IP address
 async function getIPAddress() {
     try {
@@ -1143,12 +1155,14 @@ async function getIPAddress() {
     }
 }
 
-// Simple feedback display
-function showFeedback(message, type = 'info') {
-    const el = document.getElementById('attendance-feedback');
-    if (!el) return;
-    el.textContent = message;
-    el.className = type === 'error' ? 'feedback-error' : (type === 'success' ? 'feedback-success' : 'feedback-info');
+// Generate persistent device ID
+function getDeviceId() {
+    let deviceId = localStorage.getItem('device_id');
+    if (!deviceId) {
+        deviceId = crypto.randomUUID();
+        localStorage.setItem('device_id', deviceId);
+    }
+    return deviceId;
 }
 
 // ----------------------- Admin Actions -----------------------
@@ -1174,15 +1188,7 @@ async function approveAttendanceRecord(recordId) {
 
         if (error) throw error;
 
-        const btn = document.querySelector(`button[onclick*="${recordId}"]`);
-        if (btn) {
-            const span = document.createElement('span');
-            span.textContent = '✅ Approved';
-            span.classList.add('text-success');
-            span.style.marginLeft = '10px';
-            btn.parentNode.replaceChild(span, btn);
-        }
-
+        loadAttendance(); // refresh table
         showFeedback('Attendance approved successfully!', 'success');
     } catch (err) {
         console.error('Approval failed:', err);
@@ -1198,10 +1204,7 @@ async function deleteAttendanceRecord(recordId) {
         const { error } = await sb.from('geo_attendance_logs').delete().eq('id', recordId);
         if (error) throw error;
 
-        // Remove row from table
-        const row = document.querySelector(`button[onclick*="${recordId}"]`)?.closest('tr');
-        if (row) row.remove();
-
+        loadAttendance();
         showFeedback('Attendance record deleted.', 'success');
     } catch (err) {
         console.error('Delete failed:', err);
@@ -1211,14 +1214,13 @@ async function deleteAttendanceRecord(recordId) {
 
 // Show map in modal
 function showMap(lat, lng, locationName, studentName, dateTime) {
-    const modal = document.getElementById('map-modal');
-    const mapContainer = document.getElementById('map-container');
+    const modal = $('map-modal');
+    const mapContainer = $('map-container');
     if (!modal || !mapContainer) return;
 
     modal.style.display = 'block';
     mapContainer.innerHTML = ''; // reset previous map
 
-    // Using Leaflet.js for interactive map
     const map = L.map('map-container').setView([lat, lng], 17);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap contributors'
@@ -1228,6 +1230,66 @@ function showMap(lat, lng, locationName, studentName, dateTime) {
         .addTo(map)
         .bindPopup(`<b>${studentName}</b><br>${locationName}<br>${dateTime}`)
         .openPopup();
+}
+
+// ----------------------- Manual Attendance -----------------------
+
+async function handleManualAttendance(e) {
+    e.preventDefault();
+    const submitButton = e.submitter;
+    const originalText = submitButton.textContent;
+    submitButton.disabled = true;
+    submitButton.textContent = 'Saving...';
+
+    const student_id = $('att_student_id').value;
+    const session_type = $('att_session_type').value;
+    const date = $('att_date').value;
+    const time = $('att_time').value;
+    const course_id = session_type === 'classroom' ? $('att_course_id').value : null;
+    const department = $('att_department').value.trim() || null;
+    const location_name = $('att_location').value.trim() || 'Manual Admin Entry';
+
+    let check_in_time = new Date().toISOString();
+    if (date && time) {
+        check_in_time = new Date(`${date}T${time}`).toISOString();
+    } else if (date) {
+        check_in_time = new Date(date).toISOString();
+    }
+
+    if (!student_id || (session_type === 'classroom' && !course_id)) {
+        showFeedback('Please select a student and required fields.', 'error');
+        submitButton.disabled = false;
+        submitButton.textContent = originalText;
+        return;
+    }
+
+    const attendanceData = {
+        student_id,
+        session_type,
+        check_in_time,
+        department,
+        course_id,
+        is_manual_entry: true,
+        latitude: null,
+        longitude: null,
+        location_name,
+        ip_address: await getIPAddress(),
+        device_id: getDeviceId()
+    };
+
+    const { error } = await sb.from('geo_attendance_logs').insert([attendanceData]);
+
+    if (error) {
+        showFeedback(`Failed to record attendance: ${error.message}`, 'error');
+    } else {
+        showFeedback('Manual attendance recorded successfully!', 'success');
+        e.target.reset();
+        loadAttendance();
+        toggleAttendanceFields();
+    }
+
+    submitButton.disabled = false;
+    submitButton.textContent = originalText;
 }
 
 // ----------------------- Load Attendance -----------------------
@@ -1283,11 +1345,9 @@ async function loadAttendance() {
         let geoStatus = (r.latitude && r.longitude) ? 'Yes (Geo-Logged)' : 'No (Manual)';
         let actionsHtml = '';
 
-        // View Map button
         const mapAvailable = (r.latitude && r.longitude);
         actionsHtml += `<button class="btn btn-map btn-small" ${mapAvailable ? '' : 'disabled'} onclick="${mapAvailable ? `showMap(${r.latitude}, ${r.longitude}, '${locationDisplay.replace(/'/g, "\\'")}', '${userName.replace(/'/g, "\\'")}', '${dateTime}')` : ''}">View Map</button>`;
 
-        // Approve / Status
         if (recordDate === todayISO) {
             if (!r.is_verified) {
                 actionsHtml += `<button class="btn btn-approve btn-small" onclick="approveAttendanceRecord('${r.id}')" style="margin-left:5px;">Approve</button>`;
@@ -1296,7 +1356,6 @@ async function loadAttendance() {
             }
         }
 
-        // Delete button
         actionsHtml += `<button class="btn btn-delete btn-small" onclick="deleteAttendanceRecord('${r.id}')" style="margin-left:10px;">Delete</button>`;
 
         const rowHtml = `<tr>
@@ -1321,12 +1380,11 @@ async function loadAttendance() {
 }
 
 // ----------------------- Event Listeners -----------------------
+
 $('att_session_type')?.addEventListener('change', toggleAttendanceFields);
 toggleAttendanceFields();
 $('manual-attendance-form')?.addEventListener('submit', handleManualAttendance);
 $('attendance-search')?.addEventListener('keyup', () => filterTable('attendance-search', 'attendance-table', [0,1,2,3]));
-
-
 
 /********************************
  * 8. CATS/Exams Tab
