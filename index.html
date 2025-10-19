@@ -896,7 +896,7 @@ if (uploadButton) {
 }
 
 // *************************************************************************
-// *** 5. ATTENDANCE LOGIC (GeoCheckIn with Device Verification) ***
+// *** 5. ATTENDANCE LOGIC (GeoCheckIn with Device Check) ***
 // *************************************************************************
 
 // Persistent device ID
@@ -909,22 +909,24 @@ function getDeviceId() {
     return deviceId;
 }
 
-// ---------------------- Helper: Check if user exists ----------------------
-async function checkUserExists(email) {
+// Load user profile from consolidated_user_profiles_table
+async function loadProfile(userId) {
     const { data, error } = await sb
         .from('consolidated_user_profiles_table')
-        .select('id, full_name, role, program, department, block, intake_year, email')
-        .eq('email', email)
-        .limit(1);
+        .select('*')
+        .eq('user_id', userId)
+        .limit(1)
+        .single();
 
     if (error) {
-        console.error('Error checking user existence:', error);
+        console.error('Failed to load profile:', error);
         return null;
     }
-    return data && data.length > 0 ? data[0] : null;
+    currentUserProfile = data;
+    return data;
 }
 
-// ---------------------- Load clinical areas ----------------------
+// Load clinical areas for the student
 async function loadClinicalTargets() {
     if (!currentUserProfile) await loadProfile(currentUserId);
 
@@ -952,15 +954,14 @@ async function loadClinicalTargets() {
 
         const { data, error } = await query.order('name');
         if (error) throw error;
-
         cachedClinicalAreas = data.map(area => ({ id: area.id, name: area.name }));
-    } catch (error) {
-        console.error("Error loading clinical areas:", error);
+    } catch (e) {
+        console.error('Error loading clinical areas:', e);
         cachedClinicalAreas = [];
     }
 }
 
-// ---------------------- Load class courses ----------------------
+// Load courses for 'Class' session
 async function loadClassTargets() {
     if (!currentUserProfile) await loadProfile(currentUserId);
 
@@ -988,19 +989,54 @@ async function loadClassTargets() {
 
         const { data, error } = await query.order('name');
         if (error) throw error;
-
-        cachedCourses = data.map(course => ({
-            id: course.id,
-            name: course.name,
-            code: course.code
-        }));
-    } catch (error) {
-        console.error("Error loading class targets:", error);
+        cachedCourses = data.map(course => ({ id: course.id, name: course.name, code: course.code }));
+    } catch (e) {
+        console.error('Error loading courses:', e);
         cachedCourses = [];
     }
 }
 
-// ---------------------- Load geo attendance history ----------------------
+// Update dropdown based on session type
+function updateTargetSelect() {
+    if (!sessionTypeSelect || !attendanceTargetSelect || !geoMessage) return;
+
+    const sessionType = sessionTypeSelect.value;
+    attendanceTargetSelect.innerHTML = '';
+
+    let targetList = [];
+    let label = 'Department/Course:';
+
+    if (sessionType === 'Clinical') {
+        targetList = cachedClinicalAreas.map(d => ({ id: d.id, name: d.name, text: `${d.name} (Clinical)` }));
+        label = 'Department/Area:';
+    } else if (sessionType === 'Class') {
+        targetList = cachedCourses.map(c => ({ id: c.id, name: c.name, code: c.code, text: `${c.code ? c.code + ' - ' : ''}${c.name} (Class)` }));
+        label = 'Course/Subject:';
+    }
+
+    const targetLabel = document.getElementById('target-label');
+    if (targetLabel) targetLabel.textContent = label;
+
+    if (!targetList.length) {
+        attendanceTargetSelect.innerHTML = `<option value="">${sessionType === 'Class' ? 'No active courses for your block.' : 'No clinical areas assigned.'}</option>`;
+    } else {
+        const defaultOption = document.createElement('option');
+        defaultOption.value = '';
+        defaultOption.textContent = `-- Select a ${label.replace(':', '')} --`;
+        attendanceTargetSelect.appendChild(defaultOption);
+
+        targetList.forEach(target => {
+            const option = document.createElement('option');
+            option.value = `${target.id}|${target.name}`;
+            option.textContent = target.text;
+            attendanceTargetSelect.appendChild(option);
+        });
+    }
+
+    geoMessage.innerHTML = `Please select a specific **${label.replace(':', '')}** to check in.`;
+}
+
+// Load attendance history
 async function loadGeoAttendanceHistory(userId) {
     const tableBody = document.getElementById('geo-attendance-history');
     if (!tableBody) return;
@@ -1025,159 +1061,112 @@ async function loadGeoAttendanceHistory(userId) {
 
         logs.forEach(log => {
             const timeStr = new Date(log.check_in_time).toLocaleString();
-            const verifiedText = log.is_verified === true ? '✅ Yes' : (log.is_verified === false ? '❌ No' : '⏳ Pending');
+            const verifiedText = log.is_verified === true ? '✅ Yes' : log.is_verified === false ? '❌ No' : '⏳ Pending';
             tableBody.innerHTML += `
                 <tr>
                     <td>${timeStr}</td>
                     <td>${log.session_type}</td>
-                    <td>${log.target_name}</td>
+                    <td>${log.target_name || 'N/A'}</td>
                     <td>${log.location_friendly_name || 'N/A'}</td>
                     <td>${log.accuracy_m ? log.accuracy_m.toFixed(1) : 'N/A'}</td>
                     <td>${verifiedText}</td>
                 </tr>`;
         });
-    } catch (error) {
-        console.error("Failed to load attendance history:", error);
-        tableBody.innerHTML = `<tr><td colspan="6" style="color:#EF4444;">Error loading attendance logs: ${error.message}</td></tr>`;
+    } catch (e) {
+        console.error('Failed to load attendance history:', e);
+        tableBody.innerHTML = `<tr><td colspan="6" style="color:#EF4444;">Error loading logs: ${e.message}</td></tr>`;
     }
 }
 
-// ---------------------- Update target select ----------------------
-function updateTargetSelect() {
-    if (!sessionTypeSelect || !attendanceTargetSelect || !geoMessage) return;
-
-    const sessionType = sessionTypeSelect.value;
-    attendanceTargetSelect.innerHTML = '';
-
-    let targetList = [];
-    let label = 'Department/Course:';
-
-    if (sessionType === 'Clinical') {
-        targetList = cachedClinicalAreas.map(d => ({ id: d.id, name: d.name, text: `${d.name} (Clinical)` }));
-        label = 'Department/Area:';
-    } else if (sessionType === 'Class') {
-        targetList = cachedCourses.map(c => ({ id: c.id, name: c.name, code: c.code, text: `${c.code ? c.code + ' - ' : ''}${c.name} (Class)` }));
-        label = 'Course/Subject:';
-    }
-
-    const targetLabel = document.getElementById('target-label');
-    if (targetLabel) targetLabel.textContent = label;
-
-    if (!targetList.length) {
-        attendanceTargetSelect.innerHTML = `<option value="">${sessionType === 'Class' ? 'No active courses found for your block.' : 'No clinical areas assigned to your block.'}</option>`;
-    } else {
-        const defaultOption = document.createElement('option');
-        defaultOption.value = '';
-        defaultOption.textContent = `-- Select a ${label.replace(':', '')} --`;
-        attendanceTargetSelect.appendChild(defaultOption);
-
-        targetList.forEach(target => {
-            const option = document.createElement('option');
-            option.value = `${target.id}|${target.name}`;
-            option.textContent = target.text;
-            attendanceTargetSelect.appendChild(option);
-        });
-    }
-
-    geoMessage.innerHTML = `Please select a specific **${label.replace(':', '')}** to check in.`;
-}
-
-// ---------------------- GeoCheckIn with Device Verification ----------------------
+// Geo check-in
 async function geoCheckIn() {
+    if (!currentUserProfile) {
+        await loadProfile(currentUserId);
+    }
+    const studentProfile = currentUserProfile;
+    const deviceId = getDeviceId();
     const sessionType = sessionTypeSelect.value;
     const targetSelect = attendanceTargetSelect.value;
     const checkInTime = new Date().toISOString();
     const button = document.getElementById('check-in-button');
-    const deviceId = getDeviceId();
 
-    if (!currentUserProfile) await loadProfile(currentUserId);
-    const studentProfile = currentUserProfile;
-
-    if (!studentProfile || !targetSelect || !sessionType) {
-        geoMessage.textContent = 'Error: Select session type/target and ensure profile is loaded.';
+    if (!studentProfile || !sessionType || !targetSelect || targetSelect === '') {
+        geoMessage.textContent = 'Error: Select session type and target, and ensure profile is loaded.';
         return;
     }
 
-    // ✅ Check user existence in consolidated_user_profiles_table
-    const registeredUser = await checkUserExists(studentProfile.email);
-    if (!registeredUser) {
-        geoMessage.textContent = 'Error: Your account is not registered in the consolidated user profiles table.';
+    const [targetId, targetName] = targetSelect.split('|');
+    if (!targetId || !targetName) {
+        geoMessage.textContent = 'Error: Invalid target selected.';
         return;
     }
 
     if (button) button.disabled = true;
-    geoMessage.textContent = 'Getting high-accuracy location...';
+    geoMessage.textContent = 'Attempting to get high-accuracy location...';
 
-    // ---------------------- Get Location ----------------------
-    const getLocation = () => new Promise((resolve) => {
+    // Get location
+    const getLocation = () => new Promise(resolve => {
         if (!navigator.geolocation) return resolve({ lat: FALLBACK_LAT, lon: FALLBACK_LON, acc: FALLBACK_ACCURACY, friendly: 'Fallback Location' });
         navigator.geolocation.getCurrentPosition(
             pos => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude, acc: pos.coords.accuracy, friendly: null }),
-            err => resolve({ lat: FALLBACK_LAT, lon: FALLBACK_LON, acc: FALLBACK_ACCURACY, friendly: 'Fallback Location (GPS Error)' }),
+            () => resolve({ lat: FALLBACK_LAT, lon: FALLBACK_LON, acc: FALLBACK_ACCURACY, friendly: 'Fallback Location' }),
             { enableHighAccuracy: true, timeout: 7000, maximumAge: 0 }
         );
     });
 
     try {
         const location = await getLocation();
+
         if (!location.friendly) {
-            const response = await fetch(`${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${location.lat}&lon=${location.lon}&format=json`);
-            if (response.ok) {
-                const geoData = await response.json();
-                location.friendly = geoData.display_name || `Lat: ${location.lat.toFixed(4)}, Lon: ${location.lon.toFixed(4)}`;
-            } else {
-                location.friendly = `Geocoding Failed. Lat: ${location.lat.toFixed(4)}, Lon: ${location.lon.toFixed(4)}`;
-            }
+            const res = await fetch(`${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${location.lat}&lon=${location.lon}&format=json`);
+            const geoData = res.ok ? await res.json() : null;
+            location.friendly = geoData?.display_name || `Lat:${location.lat.toFixed(4)}, Lon:${location.lon.toFixed(4)}`;
         }
 
-        const [targetId, targetName] = targetSelect.split('|');
-
-        // ✅ Prevent multiple accounts on same device
+        // Prevent same device for multiple accounts
         const { data: existing, error: deviceError } = await sb
             .from('geo_attendance_logs')
             .select('student_id')
             .eq('device_id', deviceId)
             .neq('student_id', currentUserId)
             .limit(1);
-
         if (deviceError) throw deviceError;
-        if (existing && existing.length > 0) {
+        if (existing?.length > 0) {
             geoMessage.textContent = 'This device is already used by another account. Check-in blocked.';
             if (button) button.disabled = false;
             return;
         }
 
-        // ---------------------- Proceed with check-in ----------------------
-       const { error } = await sb.rpc('check_in_and_defer_fk', {
-    p_student_id: currentUserId,
-    p_student_email: studentProfile.email,
-    p_full_name: studentProfile.full_name,
-    p_role: studentProfile.role,
-    p_check_in_time: checkInTime,
-    p_session_type: sessionType === 'Clinical' ? 'Clinical' : 'Class',
-    p_target_id: targetId,
-    p_target_name: targetName,
-    p_latitude: parseFloat(location.lat),
-    p_longitude: parseFloat(location.lon),
-    p_accuracy_m: parseFloat(location.acc),      // numeric
-    p_location_friendly_name: location.friendly,
-    p_department: studentProfile.department || studentProfile.program,
-    p_program: studentProfile.program || studentProfile.department,
-    p_block: studentProfile.block,
-    p_intake_year: studentProfile.intake_year.toString(),  // text
-    p_device_id: deviceId
-});
+        // Call RPC
+        const { error } = await sb.rpc('check_in_and_defer_fk', {
+            p_student_id: currentUserId,
+            p_student_email: studentProfile.email,
+            p_full_name: studentProfile.full_name,
+            p_role: studentProfile.role,
+            p_check_in_time: checkInTime,
+            p_session_type: sessionType,
+            p_target_id: targetId,
+            p_target_name: targetName,
+            p_latitude: location.lat,
+            p_longitude: location.lon,
+            p_accuracy_m: location.acc,
+            p_location_friendly_name: location.friendly,
+            p_department: studentProfile.department || studentProfile.program,
+            p_program: studentProfile.program || studentProfile.department,
+            p_block: studentProfile.block,
+            p_intake_year: studentProfile.intake_year,
+            p_device_id: deviceId
+        });
 
         if (error) {
-            console.error("Check-in failed:", error);
+            console.error('Check-in failed:', error);
             geoMessage.textContent = `Check-in failed: ${error.message}`;
         } else {
             geoMessage.textContent = `Check-in successful at ${new Date(checkInTime).toLocaleTimeString()} near **${location.friendly}**.`;
             loadGeoAttendanceHistory(currentUserId);
         }
-
     } catch (e) {
-        console.error("GeoCheckIn error:", e);
+        console.error('GeoCheckIn error:', e);
         geoMessage.textContent = `Critical error during check-in: ${e.message}`;
     } finally {
         if (button) button.disabled = false;
