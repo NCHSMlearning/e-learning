@@ -1629,14 +1629,9 @@ async function loadResources() {
     resourceList.innerHTML = 'Loading resources...';
 
     try {
-        // Use program or fallback to department
         const program = currentUserProfile?.program || currentUserProfile?.department;
-
-        // Normalize block: remove "Block_" prefix if present
         let block = currentUserProfile?.block || '';
         block = block.replace(/^Block_/, '');
-
-        // Determine intake year
         const intakeYear = currentUserProfile?.intake_year || currentUserProfile?.intake;
 
         if (!program || !block || !intakeYear) {
@@ -1644,7 +1639,6 @@ async function loadResources() {
             return;
         }
 
-        // Fetch resources: program matches student's program or General; block and intake match or are null
         const { data: resources, error } = await sb
             .from('resources')
             .select('id, title, file_path, program_type, block_term, block, intake_year, intake, uploaded_by_name, created_at, allow_download')
@@ -1663,11 +1657,23 @@ async function loadResources() {
             return;
         }
 
-        // Render each resource
         resources.forEach(res => {
             const { data: { publicUrl } } = sb.storage
-                .from('resources') // ✅ correct bucket
+                .from('materials')
                 .getPublicUrl(res.file_path);
+
+            // Determine file type
+            const ext = res.file_path.split('.').pop().toLowerCase();
+            let previewHtml = '';
+
+            if (ext === 'pdf') {
+                previewHtml = `<iframe src="${publicUrl}" width="100%" height="500px"></iframe>`;
+            } else if (['ppt', 'pptx', 'doc', 'docx'].includes(ext)) {
+                const encodedUrl = encodeURIComponent(publicUrl);
+                previewHtml = `<iframe src="https://view.officeapps.live.com/op/embed.aspx?src=${encodedUrl}" width="100%" height="500px"></iframe>`;
+            } else {
+                previewHtml = `<a href="${publicUrl}" target="_blank">View File</a>`;
+            }
 
             resourceList.innerHTML += `
                 <div class="resource-item" style="margin-bottom:20px;">
@@ -1677,18 +1683,13 @@ async function loadResources() {
                             ${res.program_type === 'General' ? 'General' : `${res.program_type}, Block ${res.block_term || res.block}, Intake ${res.intake_year || res.intake}`}
                             • Uploaded: ${new Date(res.created_at).toLocaleDateString()}
                         </p>
-
-                        ${res.file_path.endsWith('.pdf') 
-                            ? `<iframe src="${publicUrl}" width="100%" height="500px"></iframe>` 
-                            : `<a href="${publicUrl}" target="_blank">View File</a>`}
-
+                        ${previewHtml}
                         ${res.allow_download ? `<a href="${publicUrl}" download class="btn btn-sm btn-primary" style="margin-top:5px;display:inline-block;">Download</a>` : ''}
                     </div>
                 </div>
             `;
         });
 
-        // Count new resources uploaded in the last 7 days
         const oneWeekAgo = new Date();
         oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
         const newCount = resources.filter(r => new Date(r.created_at) > oneWeekAgo).length;
@@ -1701,7 +1702,6 @@ async function loadResources() {
         resourceList.innerHTML = `<p style="color:#EF4444;">Error loading resources: ${error.message}</p>`;
     }
 }
-
 
 
 // *************************************************************************
