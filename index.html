@@ -1617,29 +1617,29 @@ async function loadExams() {
 
 
 
-// Load resources with tabbed viewer
+// Load learning resources for student dashboard
 async function loadResources() {
+    // Ensure profile data is loaded
     if (!currentUserProfile || !currentUserProfile.program || !currentUserProfile.intake_year) {
         await loadProfile(currentUserId); 
     }
 
     const resourceList = document.getElementById('resources-list');
-    const viewer = document.getElementById('resource-viewer');
-    if (!resourceList || !viewer) return;
-
+    if (!resourceList) return;
     resourceList.innerHTML = 'Loading resources...';
-    viewer.innerHTML = 'Select a resource to view.';
 
     try {
         const program = currentUserProfile?.program || currentUserProfile?.department;
-        let block = (currentUserProfile?.block || '').replace(/^Block_/, '');
+        let block = currentUserProfile?.block || '';
+        block = block.replace(/^Block_/, '');
         const intakeYear = currentUserProfile?.intake_year || currentUserProfile?.intake;
 
         if (!program || !block || !intakeYear) {
-            resourceList.innerHTML = '<p>Missing enrollment details.</p>';
+            resourceList.innerHTML = '<p>Missing enrollment details (program, block, or intake year).</p>';
             return;
         }
 
+        // Fetch resources
         const { data: resources, error } = await sb
             .from('resources')
             .select('id, title, file_path, program_type, block_term, block, intake_year, intake, uploaded_by_name, created_at')
@@ -1649,52 +1649,54 @@ async function loadResources() {
             .order('created_at', { ascending: false });
 
         if (error) throw error;
-        resourceList.innerHTML = '';
 
+        resourceList.innerHTML = '';
         if (!resources.length) {
-            resourceList.innerHTML = `<p>No resources for ${program}, Block ${block}, Intake ${intakeYear}.</p>`;
+            resourceList.innerHTML = `<p>No learning resources found for ${program}, Block ${block}, Intake ${intakeYear}.</p>`;
+            if (document.getElementById('dashboard-new-resources')) 
+                document.getElementById('dashboard-new-resources').textContent = '0';
             return;
         }
 
-        // Render list
+        // Render each resource with inline PDF viewer if file is a PDF
         resources.forEach(res => {
-            const { data: { publicUrl } } = sb.storage.from('materials').getPublicUrl(res.file_path);
+            const { data: { publicUrl } } = sb.storage
+                .from('resources')  // ✅ Correct bucket
+                .getPublicUrl(res.file_path);
 
-            const item = document.createElement('div');
-            item.className = 'resource-item';
-            item.style.cursor = 'pointer';
-            item.style.marginBottom = '10px';
-            item.innerHTML = `
-                <strong>${res.title}</strong>
-                <p style="font-size:0.8em;color:#666;">
-                    ${res.program_type === 'General' ? 'General' : `${res.program_type}, Block ${res.block_term || res.block}, Intake ${res.intake_year || res.intake}`}
-                </p>
+            let contentHtml = '';
+            if (res.file_path.toLowerCase().endsWith('.pdf')) {
+                // Inline PDF embed
+                contentHtml = `<iframe src="${publicUrl}" width="100%" height="500px" style="border:1px solid #ccc;"></iframe>`;
+            } else {
+                // Other files: show download link
+                contentHtml = `<a href="${publicUrl}" target="_blank">View/Download</a>`;
+            }
+
+            resourceList.innerHTML += `
+                <div class="resource-item" style="margin-bottom:20px;">
+                    <div>
+                        <strong>${res.title}</strong>
+                        <p style="margin:5px 0 0;font-size:0.9em;color:#6B7280;">
+                            ${res.program_type === 'General' ? 'General' : `${res.program_type}, Block ${res.block_term || res.block}, Intake ${res.intake_year || res.intake}`} 
+                            • Uploaded: ${new Date(res.created_at).toLocaleDateString()}
+                        </p>
+                    </div>
+                    ${contentHtml}
+                </div>
             `;
-
-            // Click to view
-            item.addEventListener('click', () => {
-                let viewerHtml = '';
-                if (res.file_path.endsWith('.pdf')) {
-                    viewerHtml = `<iframe src="${publicUrl}" width="100%" height="600px"></iframe>`;
-                } else if (res.file_path.match(/\.(docx|doc|pptx|ppt|xlsx|xls)$/i)) {
-                    const encodedUrl = encodeURIComponent(publicUrl);
-                    const officeViewer = `https://view.officeapps.live.com/op/embed.aspx?src=${encodedUrl}`;
-                    viewerHtml = `<iframe src="${officeViewer}" width="100%" height="600px" frameborder="0"></iframe>`;
-                } else if (res.file_path.match(/\.(jpg|jpeg|png|gif)$/i)) {
-                    viewerHtml = `<img src="${publicUrl}" alt="${res.title}" style="max-width:100%"/>`;
-                } else {
-                    viewerHtml = `<a href="${publicUrl}" target="_blank">Download ${res.title}</a>`;
-                }
-
-                viewer.innerHTML = viewerHtml;
-            });
-
-            resourceList.appendChild(item);
         });
 
+        // Count new resources uploaded in the last 1 days
+        const oneWeekAgo = new Date();
+        oneWeekAgo.setDate(oneWeekAgo.getDate() - 1);
+        const newCount = resources.filter(r => new Date(r.created_at) > oneWeekAgo).length;
+        if (document.getElementById('dashboard-new-resources')) 
+            document.getElementById('dashboard-new-resources').textContent = newCount;
+
     } catch (error) {
-        console.error('Error loading resources:', error);
-        resourceList.innerHTML = `<p style="color:red;">Failed to load resources: ${error.message}</p>`;
+        console.error("❌ Failed to load resources:", error);
+        resourceList.innerHTML = `<p style="color:#EF4444;">Error loading resources: ${error.message}</p>`;
     }
 }
 
