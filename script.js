@@ -1645,7 +1645,7 @@ async function handleAddExam(e) {
             exam_date, 
             exam_start_time, 
             exam_type, 
-            online_link: exam_link || null, // Optional link
+            online_link: exam_link || null, // Optional link is handled here
             duration_minutes: exam_duration_minutes, 
             target_program: program, 
             intake_year: intake,     
@@ -1761,7 +1761,7 @@ function populateStudentExams(exams) {
             <p><strong>Course:</strong> ${escapeHtml(e.course?.course_name || 'N/A')}</p>
             <p><strong>Scheduled:</strong> ${formattedDate} at ${formattedTime}</p>
             <p><strong>Duration:</strong> ${e.duration_minutes} minutes</p>
-            <a href="${escapeHtml(e.online_link)}" target="_blank" class="btn-action">Start Online Assessment</a>
+            ${e.online_link ? `<a href="${escapeHtml(e.online_link)}" target="_blank" class="btn-action">Start Online Assessment</a>` : '<p class="info-text">Link will be provided closer to exam time.</p>'}
         `;
         container.appendChild(examCard);
     });
