@@ -978,49 +978,78 @@ async function handleEditUser(e) {
   const newPassword = $('edit_user_new_password').value.trim();
   const confirmPassword = $('edit_user_confirm_password').value.trim();
 
+  // ✅ Check password match only if changing it
+  if (newPassword && newPassword !== confirmPassword) {
+    showFeedback('New passwords do not match.', 'error');
+    setButtonLoading(submitButton, false, originalText);
+    return;
+  }
+
+  // ✅ Collect profile update data
   const updatedData = {
     full_name: $('edit_user_name').value.trim(),
-    email: newEmail, // Update email in profile table immediately
     program: $('edit_user_program').value || null,
     intake_year: $('edit_user_intake').value || null,
     block: $('edit_user_block').value || null,
     block_program_year: $('edit_user_block_status').value === 'true',
-    status: 'approved'
+    status: 'approved',
+    role: newRole
   };
 
-  try {
-    if (newPassword && newPassword !== confirmPassword) {
-        showFeedback('New passwords do not match.', 'error');
-        return;
-    }
+  // Only update email in the profile table if provided
+  if (newEmail) updatedData.email = newEmail;
 
+  try {
+    // ✅ 1. Update consolidated_user_profiles_table
     const { error: profileError } = await sb
       .from('consolidated_user_profiles_table')
-      .update({ ...updatedData, role: newRole })
+      .update(updatedData)
       .eq('user_id', userId);
+
     if (profileError) throw profileError;
-    
-    // Update Auth User (Email and/or Password)
+
+    // ✅ 2. Prepare Auth updates (optional)
     const authUpdateData = {};
     if (newEmail) authUpdateData.email = newEmail;
     if (newPassword) authUpdateData.password = newPassword;
 
+    // ✅ 3. Run Auth update only if necessary
     if (Object.keys(authUpdateData).length > 0) {
-        const { error: authError } = await sb.auth.admin.updateUserById(userId, authUpdateData);
-        if (authError) throw authError;
+      const { error: authError } = await sb.auth.admin.updateUserById(userId, authUpdateData);
+      if (authError) throw authError;
     }
 
-    await logAudit('USER_EDIT', `Edited profile for user ID ${userId.substring(0, 0)}. Role: ${newRole}. Blocked: ${updatedData.block_program_year}.`, userId, 'SUCCESS');
+    // ✅ 4. Audit Log
+    const changes = [
+      newEmail ? `email updated` : null,
+      newPassword ? `password updated` : null,
+      newRole ? `role = ${newRole}` : null
+    ].filter(Boolean).join(', ') || 'basic info updated';
+
+    await logAudit(
+      'USER_EDIT',
+      `Edited profile for user ID ${userId.substring(0, 8)} — ${changes}.`,
+      userId,
+      'SUCCESS'
+    );
+
+    // ✅ 5. UI feedback
     showFeedback('User profile updated successfully!', 'success');
     $('userEditModal').style.display = 'none';
     loadAllUsers();
     loadStudents();
     loadDashboardData();
+
   } catch (e) {
-    await logAudit('USER_EDIT', `Failed to edit profile for user ID ${userId.substring(0, 8)}. Reason: ${e.message}`, userId, 'FAILURE');
+    await logAudit(
+      'USER_EDIT',
+      `Failed to edit profile for user ID ${userId.substring(0, 8)}. Reason: ${e.message}`,
+      userId,
+      'FAILURE'
+    );
     showFeedback('Failed to update user: ' + (e.message || e), 'error');
   } finally {
-    setButtonLoading(submitButton, false, originalText); // FIX: Ensure button resets
+    setButtonLoading(submitButton, false, originalText);
   }
 }
 
