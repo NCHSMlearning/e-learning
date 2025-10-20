@@ -1641,7 +1641,7 @@ async function loadResources() {
 
         const { data: resources, error } = await sb
             .from('resources')
-            .select('id, title, file_path, program_type, block_term, block, intake_year, intake, uploaded_by_name, created_at, allow_download')
+            .select('id, title, file_path, file_url, program_type, block_term, block, intake_year, intake, uploaded_by_name, created_at, allow_download')
             .or(`program_type.eq.${program},program_type.eq.General`)
             .or(`block_term.eq.${block},block.eq.${block},block_term.is.null,block.is.null`)
             .or(`intake_year.eq.${intakeYear},intake.eq.${intakeYear},intake_year.is.null,intake.is.null`)
@@ -1652,56 +1652,44 @@ async function loadResources() {
         resourceList.innerHTML = '';
         if (!resources.length) {
             resourceList.innerHTML = `<p>No learning resources found for ${program}, Block ${block}, Intake ${intakeYear}.</p>`;
-            if (document.getElementById('dashboard-new-resources')) 
-                document.getElementById('dashboard-new-resources').textContent = '0';
             return;
         }
 
         resources.forEach(res => {
-            const { data: { publicUrl } } = sb.storage
-                .from('materials')
-                .getPublicUrl(res.file_path);
-
-            // Determine file type
-            const ext = res.file_path.split('.').pop().toLowerCase();
-            let previewHtml = '';
-
+            let preview = '';
+            const ext = (res.file_path || '').split('.').pop().toLowerCase();
             if (ext === 'pdf') {
-                previewHtml = `<iframe src="${publicUrl}" width="100%" height="500px"></iframe>`;
-            } else if (['ppt', 'pptx', 'doc', 'docx'].includes(ext)) {
-                const encodedUrl = encodeURIComponent(publicUrl);
-                previewHtml = `<iframe src="https://view.officeapps.live.com/op/embed.aspx?src=${encodedUrl}" width="100%" height="500px"></iframe>`;
+                preview = `<iframe src="${res.file_url}" width="100%" height="500px"></iframe>`;
+            } else if (['doc', 'docx', 'ppt', 'pptx'].includes(ext)) {
+                const encoded = encodeURIComponent(res.file_url);
+                preview = `<iframe src="https://view.officeapps.live.com/op/embed.aspx?src=${encoded}" width="100%" height="500px"></iframe>`;
             } else {
-                previewHtml = `<a href="${publicUrl}" target="_blank">View File</a>`;
+                preview = `<a href="${res.file_url}" target="_blank">View File</a>`;
             }
+
+            const downloadBtn = res.allow_download 
+                ? `<a href="${res.file_url}" download class="btn btn-sm btn-primary" style="margin-top:5px;">Download</a>` 
+                : '';
 
             resourceList.innerHTML += `
                 <div class="resource-item" style="margin-bottom:20px;">
-                    <div>
-                        <strong>${res.title}</strong>
-                        <p style="margin:5px 0 5px;font-size:0.9em;color:#6B7280;">
-                            ${res.program_type === 'General' ? 'General' : `${res.program_type}, Block ${res.block_term || res.block}, Intake ${res.intake_year || res.intake}`}
-                            • Uploaded: ${new Date(res.created_at).toLocaleDateString()}
-                        </p>
-                        ${previewHtml}
-                        ${res.allow_download ? `<a href="${publicUrl}" download class="btn btn-sm btn-primary" style="margin-top:5px;display:inline-block;">Download</a>` : ''}
-                    </div>
+                    <strong>${res.title}</strong>
+                    <p style="margin:5px 0 5px;font-size:0.9em;color:#6B7280;">
+                        ${res.program_type === 'General' ? 'General' : `${res.program_type}, Block ${res.block_term || res.block}, Intake ${res.intake_year || res.intake}`}
+                        • Uploaded: ${new Date(res.created_at).toLocaleDateString()}
+                    </p>
+                    ${preview}
+                    ${downloadBtn}
                 </div>
             `;
         });
-
-        const oneWeekAgo = new Date();
-        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-        const newCount = resources.filter(r => new Date(r.created_at) > oneWeekAgo).length;
-
-        if (document.getElementById('dashboard-new-resources')) 
-            document.getElementById('dashboard-new-resources').textContent = newCount;
 
     } catch (error) {
         console.error("❌ Failed to load resources:", error);
         resourceList.innerHTML = `<p style="color:#EF4444;">Error loading resources: ${error.message}</p>`;
     }
 }
+
 
 
 // *************************************************************************
