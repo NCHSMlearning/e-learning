@@ -2114,7 +2114,6 @@ document.getElementById('save-announcement').addEventListener('click', async()=>
         feedback.textContent='Failed to save announcement.';
         feedback.style.color='red';
     }
-}
 
 // Initial load
 loadWelcomeDetails();
