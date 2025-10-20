@@ -1481,91 +1481,107 @@ async function loadCourses() {
 
 
 /**
- * FIXED: loadExams() ensures profile data is loaded first and uses the correct program field.
+ * Student Dashboard: loadExams()
+ * Displays student's exams with scores and exam link (if available)
  */
 async function loadExams() {
-    const tableBody = document.getElementById('exams-table');
-    if (!tableBody) return;
+  const tableBody = document.getElementById('exams-table');
+  if (!tableBody) return;
 
+  tableBody.innerHTML = '<tr><td colspan="8">Loading your exams and grades...</td></tr>';
 
-    tableBody.innerHTML = '<tr><td colspan="4">Loading exam schedule...</td></tr>';
+  // ✅ Ensure profile is loaded
+  if (!currentUserProfile || !currentUserProfile.program || !currentUserProfile.intake_year) {
+    await loadProfile(currentUserId);
+  }
 
+  try {
+    const program = currentUserProfile?.program || currentUserProfile?.department;
+    const block = currentUserProfile?.block;
+    const intakeYear = currentUserProfile?.intake_year;
 
-    // ** CRITICAL FIX: Ensure profile is loaded **
-    if (!currentUserProfile || !currentUserProfile.program && !currentUserProfile.department || !currentUserProfile.intake_year) {
-        await loadProfile(currentUserId); 
+    if (!program || !block || !intakeYear) {
+      tableBody.innerHTML = `<tr><td colspan="8">Missing program, block, or intake year info. Cannot load exams.</td></tr>`;
+      cachedExams = [];
+      return;
     }
 
+    // ✅ Fetch exams joined with grades for the logged-in student
+    const { data: exams, error } = await sb
+      .from('exams_with_courses')
+      .select(`
+        id,
+        exam_name,
+        exam_date,
+        status,
+        block_term,
+        program_type,
+        exam_link,
+        exam_grades!inner(cat_score, exam_score, total_score, student_id)
+      `)
+      .or(`program_type.eq.${program},program_type.eq.General`)
+      .eq('block_term', block)
+      .eq('intake_year', intakeYear)
+      .eq('exam_grades.student_id', currentUserId)
+      .order('exam_date', { ascending: true });
 
-    try {
-        // ✅ FIX: Prioritize 'program' (Student) over 'department' (Lecturer/Fallback)
-        const program = currentUserProfile?.program || currentUserProfile?.department;
-        const block = currentUserProfile?.block;
-        const intakeYear = currentUserProfile?.intake_year;
+    if (error) throw error;
 
+    cachedExams = exams || [];
+    tableBody.innerHTML = '';
 
-        if (!program || !block || !intakeYear) {
-            tableBody.innerHTML = '<tr><td colspan="4">Missing program/department, block, or intake year info. Cannot load exams.</td></tr>';
-            cachedExams = [];
-            return;
-        }
-
-
-        const { data: exams, error } = await sb
-            .from('exams_with_courses')
-            .select('exam_name, exam_date, status, block_term, program_type')
-            .or(`program_type.eq.${program},program_type.eq.General`)
-            .eq('block_term', block)
-            .eq('intake_year', intakeYear)
-            .order('exam_date', { ascending: true });
-
-
-        if (error) throw error;
-
-
-        cachedExams = exams || [];
-        tableBody.innerHTML = '';
-
-
-        if (cachedExams.length > 0) {
-            cachedExams.forEach(exam => {
-                const dateStr = exam.exam_date 
-                    ? new Date(exam.exam_date).toLocaleDateString('en-US', { 
-                        weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' 
-                    }) 
-                    : 'N/A';
-
-
-                tableBody.innerHTML += `
-                    <tr>
-                        <td>${exam.exam_name || 'N/A'}</td>
-                        <td>${exam.block_term || 'N/A'}</td>
-                        <td>${dateStr}</td>
-                        <td>${exam.status || 'Scheduled'}</td>
-                    </tr>
-                `;
-            });
-        } else {
-            tableBody.innerHTML = `
-                <tr>
-                    <td colspan="4">
-                        No exams or CATs scheduled for ${program}, Block ${block}, Intake ${intakeYear}.
-                    </td>
-                </tr>`;
-        }
-
-
-    } catch (error) {
-        console.error("❌ Failed to load exams:", error);
-        tableBody.innerHTML = `<tr><td colspan="4" style="color:#EF4444;">Error loading exams: ${error.message}</td></tr>`;
-        cachedExams = [];
+    if (cachedExams.length === 0) {
+      tableBody.innerHTML = `
+        <tr>
+          <td colspan="8">
+            No exams or CATs found for ${program}, Block ${block}, Intake ${intakeYear}.
+          </td>
+        </tr>`;
+      return;
     }
 
+    // ✅ Render each exam row
+    cachedExams.forEach(exam => {
+      const dateStr = exam.exam_date
+        ? new Date(exam.exam_date).toLocaleDateString('en-US', {
+            weekday: 'short',
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+          })
+        : 'N/A';
 
-    // This call is now more likely to succeed because cachedExams is populated.
-    if (typeof loadDashboardMetrics === "function") {
-        loadDashboardMetrics(currentUserId);
-    }
+      const catScore = exam.exam_grades?.[0]?.cat_score ?? '-';
+      const examScore = exam.exam_grades?.[0]?.exam_score ?? '-';
+      const totalScore = exam.exam_grades?.[0]?.total_score ?? '-';
+
+      const actionBtn = exam.exam_link
+        ? `<a href="${exam.exam_link}" target="_blank" class="btn btn-sm btn-primary">Start Exam</a>`
+        : `<span style="color:gray;">No Link</span>`;
+
+      tableBody.innerHTML += `
+        <tr>
+          <td>${escapeHtml(exam.exam_name || 'N/A')}</td>
+          <td>${escapeHtml(exam.block_term || 'N/A')}</td>
+          <td>${dateStr}</td>
+          <td>${escapeHtml(exam.status || 'Scheduled')}</td>
+          <td>${catScore}</td>
+          <td>${examScore}</td>
+          <td>${totalScore}</td>
+          <td>${actionBtn}</td>
+        </tr>
+      `;
+    });
+
+  } catch (error) {
+    console.error('❌ Failed to load exams:', error);
+    tableBody.innerHTML = `<tr><td colspan="8" style="color:#EF4444;">Error loading exams: ${error.message}</td></tr>`;
+    cachedExams = [];
+  }
+
+  if (typeof loadDashboardMetrics === 'function') {
+    loadDashboardMetrics(currentUserId);
+  }
 }
 
 
