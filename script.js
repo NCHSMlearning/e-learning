@@ -1962,7 +1962,7 @@ document.getElementById('save-announcement').addEventListener('click', async () 
 
 // --------------- Load Admin Messages ---------------
 async function loadAdminMessages() {
-    const tbody = document.getElementById('messages-table').querySelector('tbody');
+    const tbody = document.getElementById('messages-table'); // use tbody directly
     tbody.innerHTML = '<tr><td colspan="4">Loading messages...</td></tr>';
 
     try {
