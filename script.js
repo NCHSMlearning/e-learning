@@ -1588,188 +1588,262 @@ async function loadAttendance() {
 }
 
 /********************************
- * 8. CATS/Exams Tab
- *******************************************************/
+ * 8. CATS / Exams
+ ********************************/
 
-// Populate course select based on program
+// Populate course dropdown based on selected program
 async function populateExamCourseSelects(courses = null) {
-    const courseSelect = $('exam_course_id');
-    const program = $('exam_program').value;
+  const courseSelect = $('exam_course_id');
+  const program = $('exam_program').value;
 
-    let filteredCourses = [];
+  let filteredCourses = [];
 
-    if (!program) filteredCourses = [];
-    else {
-        if (!courses) {
-            const { data } = await fetchData('courses', 'id, course_name, target_program', { target_program: program }, 'course_name', true);
-            filteredCourses = data || [];
-        } else {
-            filteredCourses = courses.filter(c => c.target_program === program);
-        }
+  if (!program) filteredCourses = [];
+  else {
+    if (!courses) {
+      const { data } = await fetchData(
+        'courses',
+        'id, course_name, target_program',
+        { target_program: program },
+        'course_name',
+        true
+      );
+      filteredCourses = data || [];
+    } else {
+      filteredCourses = courses.filter(c => c.target_program === program);
     }
+  }
 
-    populateSelect(courseSelect, filteredCourses, 'id', 'course_name', 'Select Course');
+  populateSelect(courseSelect, filteredCourses, 'id', 'course_name', 'Select Course');
 }
 
-// Add Exam (UPDATED to ensure button reset)
+// Add Exam / CAT
 async function handleAddExam(e) {
-    e.preventDefault();
-    const submitButton = e.submitter;
-    const originalText = submitButton.textContent;
-    setButtonLoading(submitButton, true, originalText);
+  e.preventDefault();
+  const submitButton = e.submitter;
+  const originalText = submitButton.textContent;
+  setButtonLoading(submitButton, true, originalText);
 
-    const exam_type = $('exam_type').value; 
-    const exam_link = $('exam_link').value.trim(); 
-    const exam_duration_minutes = parseInt($('exam_duration_minutes').value); 
-    const exam_start_time = $('exam_start_time').value; 
+  const exam_type = $('exam_type').value;
+  const exam_link = $('exam_link').value.trim();
+  const exam_duration_minutes = parseInt($('exam_duration_minutes').value);
+  const exam_start_time = $('exam_start_time').value;
+  const program = $('exam_program').value;
+  const course_id = $('exam_course_id').value;
+  const exam_title = $('exam_title').value.trim();
+  const exam_date = $('exam_date').value;
+  const exam_status = $('exam_status').value;
+  const intake = $('exam_intake').value;
+  const block_term = $('exam_block_term').value;
 
-    const program = $('exam_program').value;
-    const course_id = $('exam_course_id').value;
-    const exam_title = $('exam_title').value.trim();
-    const exam_date = $('exam_date').value;
-    const exam_status = $('exam_status').value;
-    const intake = $('exam_intake').value;
-    const block_term = $('exam_block_term').value;
+  if (
+    !program || !course_id || !exam_title || !exam_date ||
+    !intake || !block_term || !exam_type || isNaN(exam_duration_minutes)
+  ) {
+    showFeedback(
+      'All exam fields (Program, Course, Title, Date, Intake, Block/Term, Type, and Duration) are required.',
+      'error'
+    );
+    setButtonLoading(submitButton, false, originalText);
+    return;
+  }
 
-    // Validation (Exam Link is optional now)
-    if (!program || !course_id || !exam_title || !exam_date || !intake || !block_term || !exam_type || isNaN(exam_duration_minutes)) {
-        showFeedback('All exam fields (Program, Course, Title, Date, Intake, Block/Term, Type, and Duration) are required.', 'error');
-        setButtonLoading(submitButton, false, originalText); // FIX: Ensure button resets on validation error
-        return;
-    }
+  try {
+    const { error, data } = await sb.from('exams').insert({
+      exam_name: exam_title,
+      course_id,
+      exam_date,
+      exam_start_time,
+      exam_type,
+      online_link: exam_link || null,
+      duration_minutes: exam_duration_minutes,
+      target_program: program,
+      intake_year: intake,
+      block_term,
+      status: exam_status
+    }).select('id');
 
-    try {
-        const { error, data } = await sb.from('exams').insert({ 
-            exam_name: exam_title, 
-            course_id, 
-            exam_date, 
-            exam_start_time, 
-            exam_type, 
-            online_link: exam_link || null, // Optional link is handled here
-            duration_minutes: exam_duration_minutes, 
-            target_program: program, 
-            intake_year: intake,     
-            block_term,              
-            status: exam_status
-        }).select('id');
+    if (error) throw error;
 
-        if (error) throw error;
-        
-        await logAudit('EXAM_ADD', `Successfully posted new ${exam_type}: ${exam_title}.`, data?.[0]?.id, 'SUCCESS');
-        showFeedback('Assessment added successfully!', 'success');
-        e.target.reset();
-        loadExams();
-        renderFullCalendar();
-
-    } catch (error) {
-        await logAudit('EXAM_ADD', `Failed to add ${exam_type} ${exam_title}. Reason: ${error.message}`, null, 'FAILURE');
-        showFeedback(`Failed to add assessment: ${error.message}`, 'error');
-    } finally {
-        setButtonLoading(submitButton, false, originalText); // FIX: Ensure button resets
-    }
+    await logAudit('EXAM_ADD', `Posted new ${exam_type}: ${exam_title}.`, data?.[0]?.id, 'SUCCESS');
+    showFeedback('Assessment added successfully!', 'success');
+    e.target.reset();
+    loadExams();
+    renderFullCalendar();
+  } catch (error) {
+    await logAudit('EXAM_ADD', `Failed to add ${exam_type}: ${exam_title}. ${error.message}`, null, 'FAILURE');
+    showFeedback(`Failed to add assessment: ${error.message}`, 'error');
+  } finally {
+    setButtonLoading(submitButton, false, originalText);
+  }
 }
 
-// Load Exams Table (UPDATED to include new fields)
+// Load Exams
 async function loadExams() {
-    const tbody = $('exams-table');
-    tbody.innerHTML = '<tr><td colspan="8">Loading exams/CATs...</td></tr>';
+  const tbody = $('exams-table');
+  tbody.innerHTML = '<tr><td colspan="8">Loading exams/CATs...</td></tr>';
 
-    const { data: exams, error } = await fetchData('exams', '*, course:course_id(course_name)', {}, 'exam_date', false);
-    if (error) {
-        tbody.innerHTML = `<tr><td colspan="8">Error loading exams: ${error.message}</td></tr>`;
-        return;
+  const { data: exams, error } = await fetchData(
+    'exams',
+    '*, course:course_id(course_name)',
+    {},
+    'exam_date',
+    false
+  );
+
+  if (error) {
+    tbody.innerHTML = `<tr><td colspan="8">Error loading exams: ${error.message}</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = '';
+  exams.forEach(e => {
+    const dateTime = new Date(e.exam_date).toLocaleDateString() + ' ' + (e.exam_start_time || '');
+    const courseName = e.course?.course_name || 'N/A';
+    const type = e.exam_type || 'N/A';
+
+    let actionsHtml = `<button class="btn-action" onclick="openEditExamModal('${e.id}')">Edit</button>`;
+    if (e.online_link) {
+      actionsHtml += `<a href="${escapeHtml(e.online_link)}" target="_blank" class="btn btn-map" style="margin-left: 5px;">Link</a>`;
     }
+    actionsHtml += `<button class="btn-action" onclick="openGradeModal('${e.id}', '${escapeHtml(e.exam_name, true)}')">Grade</button>`;
+    actionsHtml += `<button class="btn btn-delete" onclick="deleteExam('${e.id}', '${escapeHtml(e.exam_name, true)}')">Delete</button>`;
 
-    tbody.innerHTML = '';
-    exams.forEach(e => {
-        const dateTime = new Date(e.exam_date).toLocaleDateString() + ' ' + (e.exam_start_time || '');
-        const courseName = e.course?.course_name || 'N/A';
-        const type = e.exam_type || 'N/A';
+    tbody.innerHTML += `
+      <tr>
+        <td>${escapeHtml(type)}</td>
+        <td>${escapeHtml(e.target_program || 'N/A')}</td>
+        <td>${escapeHtml(courseName)}</td>
+        <td>${escapeHtml(e.exam_name)}</td>
+        <td>${dateTime}</td>
+        <td>${escapeHtml(e.duration_minutes + ' mins' || 'N/A')}</td>
+        <td>${escapeHtml(e.status)}</td>
+        <td>${actionsHtml}</td>
+      </tr>`;
+  });
 
-        // Actions buttons, linking to the online link if available
-        let actionsHtml = `<button class="btn-action" onclick="openEditExamModal('${e.id}')">Edit</button>`;
-        if (e.online_link) {
-            actionsHtml += `<a href="${escapeHtml(e.online_link)}" target="_blank" class="btn btn-map" style="margin-left: 5px;">Link</a>`;
-        }
-        actionsHtml += `<button class="btn-action" onclick="openGradeModal('${e.id}', '${escapeHtml(e.exam_name, true)}')">Grade</button>`;
-        actionsHtml += `<button class="btn btn-delete" onclick="deleteExam('${e.id}', '${escapeHtml(e.exam_name, true)}')">Delete</button>`;
-
-
-        tbody.innerHTML += `<tr>
-            <td>${escapeHtml(type)}</td>
-            <td>${escapeHtml(e.target_program || 'N/A')}</td>
-            <td>${escapeHtml(courseName)}</td>
-            <td>${escapeHtml(e.exam_name)}</td>
-            <td>${dateTime}</td>
-            <td>${escapeHtml(e.duration_minutes + ' mins' || 'N/A')}</td>
-            <td>${escapeHtml(e.status)}</td>
-            <td>${actionsHtml}</td>
-        </tr>`;
-    });
-
-    filterTable('exam-search', 'exams-table', [3, 2, 0]);
-    populateStudentExams(exams); 
+  filterTable('exam-search', 'exams-table', [3, 2, 0]);
+  populateStudentExams(exams);
 }
 
 // Delete Exam
 async function deleteExam(examId, examName) {
-    if (!confirm(`Are you sure you want to delete exam: ${examName}?`)) return;
-    const { error } = await sb.from('exams').delete().eq('id', examId);
-    if (error) {
-        await logAudit('EXAM_DELETE', `Failed to delete exam ${examName}. Reason: ${error.message}`, examId, 'FAILURE');
-        showFeedback(`Failed to delete exam: ${error.message}`, 'error');
-    }
-    else {
-        await logAudit('EXAM_DELETE', `Exam ${examName} deleted successfully.`, examId, 'SUCCESS');
-        showFeedback('Exam deleted successfully!', 'success');
-        loadExams();
-        renderFullCalendar();
-    }
+  if (!confirm(`Delete exam: ${examName}?`)) return;
+  const { error } = await sb.from('exams').delete().eq('id', examId);
+  if (error) {
+    await logAudit('EXAM_DELETE', `Failed to delete ${examName}. ${error.message}`, examId, 'FAILURE');
+    showFeedback(`Failed to delete exam: ${error.message}`, 'error');
+  } else {
+    await logAudit('EXAM_DELETE', `Deleted exam ${examName}.`, examId, 'SUCCESS');
+    showFeedback('Exam deleted successfully!', 'success');
+    loadExams();
+    renderFullCalendar();
+  }
 }
 
-// Open Edit Modal (To be implemented with all new fields if needed)
+// Edit Placeholder
 function openEditExamModal(examId) {
-    showFeedback(`Edit functionality for Exams is currently limited to the DB. Full modal editor is pending.`, 'info');
+  showFeedback('Edit functionality for exams is still under development.', 'info');
 }
 
-// Grade Modal Placeholder
-function openGradeModal(examId, examName) {
-    showFeedback(`Grading functionality for: ${examName} (ID: ${examId}) is pending implementation.`, 'success');
+// Grade Modal — simplified version
+async function openGradeModal(examId, examName) {
+  const { data: students, error } = await fetchData(
+    'students',
+    'id, full_name',
+    {},
+    'full_name',
+    true
+  );
+  if (error) {
+    showFeedback('Error loading students for grading.', 'error');
+    return;
+  }
+
+  const modalHtml = `
+    <div class="grade-modal">
+      <h3>Grade: ${escapeHtml(examName)}</h3>
+      <table class="grade-table">
+        <thead><tr><th>Student</th><th>Score (%)</th></tr></thead>
+        <tbody>
+          ${students
+            .map(
+              s => `<tr>
+                      <td>${escapeHtml(s.full_name)}</td>
+                      <td><input type="number" min="0" max="100" id="score-${s.id}" placeholder="0-100"></td>
+                    </tr>`
+            )
+            .join('')}
+        </tbody>
+      </table>
+      <button class="btn-action" onclick="saveGrades('${examId}')">Save Grades</button>
+      <button class="btn btn-delete" onclick="closeModal()">Cancel</button>
+    </div>`;
+
+  showModal(modalHtml);
 }
 
-// Populate Student Exams
+// Save Grades
+async function saveGrades(examId) {
+  const rows = document.querySelectorAll('.grade-table tbody tr');
+  const grades = [];
+
+  rows.forEach(row => {
+    const input = row.querySelector('input');
+    const studentId = input.id.replace('score-', '');
+    const score = parseFloat(input.value);
+    if (!isNaN(score)) grades.push({ exam_id: examId, student_id: studentId, score });
+  });
+
+  if (grades.length === 0) {
+    showFeedback('No scores entered.', 'error');
+    return;
+  }
+
+  const { error } = await sb.from('exam_results').insert(grades);
+  if (error) {
+    showFeedback(`Failed to save grades: ${error.message}`, 'error');
+    return;
+  }
+
+  closeModal();
+  showFeedback('Grades saved successfully!', 'success');
+  await logAudit('EXAM_GRADE', `Saved grades for exam ${examId}.`, examId, 'SUCCESS');
+}
+
+// Student view
 function populateStudentExams(exams) {
-    const container = $('student-exams');
-    container.innerHTML = '';
+  const container = $('student-exams');
+  container.innerHTML = '';
 
-    if (!exams || exams.length === 0) {
-        container.innerHTML = '<p>No available assessments at the moment.</p>';
-        return;
-    }
+  if (!exams || exams.length === 0) {
+    container.innerHTML = '<p>No available assessments at the moment.</p>';
+    return;
+  }
 
-    exams.forEach(e => {
-        if (e.status !== 'Upcoming') return;
+  exams.forEach(e => {
+    if (e.status !== 'Upcoming') return;
 
-        const startDateTime = new Date(`${e.exam_date}T${e.exam_start_time || '00:00:00'}`);
-        const formattedDate = startDateTime.toLocaleDateString();
-        const formattedTime = startDateTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const startDateTime = new Date(`${e.exam_date}T${e.exam_start_time || '00:00:00'}`);
+    const formattedDate = startDateTime.toLocaleDateString();
+    const formattedTime = startDateTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-        const examCard = document.createElement('div');
-        examCard.className = 'exam-card';
-        examCard.innerHTML = `
-            <h4>${escapeHtml(e.exam_type)}: ${escapeHtml(e.exam_name)}</h4>
-            <p><strong>Course:</strong> ${escapeHtml(e.course?.course_name || 'N/A')}</p>
-            <p><strong>Scheduled:</strong> ${formattedDate} at ${formattedTime}</p>
-            <p><strong>Duration:</strong> ${e.duration_minutes} minutes</p>
-            ${e.online_link ? `<a href="${escapeHtml(e.online_link)}" target="_blank" class="btn-action">Start Online Assessment</a>` : '<p class="info-text">Link will be provided closer to exam time.</p>'}
-        `;
-        container.appendChild(examCard);
-    });
+    const examCard = document.createElement('div');
+    examCard.className = 'exam-card';
+    examCard.innerHTML = `
+      <h4>${escapeHtml(e.exam_type)}: ${escapeHtml(e.exam_name)}</h4>
+      <p><strong>Course:</strong> ${escapeHtml(e.course?.course_name || 'N/A')}</p>
+      <p><strong>Scheduled:</strong> ${formattedDate} at ${formattedTime}</p>
+      <p><strong>Duration:</strong> ${e.duration_minutes} minutes</p>
+      ${
+        e.online_link
+          ? `<a href="${escapeHtml(e.online_link)}" target="_blank" class="btn-action">Start Online Assessment</a>`
+          : '<p class="info-text">Link will be provided closer to exam time.</p>'
+      }
+    `;
+    container.appendChild(examCard);
+  });
 }
-
-// Event listeners (already in initSession)
-// $('add-exam-form').addEventListener('submit', handleAddExam);
-// $('exam_program').addEventListener('change', populateExamCourseSelects);
 
 
 /*******************************************************
