@@ -631,21 +631,25 @@ async function logout() {
  */
 async function loadWelcomeDetails() {
   const studentName = currentUserProfile?.full_name || 'Student';
-  if (welcomeHeader) welcomeHeader.textContent = `Hello, ${studentName}!`;
+  const welcomeHeader = document.getElementById('welcome-header');
+
+  if (welcomeHeader) {
+    welcomeHeader.textContent = `Hello, ${studentName}!`;
+  }
 
   // Load both welcome and announcement messages
-  await loadStudentWelcomeMessage('student_welcome', 'student-welcome-message');
-  await loadStudentWelcomeMessage('welcome_message', 'admin-announcement');
+  await loadStudentMessage('student_welcome', 'student-welcome-message');  // short personal welcome
+  await loadStudentMessage('welcome_message', 'student-announcement');     // admin announcement
 }
 
 /**
  * Load a message from app_settings safely.
  */
-async function loadStudentWelcomeMessage(key, elementId) {
-  const bannerElement = document.getElementById(elementId);
-  if (!bannerElement) return;
+async function loadStudentMessage(key, elementId) {
+  const element = document.getElementById(elementId);
+  if (!element) return;
 
-  bannerElement.textContent = 'Loading...';
+  element.textContent = 'Loading...';
 
   try {
     const { data, error } = await sb
@@ -657,15 +661,16 @@ async function loadStudentWelcomeMessage(key, elementId) {
     if (error) throw error;
 
     if (data && data.value) {
-      bannerElement.innerHTML = data.value;
+      element.innerHTML = data.value;
     } else {
-      bannerElement.textContent = 'No message available.';
+      element.textContent = 'No message available.';
     }
   } catch (err) {
-    console.error(`Failed to load ${key}:`, err);
-    bannerElement.textContent = 'Failed to load message. Please refresh.';
+    console.error(`❌ Failed to load ${key}:`, err);
+    element.textContent = 'Failed to load message. Please refresh.';
   }
 }
+
 
 /**
  * Calculates and updates all dashboard metrics.
