@@ -1903,11 +1903,11 @@ async function renderFullCalendar() {
     calendar.render();
 }
 // *************************************************************************
-// *** 8. STUDENT MESSAGES & WELCOME ANNOUNCEMENT ***
+// *** 8. STUDENT MESSAGES & WELCOME ANNOUNCEMENT (MERGED FEED + Mark as Read) ***
 // *************************************************************************
 
 /**
- * Load student header, welcome message, and announcements.
+ * Load student header, welcome message, and merged message feed.
  */
 async function loadWelcomeDetails() {
     const studentName = currentUserProfile?.full_name || 'Student';
@@ -1917,21 +1917,16 @@ async function loadWelcomeDetails() {
     // Load student welcome message
     await loadStudentMessage('student_welcome', 'student-welcome-message');
 
-    // Load official announcement
-    await loadStudentMessage('welcome_message', 'student-announcement');
+    // Load merged messages including official announcement
+    await loadStudentMessages();
 }
 
 /**
- * Load a message safely from app_settings and display it in a DOM element
+ * Load a message safely from app_settings and return it
  * @param {string} key - The key in app_settings
- * @param {string} elementId - DOM element id where message will be displayed
+ * @returns {string|null} - The message content
  */
-async function loadStudentMessage(key, elementId) {
-    const element = document.getElementById(elementId);
-    if (!element) return;
-
-    element.textContent = 'Loading...';
-
+async function getStudentMessage(key) {
     try {
         const { data, error } = await sb
             .from('app_settings')
@@ -1940,21 +1935,16 @@ async function loadStudentMessage(key, elementId) {
             .maybeSingle();
 
         if (error) throw error;
-
-        if (data && data.value) {
-            element.innerHTML = data.value; // render HTML safely
-        } else {
-            element.textContent = 'No message available.';
-        }
+        return data?.value || null;
     } catch (err) {
         console.error(`Failed to load ${key}:`, err);
-        element.textContent = 'Failed to load message. Please refresh.';
+        return null;
     }
 }
 
 /**
  * Load messages sent to the student from notifications table
- * Displays personal messages and messages targeted to their program
+ * Displays personal messages, program messages, and the official announcement
  */
 async function loadStudentMessages() {
     if (!currentUserProfile || (!currentUserProfile.program && !currentUserProfile.department)) {
@@ -1965,35 +1955,63 @@ async function loadStudentMessages() {
     const messageContainer = document.getElementById('messages-list');
     if (!messageContainer) return;
 
-    messageContainer.innerHTML = 'Loading student messages...';
+    messageContainer.innerHTML = 'Loading messages...';
 
     try {
+        // Load notifications from the notifications table
         const { data: messages, error } = await sb
             .from('notifications')
             .select('*')
-            .or(`recipient_id.eq.${currentUserId},target_program.eq.${program}`)
+            .or(`recipient_id.eq.${currentUserId},target_program.eq.${program},target_program.is.null`)
             .order('created_at', { ascending: false });
 
         if (error) throw error;
 
+        // Load official announcement
+        const officialAnnouncement = await getStudentMessage('welcome_message');
+
         messageContainer.innerHTML = '';
+
+        // Show official announcement first if available
+        if (officialAnnouncement) {
+            messageContainer.innerHTML += `
+                <div class="message-item official-announcement" style="border-left:4px solid #F59E0B; padding:15px; margin-bottom:10px; background-color:#FEF3C7; border-radius:6px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+                    <div class="message-header" style="display:flex; justify-content:space-between; font-weight:bold; color:#B45309;">
+                        <span class="message-title">📣 Official Announcement</span>
+                        <span class="message-date" style="font-weight:normal; color:#92400E;">${new Date().toLocaleDateString()}</span>
+                    </div>
+                    <div class="message-body" style="margin-top:5px; color:#78350F;">
+                        ${officialAnnouncement}
+                    </div>
+                </div>
+            `;
+        }
+
         if (!messages || messages.length === 0) {
-            messageContainer.innerHTML = '<p>No new personal or program announcements.</p>';
+            if (!officialAnnouncement) {
+                messageContainer.innerHTML = '<p>No new personal, program, or official announcements.</p>';
+            }
             return;
         }
 
+        // Show all other messages below official announcement
         messages.forEach(msg => {
             const isRead = msg.is_read ? 'read' : 'unread';
             const messageDate = new Date(msg.created_at).toLocaleDateString();
 
             messageContainer.innerHTML += `
-                <div class="message-item ${isRead}" style="border-left: 4px solid ${msg.is_read ? '#10B981' : '#F59E0B'}; padding: 15px; margin-bottom: 10px; background-color: #fff; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                <div class="message-item ${isRead}" style="border-left:4px solid ${msg.is_read ? '#10B981' : '#F59E0B'}; padding:15px; margin-bottom:10px; background-color:#fff; border-radius:6px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
                     <div class="message-header" style="display:flex; justify-content:space-between; font-weight:bold; color:#4C1D95;">
                         <span class="message-title">${msg.subject || 'Message'}</span>
                         <span class="message-date" style="font-weight:normal; color:#6B7280;">${messageDate}</span>
                     </div>
-                    <div class="message-body" style="margin-top:5px; color:#374151;">${msg.message.substring(0, 150)}${msg.message.length > 150 ? '...' : ''}</div>
-                    <span class="message-status" style="font-size:0.8em; color:${msg.is_read ? '#10B981' : '#F59E0B'}; margin-top:5px; display:inline-block;">Status: ${isRead.toUpperCase()}</span>
+                    <div class="message-body" style="margin-top:5px; color:#374151;">
+                        ${msg.message.substring(0, 150)}${msg.message.length > 150 ? '...' : ''}
+                    </div>
+                    <span class="message-status" style="font-size:0.8em; color:${msg.is_read ? '#10B981' : '#F59E0B'}; margin-top:5px; display:inline-block;">
+                        Status: ${isRead.toUpperCase()}
+                    </span>
+                    ${!msg.is_read ? `<button onclick="markMessageAsRead('${msg.id}')" style="margin-top:10px; background-color:#3B82F6; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">Mark as Read</button>` : ''}
                 </div>
             `;
         });
@@ -2020,7 +2038,7 @@ async function markMessageAsRead(messageId) {
 
 // Initial load
 loadWelcomeDetails();
-loadStudentMessages();
+
 
 /*******************************************************
  * 11. Resources Tab (Fully Corrected)
