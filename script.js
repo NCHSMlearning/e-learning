@@ -165,7 +165,7 @@ async function loadSectionData(tabId) {
         case 'sessions': loadScheduledSessions(); populateSessionCourseSelects(); break;
         case 'attendance': loadAttendance(); populateAttendanceSelects(); break;
         case 'cats': loadExams(); populateExamCourseSelects(); break;
-        case 'messages': loadMessages(); break;
+        case 'messages': loadAdminMessages(); break;
         case 'calendar': renderFullCalendar(); break;
         case 'resources': loadResources(); break;
         case 'welcome-editor': loadWelcomeMessageForEdit(); break; 
