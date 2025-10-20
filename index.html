@@ -615,7 +615,7 @@ function showTab(tabId) {
     if (tabId === 'courses' && currentUserId) loadCourses(); 
     if (tabId === 'resources' && currentUserId) loadResources();
     if (tabId === 'cats' && currentUserId) loadExams();
-    if (tabId === 'messages' && currentUserId) loadStudentMessages();
+   if (tabId === 'messages' && currentUserId) loadStudentMessagesAndAnnouncements();
     if (tabId === 'calendar' && currentUserId) loadAcademicCalendar();
 }
 
@@ -1802,65 +1802,80 @@ async function loadAcademicCalendar() {
 }
 
 
-
 // *************************************************************************
-// *** 8. MESSAGES LOGIC ***
+// *** 8. MESSAGES LOGIC (Combined Personal + Official Announcements) ***
 // *************************************************************************
 
-
-async function loadStudentMessages() {
+/**
+ * Load all messages and announcements for the student.
+ */
+async function loadStudentMessagesAndAnnouncements() {
     // Ensure profile data is loaded before reading it
-    if (!currentUserProfile || !currentUserProfile.program && !currentUserProfile.department) {
-        await loadProfile(currentUserId); 
+    if (!currentUserProfile || (!currentUserProfile.program && !currentUserProfile.department)) {
+        await loadProfile(currentUserId);
     }
 
-
-    // FIX: Use the combined program/department value
     const program = currentUserProfile?.program || currentUserProfile?.department;
-    const messageContainer = document.getElementById('messages-list'); 
+    const messageContainer = document.getElementById('messages-list');
     if (!messageContainer) return;
-    messageContainer.innerHTML = 'Loading student messages...';
 
+    messageContainer.innerHTML = 'Loading messages...';
 
     try {
-        const { data: messages, error } = await sb
+        // 1️⃣ Load personal messages
+        const { data: personalMessages, error: personalError } = await sb
             .from('student_messages')
             .select('*')
-            .or(`recipient_id.eq.${currentUserId},recipient_type.eq.All,recipient_program.eq.${program}`)
+            .or(`recipient_id.eq.${currentUserId},recipient_program.eq.${program}`)
             .order('created_at', { ascending: false });
 
+        if (personalError) throw personalError;
 
-        if (error) throw error;
+        // 2️⃣ Load official announcements
+        const { data: notifications, error: notifError } = await sb
+            .from('notifications')
+            .select('*')
+            .or(`target_program.eq.${program},target_program.is.null`)
+            .order('created_at', { ascending: false });
 
+        if (notifError) throw notifError;
+
+        // Combine messages, with personal messages first
+        const allMessages = [
+            ...(personalMessages || []),
+            ...(notifications || [])
+        ];
 
         messageContainer.innerHTML = '';
-        if (messages.length === 0) {
-            messageContainer.innerHTML = '<p>No new personal or general announcements.</p>';
+        if (allMessages.length === 0) {
+            messageContainer.innerHTML = '<p>No messages or announcements at this time.</p>';
             return;
         }
 
+        // Render each message/announcement
+        allMessages.forEach(msg => {
+            const title = msg.subject || msg.title || 'Message';
+            const body = msg.body || msg.message || msg.message_content || '';
+            const isRead = msg.is_read ? 'read' : 'unread';
+            const createdAt = msg.created_at ? new Date(msg.created_at).toLocaleDateString() : '';
 
-        messages.forEach(msg => {
-            const isRead = msg.is_read ? 'read' : 'unread'; 
             messageContainer.innerHTML += `
                 <div class="message-item ${isRead}" style="border-left: 4px solid ${msg.is_read ? '#10B981' : '#F59E0B'}; padding: 15px; margin-bottom: 10px; background-color: white; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
                     <div class="message-header" style="display: flex; justify-content: space-between; font-weight: bold; color: #4C1D95;">
-                        <span class="message-title">${msg.subject}</span>
-                        <span class="message-date" style="font-weight: normal; color: #6B7280;">${new Date(msg.created_at).toLocaleDateString()}</span>
+                        <span class="message-title">${title}</span>
+                        <span class="message-date" style="font-weight: normal; color: #6B7280;">${createdAt}</span>
                     </div>
-                    <div class="message-body" style="margin-top: 5px; color: #374151;">${msg.body.substring(0, 150)}...</div>
+                    <div class="message-body" style="margin-top: 5px; color: #374151;">${body.substring(0, 300)}</div>
                     <span class="message-status" style="font-size: 0.8em; color: ${msg.is_read ? '#10B981' : '#F59E0B'}; margin-top: 5px; display: inline-block;">Status: ${isRead.toUpperCase()}</span>
                 </div>
             `;
         });
 
-
     } catch (error) {
-        console.error("Failed to load student messages:", error);
-        messageContainer.innerHTML = '<p style="color:#EF4444;">Error loading messages.</p>';
+        console.error("Failed to load student messages and announcements:", error);
+        messageContainer.innerHTML = '<p style="color:#EF4444;">Error loading messages and announcements.</p>';
     }
 }
-
 
 
 // *************************************************************************
