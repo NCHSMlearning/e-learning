@@ -607,20 +607,17 @@ function updateBlockTermOptions(programSelectId, blockTermSelectId) {
   // Determine available options based on program
   let options = [];
   if (program === 'KRCHN') {
-    // KRCHN uses Block naming
     options = [
       { value: 'A', text: 'Block A' },
       { value: 'B', text: 'Block B' }
     ];
   } else if (program === 'TVET') {
-    // TVET uses Term naming
     options = [
       { value: 'T1', text: 'Term 1' },
       { value: 'T2', text: 'Term 2' },
       { value: 'T3', text: 'Term 3' }
     ];
   } else {
-    // Default fallback (for other programs or roles)
     options = [
       { value: 'A', text: 'Block A / Term 1' },
       { value: 'B', text: 'Block B / Term 2' },
@@ -635,11 +632,6 @@ function updateBlockTermOptions(programSelectId, blockTermSelectId) {
     option.textContent = opt.text;
     blockTermSelect.appendChild(option);
   });
-}
-
-  let html = `<option value="">-- Select Block/Term --</option>`;
-  options.forEach(opt => html += `<option value="${opt.value}">${escapeHtml(opt.text)}</option>`);
-  blockTermSelect.innerHTML = html;
 }
 
 async function handleAddAccount(e) {
