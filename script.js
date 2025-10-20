@@ -2239,93 +2239,92 @@ $('upload-resource-form')?.addEventListener('submit', async e => {
     }
 });
 
-// Load learning resources for student dashboard
+// Load resources from Supabase table
 async function loadResources() {
-    // Ensure profile data is loaded
-    if (!currentUserProfile || !currentUserProfile.program || !currentUserProfile.intake_year) {
-        await loadProfile(currentUserId); 
+    const tableBody = $('resources-list');
+    if (!tableBody) {
+        console.error("Resource table body element with ID 'resources-list' not found.");
+        return;
     }
 
-    const resourceList = document.getElementById('resources-list');
-    if (!resourceList) return;
-    resourceList.innerHTML = 'Loading resources...';
+    tableBody.innerHTML = '<tr><td colspan="7">Loading resources...</td></tr>';
 
     try {
-        const program = currentUserProfile?.program || currentUserProfile?.department;
-        let block = currentUserProfile?.block || '';
-        block = block.replace(/^Block_/, '');
-        const intakeYear = currentUserProfile?.intake_year || currentUserProfile?.intake;
-
-        if (!program || !block || !intakeYear) {
-            resourceList.innerHTML = '<p>Missing enrollment details (program, block, or intake year).</p>';
-            return;
-        }
-
         const { data: resources, error } = await sb
             .from('resources')
-            .select('id, title, file_path, program_type, block_term, block, intake_year, intake, uploaded_by_name, created_at, allow_download')
-            .or(`program_type.eq.${program},program_type.eq.General`)
-            .or(`block_term.eq.${block},block.eq.${block},block_term.is.null,block.is.null`)
-            .or(`intake_year.eq.${intakeYear},intake.eq.${intakeYear},intake_year.is.null,intake.is.null`)
+            .select('id, title, program_type, file_path, created_at, uploaded_by_name, file_url, intake, block')
             .order('created_at', { ascending: false });
 
         if (error) throw error;
 
-        resourceList.innerHTML = '';
-        if (!resources.length) {
-            resourceList.innerHTML = `<p>No learning resources found for ${program}, Block ${block}, Intake ${intakeYear}.</p>`;
-            if (document.getElementById('dashboard-new-resources')) 
-                document.getElementById('dashboard-new-resources').textContent = '0';
+        tableBody.innerHTML = '';
+
+        if (!resources?.length) {
+            tableBody.innerHTML = '<tr><td colspan="7">No resources found.</td></tr>';
             return;
         }
 
-        resources.forEach(res => {
-            const { data: { publicUrl } } = sb.storage
-                .from('materials')
-                .getPublicUrl(res.file_path);
+        resources.forEach(resource => {
+            const date = new Date(resource.created_at).toLocaleString();
+            
+            // Escape values for HTML attributes and function arguments
+            const safeFilePath = escapeHtml(resource.file_path || '', true);
+            const safeId = resource.id;
+            const safeTitle = escapeHtml(resource.title || 'Untitled', true);
+            const safeUrl = escapeHtml(resource.file_url || '#', true);
 
-            // Determine file type
-            const ext = res.file_path.split('.').pop().toLowerCase();
-            let previewHtml = '';
-
-            if (ext === 'pdf') {
-                previewHtml = `<iframe src="${publicUrl}" width="100%" height="500px"></iframe>`;
-            } else if (['ppt', 'pptx', 'doc', 'docx'].includes(ext)) {
-                const encodedUrl = encodeURIComponent(publicUrl);
-                previewHtml = `<iframe src="https://view.officeapps.live.com/op/embed.aspx?src=${encodedUrl}" width="100%" height="500px"></iframe>`;
-            } else {
-                previewHtml = `<a href="${publicUrl}" target="_blank">View File</a>`;
-            }
-
-            resourceList.innerHTML += `
-                <div class="resource-item" style="margin-bottom:20px;">
-                    <div>
-                        <strong>${res.title}</strong>
-                        <p style="margin:5px 0 5px;font-size:0.9em;color:#6B7280;">
-                            ${res.program_type === 'General' ? 'General' : `${res.program_type}, Block ${res.block_term || res.block}, Intake ${res.intake_year || res.intake}`}
-                            • Uploaded: ${new Date(res.created_at).toLocaleDateString()}
-                        </p>
-                        ${previewHtml}
-                        ${res.allow_download ? `<a href="${publicUrl}" download class="btn btn-sm btn-primary" style="margin-top:5px;display:inline-block;">Download</a>` : ''}
-                    </div>
-                </div>
+            tableBody.innerHTML += `
+                <tr>
+                    <td>${escapeHtml(resource.program_type || 'N/A')}</td>
+                    <td>${escapeHtml(resource.title || 'Untitled')}</td>
+                    <td>${escapeHtml(resource.intake || 'N/A')}</td>
+                    <td>${escapeHtml(resource.block || 'N/A')}</td>
+                    <td>${escapeHtml(resource.uploaded_by_name || 'Unknown')}</td>
+                    <td>${date}</td>
+                    <td>
+                        <a href="${safeUrl}" target="_blank" class="btn-action">Download</a>
+                        <button class="btn btn-delete" onclick="deleteResource('${safeFilePath}', ${safeId}, '${safeTitle}')">Delete</button>
+                    </td>
+                </tr>
             `;
         });
 
-        const oneWeekAgo = new Date();
-        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-        const newCount = resources.filter(r => new Date(r.created_at) > oneWeekAgo).length;
-
-        if (document.getElementById('dashboard-new-resources')) 
-            document.getElementById('dashboard-new-resources').textContent = newCount;
-
-    } catch (error) {
-        console.error("❌ Failed to load resources:", error);
-        resourceList.innerHTML = `<p style="color:#EF4444;">Error loading resources: ${error.message}</p>`;
+    } catch (e) {
+        console.error('Error loading resources:', e);
+        tableBody.innerHTML = `<tr><td colspan="7">Error loading resources: ${e.message}</td></tr>`;
+        await logAudit('RESOURCE_LOAD', `Failed to load resources: ${e.message}`, null, 'FAILURE');
     }
+
+    filterTable('resource-search', 'resources-list', [0, 1, 2, 3]);
 }
 
+// Delete resource from both Storage and Table
+async function deleteResource(filePath, id, title) {
+    if (!confirm(`Are you sure you want to delete the file: ${title}? This action cannot be undone.`)) return;
 
+    try {
+        // Remove file from storage
+        const { error: storageError } = await sb.storage
+            .from(RESOURCES_BUCKET)
+            .remove([filePath]);
+        if (storageError) throw storageError;
+
+        // Remove metadata from database
+        const { error: dbError } = await sb
+            .from('resources')
+            .delete()
+            .eq('id', id);
+        if (dbError) throw dbError;
+
+        await logAudit('RESOURCE_DELETE', `Deleted resource: ${title} (${filePath}).`, id, 'SUCCESS');
+        showFeedback('✅ Resource deleted successfully.', 'success');
+        loadResources();
+    } catch (e) {
+        await logAudit('RESOURCE_DELETE', `Failed to delete resource: ${title}. Reason: ${e.message}`, id, 'FAILURE');
+        console.error('Delete failed:', e);
+        showFeedback(`❌ Failed to delete resource: ${e.message}`, 'error');
+    }
+}
 /*******************************************************
  * 12. Security & System Status (NEW STRATEGIC FEATURE)
  *******************************************************/
