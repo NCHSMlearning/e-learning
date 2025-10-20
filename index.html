@@ -1480,104 +1480,120 @@ async function loadCourses() {
 
 
 
+// Utility to safely escape HTML
+function escapeHtml(str) {
+    if (!str) return '';
+    return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
 /**
  * Student Dashboard: loadExams()
- * Displays student's exams with score and exam link (if available)
+ * Displays student's exams with scores and exam link (if available)
  */
 async function loadExams() {
-  const tableBody = document.getElementById('exams-table');
-  if (!tableBody) return;
+    const tableBody = document.getElementById('exams-table');
+    if (!tableBody) return;
 
-  tableBody.innerHTML = '<tr><td colspan="8">Loading your exams and grades...</td></tr>';
+    tableBody.innerHTML = '<tr><td colspan="8">Loading your exams and grades...</td></tr>';
 
-  // Ensure profile is loaded
-  if (!currentUserProfile || !currentUserProfile.program || !currentUserProfile.intake_year) {
-    await loadProfile(currentUserId);
-  }
-
-  try {
-    const program = currentUserProfile?.program || currentUserProfile?.department;
-    const block = currentUserProfile?.block;
-    const intakeYear = currentUserProfile?.intake_year;
-
-    if (!program || !block || !intakeYear) {
-      tableBody.innerHTML = `<tr><td colspan="8">Missing program, block, or intake year info. Cannot load exams.</td></tr>`;
-      cachedExams = [];
-      return;
+    // Ensure profile is loaded
+    if (!currentUserProfile || !currentUserProfile.program || !currentUserProfile.intake_year) {
+        await loadProfile(currentUserId);
     }
 
-    // Fetch exams joined with grades for the logged-in student
-    const { data: exams, error } = await sb
-      .from('exams_with_courses')
-      .select(`
-        id,
-        exam_name,
-        exam_date,
-        status,
-        block_term,
-        program_type,
-        exam_link,
-        exam_grades!left(score, student_id)
-      `)
-      .or(`program_type.eq.${program},program_type.eq.General`)
-      .eq('block_term', block)
-      .eq('intake_year', intakeYear)
-      .eq('exam_grades.student_id', currentUserId)
-      .order('exam_date', { ascending: true });
+    try {
+        const program = currentUserProfile?.program || currentUserProfile?.department;
+        const block = currentUserProfile?.block;
+        const intakeYear = currentUserProfile?.intake_year;
 
-    if (error) throw error;
+        if (!program || !block || !intakeYear) {
+            tableBody.innerHTML = `<tr><td colspan="8">Missing program, block, or intake year info. Cannot load exams.</td></tr>`;
+            cachedExams = [];
+            return;
+        }
 
-    cachedExams = exams || [];
-    tableBody.innerHTML = '';
+        // Fetch exams joined with grades for the logged-in student
+        const { data: exams, error } = await sb
+            .from('exams_with_courses')
+            .select(`
+                id,
+                exam_name,
+                exam_date,
+                status,
+                block_term,
+                program_type,
+                exam_link,
+                duration_minutes,
+                exam_grades!inner(cat_score, exam_score, total_score, student_id)
+            `)
+            .or(`program_type.eq.${program},program_type.eq.General`)
+            .eq('block_term', block)
+            .eq('intake_year', intakeYear)
+            .eq('exam_grades.student_id', currentUserId)
+            .order('exam_date', { ascending: true });
 
-    if (cachedExams.length === 0) {
-      tableBody.innerHTML = `
-        <tr>
-          <td colspan="8">
-            No exams or CATs found for ${program}, Block ${block}, Intake ${intakeYear}.
-          </td>
-        </tr>`;
-      return;
+        if (error) throw error;
+
+        cachedExams = exams || [];
+        tableBody.innerHTML = '';
+
+        if (cachedExams.length === 0) {
+            tableBody.innerHTML = `
+                <tr>
+                    <td colspan="8">
+                        No exams or CATs found for ${escapeHtml(program)}, Block ${escapeHtml(block)}, Intake ${escapeHtml(intakeYear)}.
+                    </td>
+                </tr>`;
+            return;
+        }
+
+        // Render each exam row
+        cachedExams.forEach(exam => {
+            const dateStr = exam.exam_date
+                ? new Date(exam.exam_date).toLocaleDateString('en-US', {
+                    weekday: 'short',
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric'
+                  }) + ' ' + (exam.exam_start_time || '')
+                : 'N/A';
+
+            const catScore = exam.exam_grades?.[0]?.cat_score ?? '-';
+            const examScore = exam.exam_grades?.[0]?.exam_score ?? '-';
+            const totalScore = exam.exam_grades?.[0]?.total_score ?? '-';
+
+            const actionBtn = exam.exam_link
+                ? `<a href="${escapeHtml(exam.exam_link)}" target="_blank" class="btn btn-sm btn-primary">Start Exam</a>`
+                : `<span style="color:gray;">No Link</span>`;
+
+            tableBody.innerHTML += `
+                <tr>
+                    <td>${escapeHtml(exam.exam_name || 'N/A')}</td>
+                    <td>${escapeHtml(exam.block_term || 'N/A')}</td>
+                    <td>${dateStr}</td>
+                    <td>${escapeHtml(exam.status || 'Scheduled')}</td>
+                    <td>${catScore}</td>
+                    <td>${examScore}</td>
+                    <td>${totalScore}</td>
+                    <td>${actionBtn}</td>
+                </tr>
+            `;
+        });
+
+    } catch (error) {
+        console.error('❌ Failed to load exams:', error);
+        tableBody.innerHTML = `<tr><td colspan="8" style="color:#EF4444;">Error loading exams: ${escapeHtml(error.message)}</td></tr>`;
+        cachedExams = [];
     }
 
-    // Render each exam row
-    cachedExams.forEach(exam => {
-      const dateStr = exam.exam_date
-        ? new Date(exam.exam_date).toLocaleDateString('en-US', {
-            weekday: 'short',
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric'
-          })
-        : 'N/A';
-
-      const score = exam.exam_grades?.[0]?.score ?? '-';
-
-      const actionBtn = exam.exam_link
-        ? `<a href="${exam.exam_link}" target="_blank" class="btn btn-sm btn-primary">Start Exam</a>`
-        : `<span style="color:gray;">No Link</span>`;
-
-      tableBody.innerHTML += `
-        <tr>
-          <td>${escapeHtml(exam.exam_name || 'N/A')}</td>
-          <td>${escapeHtml(exam.block_term || 'N/A')}</td>
-          <td>${dateStr}</td>
-          <td>${escapeHtml(exam.status || 'Scheduled')}</td>
-          <td>${score}</td>
-          <td>${actionBtn}</td>
-        </tr>
-      `;
-    });
-
-  } catch (error) {
-    console.error('❌ Failed to load exams:', error);
-    tableBody.innerHTML = `<tr><td colspan="8" style="color:#EF4444;">Error loading exams: ${error.message}</td></tr>`;
-    cachedExams = [];
-  }
-
-  if (typeof loadDashboardMetrics === 'function') {
-    loadDashboardMetrics(currentUserId);
-  }
+    if (typeof loadDashboardMetrics === 'function') {
+        loadDashboardMetrics(currentUserId);
+    }
 }
 
 
