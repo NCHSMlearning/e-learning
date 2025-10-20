@@ -1906,78 +1906,65 @@ async function renderFullCalendar() {
 // *** 8. STUDENT & ADMIN MESSAGES + OFFICIAL ANNOUNCEMENT (MERGED FEED) ***
 // *************************************************************************
 
-/**
- * Load student/admin header, welcome message, and merged message feed.
- */
-async function loadWelcomeDetails() {
+document.addEventListener('DOMContentLoaded', () => {
+
+  // ---------------- Load Student/Admin Welcome & Messages ----------------
+  async function loadWelcomeDetails() {
     const userName = currentUserProfile?.full_name || 'User';
     const welcomeHeader = document.getElementById('welcome-header');
     if (welcomeHeader) welcomeHeader.textContent = `Hello, ${userName}!`;
 
-    // Load student/admin welcome message
+    // Load student welcome message
     await loadStudentMessage('student_welcome', 'student-welcome-message');
 
-    // Load merged messages including official announcement
+    // Load merged student feed
     await loadStudentMessages();
-}
 
-/**
- * Load a single message from app_settings safely
- * @param {string} key
- * @param {string} elementId
- */
-async function loadStudentMessage(key, elementId) {
+    // Load admin messages table
+    if (document.getElementById('messages-table')) await loadAdminMessages();
+  }
+
+  // ---------------- Load a single message from app_settings ----------------
+  async function loadStudentMessage(key, elementId) {
     const element = document.getElementById(elementId);
     if (!element) return;
 
     element.textContent = 'Loading...';
-
     try {
-        const { data, error } = await sb
-            .from('app_settings')
-            .select('value')
-            .eq('key', key)
-            .maybeSingle();
+      const { data, error } = await sb
+        .from('app_settings')
+        .select('value')
+        .eq('key', key)
+        .maybeSingle();
+      if (error) throw error;
 
-        if (error) throw error;
-
-        if (data?.value) {
-            element.innerHTML = data.value;
-        } else {
-            element.textContent = 'No message available.';
-        }
+      element.innerHTML = data?.value || 'No message available.';
     } catch (err) {
-        console.error(`Failed to load ${key}:`, err);
-        element.textContent = 'Failed to load message. Please refresh.';
+      console.error(`Failed to load ${key}:`, err);
+      element.textContent = 'Failed to load message. Please refresh.';
     }
-}
+  }
 
-/**
- * Get a message from app_settings
- * @param {string} key
- * @returns {string|null}
- */
-async function getStudentMessage(key) {
+  // ---------------- Get a message value from app_settings ----------------
+  async function getStudentMessage(key) {
     try {
-        const { data, error } = await sb
-            .from('app_settings')
-            .select('value')
-            .eq('key', key)
-            .maybeSingle();
-        if (error) throw error;
-        return data?.value || null;
+      const { data, error } = await sb
+        .from('app_settings')
+        .select('value')
+        .eq('key', key)
+        .maybeSingle();
+      if (error) throw error;
+      return data?.value || null;
     } catch (err) {
-        console.error(`Failed to load ${key}:`, err);
-        return null;
+      console.error(`Failed to load ${key}:`, err);
+      return null;
     }
-}
+  }
 
-/**
- * Load messages from notifications table + official announcement
- */
-async function loadStudentMessages() {
+  // ---------------- Load student merged messages feed ----------------
+  async function loadStudentMessages() {
     if (!currentUserProfile || (!currentUserProfile.program && !currentUserProfile.department)) {
-        await loadProfile(currentUserId); // ensure profile loaded
+      await loadProfile(currentUserId);
     }
 
     const program = currentUserProfile?.program || currentUserProfile?.department;
@@ -1987,138 +1974,194 @@ async function loadStudentMessages() {
     messageContainer.innerHTML = 'Loading messages...';
 
     try {
-        // Fetch notifications
-        const { data: messages, error } = await sb
-            .from('notifications')
-            .select('*')
-            .or(`recipient_id.eq.${currentUserId},target_program.eq.${program},target_program.is.null`)
-            .order('created_at', { ascending: false });
-        if (error) throw error;
+      const { data: messages, error } = await sb
+        .from('notifications')
+        .select('*')
+        .or(`recipient_id.eq.${currentUserId},target_program.eq.${program},target_program.is.null`)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
 
-        // Fetch official announcement
-        const officialAnnouncement = await getStudentMessage('welcome_message');
+      const officialAnnouncement = await getStudentMessage('welcome_message');
+      messageContainer.innerHTML = '';
 
-        messageContainer.innerHTML = '';
+      // Show official announcement
+      if (officialAnnouncement) {
+        messageContainer.innerHTML += `
+          <div class="message-item official-announcement" style="border-left:4px solid #F59E0B; padding:15px; margin-bottom:10px; background-color:#FEF3C7; border-radius:6px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+            <div class="message-header" style="display:flex; justify-content:space-between; font-weight:bold; color:#B45309;">
+              <span class="message-title">📣 Official Announcement</span>
+              <span class="message-date" style="font-weight:normal; color:#92400E;">${new Date().toLocaleDateString()}</span>
+            </div>
+            <div class="message-body" style="margin-top:5px; color:#78350F;">
+              ${officialAnnouncement}
+            </div>
+          </div>
+        `;
+      }
 
-        // Display official announcement first
-        if (officialAnnouncement) {
-            messageContainer.innerHTML += `
-                <div class="message-item official-announcement" style="border-left:4px solid #F59E0B; padding:15px; margin-bottom:10px; background-color:#FEF3C7; border-radius:6px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
-                    <div class="message-header" style="display:flex; justify-content:space-between; font-weight:bold; color:#B45309;">
-                        <span class="message-title">📣 Official Announcement</span>
-                        <span class="message-date" style="font-weight:normal; color:#92400E;">${new Date().toLocaleDateString()}</span>
-                    </div>
-                    <div class="message-body" style="margin-top:5px; color:#78350F;">
-                        ${officialAnnouncement}
-                    </div>
-                </div>
-            `;
+      if (!messages || messages.length === 0) {
+        if (!officialAnnouncement) {
+          messageContainer.innerHTML = '<p>No new messages or announcements.</p>';
         }
+        return;
+      }
 
-        if (!messages || messages.length === 0) {
-            if (!officialAnnouncement) {
-                messageContainer.innerHTML = '<p>No new messages or announcements.</p>';
-            }
-            return;
-        }
-
-        // Display other notifications
-        messages.forEach(msg => {
-            const isRead = msg.is_read ? 'read' : 'unread';
-            const messageDate = new Date(msg.created_at).toLocaleDateString();
-
-            messageContainer.innerHTML += `
-                <div class="message-item ${isRead}" style="border-left:4px solid ${msg.is_read ? '#10B981' : '#F59E0B'}; padding:15px; margin-bottom:10px; background-color:#fff; border-radius:6px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
-                    <div class="message-header" style="display:flex; justify-content:space-between; font-weight:bold; color:#4C1D95;">
-                        <span class="message-title">${msg.subject || 'Message'}</span>
-                        <span class="message-date" style="font-weight:normal; color:#6B7280;">${messageDate}</span>
-                    </div>
-                    <div class="message-body" style="margin-top:5px; color:#374151;">
-                        ${msg.message.substring(0,150)}${msg.message.length>150?'...':''}
-                    </div>
-                    <span class="message-status" style="font-size:0.8em; color:${msg.is_read?'#10B981':'#F59E0B'}; margin-top:5px; display:inline-block;">
-                        Status: ${isRead.toUpperCase()}
-                    </span>
-                    ${!msg.is_read ? `<button onclick="markMessageAsRead('${msg.id}')" style="margin-top:10px; background-color:#3B82F6; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">Mark as Read</button>` : ''}
-                </div>
-            `;
-        });
-
+      // Show other messages
+      messages.forEach(msg => {
+        const isRead = msg.is_read ? 'read' : 'unread';
+        const messageDate = new Date(msg.created_at).toLocaleDateString();
+        messageContainer.innerHTML += `
+          <div class="message-item ${isRead}" style="border-left:4px solid ${msg.is_read ? '#10B981' : '#F59E0B'}; padding:15px; margin-bottom:10px; background-color:#fff; border-radius:6px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+            <div class="message-header" style="display:flex; justify-content:space-between; font-weight:bold; color:#4C1D95;">
+              <span class="message-title">${msg.subject || 'Message'}</span>
+              <span class="message-date" style="font-weight:normal; color:#6B7280;">${messageDate}</span>
+            </div>
+            <div class="message-body" style="margin-top:5px; color:#374151;">
+              ${msg.message.substring(0,150)}${msg.message.length>150?'...':''}
+            </div>
+            <span class="message-status" style="font-size:0.8em; color:${msg.is_read?'#10B981':'#F59E0B'}; margin-top:5px; display:inline-block;">
+              Status: ${isRead.toUpperCase()}
+            </span>
+            ${!msg.is_read ? `<button onclick="markMessageAsRead('${msg.id}')" style="margin-top:10px; background-color:#3B82F6; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">Mark as Read</button>` : ''}
+          </div>
+        `;
+      });
     } catch (err) {
-        console.error('Failed to load messages:', err);
-        messageContainer.innerHTML = '<p style="color:#EF4444;">Error loading messages.</p>';
+      console.error('Failed to load messages:', err);
+      messageContainer.innerHTML = '<p style="color:#EF4444;">Error loading messages.</p>';
     }
-}
+  }
 
-/**
- * Mark a message as read
- */
-async function markMessageAsRead(messageId) {
+  // ---------------- Mark student message as read ----------------
+  async function markMessageAsRead(messageId) {
     try {
-        await sb.from('notifications')
-            .update({ is_read: true })
-            .eq('id', messageId);
-        await loadStudentMessages();
+      await sb.from('notifications').update({ is_read: true }).eq('id', messageId);
+      await loadStudentMessages();
     } catch (err) {
-        console.error('Failed to mark message as read:', err);
+      console.error('Failed to mark message as read:', err);
     }
-}
+  }
 
-/**
- * Send admin/system message
- */
-document.getElementById('send-message-form').addEventListener('submit', async (e)=>{
+  // ---------------- Send system/admin message ----------------
+  const sendForm = document.getElementById('send-message-form');
+  sendForm?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const target_program = document.getElementById('msg_program').value;
     const message_content = document.getElementById('msg_body').value.trim();
     const subject = `System Message to ${target_program}`;
-    if(!message_content) return alert('Message cannot be empty');
+    if (!message_content) return alert('Message cannot be empty');
 
     try {
-        await sb.from('notifications').insert({
-            target_program: target_program==='ALL'?null:target_program,
-            title: subject,
-            message: message_content,
-            message_type: 'system',
-            sender_id: currentUserProfile.id
-        });
+      await sb.from('notifications').insert({
+        target_program: target_program === 'ALL' ? null : target_program,
+        title: subject,
+        message: message_content,
+        message_type: 'system',
+        sender_id: currentUserProfile.id
+      });
 
-        alert('Message sent successfully!');
-        e.target.reset();
-        await loadStudentMessages(); // immediately appear in feed
-    } catch(err){
-        console.error(err);
-        alert('Failed to send message.');
+      alert('Message sent successfully!');
+      e.target.reset();
+      await loadAdminMessages();
+      await loadStudentMessages();
+    } catch (err) {
+      console.error(err);
+      alert('Failed to send message.');
     }
-});
+  });
 
-/**
- * Save official announcement
- */
-document.getElementById('save-announcement').addEventListener('click', async()=>{
+  // ---------------- Save official announcement ----------------
+  const saveAnnouncementBtn = document.getElementById('save-announcement');
+  saveAnnouncementBtn?.addEventListener('click', async () => {
     const body = document.getElementById('announcement-body').value.trim();
     const feedback = document.getElementById('announcement-feedback');
-    if(!body){
-        feedback.textContent='Announcement cannot be empty.';
-        feedback.style.color='red';
-        return;
+    if (!body) {
+      feedback.textContent = 'Announcement cannot be empty.';
+      feedback.style.color = 'red';
+      return;
     }
-    try{
-        await sb.from('app_settings')
-            .upsert({key:'welcome_message', value:body},{onConflict:'key'});
-        feedback.textContent='Official announcement saved successfully!';
-        feedback.style.color='green';
-        await loadStudentMessages(); // refresh feed immediately
-    }catch(err){
-        console.error(err);
-        feedback.textContent='Failed to save announcement.';
-        feedback.style.color='red';
+    try {
+      await sb.from('app_settings').upsert({ key: 'welcome_message', value: body }, { onConflict: 'key' });
+      feedback.textContent = 'Official announcement saved successfully!';
+      feedback.style.color = 'green';
+      await loadAdminMessages();
+      await loadStudentMessages();
+    } catch (err) {
+      console.error(err);
+      feedback.textContent = 'Failed to save announcement.';
+      feedback.style.color = 'red';
     }
- }); // <-- close the event listener properly
+  });
 
-// Initial load
-loadWelcomeDetails();
-loadStudentMessages();
+  // ---------------- Load Admin Messages Table ----------------
+  async function loadAdminMessages() {
+    const tbody = document.getElementById('messages-table');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="4">Loading messages...</td></tr>';
+
+    try {
+      const { data: messages, error } = await sb.from('notifications')
+        .select('*, sender:sender_id(full_name)')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+
+      tbody.innerHTML = '';
+      if (!messages || messages.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4">No messages found.</td></tr>';
+        return;
+      }
+
+      messages.forEach(msg => {
+        const recipient = msg.target_program || 'ALL Students';
+        const sendDate = new Date(msg.created_at).toLocaleString();
+        tbody.innerHTML += `
+          <tr>
+            <td>${escapeHtml(recipient)}</td>
+            <td>${escapeHtml(msg.message.substring(0,80) + (msg.message.length>80?'...':''))}</td>
+            <td>${sendDate}</td>
+            <td>
+              <button onclick="editNotification('${msg.id}')">Edit</button>
+              <button onclick="deleteNotification('${msg.id}')" style="color:red;">Delete</button>
+            </td>
+          </tr>
+        `;
+      });
+    } catch (err) {
+      console.error(err);
+      tbody.innerHTML = `<tr><td colspan="4">Error loading messages: ${err.message}</td></tr>`;
+    }
+  }
+
+  // ---------------- Edit/Delete Notification ----------------
+  window.editNotification = function(id) {
+    console.log('Edit notification:', id);
+    alert('Edit functionality not implemented yet.');
+  }
+
+  window.deleteNotification = async function(id) {
+    if (!confirm('Are you sure you want to delete this message?')) return;
+    try {
+      await sb.from('notifications').delete().eq('id', id);
+      alert('Message deleted successfully!');
+      await loadAdminMessages();
+      await loadStudentMessages();
+    } catch (err) {
+      console.error(err);
+      alert('Failed to delete message.');
+    }
+  }
+
+  // ---------------- Escape HTML ----------------
+  function escapeHtml(text) {
+    const map = { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#039;' };
+    return text.replace(/[&<>"']/g, m => map[m]);
+  }
+
+  // ---------------- Initial Load ----------------
+  loadWelcomeDetails();
+
+});
+
 
 
 /*******************************************************
