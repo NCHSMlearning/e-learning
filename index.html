@@ -499,6 +499,20 @@
                 <h2 style="color: #4C1D95;">Learning Resources</h2>
                 <div id="resources-list">Loading resources...</div>
             </section>
+           <section id="resources" class="tab-content">
+    <h2 style="color: #4C1D95;">Learning Resources</h2>
+    <div style="display:flex; gap:20px;">
+        <!-- Resource List -->
+        <div id="resources-list" style="width:30%; max-height:600px; overflow-y:auto; border-right:1px solid #ddd; padding-right:10px;">
+            Loading resources...
+        </div>
+
+        <!-- Viewer Area -->
+        <div id="resource-viewer" style="width:70%; min-height:600px; border:1px solid #ddd; padding:10px;">
+            Select a resource to view.
+        </div>
+    </div>
+</section>
 
 
             <section id="messages" class="tab-content">
@@ -1603,24 +1617,26 @@ async function loadExams() {
 
 
 
-// Load learning resources for student dashboard
+// Load resources with tabbed viewer
 async function loadResources() {
     if (!currentUserProfile || !currentUserProfile.program || !currentUserProfile.intake_year) {
         await loadProfile(currentUserId); 
     }
 
     const resourceList = document.getElementById('resources-list');
-    if (!resourceList) return;
+    const viewer = document.getElementById('resource-viewer');
+    if (!resourceList || !viewer) return;
+
     resourceList.innerHTML = 'Loading resources...';
+    viewer.innerHTML = 'Select a resource to view.';
 
     try {
         const program = currentUserProfile?.program || currentUserProfile?.department;
-        let block = currentUserProfile?.block || '';
-        block = block.replace(/^Block_/, '');
+        let block = (currentUserProfile?.block || '').replace(/^Block_/, '');
         const intakeYear = currentUserProfile?.intake_year || currentUserProfile?.intake;
 
         if (!program || !block || !intakeYear) {
-            resourceList.innerHTML = '<p>Missing enrollment details (program, block, or intake year).</p>';
+            resourceList.innerHTML = '<p>Missing enrollment details.</p>';
             return;
         }
 
@@ -1633,46 +1649,55 @@ async function loadResources() {
             .order('created_at', { ascending: false });
 
         if (error) throw error;
-
         resourceList.innerHTML = '';
+
         if (!resources.length) {
-            resourceList.innerHTML = `<p>No learning resources found for ${program}, Block ${block}, Intake ${intakeYear}.</p>`;
-            if (document.getElementById('dashboard-new-resources')) 
-                document.getElementById('dashboard-new-resources').textContent = '0';
+            resourceList.innerHTML = `<p>No resources for ${program}, Block ${block}, Intake ${intakeYear}.</p>`;
             return;
         }
 
+        // Render list
         resources.forEach(res => {
-            const { data: { publicUrl } } = sb.storage
-                .from('resources')  // corrected bucket
-                .getPublicUrl(res.file_path);
+            const { data: { publicUrl } } = sb.storage.from('materials').getPublicUrl(res.file_path);
 
-            resourceList.innerHTML += `
-                <div class="resource-item">
-                    <div>
-                        <a href="${publicUrl}" target="_blank">${res.title}</a>
-                        <p style="margin:5px 0 0;font-size:0.9em;color:#6B7280;">
-                            ${res.program_type === 'General' ? 'General' : `${res.program_type}, Block ${res.block_term || res.block}, Intake ${res.intake_year || res.intake}`} 
-                            • Uploaded: ${new Date(res.created_at).toLocaleDateString()}
-                        </p>
-                    </div>
-                    <span style="font-size:1.5em;">📄</span>
-                </div>
+            const item = document.createElement('div');
+            item.className = 'resource-item';
+            item.style.cursor = 'pointer';
+            item.style.marginBottom = '10px';
+            item.innerHTML = `
+                <strong>${res.title}</strong>
+                <p style="font-size:0.8em;color:#666;">
+                    ${res.program_type === 'General' ? 'General' : `${res.program_type}, Block ${res.block_term || res.block}, Intake ${res.intake_year || res.intake}`}
+                </p>
             `;
+
+            // Click to view
+            item.addEventListener('click', () => {
+                let viewerHtml = '';
+                if (res.file_path.endsWith('.pdf')) {
+                    viewerHtml = `<iframe src="${publicUrl}" width="100%" height="600px"></iframe>`;
+                } else if (res.file_path.match(/\.(docx|doc|pptx|ppt|xlsx|xls)$/i)) {
+                    const encodedUrl = encodeURIComponent(publicUrl);
+                    const officeViewer = `https://view.officeapps.live.com/op/embed.aspx?src=${encodedUrl}`;
+                    viewerHtml = `<iframe src="${officeViewer}" width="100%" height="600px" frameborder="0"></iframe>`;
+                } else if (res.file_path.match(/\.(jpg|jpeg|png|gif)$/i)) {
+                    viewerHtml = `<img src="${publicUrl}" alt="${res.title}" style="max-width:100%"/>`;
+                } else {
+                    viewerHtml = `<a href="${publicUrl}" target="_blank">Download ${res.title}</a>`;
+                }
+
+                viewer.innerHTML = viewerHtml;
+            });
+
+            resourceList.appendChild(item);
         });
 
-        const oneWeekAgo = new Date();
-        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-        const newCount = resources.filter(r => new Date(r.created_at) > oneWeekAgo).length;
-
-        if (document.getElementById('dashboard-new-resources')) 
-            document.getElementById('dashboard-new-resources').textContent = newCount;
-
     } catch (error) {
-        console.error("❌ Failed to load resources:", error);
-        resourceList.innerHTML = `<p style="color:#EF4444;">Error loading resources: ${error.message}</p>`;
+        console.error('Error loading resources:', error);
+        resourceList.innerHTML = `<p style="color:red;">Failed to load resources: ${error.message}</p>`;
     }
 }
+
 
 
 // *************************************************************************
