@@ -595,35 +595,47 @@ function getRoleFields(role) {
 // ==========================================================
 // *** CORE LOGIC FUNCTIONS ***
 // ==========================================================
+
 function updateBlockTermOptions(programSelectId, blockTermSelectId) {
   const program = $(programSelectId)?.value;
   const blockTermSelect = $(blockTermSelectId);
   if (!blockTermSelect) return;
 
-  // Use the ID to check if it's the target block/term or the source block/term
-  const isTargetBlock = blockTermSelectId === 'promote_to_block';
+  // Clear previous options
+  blockTermSelect.innerHTML = '<option value="">-- Select Block/Term --</option>';
 
+  // Determine available options based on program
   let options = [];
   if (program === 'KRCHN') {
-    // KRCHN must only have Block A or Block B
+    // KRCHN uses Block naming
     options = [
-        { value: 'Block_A', text: 'Block A' }, 
-        { value: 'Block_B', text: 'Block B' } 
+      { value: 'A', text: 'Block A' },
+      { value: 'B', text: 'Block B' }
     ];
   } else if (program === 'TVET') {
+    // TVET uses Term naming
     options = [
       { value: 'T1', text: 'Term 1' },
       { value: 'T2', text: 'Term 2' },
       { value: 'T3', text: 'Term 3' }
     ];
   } else {
-    // Default options for other roles/general use
+    // Default fallback (for other programs or roles)
     options = [
-        { value: 'Block_A', text: 'Block A / Term 1' }, 
-        { value: 'Block_B', text: 'Block B / Term 2' },
-        { value: 'Block_C', text: 'Block C / Term 3' }
+      { value: 'A', text: 'Block A / Term 1' },
+      { value: 'B', text: 'Block B / Term 2' },
+      { value: 'C', text: 'Block C / Term 3' }
     ];
   }
+
+  // Add new options
+  options.forEach(opt => {
+    const option = document.createElement('option');
+    option.value = opt.value;
+    option.textContent = opt.text;
+    blockTermSelect.appendChild(option);
+  });
+}
 
   let html = `<option value="">-- Select Block/Term --</option>`;
   options.forEach(opt => html += `<option value="${opt.value}">${escapeHtml(opt.text)}</option>`);
