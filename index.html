@@ -1482,7 +1482,7 @@ async function loadCourses() {
 
 /**
  * Student Dashboard: loadExams()
- * Displays student's exams with scores and exam link (if available)
+ * Displays student's exams with score and exam link (if available)
  */
 async function loadExams() {
   const tableBody = document.getElementById('exams-table');
@@ -1490,7 +1490,7 @@ async function loadExams() {
 
   tableBody.innerHTML = '<tr><td colspan="8">Loading your exams and grades...</td></tr>';
 
-  // ✅ Ensure profile is loaded
+  // Ensure profile is loaded
   if (!currentUserProfile || !currentUserProfile.program || !currentUserProfile.intake_year) {
     await loadProfile(currentUserId);
   }
@@ -1506,7 +1506,7 @@ async function loadExams() {
       return;
     }
 
-    // ✅ Fetch exams joined with grades for the logged-in student
+    // Fetch exams joined with grades for the logged-in student
     const { data: exams, error } = await sb
       .from('exams_with_courses')
       .select(`
@@ -1517,7 +1517,7 @@ async function loadExams() {
         block_term,
         program_type,
         exam_link,
-        exam_grades!inner(cat_score, exam_score, total_score, student_id)
+        exam_grades!left(score, student_id)
       `)
       .or(`program_type.eq.${program},program_type.eq.General`)
       .eq('block_term', block)
@@ -1540,7 +1540,7 @@ async function loadExams() {
       return;
     }
 
-    // ✅ Render each exam row
+    // Render each exam row
     cachedExams.forEach(exam => {
       const dateStr = exam.exam_date
         ? new Date(exam.exam_date).toLocaleDateString('en-US', {
@@ -1551,9 +1551,7 @@ async function loadExams() {
           })
         : 'N/A';
 
-      const catScore = exam.exam_grades?.[0]?.cat_score ?? '-';
-      const examScore = exam.exam_grades?.[0]?.exam_score ?? '-';
-      const totalScore = exam.exam_grades?.[0]?.total_score ?? '-';
+      const score = exam.exam_grades?.[0]?.score ?? '-';
 
       const actionBtn = exam.exam_link
         ? `<a href="${exam.exam_link}" target="_blank" class="btn btn-sm btn-primary">Start Exam</a>`
@@ -1565,9 +1563,7 @@ async function loadExams() {
           <td>${escapeHtml(exam.block_term || 'N/A')}</td>
           <td>${dateStr}</td>
           <td>${escapeHtml(exam.status || 'Scheduled')}</td>
-          <td>${catScore}</td>
-          <td>${examScore}</td>
-          <td>${totalScore}</td>
+          <td>${score}</td>
           <td>${actionBtn}</td>
         </tr>
       `;
@@ -1583,7 +1579,6 @@ async function loadExams() {
     loadDashboardMetrics(currentUserId);
   }
 }
-
 
 
 // Load learning resources (remains correct)
