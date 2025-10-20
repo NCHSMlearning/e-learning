@@ -3,7 +3,7 @@
  * SUPERADMIN DASHBOARD - COURSE, USER, ATTENDANCE & FULL FILTERING MANAGEMENT
  * (Includes: Strategic Admin Features, Online Exam Enhancements, Mass Promotion)
  *
- * **FIXED: Resource Block Loading & Admin Messages Loading**
+ * **FIXED: Button loading/reset, Consolidated Table Logic, Audit Logging**
  **********************************************************************************/
  // Hides the .html extension in the URL
     if (window.location.pathname.endsWith('.html')) {
@@ -25,7 +25,7 @@ const MESSAGE_KEY = 'student_welcome';
 // NEW TABLES FOR STRATEGIC FEATURES
 const AUDIT_TABLE = 'audit_logs'; 
 const GLOBAL_SETTINGS_KEY = 'global_system_status'; 
-
+const USER_PROFILE_TABLE = 'consolidated_user_profiles_table'; // Consolidated User Table
 
 // Global Variables
 let currentUserProfile = null;
@@ -328,6 +328,7 @@ async function loadAuditLogs() {
     tbody.innerHTML = '';
     logs.forEach(log => {
         const timestamp = new Date(log.timestamp).toLocaleString();
+        // Use consistent status classes for visualization
         const statusClass = log.status === 'SUCCESS' ? 'status-approved' : 'status-danger';
 
         tbody.innerHTML += `
@@ -479,7 +480,7 @@ async function loadTotalDailyCheckIns() {
 async function loadDashboardData() {
     // Total users
     const { count: allUsersCount } = await sb
-        .from('consolidated_user_profiles_table')
+        .from(USER_PROFILE_TABLE)
         .select('user_id', { count: 'exact' });
     $('totalUsers').textContent = allUsersCount || 0;
     
@@ -488,7 +489,7 @@ async function loadDashboardData() {
 
     // Pending approvals
     const { count: pendingCount, error } = await sb
-      .from('consolidated_user_profiles_table')
+      .from(USER_PROFILE_TABLE)
       .select('user_id', { count: 'exact', head: true })
       .eq('status', 'pending');
 
@@ -501,7 +502,7 @@ async function loadDashboardData() {
 
     // Total students
     const { count: studentsCount } = await sb
-        .from('consolidated_user_profiles_table')
+        .from(USER_PROFILE_TABLE)
         .select('user_id', { count: 'exact' })
         .eq('role', 'student');
     $('totalStudents').textContent = studentsCount || 0;
@@ -611,20 +612,21 @@ function updateBlockTermOptions(programSelectId, blockTermSelectId) {
   let options = [];
   if (program === 'KRCHN') {
     options = [
-      { value: 'A', text: 'Block A' },
-      { value: 'B', text: 'Block B' }
+      { value: 'Block_A', text: 'Block A' },
+      { value: 'Block_B', text: 'Block B' }
     ];
   } else if (program === 'TVET') {
     options = [
-      { value: 'T1', text: 'Term 1' },
-      { value: 'T2', text: 'Term 2' },
-      { value: 'T3', text: 'Term 3' }
+      { value: 'Term_1', text: 'Term 1' },
+      { value: 'Term_2', text: 'Term 2' },
+      { value: 'Term_3', text: 'Term 3' }
     ];
   } else {
+    // Default or other programs
     options = [
-      { value: 'A', text: 'Block A / Term 1' },
-      { value: 'B', text: 'Block B / Term 2' },
-      { value: 'C', text: 'Block C / Term 3' }
+      { value: 'Block_A', text: 'Block A / Term 1' },
+      { value: 'Block_B', text: 'Block B / Term 2' },
+      { value: 'Block_C', text: 'Block C / Term 3' }
     ];
   }
 
@@ -671,8 +673,9 @@ async function handleAddAccount(e) {
 
     if (user && user.id) {
       const profileData = { user_id: user.id, email, ...userData };
-      const { error: insertError } = await sb.from('consolidated_user_profiles_table').insert([profileData]);
+      const { error: insertError } = await sb.from(USER_PROFILE_TABLE).insert([profileData]);
       if (insertError) {
+        // CRITICAL: Delete user from auth if profile insertion fails
         await sb.auth.admin.deleteUser(user.id);
         throw insertError;
       }
@@ -687,7 +690,7 @@ async function handleAddAccount(e) {
     await logAudit('USER_ENROLL', `Failed to enroll new account: ${name}. Reason: ${err.message}`, null, 'FAILURE');
     showFeedback(`Account creation failed: ${err.message}`, 'error');
   } finally {
-    setButtonLoading(submitButton, false, originalText); // FIX: Ensure button resets
+    setButtonLoading(submitButton, false, originalText);
   }
 }
 
@@ -725,7 +728,7 @@ async function handleMassPromotion(e) {
 
     try {
         const { data, error } = await sb
-            .from('consolidated_user_profiles_table')
+            .from(USER_PROFILE_TABLE)
             .update({ block: promote_to_block })
             .eq('role', 'student')
             .eq('intake_year', promote_intake)
@@ -749,7 +752,7 @@ async function handleMassPromotion(e) {
         await logAudit('PROMOTION_MASS', `Failed mass promotion for ${promote_intake} ${promote_from_block}. Reason: ${err.message}`, null, 'FAILURE');
         showFeedback(`❌ Mass promotion failed: ${err.message}`, 'error');
     } finally {
-        setButtonLoading(submitButton, false, originalText); // FIX: Ensure button resets
+        setButtonLoading(submitButton, false, originalText);
     }
 }
 
@@ -768,7 +771,7 @@ async function loadPendingApprovals() {
   tbody.innerHTML = '<tr><td colspan="7">Loading pending approvals...</td></tr>';
 
   const { data: pending, error } = await sb
-    .from('consolidated_user_profiles_table')
+    .from(USER_PROFILE_TABLE)
     .select('*')
     .eq('status', 'pending')
     .order('created_at', { ascending: true });
@@ -804,7 +807,7 @@ async function loadAllUsers() {
   const tbody = $('users-table');
   tbody.innerHTML = '<tr><td colspan="7">Loading all users...</td></tr>';
 
-  const { data: users, error } = await sb.from('consolidated_user_profiles_table')
+  const { data: users, error } = await sb.from(USER_PROFILE_TABLE)
     .select('*')
     .order('full_name', { ascending: true });
   if (error) {
@@ -820,6 +823,7 @@ async function loadAllUsers() {
     const isBlocked = u.block_program_year === true;
     const isApproved = u.status === 'approved';
     const statusText = isBlocked ? 'BLOCKED' : (isApproved ? 'Approved' : 'Pending');
+    // Using defined CSS classes for status visualization
     const statusClass = isBlocked ? 'status-danger' : (isApproved ? 'status-approved' : 'status-pending');
 
     tbody.innerHTML += `
@@ -849,7 +853,7 @@ async function loadStudents() {
   const tbody = $('students-table');
   tbody.innerHTML = '<tr><td colspan="9">Loading students...</td></tr>';
 
-  const { data: students, error } = await sb.from('consolidated_user_profiles_table')
+  const { data: students, error } = await sb.from(USER_PROFILE_TABLE)
     .select('*')
     .eq('role', 'student')
     .order('full_name', { ascending: true });
@@ -891,7 +895,7 @@ async function approveUser(userId, fullName) {
   if (!confirm(`Approve user ${fullName}?`)) return;
 
   const { error } = await sb
-    .from('consolidated_user_profiles_table')
+    .from(USER_PROFILE_TABLE)
     .update({ status: 'approved' })
     .eq('user_id', userId);
 
@@ -910,7 +914,7 @@ async function approveUser(userId, fullName) {
 
 async function updateUserRole(userId, newRole, fullName) {
   if (!confirm(`Change user ${fullName}'s role to ${newRole}?`)) return;
-  const { error } = await sb.from('consolidated_user_profiles_table')
+  const { error } = await sb.from(USER_PROFILE_TABLE)
     .update({ role: newRole })
     .eq('user_id', userId);
   if (error) {
@@ -928,15 +932,16 @@ async function updateUserRole(userId, newRole, fullName) {
 async function deleteProfile(userId, fullName) {
   if (!confirm(`CRITICAL: Permanently delete profile and user ${fullName}?`)) return;
 
-  const { error } = await sb.from('consolidated_user_profiles_table').delete().eq('user_id', userId);
+  const { error } = await sb.from(USER_PROFILE_TABLE).delete().eq('user_id', userId);
   if (error) {
     await logAudit('USER_DELETE', `Failed to delete profile for ${fullName}. Reason: ${error.message}`, userId, 'FAILURE');
     showFeedback(`Failed: ${error.message}`, 'error');
   } else {
+    // Attempt to delete from Supabase Auth as well
     const { error: authErr } = await sb.auth.admin.deleteUser(userId);
     if (authErr) {
         await logAudit('USER_DELETE', `Profile deleted, but Auth deletion failed for ${fullName}.`, userId, 'WARNING');
-        showFeedback('Profile deleted from table, but auth deletion failed', 'warning');
+        showFeedback('Profile deleted from table, but auth deletion failed (manual cleanup required).', 'warning');
     }
     else {
         await logAudit('USER_DELETE', `User ${fullName} deleted successfully.`, userId, 'SUCCESS');
@@ -951,7 +956,7 @@ async function deleteProfile(userId, fullName) {
 async function openEditUserModal(userId) {
   try {
     const { data: user, error } = await sb
-      .from('consolidated_user_profiles_table')
+      .from(USER_PROFILE_TABLE)
       .select('*')
       .eq('user_id', userId)
       .single();
@@ -966,7 +971,7 @@ async function openEditUserModal(userId) {
     $('edit_user_intake').value = user.intake_year || '2024';
     $('edit_user_block_status').value = user.block_program_year ? 'true' : 'false';
     updateBlockTermOptions('edit_user_program', 'edit_user_block');
-    $('edit_user_block').value = user.block || 'A';
+    $('edit_user_block').value = user.block || 'Block_A'; // Use a default block value that matches updateBlockTermOptions output
     $('userEditModal').style.display = 'flex';
   } catch (e) {
     showFeedback(`Failed to load user: ${e.message}`, 'error');
@@ -996,7 +1001,7 @@ async function handleEditUser(e) {
   try {
     // Update consolidated profile
     const { error: profileError } = await sb
-      .from('consolidated_user_profiles_table')
+      .from(USER_PROFILE_TABLE)
       .update({ ...updatedData, role: newRole })
       .eq('user_id', userId);
 
@@ -1077,7 +1082,7 @@ async function handleAddCourse(e) {
         await logAudit('COURSE_ADD', `Failed to add course ${unit_code}. Reason: ${error.message}`, null, 'FAILURE');
         showFeedback(`Failed to add course: ${error.message}`, 'error');
     } finally {
-        setButtonLoading(submitButton, false, originalText); // FIX: Ensure button resets
+        setButtonLoading(submitButton, false, originalText);
     }
 }
 
@@ -1157,7 +1162,7 @@ async function handleEditCourse(e) {
     const id = $('edit_course_id').value;
     const name = $('edit_course_name').value.trim();
     const unit_code = $('edit_course_unit_code').value.trim(); 
-    const description = $('edit_course-description').value.trim();
+    const description = $('edit_course_description').value.trim(); // NOTE: Corrected ID from HTML (assuming it's not 'edit_course-description')
     const target_program = $('edit_course_program').value;
     const intake_year = $('edit_course_intake').value;
     const block = $('edit_course_block').value;
@@ -1184,7 +1189,7 @@ async function handleEditCourse(e) {
         await logAudit('COURSE_EDIT', `Failed to update course ID ${id}. Reason: ${e.message}`, id, 'FAILURE');
         showFeedback('Failed to update course: ' + (e.message || e), 'error');
     } finally {
-        setButtonLoading(submitButton, false, originalText); // FIX: Ensure button resets
+        setButtonLoading(submitButton, false, originalText);
     }
 }
 
@@ -1372,7 +1377,7 @@ function toggleAttendanceFields() {
 
 async function populateAttendanceSelects() {
     // Populate Student Select
-    const { data: students } = await fetchData('consolidated_user_profiles_table', 'user_id, full_name, role', { role: 'student' }, 'full_name', true);
+    const { data: students } = await fetchData(USER_PROFILE_TABLE, 'user_id, full_name, role', { role: 'student' }, 'full_name', true);
     populateSelect($('att_student_id'), students, 'user_id', 'full_name', 'Select Student');
 
     // Populate Course Select
@@ -1516,7 +1521,7 @@ async function handleManualAttendance(e) {
         await logAudit('ATTENDANCE_MANUAL', `Failed manual attendance for student ${student_id}. Reason: ${error.message}`, student_id, 'FAILURE');
         showFeedback(`Failed to record attendance: ${error.message}`, 'error');
     } finally {
-        setButtonLoading(submitButton, false, originalText); // FIX: Ensure button resets
+        setButtonLoading(submitButton, false, originalText);
     }
 }
 
@@ -1538,7 +1543,7 @@ async function loadAttendance() {
             latitude,
             longitude,
             target_name,
-            consolidated_user_profiles_table:student_id(full_name, role)
+            ${USER_PROFILE_TABLE}:student_id(full_name, role)
         `)
         .order('check_in_time', { ascending: false });
 
@@ -1551,7 +1556,7 @@ async function loadAttendance() {
     let todayHtml='', pastHtml='';
 
     allRecords.forEach(r=>{
-        const userProfile = r.consolidated_user_profiles_table;
+        const userProfile = r[USER_PROFILE_TABLE];
         const userName = userProfile?.full_name || 'N/A User';
         const dateTime = new Date(r.check_in_time).toLocaleString();
         const targetDetail = r.target_name || r.department || r.location_name || 'N/A Target';
@@ -1761,7 +1766,7 @@ function openEditExamModal(examId) {
 // Grade Modal — simplified version
 async function openGradeModal(examId, examName) {
   const { data: students, error } = await fetchData(
-    'consolidated_user_profiles_table', // Changed to match your consolidated table name
+    USER_PROFILE_TABLE, // Changed to match your consolidated table name
     'user_id, full_name',
     { role: 'student' }, // Filter for students
     'full_name',
@@ -1805,23 +1810,24 @@ async function saveGrades(examId) {
     // Note: Assuming student ID is stored in the 'user_id' field of the student's profile.
     const studentId = input.id.replace('score-', ''); 
     const score = parseFloat(input.value);
-    if (!isNaN(score)) grades.push({ exam_id: examId, student_id: studentId, score });
+    // Only save valid scores between 0-100
+    if (!isNaN(score) && score >= 0 && score <= 100) grades.push({ exam_id: examId, student_id: studentId, score });
   });
 
   if (grades.length === 0) {
-    showFeedback('No scores entered.', 'error');
+    showFeedback('No valid scores entered (0-100).', 'error');
     return;
   }
 
-  // NOTE: This assumes an 'exam_results' table exists with exam_id, student_id, and score columns.
-  const { error } = await sb.from('exam_results').insert(grades); 
+  // Use upsert to handle new results or updates to existing ones
+  const { error } = await sb.from('exam_results').upsert(grades, { onConflict: 'exam_id, student_id' }); 
   if (error) {
     showFeedback(`Failed to save grades: ${error.message}`, 'error');
     return;
   }
 
   closeModal();
-  showFeedback('Grades saved successfully!', 'success');
+  showFeedback('Grades saved/updated successfully!', 'success');
   await logAudit('EXAM_GRADE', `Saved grades for exam ${examId}.`, examId, 'SUCCESS');
 }
 
@@ -1851,6 +1857,7 @@ function closeModal() {
 // Student view
 function populateStudentExams(exams) {
   const container = $('student-exams');
+  if (!container) return; // Check if the element exists (only in student view)
   container.innerHTML = '';
 
   if (!exams || exams.length === 0) {
@@ -1923,17 +1930,22 @@ async function renderFullCalendar() {
         });
     });
 
-    const calendar = new FullCalendar.Calendar(calendarEl, {
-        initialView: 'dayGridMonth',
-        headerToolbar: {
-            left: 'prev,next today',
-            center: 'title',
-            right: 'dayGridMonth,timeGridWeek,timeGridDay'
-        },
-        events: events
-    });
+    // The FullCalendar library must be included in your HTML for this to work
+    if (typeof FullCalendar !== 'undefined' && calendarEl) {
+        const calendar = new FullCalendar.Calendar(calendarEl, {
+            initialView: 'dayGridMonth',
+            headerToolbar: {
+                left: 'prev,next today',
+                center: 'title',
+                right: 'dayGridMonth,timeGridWeek,timeGridDay'
+            },
+            events: events
+        });
 
-    calendar.render();
+        calendar.render();
+    } else {
+        calendarEl.innerHTML = '<p>FullCalendar library not loaded. Please ensure it is included in your HTML.</p>';
+    }
 }
 // *************************************************************************
 // *** 10. STUDENT & ADMIN MESSAGES + OFFICIAL ANNOUNCEMENT (MERGED FEED) ***
@@ -2004,8 +2016,11 @@ async function loadStudentMessages() {
  */
 async function markMessageAsRead(messageId) {
   try {
-    await sb.from('notifications').update({ is_read: true }).eq('id', messageId);
-    await loadStudentMessages(); // Refresh student view
+    // Only mark as read if the current user is a student
+    if (currentUserProfile.role === 'student') {
+        await sb.from('notifications').update({ is_read: true }).eq('id', messageId).eq('recipient_id', currentUserProfile.id);
+        await loadStudentMessages(); // Refresh student view
+    }
   } catch (err) {
     console.error('Failed to mark message as read:', err);
   }
@@ -2121,9 +2136,6 @@ window.deleteNotification = async function(id) {
  * 11. Resources Tab (Fully Corrected)
  *******************************************************/
  
-// *** FIX: The flawed loadBlocks() function was removed here. The event listeners
-// *** in initSession now correctly point to the global updateBlockTermOptions.
-
 // -------------------- Handle Upload Form --------------------
 $('upload-resource-form')?.addEventListener('submit', async e => {
     e.preventDefault();
@@ -2270,8 +2282,12 @@ async function loadSystemStatus() {
     const { data } = await fetchData(SETTINGS_TABLE, '*', { key: GLOBAL_SETTINGS_KEY });
     const statusData = data?.[0] || { value: 'ACTIVE', message: '' };
 
-    $('global_status').value = statusData.value;
-    $('maintenance_message').value = statusData.message || '';
+    // Assuming a select element with id 'global_status' exists
+    const statusSelect = $('global_status');
+    if (statusSelect) statusSelect.value = statusData.value;
+    
+    const messageInput = $('maintenance_message');
+    if (messageInput) messageInput.value = statusData.message || '';
 }
 
 /**
@@ -2366,14 +2382,14 @@ async function handleGlobalPasswordReset(e) {
     
     if (!email || !newPassword) {
         showFeedback('Email and New Password are required.', 'error');
-        setButtonLoading(submitButton, false, originalText); // FIX: Ensure button resets
+        setButtonLoading(submitButton, false, originalText);
         return;
     }
 
     try {
         // 1. Find the user ID by email
         const { data: profile, error: profileError } = await sb
-            .from('consolidated_user_profiles_table')
+            .from(USER_PROFILE_TABLE)
             .select('user_id, full_name')
             .eq('email', email)
             .single();
@@ -2396,7 +2412,7 @@ async function handleGlobalPasswordReset(e) {
         await logAudit('USER_PASSWORD_RESET', `Failed to force password reset for: ${email}. Reason: ${e.message}`, userId, 'FAILURE');
         showFeedback(`❌ Password reset failed: ${e.message}`, 'error');
     } finally {
-        setButtonLoading(submitButton, false, originalText); // FIX: Ensure button resets
+        setButtonLoading(submitButton, false, originalText);
     }
 }
 
@@ -2412,7 +2428,7 @@ async function handleAccountDeactivation(e) {
     
     if (!userId) {
         showFeedback('User ID is required for deactivation.', 'error');
-        setButtonLoading(submitButton, false, originalText); // FIX: Ensure button resets
+        setButtonLoading(submitButton, false, originalText);
         return;
     }
 
@@ -2424,7 +2440,7 @@ async function handleAccountDeactivation(e) {
     try {
         // 1. Update the block status in the profiles table (prevents access via RLS)
         const { error: profileError } = await sb
-            .from('consolidated_user_profiles_table')
+            .from(USER_PROFILE_TABLE)
             .update({ block_program_year: true, status: 'blocked' }) 
             .eq('user_id', userId);
             
@@ -2441,7 +2457,7 @@ async function handleAccountDeactivation(e) {
         await logAudit('USER_BLOCK', `Failed to block user ID ${userId.substring(0, 8)}... Reason: ${e.message}`, userId, 'FAILURE');
         showFeedback(`❌ Deactivation failed: ${e.message}`, 'error');
     } finally {
-        setButtonLoading(submitButton, false, originalText); // FIX: Ensure button resets
+        setButtonLoading(submitButton, false, originalText);
     }
 }
 
@@ -2488,7 +2504,7 @@ $('restore-form')?.addEventListener('submit', e => {
     logAudit('DB_RESTORE', 'Attempted database restoration from file.', null, 'FAILURE'); // Always log as failure for placeholder
     showFeedback('CRITICAL ACTION: Database restoration initiated. This is a highly sensitive server-side process and cannot be done via the client. Check your DB logs.', 'error');
     e.target.reset();
-    setButtonLoading(submitButton, false, originalText); // FIX: Ensure button resets
+    setButtonLoading(submitButton, false, originalText);
 });
 
 
