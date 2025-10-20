@@ -1903,129 +1903,124 @@ async function renderFullCalendar() {
     calendar.render();
 }
 // *************************************************************************
-// *** 10. ADMIN MESSAGES & OFFICIAL ANNOUNCEMENT ***
+// *** 8. STUDENT MESSAGES & WELCOME ANNOUNCEMENT ***
 // *************************************************************************
 
-// --------------- Send Personal/System Message ---------------
-document.getElementById('send-message-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const target_program = document.getElementById('msg_program').value;
-    const message_content = document.getElementById('msg_body').value.trim();
-    const subject = `System Message to ${target_program}`;
-    const message_type = 'system';
+/**
+ * Load student header, welcome message, and announcements.
+ */
+async function loadWelcomeDetails() {
+    const studentName = currentUserProfile?.full_name || 'Student';
+    const welcomeHeader = document.getElementById('welcome-header');
+    if (welcomeHeader) welcomeHeader.textContent = `Hello, ${studentName}!`;
 
-    if (!message_content) return alert('Message content cannot be empty.');
+    // Load student welcome message
+    await loadStudentMessage('student_welcome', 'student-welcome-message');
+
+    // Load official announcement
+    await loadStudentMessage('welcome_message', 'student-announcement');
+}
+
+/**
+ * Load a message safely from app_settings and display it in a DOM element
+ * @param {string} key - The key in app_settings
+ * @param {string} elementId - DOM element id where message will be displayed
+ */
+async function loadStudentMessage(key, elementId) {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+
+    element.textContent = 'Loading...';
 
     try {
-        await sb.from('notifications').insert({
-            target_program: target_program === 'ALL' ? null : target_program,
-            title: subject,
-            message: message_content,
-            message_type: message_type,
-            sender_id: currentUserProfile.id,
-        });
+        const { data, error } = await sb
+            .from('app_settings')
+            .select('value')
+            .eq('key', key)
+            .maybeSingle();
 
-        alert('Message sent successfully!');
-        e.target.reset();
-        loadAdminMessages();
+        if (error) throw error;
+
+        if (data && data.value) {
+            element.innerHTML = data.value; // render HTML safely
+        } else {
+            element.textContent = 'No message available.';
+        }
     } catch (err) {
-        console.error(err);
-        alert('Failed to send message.');
+        console.error(`Failed to load ${key}:`, err);
+        element.textContent = 'Failed to load message. Please refresh.';
     }
-});
+}
 
-// --------------- Official Announcement ---------------
-document.getElementById('save-announcement').addEventListener('click', async () => {
-    const body = document.getElementById('announcement-body').value.trim();
-    const feedback = document.getElementById('announcement-feedback');
-    if (!body) {
-        feedback.textContent = 'Announcement cannot be empty.';
-        feedback.style.color = 'red';
-        return;
+/**
+ * Load messages sent to the student from notifications table
+ * Displays personal messages and messages targeted to their program
+ */
+async function loadStudentMessages() {
+    if (!currentUserProfile || (!currentUserProfile.program && !currentUserProfile.department)) {
+        await loadProfile(currentUserId); // Ensure profile is loaded
     }
+
+    const program = currentUserProfile?.program || currentUserProfile?.department;
+    const messageContainer = document.getElementById('messages-list');
+    if (!messageContainer) return;
+
+    messageContainer.innerHTML = 'Loading student messages...';
 
     try {
-        await sb.from('app_settings')
-            .upsert({ key: 'welcome_message', value: body }, { onConflict: 'key' });
-
-        feedback.textContent = 'Official announcement saved successfully!';
-        feedback.style.color = 'green';
-
-        // Refresh student banner if needed
-        await loadStudentWelcomeMessage('welcome_message', 'student-announcement');
-    } catch (err) {
-        console.error(err);
-        feedback.textContent = 'Failed to save announcement.';
-        feedback.style.color = 'red';
-    }
-});
-
-// --------------- Load Admin Messages ---------------
-async function loadAdminMessages() {
-    const tbody = document.getElementById('messages-table'); // use tbody directly
-    tbody.innerHTML = '<tr><td colspan="4">Loading messages...</td></tr>';
-
-    try {
-        const { data: messages, error } = await sb.from('notifications')
-            .select('*, sender:sender_id(full_name)')
+        const { data: messages, error } = await sb
+            .from('notifications')
+            .select('*')
+            .or(`recipient_id.eq.${currentUserId},target_program.eq.${program}`)
             .order('created_at', { ascending: false });
 
         if (error) throw error;
 
-        tbody.innerHTML = '';
+        messageContainer.innerHTML = '';
         if (!messages || messages.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4">No messages found.</td></tr>';
+            messageContainer.innerHTML = '<p>No new personal or program announcements.</p>';
             return;
         }
 
-        messages.forEach(m => {
-            const recipient = m.target_program || 'ALL Students';
-            const sendDate = new Date(m.created_at).toLocaleString();
+        messages.forEach(msg => {
+            const isRead = msg.is_read ? 'read' : 'unread';
+            const messageDate = new Date(msg.created_at).toLocaleDateString();
 
-            tbody.innerHTML += `<tr>
-                <td>${escapeHtml(recipient)}</td>
-                <td>${escapeHtml(m.message.substring(0, 80) + (m.message.length > 80 ? '...' : ''))}</td>
-                <td>${sendDate}</td>
-                <td>
-                    <button onclick="editNotification('${m.id}')">Edit</button>
-                    <button onclick="deleteNotification('${m.id}')" style="color:red;">Delete</button>
-                </td>
-            </tr>`;
+            messageContainer.innerHTML += `
+                <div class="message-item ${isRead}" style="border-left: 4px solid ${msg.is_read ? '#10B981' : '#F59E0B'}; padding: 15px; margin-bottom: 10px; background-color: #fff; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                    <div class="message-header" style="display:flex; justify-content:space-between; font-weight:bold; color:#4C1D95;">
+                        <span class="message-title">${msg.subject || 'Message'}</span>
+                        <span class="message-date" style="font-weight:normal; color:#6B7280;">${messageDate}</span>
+                    </div>
+                    <div class="message-body" style="margin-top:5px; color:#374151;">${msg.message.substring(0, 150)}${msg.message.length > 150 ? '...' : ''}</div>
+                    <span class="message-status" style="font-size:0.8em; color:${msg.is_read ? '#10B981' : '#F59E0B'}; margin-top:5px; display:inline-block;">Status: ${isRead.toUpperCase()}</span>
+                </div>
+            `;
         });
     } catch (err) {
-        console.error(err);
-        tbody.innerHTML = `<tr><td colspan="4">Error loading messages: ${err.message}</td></tr>`;
+        console.error('Failed to load student messages:', err);
+        messageContainer.innerHTML = '<p style="color:#EF4444;">Error loading messages.</p>';
     }
 }
 
-// --------------- Edit / Delete Notifications ---------------
-function editNotification(id) {
-    // Fetch notification and populate form/modal
-    console.log('Edit notification:', id);
-}
-
-async function deleteNotification(id) {
-    if (!confirm('Are you sure you want to delete this message?')) return;
-
+/**
+ * Mark a student message as read
+ * @param {string} messageId
+ */
+async function markMessageAsRead(messageId) {
     try {
-        await sb.from('notifications').delete().eq('id', id);
-        alert('Message deleted successfully!');
-        loadAdminMessages();
+        await sb.from('notifications')
+            .update({ is_read: true })
+            .eq('id', messageId);
+        await loadStudentMessages();
     } catch (err) {
-        console.error(err);
-        alert('Failed to delete message.');
+        console.error('Failed to mark message as read:', err);
     }
-}
-
-// --------------- Escape HTML for table display ---------------
-function escapeHtml(text) {
-    const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
-    return text.replace(/[&<>"']/g, m => map[m]);
 }
 
 // Initial load
-loadAdminMessages();
-
+loadWelcomeDetails();
+loadStudentMessages();
 
 /*******************************************************
  * 11. Resources Tab (Fully Corrected)
