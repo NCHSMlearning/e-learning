@@ -1761,9 +1761,9 @@ function openEditExamModal(examId) {
 // Grade Modal — simplified version
 async function openGradeModal(examId, examName) {
   const { data: students, error } = await fetchData(
-    'students',
-    'id, full_name',
-    {},
+    'consolidated_user_profiles_table', // Changed to match your consolidated table name
+    'user_id, full_name',
+    { role: 'student' }, // Filter for students
     'full_name',
     true
   );
@@ -1773,7 +1773,7 @@ async function openGradeModal(examId, examName) {
   }
 
   const modalHtml = `
-    <div class="grade-modal">
+    <div class="modal-content">
       <h3>Grade: ${escapeHtml(examName)}</h3>
       <table class="grade-table">
         <thead><tr><th>Student</th><th>Score (%)</th></tr></thead>
@@ -1782,7 +1782,7 @@ async function openGradeModal(examId, examName) {
             .map(
               s => `<tr>
                       <td>${escapeHtml(s.full_name)}</td>
-                      <td><input type="number" min="0" max="100" id="score-${s.id}" placeholder="0-100"></td>
+                      <td><input type="number" min="0" max="100" id="score-${s.user_id}" placeholder="0-100"></td>
                     </tr>`
             )
             .join('')}
@@ -1802,7 +1802,8 @@ async function saveGrades(examId) {
 
   rows.forEach(row => {
     const input = row.querySelector('input');
-    const studentId = input.id.replace('score-', '');
+    // Note: Assuming student ID is stored in the 'user_id' field of the student's profile.
+    const studentId = input.id.replace('score-', ''); 
     const score = parseFloat(input.value);
     if (!isNaN(score)) grades.push({ exam_id: examId, student_id: studentId, score });
   });
@@ -1812,7 +1813,8 @@ async function saveGrades(examId) {
     return;
   }
 
-  const { error } = await sb.from('exam_results').insert(grades);
+  // NOTE: This assumes an 'exam_results' table exists with exam_id, student_id, and score columns.
+  const { error } = await sb.from('exam_results').insert(grades); 
   if (error) {
     showFeedback(`Failed to save grades: ${error.message}`, 'error');
     return;
@@ -1821,6 +1823,29 @@ async function saveGrades(examId) {
   closeModal();
   showFeedback('Grades saved successfully!', 'success');
   await logAudit('EXAM_GRADE', `Saved grades for exam ${examId}.`, examId, 'SUCCESS');
+}
+
+// Generic Modal Function - Required for openGradeModal
+function showModal(contentHtml) {
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.id = 'tempModal'; // Temporary ID for easy cleanup
+    modal.innerHTML = `
+        <div class="modal-content">
+            <span class="close" onclick="closeModal()">&times;</span>
+            ${contentHtml}
+        </div>
+    `;
+    document.body.appendChild(modal);
+    modal.style.display = 'flex';
+}
+
+function closeModal() {
+    const modal = $('tempModal');
+    if (modal) {
+        modal.style.display = 'none';
+        modal.remove();
+    }
 }
 
 // Student view
@@ -2037,7 +2062,7 @@ async function handleSendMessage(e) {
 async function loadAdminMessages() {
     const tbody = document.getElementById('messages-table');
     if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="4">Loading messages...</td></tr>'; // <-- This should now be temporary
+    tbody.innerHTML = '<tr><td colspan="5">Loading messages...</td></tr>'; // <-- This should now be temporary and replaced quickly
 
     try {
       const { data: messages, error } = await sb.from('notifications')
@@ -2048,7 +2073,7 @@ async function loadAdminMessages() {
 
       tbody.innerHTML = '';
       if (!messages || messages.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4">No messages found.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5">No messages found.</td></tr>';
         return;
       }
 
@@ -2071,7 +2096,7 @@ async function loadAdminMessages() {
       });
     } catch (err) {
       console.error(err);
-      tbody.innerHTML = `<tr><td colspan="4">Error loading messages: ${err.message}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="5">Error loading messages: ${err.message}</td></tr>`;
     }
 }
 
@@ -2096,7 +2121,7 @@ window.deleteNotification = async function(id) {
  * 11. Resources Tab (Fully Corrected)
  *******************************************************/
  
-// *** FIX: Removed the flawed loadBlocks() function here. The event listeners
+// *** FIX: The flawed loadBlocks() function was removed here. The event listeners
 // *** in initSession now correctly point to the global updateBlockTermOptions.
 
 // -------------------- Handle Upload Form --------------------
