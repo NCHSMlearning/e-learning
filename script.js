@@ -548,32 +548,36 @@ async function handleSaveWelcomeMessage(e) {
         return;
     }
 
-    const { data: existing } = await fetchData(SETTINGS_TABLE, 'id', { key: MESSAGE_KEY });
-    let updateOrInsertError = null;
+    try {
+        const { data: existing } = await fetchData(SETTINGS_TABLE, 'id', { key: MESSAGE_KEY });
+        let updateOrInsertError = null;
 
-    if (existing && existing.length > 0) {
-        const { error } = await sb
-            .from(SETTINGS_TABLE)
-            .update({ value, updated_at: new Date().toISOString() })
-            .eq('id', existing[0].id);
-        updateOrInsertError = error;
-    } else {
-        const { error } = await sb
-            .from(SETTINGS_TABLE)
-            .insert({ key: MESSAGE_KEY, value });
-        updateOrInsertError = error;
-    }
+        if (existing && existing.length > 0) {
+            const { error } = await sb
+                .from(SETTINGS_TABLE)
+                .update({ value, updated_at: new Date().toISOString() })
+                .eq('id', existing[0].id);
+            updateOrInsertError = error;
+        } else {
+            const { error } = await sb
+                .from(SETTINGS_TABLE)
+                .insert({ key: MESSAGE_KEY, value });
+            updateOrInsertError = error;
+        }
 
-    if (updateOrInsertError) {
+        if (updateOrInsertError) {
+            throw updateOrInsertError;
+        } else {
+            await logAudit('WELCOME_MESSAGE_UPDATE', `Successfully updated the student welcome message.`, null, 'SUCCESS');
+            showFeedback('Welcome message saved successfully!', 'success');
+            loadWelcomeMessageForEdit(); // Refresh the editor and preview
+        }
+    } catch (err) {
         await logAudit('WELCOME_MESSAGE_UPDATE', `Failed to update welcome message.`, null, 'FAILURE');
-        showFeedback(`Failed to save message: ${updateOrInsertError.message}`, 'error');
-    } else {
-        await logAudit('WELCOME_MESSAGE_UPDATE', `Successfully updated the student welcome message.`, null, 'SUCCESS');
-        showFeedback('Welcome message saved successfully!', 'success');
-        loadWelcomeMessageForEdit(); // Refresh the editor and preview
+        showFeedback(`Failed to save message: ${err.message}`, 'error');
+    } finally {
+        setButtonLoading(submitButton, false, originalText);
     }
-
-    setButtonLoading(submitButton, false, originalText);
 }
 
 /*******************************************************
@@ -601,10 +605,10 @@ function updateBlockTermOptions(programSelectId, blockTermSelectId) {
 
   let options = [];
   if (program === 'KRCHN') {
+    // KRCHN must only have Block A or Block B
     options = [
-        { value: 'Block_A', text: 'Block A (Year 1)' }, 
-        { value: 'Block_B', text: 'Block B (Year 2)' },
-        { value: 'Block_C', text: 'Block C (Year 3 - Final)' }
+        { value: 'Block_A', text: 'Block A' }, 
+        { value: 'Block_B', text: 'Block B' } 
     ];
   } else if (program === 'TVET') {
     options = [
@@ -676,7 +680,7 @@ async function handleAddAccount(e) {
     await logAudit('USER_ENROLL', `Failed to enroll new account: ${name}. Reason: ${err.message}`, null, 'FAILURE');
     showFeedback(`Account creation failed: ${err.message}`, 'error');
   } finally {
-    setButtonLoading(submitButton, false, originalText);
+    setButtonLoading(submitButton, false, originalText); // FIX: Ensure button resets
   }
 }
 
@@ -738,7 +742,7 @@ async function handleMassPromotion(e) {
         await logAudit('PROMOTION_MASS', `Failed mass promotion for ${promote_intake} ${promote_from_block}. Reason: ${err.message}`, null, 'FAILURE');
         showFeedback(`❌ Mass promotion failed: ${err.message}`, 'error');
     } finally {
-        setButtonLoading(submitButton, false, originalText);
+        setButtonLoading(submitButton, false, originalText); // FIX: Ensure button resets
     }
 }
 
@@ -1006,7 +1010,7 @@ async function handleEditUser(e) {
         if (authError) throw authError;
     }
 
-    await logAudit('USER_EDIT', `Edited profile for user ID ${userId.substring(0, 8)}. Role: ${newRole}. Blocked: ${updatedData.block_program_year}.`, userId, 'SUCCESS');
+    await logAudit('USER_EDIT', `Edited profile for user ID ${userId.substring(0, 0)}. Role: ${newRole}. Blocked: ${updatedData.block_program_year}.`, userId, 'SUCCESS');
     showFeedback('User profile updated successfully!', 'success');
     $('userEditModal').style.display = 'none';
     loadAllUsers();
@@ -1016,7 +1020,7 @@ async function handleEditUser(e) {
     await logAudit('USER_EDIT', `Failed to edit profile for user ID ${userId.substring(0, 8)}. Reason: ${e.message}`, userId, 'FAILURE');
     showFeedback('Failed to update user: ' + (e.message || e), 'error');
   } finally {
-    setButtonLoading(submitButton, false, originalText);
+    setButtonLoading(submitButton, false, originalText); // FIX: Ensure button resets
   }
 }
 
@@ -1044,27 +1048,30 @@ async function handleAddCourse(e) {
         return;
     }
 
-    const { error } = await sb.from('courses').insert({ 
-        course_name, 
-        unit_code, 
-        description, 
-        target_program, 
-        intake_year, 
-        block,
-        status: 'Active'
-    });
+    try {
+        const { error } = await sb.from('courses').insert({ 
+            course_name, 
+            unit_code, 
+            description, 
+            target_program, 
+            intake_year, 
+            block,
+            status: 'Active'
+        });
 
-    if (error) {
-        await logAudit('COURSE_ADD', `Failed to add course ${unit_code}. Reason: ${error.message}`, null, 'FAILURE');
-        showFeedback(`Failed to add course: ${error.message}`, 'error');
-    } else {
+        if (error) throw error;
+        
         await logAudit('COURSE_ADD', `Successfully added course: ${unit_code} - ${course_name}.`, null, 'SUCCESS');
         showFeedback('Course added successfully!', 'success');
         e.target.reset();
         loadCourses();
-    }
 
-    setButtonLoading(submitButton, false, originalText);
+    } catch (error) {
+        await logAudit('COURSE_ADD', `Failed to add course ${unit_code}. Reason: ${error.message}`, null, 'FAILURE');
+        showFeedback(`Failed to add course: ${error.message}`, 'error');
+    } finally {
+        setButtonLoading(submitButton, false, originalText); // FIX: Ensure button resets
+    }
 }
 
 async function loadCourses() {
@@ -1170,7 +1177,7 @@ async function handleEditCourse(e) {
         await logAudit('COURSE_EDIT', `Failed to update course ID ${id}. Reason: ${e.message}`, id, 'FAILURE');
         showFeedback('Failed to update course: ' + (e.message || e), 'error');
     } finally {
-        setButtonLoading(submitButton, false, originalText);
+        setButtonLoading(submitButton, false, originalText); // FIX: Ensure button resets
     }
 }
 
@@ -1273,20 +1280,23 @@ async function handleAddSession(e) {
         created_at: new Date().toISOString()
     };
 
-    const { error, data } = await sb.from('scheduled_sessions').insert([sessionData]).select('id');
+    try {
+        const { error, data } = await sb.from('scheduled_sessions').insert([sessionData]).select('id');
 
-    if (error) {
-        await logAudit('SESSION_ADD', `Failed to schedule session: ${session_title}. Reason: ${error.message}`, null, 'FAILURE');
-        showFeedback(`❌ Failed to schedule session: ${error.message}`, 'error');
-    } else {
+        if (error) throw error;
+        
         await logAudit('SESSION_ADD', `Successfully scheduled session: ${session_title}.`, data?.[0]?.id, 'SUCCESS');
         showFeedback('✅ Session scheduled successfully!', 'success');
         e.target.reset();
         loadScheduledSessions();
         renderFullCalendar();
-    }
 
-    setButtonLoading(submitButton, false, originalText);
+    } catch (error) {
+        await logAudit('SESSION_ADD', `Failed to schedule session: ${session_title}. Reason: ${error.message}`, null, 'FAILURE');
+        showFeedback(`❌ Failed to schedule session: ${error.message}`, 'error');
+    } finally {
+        setButtonLoading(submitButton, false, originalText); // FIX: Ensure button resets
+    }
 }
 
 async function deleteSession(sessionId, sessionTitle) {
@@ -1480,20 +1490,22 @@ async function handleManualAttendance(e) {
         target_name: session_type === 'clinical' ? department : $('att_course_id')?.selectedOptions[0]?.text || null
     };
 
-    const { error, data } = await sb.from('geo_attendance_logs').insert([attendanceData]).select('id');
-    if (error) {
-        await logAudit('ATTENDANCE_MANUAL', `Failed manual attendance for student ${student_id}. Reason: ${error.message}`, student_id, 'FAILURE');
-        showFeedback(`Failed to record attendance: ${error.message}`, 'error');
-    }
-    else { 
+    try {
+        const { error, data } = await sb.from('geo_attendance_logs').insert([attendanceData]).select('id');
+        if (error) throw error;
+        
         await logAudit('ATTENDANCE_MANUAL', `Recorded manual attendance for student ${student_id} for ${session_type}.`, data?.[0]?.id, 'SUCCESS');
         showFeedback('Manual attendance recorded successfully!', 'success'); 
         e.target.reset(); 
         loadAttendance(); 
         toggleAttendanceFields(); 
-    }
 
-    setButtonLoading(submitButton, false, originalText);
+    } catch (error) {
+        await logAudit('ATTENDANCE_MANUAL', `Failed manual attendance for student ${student_id}. Reason: ${error.message}`, student_id, 'FAILURE');
+        showFeedback(`Failed to record attendance: ${error.message}`, 'error');
+    } finally {
+        setButtonLoading(submitButton, false, originalText); // FIX: Ensure button resets
+    }
 }
 
 // ----------------------- Load Attendance -----------------------
@@ -1599,17 +1611,17 @@ async function populateExamCourseSelects(courses = null) {
     populateSelect(courseSelect, filteredCourses, 'id', 'course_name', 'Select Course');
 }
 
-// Add Exam (NEW: Includes exam_type, exam_link, exam_duration_minutes)
+// Add Exam (UPDATED to ensure button reset)
 async function handleAddExam(e) {
     e.preventDefault();
     const submitButton = e.submitter;
     const originalText = submitButton.textContent;
     setButtonLoading(submitButton, true, originalText);
 
-    const exam_type = $('exam_type').value; // NEW
-    const exam_link = $('exam_link').value.trim(); // NEW
-    const exam_duration_minutes = parseInt($('exam_duration_minutes').value); // NEW
-    const exam_start_time = $('exam_start_time').value; // NEW
+    const exam_type = $('exam_type').value; 
+    const exam_link = $('exam_link').value.trim(); 
+    const exam_duration_minutes = parseInt($('exam_duration_minutes').value); 
+    const exam_start_time = $('exam_start_time').value; 
 
     const program = $('exam_program').value;
     const course_id = $('exam_course_id').value;
@@ -1619,39 +1631,42 @@ async function handleAddExam(e) {
     const intake = $('exam_intake').value;
     const block_term = $('exam_block_term').value;
 
-    if (!program || !course_id || !exam_title || !exam_date || !intake || !block_term || !exam_type || !exam_link || isNaN(exam_duration_minutes)) {
-        showFeedback('All exam fields are required, including the Online Exam Link and Duration.', 'error');
-        setButtonLoading(submitButton, false, originalText);
+    // Validation (Exam Link is optional now)
+    if (!program || !course_id || !exam_title || !exam_date || !intake || !block_term || !exam_type || isNaN(exam_duration_minutes)) {
+        showFeedback('All exam fields (Program, Course, Title, Date, Intake, Block/Term, Type, and Duration) are required.', 'error');
+        setButtonLoading(submitButton, false, originalText); // FIX: Ensure button resets on validation error
         return;
     }
 
-    const { error, data } = await sb.from('exams').insert({ 
-        exam_name: exam_title, 
-        course_id, 
-        exam_date, 
-        exam_start_time, // NEW
-        exam_type, // NEW
-        online_link: exam_link, // NEW
-        duration_minutes: exam_duration_minutes, // NEW
-        target_program: program, 
-        intake_year: intake,     
-        block_term,              
-        status: exam_status
-    }).select('id');
+    try {
+        const { error, data } = await sb.from('exams').insert({ 
+            exam_name: exam_title, 
+            course_id, 
+            exam_date, 
+            exam_start_time, 
+            exam_type, 
+            online_link: exam_link || null, // Optional link
+            duration_minutes: exam_duration_minutes, 
+            target_program: program, 
+            intake_year: intake,     
+            block_term,              
+            status: exam_status
+        }).select('id');
 
-    if (error) {
-        await logAudit('EXAM_ADD', `Failed to add ${exam_type} ${exam_title}. Reason: ${error.message}`, null, 'FAILURE');
-        showFeedback(`Failed to add assessment: ${error.message}`, 'error');
-    }
-    else {
+        if (error) throw error;
+        
         await logAudit('EXAM_ADD', `Successfully posted new ${exam_type}: ${exam_title}.`, data?.[0]?.id, 'SUCCESS');
         showFeedback('Assessment added successfully!', 'success');
         e.target.reset();
         loadExams();
         renderFullCalendar();
-    }
 
-    setButtonLoading(submitButton, false, originalText);
+    } catch (error) {
+        await logAudit('EXAM_ADD', `Failed to add ${exam_type} ${exam_title}. Reason: ${error.message}`, null, 'FAILURE');
+        showFeedback(`Failed to add assessment: ${error.message}`, 'error');
+    } finally {
+        setButtonLoading(submitButton, false, originalText); // FIX: Ensure button resets
+    }
 }
 
 // Load Exams Table (UPDATED to include new fields)
@@ -1827,7 +1842,7 @@ async function handleSendMessage(e) {
 
     if (!message_content) {
         showFeedback('Message content cannot be empty.', 'error');
-        setButtonLoading(submitButton, false, originalText);
+        setButtonLoading(submitButton, false, originalText); // FIX: Ensure button resets
         return;
     }
 
@@ -1840,21 +1855,19 @@ async function handleSendMessage(e) {
             sender_id: currentUserProfile.id,
         }).select('id');
 
-        if (error) {
-            await logAudit('MESSAGE_SEND', `Failed to send message to ${target_program}. Reason: ${error.message}`, null, 'FAILURE');
-            showFeedback(`Failed to send message: ${error.message}`, 'error');
-        } else {
-            await logAudit('MESSAGE_SEND', `Message sent to ${target_program}. Title: ${subject.substring(0, 30)}...`, data?.[0]?.id, 'SUCCESS');
-            showFeedback('Message sent successfully!', 'success'); 
-            e.target.reset(); 
-            loadMessages(); 
-        }
+        if (error) throw error;
+        
+        await logAudit('MESSAGE_SEND', `Message sent to ${target_program}. Title: ${subject.substring(0, 30)}...`, data?.[0]?.id, 'SUCCESS');
+        showFeedback('Message sent successfully!', 'success'); 
+        e.target.reset(); 
+        loadMessages(); 
 
     } catch (err) {
+        await logAudit('MESSAGE_SEND', `Failed to send message to ${target_program}. Reason: ${err.message}`, null, 'FAILURE');
         console.error('Send message failed:', err);
         showFeedback(`Failed to send message: ${err.message}`, 'error');
     } finally {
-        setButtonLoading(submitButton, false, originalText);
+        setButtonLoading(submitButton, false, originalText); // FIX: Ensure button resets
     }
 }
 
@@ -1913,7 +1926,7 @@ $('upload-resource-form')?.addEventListener('submit', async e => {
 
     if (!fileInput.files.length || !program || !intake || !block || !title) {
         showFeedback('Please select a file and fill all required fields.', 'error');
-        setButtonLoading(submitButton, false, originalText);
+        setButtonLoading(submitButton, false, originalText); // FIX: Ensure button resets
         return;
     }
 
@@ -1965,7 +1978,7 @@ $('upload-resource-form')?.addEventListener('submit', async e => {
         console.error('Upload failed:', err);
         showFeedback(`❌ Upload failed: ${err.message}`, 'error');
     } finally {
-        setButtonLoading(submitButton, false, originalText);
+        setButtonLoading(submitButton, false, originalText); // FIX: Ensure button resets
     }
 });
 
@@ -2161,7 +2174,7 @@ async function handleGlobalPasswordReset(e) {
     
     if (!email || !newPassword) {
         showFeedback('Email and New Password are required.', 'error');
-        setButtonLoading(submitButton, false, originalText);
+        setButtonLoading(submitButton, false, originalText); // FIX: Ensure button resets
         return;
     }
 
@@ -2191,7 +2204,7 @@ async function handleGlobalPasswordReset(e) {
         await logAudit('USER_PASSWORD_RESET', `Failed to force password reset for: ${email}. Reason: ${e.message}`, userId, 'FAILURE');
         showFeedback(`❌ Password reset failed: ${e.message}`, 'error');
     } finally {
-        setButtonLoading(submitButton, false, originalText);
+        setButtonLoading(submitButton, false, originalText); // FIX: Ensure button resets
     }
 }
 
@@ -2207,7 +2220,7 @@ async function handleAccountDeactivation(e) {
     
     if (!userId) {
         showFeedback('User ID is required for deactivation.', 'error');
-        setButtonLoading(submitButton, false, originalText);
+        setButtonLoading(submitButton, false, originalText); // FIX: Ensure button resets
         return;
     }
 
@@ -2236,7 +2249,7 @@ async function handleAccountDeactivation(e) {
         await logAudit('USER_BLOCK', `Failed to block user ID ${userId.substring(0, 8)}... Reason: ${e.message}`, userId, 'FAILURE');
         showFeedback(`❌ Deactivation failed: ${e.message}`, 'error');
     } finally {
-        setButtonLoading(submitButton, false, originalText);
+        setButtonLoading(submitButton, false, originalText); // FIX: Ensure button resets
     }
 }
 
@@ -2276,9 +2289,14 @@ function triggerBackup() {
 
 $('restore-form')?.addEventListener('submit', e => {
     e.preventDefault();
+    const submitButton = e.submitter;
+    const originalText = submitButton.textContent;
+    setButtonLoading(submitButton, true, originalText);
+
     logAudit('DB_RESTORE', 'Attempted database restoration from file.', null, 'FAILURE'); // Always log as failure for placeholder
     showFeedback('CRITICAL ACTION: Database restoration initiated. This is a highly sensitive server-side process and cannot be done via the client. Check your DB logs.', 'error');
     e.target.reset();
+    setButtonLoading(submitButton, false, originalText); // FIX: Ensure button resets
 });
 
 
