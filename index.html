@@ -1597,41 +1597,35 @@ async function loadExams() {
 
 
 
-// Load learning resources (remains correct)
+// Load learning resources for student dashboard
 async function loadResources() {
-    // Ensure profile data is loaded before reading it
-    if (!currentUserProfile || !currentUserProfile.program && !currentUserProfile.department || !currentUserProfile.intake_year) {
+    // Ensure profile data is loaded
+    if (!currentUserProfile || !currentUserProfile.program || !currentUserProfile.intake_year) {
         await loadProfile(currentUserId); 
     }
 
-
     const resourceList = document.getElementById('resources-list');
     if (!resourceList) return;
-    resourceList.innerHTML = 'Loading resources from Supabase...';
-
+    resourceList.innerHTML = 'Loading resources...';
 
     try {
-        // ✅ FIX: Prioritize 'program' (Student) over 'department' (Lecturer/Fallback)
         const program = currentUserProfile?.program || currentUserProfile?.department;
         const block = currentUserProfile?.block;
 
-
         if (!program || !block) {
-            resourceList.innerHTML = '<p>Missing enrollment details (program/department or block).</p>';
+            resourceList.innerHTML = '<p>Missing enrollment details (program or block).</p>';
             return;
         }
 
-
+        // Fetch resources: program can be student's program or General; block must match or be null
         const { data: resources, error } = await sb
             .from('resources')
             .select('id, title, file_path, program_type, block_term, uploaded_by_name, created_at')
             .or(`program_type.eq.${program},program_type.eq.General`)
-            .or(`block_term.eq.${block},block_term.is.null`) 
+            .or(`block_term.eq.${block},block_term.is.null`) // keep this if some are general resources without block
             .order('created_at', { ascending: false });
 
-
         if (error) throw error;
-
 
         resourceList.innerHTML = '';
         if (!resources.length) {
@@ -1641,12 +1635,11 @@ async function loadResources() {
             return;
         }
 
-
+        // Render each resource
         resources.forEach(res => {
             const { data: { publicUrl } } = sb.storage
                 .from('materials')
                 .getPublicUrl(res.file_path);
-
 
             resourceList.innerHTML += `
                 <div class="resource-item">
@@ -1662,15 +1655,13 @@ async function loadResources() {
             `;
         });
 
-
+        // Count new resources uploaded in the last 7 days
         const oneWeekAgo = new Date();
         oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
         const newCount = resources.filter(r => new Date(r.created_at) > oneWeekAgo).length;
 
-
         if (document.getElementById('dashboard-new-resources')) 
             document.getElementById('dashboard-new-resources').textContent = newCount;
-
 
     } catch (error) {
         console.error("❌ Failed to load resources:", error);
