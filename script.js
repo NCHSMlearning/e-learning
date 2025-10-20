@@ -1902,59 +1902,70 @@ async function renderFullCalendar() {
 
     calendar.render();
 }
+// *************************************************************************
+// *** 10. ADMIN MESSAGES & OFFICIAL ANNOUNCEMENT ***
+// *************************************************************************
 
-/*******************************************************
- * 10. Messages Tab
- *******************************************************/
-
-async function handleSendMessage(e) {
+// --------------- Send Personal/System Message ---------------
+document.getElementById('send-message-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const submitButton = e.submitter;
-    const originalText = submitButton.textContent;
-    setButtonLoading(submitButton, true, originalText);
-
-    const target_program = $('msg_program').value; 
-    const message_content = $('msg_body').value.trim(); 
+    const target_program = document.getElementById('msg_program').value;
+    const message_content = document.getElementById('msg_body').value.trim();
     const subject = `System Message to ${target_program}`;
-    const message_type = 'system'; 
+    const message_type = 'system';
 
-    if (!message_content) {
-        showFeedback('Message content cannot be empty.', 'error');
-        setButtonLoading(submitButton, false, originalText); // FIX: Ensure button resets
+    if (!message_content) return alert('Message content cannot be empty.');
+
+    try {
+        await sb.from('notifications').insert({
+            target_program: target_program === 'ALL' ? null : target_program,
+            title: subject,
+            message: message_content,
+            message_type: message_type,
+            sender_id: currentUserProfile.id,
+        });
+
+        alert('Message sent successfully!');
+        e.target.reset();
+        loadAdminMessages();
+    } catch (err) {
+        console.error(err);
+        alert('Failed to send message.');
+    }
+});
+
+// --------------- Official Announcement ---------------
+document.getElementById('save-announcement').addEventListener('click', async () => {
+    const body = document.getElementById('announcement-body').value.trim();
+    const feedback = document.getElementById('announcement-feedback');
+    if (!body) {
+        feedback.textContent = 'Announcement cannot be empty.';
+        feedback.style.color = 'red';
         return;
     }
 
     try {
-        const { error, data } = await sb.from('notifications').insert({ 
-            target_program: target_program === 'ALL' ? null : target_program, 
-            title: subject,                               
-            message: message_content,                  
-            message_type: message_type,
-            sender_id: currentUserProfile.id,
-        }).select('id');
+        await sb.from('app_settings')
+            .upsert({ key: 'welcome_message', value: body }, { onConflict: 'key' });
 
-        if (error) throw error;
-        
-        await logAudit('MESSAGE_SEND', `Message sent to ${target_program}. Title: ${subject.substring(0, 30)}...`, data?.[0]?.id, 'SUCCESS');
-        showFeedback('Message sent successfully!', 'success'); 
-        e.target.reset(); 
-        loadMessages(); 
+        feedback.textContent = 'Official announcement saved successfully!';
+        feedback.style.color = 'green';
 
+        // Refresh student banner if needed
+        await loadStudentWelcomeMessage('welcome_message', 'student-announcement');
     } catch (err) {
-        await logAudit('MESSAGE_SEND', `Failed to send message to ${target_program}. Reason: ${err.message}`, null, 'FAILURE');
-        console.error('Send message failed:', err);
-        showFeedback(`Failed to send message: ${err.message}`, 'error');
-    } finally {
-        setButtonLoading(submitButton, false, originalText); // FIX: Ensure button resets
+        console.error(err);
+        feedback.textContent = 'Failed to save announcement.';
+        feedback.style.color = 'red';
     }
-}
+});
 
-async function loadMessages() {
-    const tbody = $('messages-table');
-    tbody.innerHTML = '<tr><td colspan="3">Loading messages...</td></tr>';
-    
+// --------------- Load Admin Messages ---------------
+async function loadAdminMessages() {
+    const tbody = document.getElementById('messages-table').querySelector('tbody');
+    tbody.innerHTML = '<tr><td colspan="4">Loading messages...</td></tr>';
+
     try {
-        // Load messages sent by system or superadmin role
         const { data: messages, error } = await sb.from('notifications')
             .select('*, sender:sender_id(full_name)')
             .order('created_at', { ascending: false });
@@ -1963,7 +1974,7 @@ async function loadMessages() {
 
         tbody.innerHTML = '';
         if (!messages || messages.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="3">No messages found.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="4">No messages found.</td></tr>';
             return;
         }
 
@@ -1975,14 +1986,45 @@ async function loadMessages() {
                 <td>${escapeHtml(recipient)}</td>
                 <td>${escapeHtml(m.message.substring(0, 80) + (m.message.length > 80 ? '...' : ''))}</td>
                 <td>${sendDate}</td>
+                <td>
+                    <button onclick="editNotification('${m.id}')">Edit</button>
+                    <button onclick="deleteNotification('${m.id}')" style="color:red;">Delete</button>
+                </td>
             </tr>`;
         });
-
     } catch (err) {
-        console.error('Failed to load messages:', err);
-        tbody.innerHTML = `<tr><td colspan="3">Error loading messages: ${err.message}</td></tr>`;
+        console.error(err);
+        tbody.innerHTML = `<tr><td colspan="4">Error loading messages: ${err.message}</td></tr>`;
     }
 }
+
+// --------------- Edit / Delete Notifications ---------------
+function editNotification(id) {
+    // Fetch notification and populate form/modal
+    console.log('Edit notification:', id);
+}
+
+async function deleteNotification(id) {
+    if (!confirm('Are you sure you want to delete this message?')) return;
+
+    try {
+        await sb.from('notifications').delete().eq('id', id);
+        alert('Message deleted successfully!');
+        loadAdminMessages();
+    } catch (err) {
+        console.error(err);
+        alert('Failed to delete message.');
+    }
+}
+
+// --------------- Escape HTML for table display ---------------
+function escapeHtml(text) {
+    const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+    return text.replace(/[&<>"']/g, m => map[m]);
+}
+
+// Initial load
+loadAdminMessages();
 
 
 /*******************************************************
