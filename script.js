@@ -441,25 +441,60 @@ function exportTableToCSV(tableId, filename) {
  * 3. Dashboard / Welcome Editor (Fixed)
  *******************************************************/
 
+/**
+ * NEW: Calculates and displays the total number of check-ins for the current day.
+ */
+async function loadTotalDailyCheckIns() {
+    const today = new Date();
+    // Set to start of today in UTC to align with Supabase check_in_time if it's stored as UTC
+    today.setUTCHours(0, 0, 0, 0); 
+    const todayISO = today.toISOString();
+    
+    // Set to start of tomorrow
+    const tomorrow = new Date(today);
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    const tomorrowISO = tomorrow.toISOString();
+
+    const checkInsElement = $('totalDailyCheckIns');
+    if (!checkInsElement) return;
+
+    const { count, error } = await sb
+        .from('geo_attendance_logs')
+        .select('*', { count: 'exact', head: true })
+        .gte('check_in_time', todayISO) // Greater than or equal to start of today
+        .lt('check_in_time', tomorrowISO); // Less than start of tomorrow
+
+    if (error) {
+        console.error('Error counting daily check-ins:', error.message);
+        checkInsElement.textContent = 'Error';
+    } else {
+        checkInsElement.textContent = count || 0;
+    }
+}
+
+
 async function loadDashboardData() {
     // Total users
     const { count: allUsersCount } = await sb
         .from('consolidated_user_profiles_table')
         .select('user_id', { count: 'exact' });
     $('totalUsers').textContent = allUsersCount || 0;
+    
+    // Total Daily Check-ins (NEW METRIC)
+    await loadTotalDailyCheckIns(); 
 
-  // Pending approvals
-const { count: pendingCount, error } = await sb
-  .from('consolidated_user_profiles_table')
-  .select('user_id', { count: 'exact', head: true })
-  .eq('status', 'pending');
+    // Pending approvals
+    const { count: pendingCount, error } = await sb
+      .from('consolidated_user_profiles_table')
+      .select('user_id', { count: 'exact', head: true })
+      .eq('status', 'pending');
 
-if (error) {
-  console.error('Error counting pending approvals:', error.message);
-  $('pendingApprovals').textContent = '0';
-} else {
-  $('pendingApprovals').textContent = pendingCount || 0;
-}
+    if (error) {
+      console.error('Error counting pending approvals:', error.message);
+      $('pendingApprovals').textContent = '0';
+    } else {
+      $('pendingApprovals').textContent = pendingCount || 0;
+    }
 
     // Total students
     const { count: studentsCount } = await sb
@@ -534,7 +569,7 @@ async function handleSaveWelcomeMessage(e) {
         showFeedback(`Failed to save message: ${updateOrInsertError.message}`, 'error');
     } else {
         await logAudit('WELCOME_MESSAGE_UPDATE', `Successfully updated the student welcome message.`, null, 'SUCCESS');
-        showFeedback('Welcome message saved successfully!');
+        showFeedback('Welcome message saved successfully!', 'success');
         loadWelcomeMessageForEdit(); // Refresh the editor and preview
     }
 
@@ -747,8 +782,8 @@ async function loadPendingApprovals() {
         <td>${escapeHtml(u.program || 'N/A')}</td>
         <td>${new Date(u.created_at).toLocaleDateString()}</td>
         <td>
-          <button class="btn btn-approve" onclick="approveUser('${u.user_id}', '${u.full_name}')">Approve</button>
-          <button class="btn btn-delete" onclick="deleteProfile('${u.user_id}', '${u.full_name}')">Reject</button>
+          <button class="btn btn-approve" onclick="approveUser('${u.user_id}', '${escapeHtml(u.full_name, true)}')">Approve</button>
+          <button class="btn btn-delete" onclick="deleteProfile('${u.user_id}', '${escapeHtml(u.full_name, true)}')">Reject</button>
         </td>
       </tr>`;
   });
@@ -782,7 +817,7 @@ async function loadAllUsers() {
         <td>${escapeHtml(u.full_name)}</td>
         <td>${escapeHtml(u.email)}</td>
         <td>
-          <select class="btn" onchange="updateUserRole('${u.user_id}', this.value, '${u.full_name}')" ${u.role === 'superadmin' ? 'disabled' : ''}>
+          <select class="btn" onchange="updateUserRole('${u.user_id}', this.value, '${escapeHtml(u.full_name, true)}')" ${u.role === 'superadmin' ? 'disabled' : ''}>
             ${roleOptions}
           </select>
         </td>
@@ -790,8 +825,8 @@ async function loadAllUsers() {
         <td class="${statusClass}">${statusText}</td>
         <td>
           <button class="btn btn-map" onclick="openEditUserModal('${u.user_id}')">Edit</button>
-          ${!isApproved ? `<button class="btn btn-approve" onclick="approveUser('${u.user_id}', '${u.full_name}')">Approve</button>` : ''}
-          <button class="btn btn-delete" onclick="deleteProfile('${u.user_id}', '${u.full_name}')">Delete</button>
+          ${!isApproved ? `<button class="btn btn-approve" onclick="approveUser('${u.user_id}', '${escapeHtml(u.full_name, true)}')">Approve</button>` : ''}
+          <button class="btn btn-delete" onclick="deleteProfile('${u.user_id}', '${escapeHtml(u.full_name, true)}')">Delete</button>
         </td>
       </tr>`;
   });
@@ -830,7 +865,7 @@ async function loadStudents() {
         <td class="${statusClass}">${statusText}</td>
         <td>
           <button class="btn btn-map" onclick="openEditUserModal('${s.user_id}')">Edit</button>
-          <button class="btn btn-delete" onclick="deleteProfile('${s.user_id}', '${s.full_name}')">Delete</button>
+          <button class="btn btn-delete" onclick="deleteProfile('${s.user_id}', '${escapeHtml(s.full_name, true)}')">Delete</button>
         </td>
       </tr>`;
   });
@@ -856,9 +891,9 @@ async function approveUser(userId, fullName) {
     await logAudit('USER_APPROVE', `User ${fullName} approved successfully.`, userId, 'SUCCESS');
     showFeedback('User approved successfully!', 'success');
     loadPendingApprovals();
-    loadAllUsers?.();
-    loadStudents?.();
-    loadDashboardData?.();
+    loadAllUsers();
+    loadStudents();
+    loadDashboardData();
   }
 }
 
@@ -1024,7 +1059,7 @@ async function handleAddCourse(e) {
         showFeedback(`Failed to add course: ${error.message}`, 'error');
     } else {
         await logAudit('COURSE_ADD', `Successfully added course: ${unit_code} - ${course_name}.`, null, 'SUCCESS');
-        showFeedback('Course added successfully!');
+        showFeedback('Course added successfully!', 'success');
         e.target.reset();
         loadCourses();
     }
@@ -1077,7 +1112,7 @@ async function deleteCourse(courseId, unitCode) {
     } 
     else { 
         await logAudit('COURSE_DELETE', `Successfully deleted course ${unitCode}.`, courseId, 'SUCCESS');
-        showFeedback('Course deleted successfully!'); 
+        showFeedback('Course deleted successfully!', 'success'); 
         loadCourses(); 
     }
 }
@@ -1108,7 +1143,7 @@ async function handleEditCourse(e) {
     const id = $('edit_course_id').value;
     const name = $('edit_course_name').value.trim();
     const unit_code = $('edit_course_unit_code').value.trim(); 
-    const description = $('edit_course_description').value.trim();
+    const description = $('edit_course-description').value.trim();
     const target_program = $('edit_course_program').value;
     const intake_year = $('edit_course_intake').value;
     const block = $('edit_course_block').value;
@@ -1128,7 +1163,7 @@ async function handleEditCourse(e) {
         if (error) throw error;
 
         await logAudit('COURSE_EDIT', `Updated course ${unit_code}.`, id, 'SUCCESS');
-        showFeedback('Course updated successfully!');
+        showFeedback('Course updated successfully!', 'success');
         $('courseEditModal').style.display = 'none';
         loadCourses(); 
     } catch (e) {
@@ -1199,7 +1234,7 @@ async function loadScheduledSessions() {
             <td>${escapeHtml(s.target_program || 'N/A')}</td>
             <td>${escapeHtml(s.block_term || 'N/A')}</td>
             <td>
-                <button class="btn btn-delete" onclick="deleteSession('${s.id}', '${s.session_title}')">Delete</button>
+                <button class="btn btn-delete" onclick="deleteSession('${s.id}', '${escapeHtml(s.session_title, true)}')">Delete</button>
             </td>
         </tr>`;
     });
@@ -1245,7 +1280,7 @@ async function handleAddSession(e) {
         showFeedback(`❌ Failed to schedule session: ${error.message}`, 'error');
     } else {
         await logAudit('SESSION_ADD', `Successfully scheduled session: ${session_title}.`, data?.[0]?.id, 'SUCCESS');
-        showFeedback('✅ Session scheduled successfully!');
+        showFeedback('✅ Session scheduled successfully!', 'success');
         e.target.reset();
         loadScheduledSessions();
         renderFullCalendar();
@@ -1263,7 +1298,7 @@ async function deleteSession(sessionId, sessionTitle) {
     } 
     else { 
         await logAudit('SESSION_DELETE', `Session ${sessionTitle} deleted successfully.`, sessionId, 'SUCCESS');
-        showFeedback('Session deleted successfully!'); 
+        showFeedback('Session deleted successfully!', 'success'); 
         loadScheduledSessions(); 
         renderFullCalendar(); 
     }
@@ -1291,10 +1326,6 @@ function saveClinicalName() {
 
 // ----------------------- Supporting Functions -----------------------
 
-function $(id) {
-    return document.getElementById(id);
-}
-
 function toggleAttendanceFields() {
     const sessionType = $('att_session_type')?.value;
     const departmentInput = $('att_department');
@@ -1315,12 +1346,6 @@ function toggleAttendanceFields() {
         departmentInput.required = false;
         if (courseSelect) { courseSelect.required = false; courseSelect.value = ""; }
     }
-}
-
-function showFeedback(message, type='info') {
-    // Re-use the global showFeedback
-    const globalFeedback = window.showFeedback;
-    if (globalFeedback) globalFeedback(message, type);
 }
 
 async function populateAttendanceSelects() {
@@ -1391,11 +1416,13 @@ function showMap(lat, lng, locationName, studentName, dateTime) {
 
     // Ensure the map container is visible before initializing the map
     setTimeout(() => {
-        // Only initialize if it hasn't been done or if a new location is needed
+        // Remove existing map instance if it exists
         if (attendanceMap) {
             attendanceMap.remove();
+            attendanceMap = null; 
         }
         
+        // Initialize Leaflet map
         attendanceMap = L.map('mapbox-map').setView([lat, lng], 17);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; OpenStreetMap contributors'
@@ -1406,7 +1433,7 @@ function showMap(lat, lng, locationName, studentName, dateTime) {
             .bindPopup(`<b>${studentName}</b><br>${locationName}<br>${dateTime}`)
             .openPopup();
         
-        // Fix for map not fully rendering inside a modal
+        // CRITICAL FIX: Ensure map tiles render correctly in the modal
         attendanceMap.invalidateSize();
 
     }, 300); 
@@ -1618,7 +1645,7 @@ async function handleAddExam(e) {
     }
     else {
         await logAudit('EXAM_ADD', `Successfully posted new ${exam_type}: ${exam_title}.`, data?.[0]?.id, 'SUCCESS');
-        showFeedback('Assessment added successfully!');
+        showFeedback('Assessment added successfully!', 'success');
         e.target.reset();
         loadExams();
         renderFullCalendar();
@@ -1679,7 +1706,7 @@ async function deleteExam(examId, examName) {
     }
     else {
         await logAudit('EXAM_DELETE', `Exam ${examName} deleted successfully.`, examId, 'SUCCESS');
-        showFeedback('Exam deleted successfully!');
+        showFeedback('Exam deleted successfully!', 'success');
         loadExams();
         renderFullCalendar();
     }
@@ -1818,7 +1845,7 @@ async function handleSendMessage(e) {
             showFeedback(`Failed to send message: ${error.message}`, 'error');
         } else {
             await logAudit('MESSAGE_SEND', `Message sent to ${target_program}. Title: ${subject.substring(0, 30)}...`, data?.[0]?.id, 'SUCCESS');
-            showFeedback('Message sent successfully!'); 
+            showFeedback('Message sent successfully!', 'success'); 
             e.target.reset(); 
             loadMessages(); 
         }
@@ -1930,7 +1957,7 @@ $('upload-resource-form')?.addEventListener('submit', async e => {
         if (dbError) throw dbError;
 
         await logAudit('RESOURCE_UPLOAD', `Uploaded resource: ${title} to ${program}/${intake}/${block}.`, data?.[0]?.id, 'SUCCESS');
-        showFeedback(`✅ File "${file.name}" uploaded successfully!`);
+        showFeedback(`✅ File "${file.name}" uploaded successfully!`, 'success');
         e.target.reset();
         loadResources();
     } catch (err) {
@@ -1945,6 +1972,11 @@ $('upload-resource-form')?.addEventListener('submit', async e => {
 // Load resources from Supabase table
 async function loadResources() {
     const tableBody = $('resources-list');
+    if (!tableBody) {
+        console.error("Resource table body element with ID 'resources-list' not found.");
+        return;
+    }
+
     tableBody.innerHTML = '<tr><td colspan="7">Loading resources...</td></tr>';
 
     try {
@@ -1964,6 +1996,12 @@ async function loadResources() {
 
         resources.forEach(resource => {
             const date = new Date(resource.created_at).toLocaleString();
+            
+            // Escape values for HTML attributes and function arguments
+            const safeFilePath = escapeHtml(resource.file_path || '', true);
+            const safeId = resource.id;
+            const safeTitle = escapeHtml(resource.title || 'Untitled', true);
+            const safeUrl = escapeHtml(resource.file_url || '#', true);
 
             tableBody.innerHTML += `
                 <tr>
@@ -1974,8 +2012,8 @@ async function loadResources() {
                     <td>${escapeHtml(resource.uploaded_by_name || 'Unknown')}</td>
                     <td>${date}</td>
                     <td>
-                        <a href="${escapeHtml(resource.file_url)}" target="_blank" class="btn-action">Download</a>
-                        <button class="btn btn-delete" onclick="deleteResource('${escapeHtml(resource.file_path, true)}', ${resource.id}, '${escapeHtml(resource.title, true)}')">Delete</button>
+                        <a href="${safeUrl}" target="_blank" class="btn-action">Download</a>
+                        <button class="btn btn-delete" onclick="deleteResource('${safeFilePath}', ${safeId}, '${safeTitle}')">Delete</button>
                     </td>
                 </tr>
             `;
@@ -1984,6 +2022,7 @@ async function loadResources() {
     } catch (e) {
         console.error('Error loading resources:', e);
         tableBody.innerHTML = `<tr><td colspan="7">Error loading resources: ${e.message}</td></tr>`;
+        await logAudit('RESOURCE_LOAD', `Failed to load resources: ${e.message}`, null, 'FAILURE');
     }
 
     filterTable('resource-search', 'resources-list', [0, 1, 2, 3]);
@@ -2008,7 +2047,7 @@ async function deleteResource(filePath, id, title) {
         if (dbError) throw dbError;
 
         await logAudit('RESOURCE_DELETE', `Deleted resource: ${title} (${filePath}).`, id, 'SUCCESS');
-        showFeedback('✅ Resource deleted successfully.');
+        showFeedback('✅ Resource deleted successfully.', 'success');
         loadResources();
     } catch (e) {
         await logAudit('RESOURCE_DELETE', `Failed to delete resource: ${title}. Reason: ${e.message}`, id, 'FAILURE');
@@ -2187,9 +2226,7 @@ async function handleAccountDeactivation(e) {
         if (profileError) throw profileError;
         
         // 2. Optionally revoke all current sessions (to immediately log them out)
-        // Note: Supabase Admin API doesn't have a direct 'logout all sessions by user_id'.
-        // This would usually require a custom function/hook or simply relying on RLS/token expiry.
-        // We rely on the RLS block above.
+        // This is generally handled by the RLS policy hitting the 'blocked' status.
 
         await logAudit('USER_BLOCK', `Permanently blocked user ID: ${userId.substring(0, 8)}... from accessing the system.`, userId, 'SUCCESS');
         showFeedback(`✅ User ID ${userId.substring(0, 8)}... has been blocked and logged out.`, 'success');
