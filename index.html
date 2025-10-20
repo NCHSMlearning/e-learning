@@ -1622,25 +1622,28 @@ async function loadResources() {
         let block = currentUserProfile?.block || '';
         block = block.replace(/^Block_/, '');
 
-        if (!program || !block) {
-            resourceList.innerHTML = '<p>Missing enrollment details (program or block).</p>';
+        // Determine intake year
+        const intakeYear = currentUserProfile?.intake_year || currentUserProfile?.intake;
+
+        if (!program || !block || !intakeYear) {
+            resourceList.innerHTML = '<p>Missing enrollment details (program, block, or intake year).</p>';
             return;
         }
 
-        // Fetch resources: program matches student's program or General; block_term or block matches student
+        // Fetch resources: program matches student's program or General; block and intake match or are null
         const { data: resources, error } = await sb
-  .from('resources')
-  .select('id, title, file_path, program_type, block_term, block, uploaded_by_name, created_at')
-  .or(`program_type.eq.${program},program_type.eq.General`)
-  .or(`block_term.eq.${block},block.eq.${block},block_term.is.null,block.is.null`)
-  .or(`intake_year.eq.${intakeYear},intake.eq.${intakeYear},intake_year.is.null,intake.is.null`)
-  .order('created_at', { ascending: false });
+            .from('resources')
+            .select('id, title, file_path, program_type, block_term, block, intake_year, intake, uploaded_by_name, created_at')
+            .or(`program_type.eq.${program},program_type.eq.General`)
+            .or(`block_term.eq.${block},block.eq.${block},block_term.is.null,block.is.null`)
+            .or(`intake_year.eq.${intakeYear},intake.eq.${intakeYear},intake_year.is.null,intake.is.null`)
+            .order('created_at', { ascending: false });
 
         if (error) throw error;
 
         resourceList.innerHTML = '';
         if (!resources.length) {
-            resourceList.innerHTML = `<p>No learning resources found for ${program}, Block ${block}.</p>`;
+            resourceList.innerHTML = `<p>No learning resources found for ${program}, Block ${block}, Intake ${intakeYear}.</p>`;
             if (document.getElementById('dashboard-new-resources')) 
                 document.getElementById('dashboard-new-resources').textContent = '0';
             return;
@@ -1657,7 +1660,7 @@ async function loadResources() {
                     <div>
                         <a href="${publicUrl}" target="_blank">${res.title}</a>
                         <p style="margin:5px 0 0;font-size:0.9em;color:#6B7280;">
-                            ${res.program_type === 'General' ? 'General' : `${res.program_type}, Block ${res.block_term || res.block}`} 
+                            ${res.program_type === 'General' ? 'General' : `${res.program_type}, Block ${res.block_term || res.block}, Intake ${res.intake_year || res.intake}`} 
                             • Uploaded: ${new Date(res.created_at).toLocaleDateString()}
                         </p>
                     </div>
@@ -1679,6 +1682,7 @@ async function loadResources() {
         resourceList.innerHTML = `<p style="color:#EF4444;">Error loading resources: ${error.message}</p>`;
     }
 }
+
 
 // *************************************************************************
 // *** 7. ACADEMIC CALENDAR LOGIC ***
