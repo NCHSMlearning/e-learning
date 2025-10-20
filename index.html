@@ -265,12 +265,11 @@
 
             <section id="dashboard" class="tab-content active">
 
-
-                <div id="welcome-banner">
-                    <span class="info-icon">📣</span>
-                    <strong>THE OFFICIAL ANNOUNCEMENT IS HERE:</strong> 
-                    <span id="student-welcome-message">Loading message...</span>
-                </div>
+<div id="welcome-banner">
+  <span class="info-icon">📣</span>
+  <strong>THE OFFICIAL ANNOUNCEMENT IS HERE:</strong> 
+  <span id="student-welcome-message">Loading message...</span>
+</div>
 
 
                 <h2 style="margin-top: 30px; color: #4C1D95;">Quick Snapshot</h2>
@@ -617,54 +616,45 @@ async function logout() {
 
 
 /**
- * Load the student header and welcome message.
+ * Load the student header, welcome message, and announcement.
  */
 async function loadWelcomeDetails() {
-    const studentName = currentUserProfile?.full_name || 'Student';
-    if (welcomeHeader) welcomeHeader.textContent = `Hello, ${studentName}!`;
+  const studentName = currentUserProfile?.full_name || 'Student';
+  if (welcomeHeader) welcomeHeader.textContent = `Hello, ${studentName}!`;
 
-
-    await loadStudentWelcomeMessage();
+  // Load both welcome and announcement messages
+  await loadStudentWelcomeMessage('student_welcome', 'student-welcome-message');
+  await loadStudentWelcomeMessage('welcome_message', 'admin-announcement');
 }
-
 
 /**
- * Load welcome message from app_settings safely.
+ * Load a message from app_settings safely.
  */
-async function loadStudentWelcomeMessage() {
-    const bannerElement = document.getElementById('student-welcome-message');
-    const inputElement = document.getElementById('welcome-input');
-    if (!bannerElement) return;
+async function loadStudentWelcomeMessage(key, elementId) {
+  const bannerElement = document.getElementById(elementId);
+  if (!bannerElement) return;
 
+  bannerElement.textContent = 'Loading...';
 
-    bannerElement.textContent = 'Loading announcements...';
+  try {
+    const { data, error } = await sb
+      .from('app_settings')
+      .select('value')
+      .eq('key', key)
+      .maybeSingle();
 
+    if (error) throw error;
 
-    try {
-        const { data, error } = await sb
-            .from(SETTINGS_TABLE)
-            .select('value')
-            .eq('key', MESSAGE_KEY)
-            .maybeSingle(); 
-
-
-        if (error) throw error;
-
-
-        if (data && data.value) {
-            bannerElement.innerHTML = data.value;
-            if (inputElement) inputElement.value = data.value;
-        } else {
-            bannerElement.textContent = 'Welcome! No current announcements from the Administration.';
-            if (inputElement) inputElement.value = '';
-        }
-    } catch (err) {
-        console.error('Failed to load welcome message:', err);
-        bannerElement.textContent = 'Failed to load announcements. Please refresh.';
-        if (inputElement) inputElement.value = '';
+    if (data && data.value) {
+      bannerElement.innerHTML = data.value;
+    } else {
+      bannerElement.textContent = 'No message available.';
     }
+  } catch (err) {
+    console.error(`Failed to load ${key}:`, err);
+    bannerElement.textContent = 'Failed to load message. Please refresh.';
+  }
 }
-
 
 /**
  * Calculates and updates all dashboard metrics.
