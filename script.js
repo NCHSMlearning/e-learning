@@ -2114,6 +2114,7 @@ document.getElementById('save-announcement').addEventListener('click', async()=>
         feedback.textContent='Failed to save announcement.';
         feedback.style.color='red';
     }
+ }); // <-- close the event listener properly
 
 // Initial load
 loadWelcomeDetails();
