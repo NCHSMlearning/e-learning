@@ -19,16 +19,15 @@
                 <li><a href="#" data-tab="dashboard" class="active">Dashboard</a></li>
                 <li><a href="#" data-tab="users">Manage Users</a></li> 
                 <li><a href="#" data-tab="pending">Pending Approvals</a></li> 
-                <li><a href="#" data-tab="enroll">Enroll Accounts</a></li>
-                <li><a href="#" data-tab="courses">Courses</a></li>
+                <li><a href="#" data-tab="enroll">Enroll Accounts & Promotion</a></li> <li><a href="#" data-tab="courses">Courses</a></li>
                 <li><a href="#" data-tab="sessions">Manage Sessions</a></li> 
                 <li><a href="#" data-tab="attendance">Attendance & Check-in</a></li> 
                 <li><a href="#" data-tab="cats">CATS/Exams</a></li>
+                <li><a href="#" data-tab="resources">Resources</a></li>
                 <li><a href="#" data-tab="messages">Inbox</a></li>
                 <li><a href="#" data-tab="calendar">System Calendar</a></li> 
-                <li><a href="#" data-tab="resources">Resources</a></li>
                 <li><a href="#" data-tab="welcome-editor">Edit Welcome Message</a></li> 
-                <li><a href="#" data-tab="security">Security & Settings</a></li>
+                <li><a href="#" data-tab="audit">Audit & Security Logs</a></li> <li><a href="#" data-tab="security">Security & Settings</a></li>
                 <li><a href="#" data-tab="backup">Backup & Restore</a></li> 
             </ul>
             <div class="logout"><a href="#" onclick="logout()">Logout</a></div>
@@ -48,8 +47,7 @@
                     <div class="card" onclick="showTab('users')"><h3>Total Users</h3><p class="data" id="totalUsers">0</p></div>
                     <div class="card" onclick="showTab('pending')"><h3>Pending Approvals</h3><p class="data" id="pendingApprovals">0</p></div>
                     <div class="card" onclick="showTab('enroll')"><h3>Total Students</h3><p class="data" id="totalStudents">0</p></div>
-                    <div class="card" onclick="showTab('attendance')"><h3>Today's Geo Check-ins</h3><p class="data" id="todayCheckins">0</p></div>
-                </div>
+                    <div class="card" onclick="showTab('data-health')"><h3>Data Integrity Score</h3><p class="data" id="dataIntegrityScore">--%</p></div> </div>
             </section>
 
             <section id="users" class="tab-content">
@@ -108,6 +106,30 @@
                     <button type="submit">Enroll Account</button>
                 </form>
                 
+                <hr>
+                
+                <h3>Mass Student Block/Term Promotion (End of Term) 🚀</h3>
+                <p>Advance all students from one Block/Term to the next.</p>
+                <form id="mass-promotion-form" class="inline-form">
+                    <select id="promote_intake" required>
+                        <option value="">-- Select Intake Year --</option>
+                        <option value="2024">March 2024</option>
+                        <option value="2025">March 2025</option>
+                    </select>
+                    <select id="promote_from_block" required>
+                        <option value="">-- Promote Students FROM --</option>
+                        </select>
+                    <select id="promote_to_block" required>
+                        <option value="">-- Promote Students TO --</option>
+                        </select>
+                    <button type="submit" class="btn-danger">Execute Mass Promotion</button>
+                </form>
+                <p class="warning-text" id="promotion-warning" style="color: red; margin-top: 5px;">
+                    **WARNING:** This action is irreversible and affects all active students in the 'FROM' group.
+                </p>
+
+                <hr>
+
                 <h3>Enrolled Students (For quick reference)</h3>
                 <div class="toolbar">
                     <button onclick="exportTableToCSV('students-table', 'Enrolled_Students_Export.csv')" class="btn-action export-btn">Export Student List (CSV)</button>
@@ -166,7 +188,6 @@
                         <option value="">-- Select Session Type --</option>
                         <option value="class">Class Session</option>
                         <option value="clinical">Clinical Rotation</option>
-                        <option value="exam">Exam/CAT</option>
                         <option value="event">General Event</option>
                     </select>
                     <input type="text" id="session_title" placeholder="Title/Topic" required>
@@ -228,232 +249,225 @@
                     <input type="text" id="clinical_name_to_edit" placeholder="New Clinical Area Name (e.g., PEDIATRICS Term 1)" required>
                     <button type="button" onclick="saveClinicalName()">Update Clinical Name</button>
                 </form>
-
             </section>
 
            <section id="attendance" class="tab-content">
-    <h2 style="color: #4C1D95;">Daily Attendance & Geo Check-in</h2>
+                <h2 style="color: #4C1D95;">Daily Attendance & Geo Check-in</h2>
+                <h3>Admin/Lecturer Self Check-in (Mark My Attendance) 📍</h3>
+                <p>Check in your own presence for the day. (Uses current location/time, requires Geo-location access).</p>
+                <button onclick="adminCheckIn()" class="btn-action">Mark My Attendance Now</button>
+                
+                <hr>
+                
+                <h3>Admin/Super Admin Manual Student Check-in</h3>
+                <p>Use this form to manually mark attendance for a student.</p>
+                <form id="manual-attendance-form" class="inline-form">
+                    <select id="att_student_id" required><option value="">-- Select Student --</option></select>
+                    <select id="att_session_type" required>
+                        <option value="">-- Select Session Type --</option>
+                        <option value="classroom">Classroom</option>
+                        <option value="clinical">Clinical Rotation</option>
+                        <option value="virtual">Virtual</option>
+                        <option value="call">On Call</option>
+                    </select>
+                    <input type="text" id="att_department" placeholder="Department/Area" required>
+                    <select id="att_course_id"><option value="">-- Select Course (Optional) --</option></select>
+                    <input id="att_location" placeholder="Location">
+                    <input id="att_date" type="date" required>
+                    <input id="att_time" type="time">
+                    <button type="submit" class="btn-action">Mark Attendance</button>
+                </form>
 
-    <h3>Admin/Lecturer Self Check-in (Mark My Attendance) 📍</h3>
-    <p>Check in your own presence for the day. (Uses current location/time, requires Geo-location access).</p>
-    <button onclick="adminCheckIn()" class="btn-action">Mark My Attendance Now</button>
-    
-    <hr>
-    
-    <h3>Admin/Super Admin Manual Student Check-in</h3>
-    <p>Use this form to manually mark attendance for a student.</p>
-    <form id="manual-attendance-form" class="inline-form">
-        <select id="att_student_id" required><option value="">-- Select Student --</option></select>
-        <select id="att_session_type" required>
-            <option value="">-- Select Session Type --</option>
-            <option value="classroom">Classroom</option>
-            <option value="clinical">Clinical Rotation</option>
-            <option value="virtual">Virtual</option>
-            <option value="call">On Call</option>
-        </select>
-        <input type="text" id="att_department" placeholder="Department/Area" required>
-        <select id="att_course_id"><option value="">-- Select Course (Optional) --</option></select>
-        <input id="att_location" placeholder="Location">
-        <input id="att_date" type="date" required>
-        <input id="att_time" type="time">
-        <button type="submit" class="btn-action">Mark Attendance</button>
-    </form>
+                <div id="attendance-records">
+                    <h3 style="color: #4C1D95;">Today's Attendance Records (Pending & Verified)</h3>
+                    <input type="text" id="attendance-search" placeholder="Search by Student Name..." onkeyup="filterTable('attendance-search', 'attendance-table', [0, 1, 2])">
+                    <div class="toolbar">
+                        <button onclick="exportTableToCSV('attendance-table', 'Todays_Attendance_Export.csv')" class="btn-action export-btn">Export Today's Records (CSV)</button>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Student</th>
+                                <th>Session Type</th>
+                                <th>Target (Course/Clinical)</th>
+                                <th>Department/Location</th>
+                                <th>Date/Time</th>
+                                <th>Geo Data</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="attendance-table">
+                            <tr><td colspan="7">Loading today's records...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
 
-    <div id="attendance-records">
-        <h3 style="color: #4C1D95;">Today's Attendance Records (Pending & Verified)</h3>
-        <input type="text" id="attendance-search" placeholder="Search by Student Name..." onkeyup="filterTable('attendance-search', 'attendance-table', [0, 1, 2])">
-        <div class="toolbar">
-            <button onclick="exportTableToCSV('attendance-table', 'Todays_Attendance_Export.csv')" class="btn-action export-btn">Export Today's Records (CSV)</button>
-        </div>
-        <table>
-            <thead>
-                <tr>
-                    <th>Student</th>
-                    <th>Session Type</th>
-                    <th>Target (Course/Clinical)</th>
-                    <th>Department/Location</th>
-                    <th>Date/Time</th>
-                    <th>Geo Data</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody id="attendance-table">
-                <tr><td colspan="7">Loading today's records...</td></tr>
-            </tbody>
-        </table>
-    </div>
-
-    <div id="past-attendance-history">
-        <h3 style="color: #4C1D95;">Past Attendance History (All Users)</h3>
-        <p>Records from previous days for all users.</p>
-        <div class="toolbar">
-            <button onclick="exportTableToCSV('past-attendance-table', 'Past_Attendance_History_Export.csv')" class="btn-action export-btn">Export History (CSV)</button>
-        </div>
-        <table>
-            <thead>
-                <tr>
-                    <th>User</th>
-                    <th>Session Type</th>
-                    <th>Target (Course/Clinical)</th>
-                    <th>Date/Time</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody id="past-attendance-table">
-                <tr><td colspan="6">Loading history...</td></tr>
-            </tbody>
-        </table>
-    </div>
-</section>
+                <div id="past-attendance-history">
+                    <h3 style="color: #4C1D95;">Past Attendance History (All Users)</h3>
+                    <p>Records from previous days for all users.</p>
+                    <div class="toolbar">
+                        <button onclick="exportTableToCSV('past-attendance-table', 'Past_Attendance_History_Export.csv')" class="btn-action export-btn">Export History (CSV)</button>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>Session Type</th>
+                                <th>Target (Course/Clinical)</th>
+                                <th>Date/Time</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="past-attendance-table">
+                            <tr><td colspan="6">Loading history...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+            
             <section id="cats" class="tab-content">
-    <h2>CATS / Exams</h2>
-    <p>Note: Selecting a <strong>Program</strong> dynamically filters the <strong>Course</strong> and <strong>Block/Term</strong> options.</p>
+                <h2>CATS / Exams Administration</h2>
+                <p>Post online or manage scheduled assessments. Selecting a **Program** dynamically filters other options.</p>
 
-    <!-- Add Exam Form -->
-    <form id="add-exam-form" class="inline-form">
-        <select id="exam_program" required>
-            <option value="">-- Select Program --</option>
-            <option value="KRCHN">KRCHN Students</option>
-            <option value="TVET">TVET Students</option>
-        </select>
-        <select id="exam_course_id" required>
-            <option value="">-- Select Course --</option>
-        </select>
-        <input type="text" id="exam_title" placeholder="Exam Title" required>
-        <input type="date" id="exam_date" required>
-        <select id="exam_status">
-            <option>Upcoming</option>
-            <option>Completed</option>
-        </select>
-        <select id="exam_intake">
-            <option value="">-- Select Intake Year --</option>
-            <option value="2024">March 2024</option>
-            <option value="2025">March 2025</option>
-            <option value="2026">March 2026</option>
-            <option value="2027">March 2027</option>
-            <option value="2028">March 2028</option>
-        </select>
-        <select id="exam_block_term">
-            <option value="">-- Select Block/Term --</option>
-        </select>
-        <button type="submit">Add Exam</button>
-    </form>
+                <form id="add-exam-form" class="inline-form">
+                    <select id="exam_type" required>
+                        <option value="">-- Select Type --</option>
+                        <option value="EXAM">Final Exam</option>
+                        <option value="CAT">Continuous Assessment Test (CAT)</option>
+                    </select>
+                    
+                    <select id="exam_program" required>
+                        <option value="">-- Select Program --</option>
+                        <option value="KRCHN">KRCHN Students</option>
+                        <option value="TVET">TVET Students</option>
+                    </select>
+                    
+                    <select id="exam_course_id" required>
+                        <option value="">-- Select Course --</option>
+                    </select>
+                    
+                    <input type="text" id="exam_title" placeholder="Assessment Title" required>
+                    
+                    <input type="url" id="exam_link" placeholder="Link to Online Exam/Quiz (e.g., Google Form URL)" required>
+                    
+                    <input type="number" id="exam_duration_minutes" placeholder="Duration (Minutes, e.g., 60)" required min="5">
+                    
+                    <input type="date" id="exam_date" required>
+                    <input type="time" id="exam_start_time" required> <select id="exam_status">
+                        <option value="Upcoming">Upcoming</option>
+                        <option value="Completed">Completed</option>
+                        <option value="InProgress">In Progress</option>
+                    </select>
+                    
+                    <select id="exam_intake">
+                        <option value="">-- Select Intake Year --</option>
+                        <option value="2024">March 2024</option>
+                        <option value="2025">March 2025</option>
+                        <option value="2026">March 2026</option>
+                        <option value="2027">March 2027</option>
+                        <option value="2028">March 2028</option>
+                    </select>
+                    <select id="exam_block_term">
+                        <option value="">-- Select Block/Term --</option>
+                    </select>
+                    
+                    <button type="submit">Post Assessment</button>
+                </form>
 
-    <!-- Exams Toolbar -->
-    <div class="toolbar">
-        <input type="text" id="exam-search" placeholder="Search Exams...">
-        <button class="btn-action export-btn">Export Exams (CSV)</button>
-    </div>
+                <div class="toolbar">
+                    <input type="text" id="exam-search" placeholder="Search Assessments...">
+                    <button class="btn-action export-btn">Export Assessments (CSV)</button>
+                </div>
 
-    <!-- Exams Table -->
-    <table>
-        <thead>
-            <tr>
-                <th>Program</th>
-                <th>Course</th>
-                <th>Title</th>
-                <th>Date</th>
-                <th>Status</th>
-                <th>Intake</th>
-                <th>Block/Term</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody id="exams-table">
-            <tr><td colspan="8">Loading exams...</td></tr>
-        </tbody>
-    </table>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Type</th> <th>Program</th>
+                            <th>Course</th>
+                            <th>Title</th>
+                            <th>Date/Time</th>
+                            <th>Duration</th> <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="exams-table">
+                        <tr><td colspan="8">Loading assessments...</td></tr>
+                    </tbody>
+                </table>
 
-    <!-- Edit Exam Modal -->
-    <div id="examEditModal" class="modal">
-        <div class="modal-content">
-            <span class="close">&times;</span>
-            <h2>Edit Exam</h2>
-            <form id="edit-exam-form">
-                <input type="hidden" id="edit_exam_id">
-                <label>Title</label>
-                <input type="text" id="edit_exam_title" required>
-                <label>Date</label>
-                <input type="date" id="edit_exam_date" required>
-                <label>Status</label>
-                <select id="edit_exam_status">
-                    <option>Upcoming</option>
-                    <option>Completed</option>
-                </select>
-                <button type="submit">Save Changes</button>
-            </form>
-        </div>
-    </div>
-
-    <!-- Student Online Exam Interface -->
-    <h3>Available Exams (Students)</h3>
-    <div id="student-exams">
-        <p>Loading available exams...</p>
-    </div>
-</section>
+                <h3>Available Assessments (Students Portal Preview)</h3>
+                <div id="student-exams">
+                    <p>Loading available assessments...</p>
+                </div>
+            </section>
 
 
-          <section id="resources" class="tab-content">
-  <h2>Resource Center</h2>
-  <p>Upload files to share with students based on their program, intake year, and block/term.</p>
+            <section id="resources" class="tab-content">
+                <h2>Resource Center</h2>
+                <p>Upload files to share with students based on their program, intake year, and block/term.</p>
 
-  <form id="upload-resource-form" class="inline-form">
-    <select id="resource_program" required>
-      <option value="">-- Select Program --</option>
-      <option value="KRCHN">KRCHN Students</option>
-      <option value="TVET">TVET Students</option>
-    </select>
+                <form id="upload-resource-form" class="inline-form">
+                    <select id="resource_program" required>
+                        <option value="">-- Select Program --</option>
+                        <option value="KRCHN">KRCHN Students</option>
+                        <option value="TVET">TVET Students</option>
+                    </select>
 
-    <select id="resource_intake" required>
-      <option value="">-- Select Intake Year --</option>
-      <option value="2024">March 2024</option>
-      <option value="2025">March 2025</option>
-      <option value="2026">March 2026</option>
-      <option value="2027">March 2027</option>
-      <option value="2028">March 2028</option>
-    </select>
+                    <select id="resource_intake" required>
+                        <option value="">-- Select Intake Year --</option>
+                        <option value="2024">March 2024</option>
+                        <option value="2025">March 2025</option>
+                        <option value="2026">March 2026</option>
+                        <option value="2027">March 2027</option>
+                        <option value="2028">March 2028</option>
+                    </select>
 
-    <select id="resource_block" required>
-      <option value="">-- Select Block/Term --</option>
-    </select>
+                    <select id="resource_block" required>
+                        <option value="">-- Select Block/Term --</option>
+                    </select>
+                    <input 
+                        type="file" 
+                        id="resource-file" 
+                        required
+                        accept=".pdf, .doc, .docx, .ppt, .pptx, .xls, .xlsx" 
+                        title="Accepts PDF and common Microsoft Office documents."
+                    >
+                    <input type="text" id="resource-title" placeholder="Title for file" required>
+                    <button type="submit">Upload</button>
+                </form>
 
-    <input type="file" id="resource-file" required>
-    <input type="text" id="resource-title" placeholder="Title for file" required>
-    <button type="submit">Upload</button>
-  </form>
+                <div class="toolbar">
+                    <input 
+                        type="text" 
+                        id="resource-search" 
+                        placeholder="Search Resources..." 
+                        onkeyup="filterTable('resource-search', 'resources-list', [0,1,2,3])">
+                    <button 
+                        onclick="exportTableToCSV('resources-list', 'Resource_Index_Export.csv')" 
+                        class="btn-action export-btn">
+                        Export Resource List (CSV)
+                    </button>
+                </div>
 
-  <div class="toolbar">
-    <input 
-      type="text" 
-      id="resource-search" 
-      placeholder="Search Resources..." 
-      onkeyup="filterTable('resource-search', 'resources-list', [0,1,2,3])">
-    <button 
-      onclick="exportTableToCSV('resources-list', 'Resource_Index_Export.csv')" 
-      class="btn-action export-btn">
-      Export Resource List (CSV)
-    </button>
-  </div>
-
-  <table>
-    <thead>
-      <tr>
-        <th>Program</th>
-        <th>Title</th>
-        <th>Intake</th>
-        <th>Block/Term</th>
-        <th>Uploaded By</th>
-        <th>Date</th>
-        <th>Actions</th>
-      </tr>
-    </thead>
-    <tbody id="resources-list">
-      <tr><td colspan="7">Loading resources...</td></tr>
-    </tbody>
-  </table>
-</section>
-
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Program</th>
+                            <th>Title</th>
+                            <th>Intake</th>
+                            <th>Block/Term</th>
+                            <th>Uploaded By</th>
+                            <th>Date</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resources-list">
+                        <tr><td colspan="7">Loading resources...</td></tr>
+                    </tbody>
+                </table>
+            </section>
+            
             <section id="messages" class="tab-content">
                 <h2>Inbox / Messages</h2>
                 <form id="send-message-form" class="inline-form">
@@ -482,9 +496,65 @@
                 <div id="fullCalendarDisplay"></div> 
             </section>
             
+            <section id="welcome-editor" class="tab-content">
+                <h2>Edit Student Welcome Message</h2>
+                <p>The **Save Welcome Message** button must update the live message on the student-facing site.</p>
+                <form id="edit-welcome-form">
+                    <textarea id="welcome-message-editor" rows="20" placeholder="Paste the HTML content for the Welcome Message here..."></textarea>
+                    <button type="submit" class="btn-action">Save Welcome Message</button>
+                </form>
+                <h3>Current Live Preview</h3>
+                <div id="live-preview">
+                    <p>Loading live preview...</p>
+                </div>
+            </section>
+
+            <section id="audit" class="tab-content">
+                <h2>Audit & Security Logs 🔍</h2>
+                <p>Track every critical administrative action (user changes, file deletions, major system updates).</p>
+                
+                <h3>Filter Logs</h3>
+                <div class="toolbar">
+                    <select id="log-filter-user"><option value="">-- Filter by User --</option></select>
+                    <select id="log-filter-action"><option value="">-- Filter by Action Type --</option></select>
+                    <input type="date" id="log-filter-date-start">
+                    <input type="date" id="log-filter-date-end">
+                    <button onclick="fetchAuditLogs()" class="btn-action">Apply Filters</button>
+                    <button onclick="exportTableToCSV('audit-table', 'Audit_Log_Export.csv')" class="btn-action export-btn">Export All (CSV)</button>
+                </div>
+                
+                <table>
+                    <thead>
+                        <tr><th>Timestamp</th><th>User/Role</th><th>Action Type</th><th>Details (Target ID)</th><th>Status</th></tr>
+                    </thead>
+                    <tbody id="audit-table">
+                        <tr><td colspan="5">Loading recent critical events...</td></tr>
+                    </tbody>
+                </table>
+            </section>
+            
             <section id="security" class="tab-content">
                 <h2>System Security & Settings</h2>
                 
+                <hr>
+                <h3>Global System Status Management (The Kill Switch) 🛑</h3>
+                <p>Allows immediate, controlled system status changes for maintenance or security incidents.</p>
+
+                <div class="inline-form">
+                    <label for="global_status" style="font-weight: bold;">Current System Status:</label>
+                    <select id="global_status" onchange="updateSystemStatus(this.value)">
+                        <option value="ACTIVE">System Online (ACTIVE)</option>
+                        <option value="MAINTENANCE">Maintenance Mode (Login Disabled)</option>
+                        <option value="EMERGENCY_LOCKDOWN">EMERGENCY LOCKDOWN (All Access Disabled)</option>
+                    </select>
+                </div>
+
+                <div id="status_details" style="margin-top: 10px;">
+                    <textarea id="maintenance_message" rows="3" placeholder="Enter the message users will see (e.g., 'System down for urgent maintenance. Back at 5 PM')."></textarea>
+                    <button onclick="saveSystemMessage()" class="btn-action">Save System Message</button>
+                </div>
+                <hr>
+
                 <h3>Force Password Reset</h3>
                 <p>Use this tool for an immediate, targeted password reset for any user via their email.</p>
                 <form id="global-password-reset-form" class="inline-form">
@@ -503,19 +573,6 @@
                 </form>
             </section>
 
-            <section id="welcome-editor" class="tab-content">
-                <h2>Edit Student Welcome Message</h2>
-                <p>The **Save Welcome Message** button must update the live message on the student-facing site.</p>
-                <form id="edit-welcome-form">
-                    <textarea id="welcome-message-editor" rows="20" placeholder="Paste the HTML content for the Welcome Message here..."></textarea>
-                    <button type="submit" class="btn-action">Save Welcome Message</button>
-                </form>
-                <h3>Current Live Preview</h3>
-                <div id="live-preview">
-                    <p>Loading live preview...</p>
-                </div>
-            </section>
-            
             <section id="backup" class="tab-content">
                 <h2>Database Backup & Restore</h2>
                 <p>Manage database backups to prevent data loss. </p>
