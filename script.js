@@ -2168,7 +2168,52 @@ document.addEventListener('DOMContentLoaded', () => {
  * 11. Resources Tab (Fully Corrected)
  *******************************************************/
 
-// Handle upload form
+// -------------------- Populate Block/Term --------------------
+$('resource_program').addEventListener('change', loadBlocks);
+$('resource_intake').addEventListener('change', loadBlocks);
+
+async function loadBlocks() {
+    const program = $('resource_program').value;
+    const intake = $('resource_intake').value;
+    const blockSelect = $('resource_block');
+
+    blockSelect.innerHTML = '<option value="">-- Select Block/Term --</option>';
+    if (!program || !intake) return;
+
+    try {
+        const { data: blocks, error } = await sb
+            .from('resources')
+            .select('block')
+            .eq('program_type', program)
+            .eq('intake', intake)
+            .order('block', { ascending: true });
+
+        if (error) throw error;
+
+        const uniqueBlocks = [...new Set(blocks.map(b => b.block).filter(Boolean))];
+
+        // Default blocks if none exist
+        if (uniqueBlocks.length === 0) {
+            ['Block 1', 'Block 2', 'Block 3', 'Block 4'].forEach(b => {
+                const opt = document.createElement('option');
+                opt.value = b;
+                opt.textContent = b;
+                blockSelect.appendChild(opt);
+            });
+        } else {
+            uniqueBlocks.forEach(b => {
+                const opt = document.createElement('option');
+                opt.value = b;
+                opt.textContent = b;
+                blockSelect.appendChild(opt);
+            });
+        }
+    } catch (err) {
+        console.error('Failed to load blocks:', err);
+    }
+}
+
+// -------------------- Handle Upload Form --------------------
 $('upload-resource-form')?.addEventListener('submit', async e => {
     e.preventDefault();
     const submitButton = e.submitter;
@@ -2183,7 +2228,7 @@ $('upload-resource-form')?.addEventListener('submit', async e => {
 
     if (!fileInput.files.length || !program || !intake || !block || !title) {
         showFeedback('Please select a file and fill all required fields.', 'error');
-        setButtonLoading(submitButton, false, originalText); // FIX: Ensure button resets
+        setButtonLoading(submitButton, false, originalText);
         return;
     }
 
@@ -2192,23 +2237,18 @@ $('upload-resource-form')?.addEventListener('submit', async e => {
     const filePath = `${program}/${intake}/${block}/${safeFileName}`;
 
     try {
-        // 1️⃣ Upload file to Supabase Storage
+        // 1️⃣ Upload to Supabase Storage
         const { error: uploadError } = await sb.storage
             .from(RESOURCES_BUCKET)
-            .upload(filePath, file, {
-                cacheControl: '3600',
-                upsert: true,
-                contentType: file.type
-            });
-
+            .upload(filePath, file, { cacheControl: '3600', upsert: true, contentType: file.type });
         if (uploadError) throw uploadError;
 
-        // 2️⃣ Get the public URL
+        // 2️⃣ Get public URL
         const { data: { publicUrl } } = sb.storage
             .from(RESOURCES_BUCKET)
             .getPublicUrl(filePath);
 
-        // 3️⃣ Insert file metadata into 'resources' table
+        // 3️⃣ Insert metadata into 'resources' table
         const { error: dbError, data } = await sb
             .from('resources')
             .insert({
@@ -2235,17 +2275,14 @@ $('upload-resource-form')?.addEventListener('submit', async e => {
         console.error('Upload failed:', err);
         showFeedback(`❌ Upload failed: ${err.message}`, 'error');
     } finally {
-        setButtonLoading(submitButton, false, originalText); // FIX: Ensure button resets
+        setButtonLoading(submitButton, false, originalText);
     }
 });
 
-// Load resources from Supabase table
+// -------------------- Load Resources Table --------------------
 async function loadResources() {
     const tableBody = $('resources-list');
-    if (!tableBody) {
-        console.error("Resource table body element with ID 'resources-list' not found.");
-        return;
-    }
+    if (!tableBody) return console.error("Resource table body element with ID 'resources-list' not found.");
 
     tableBody.innerHTML = '<tr><td colspan="7">Loading resources...</td></tr>';
 
@@ -2254,11 +2291,9 @@ async function loadResources() {
             .from('resources')
             .select('id, title, program_type, file_path, created_at, uploaded_by_name, file_url, intake, block')
             .order('created_at', { ascending: false });
-
         if (error) throw error;
 
         tableBody.innerHTML = '';
-
         if (!resources?.length) {
             tableBody.innerHTML = '<tr><td colspan="7">No resources found.</td></tr>';
             return;
@@ -2266,8 +2301,6 @@ async function loadResources() {
 
         resources.forEach(resource => {
             const date = new Date(resource.created_at).toLocaleString();
-            
-            // Escape values for HTML attributes and function arguments
             const safeFilePath = escapeHtml(resource.file_path || '', true);
             const safeId = resource.id;
             const safeTitle = escapeHtml(resource.title || 'Untitled', true);
@@ -2288,7 +2321,6 @@ async function loadResources() {
                 </tr>
             `;
         });
-
     } catch (e) {
         console.error('Error loading resources:', e);
         tableBody.innerHTML = `<tr><td colspan="7">Error loading resources: ${e.message}</td></tr>`;
@@ -2298,22 +2330,15 @@ async function loadResources() {
     filterTable('resource-search', 'resources-list', [0, 1, 2, 3]);
 }
 
-// Delete resource from both Storage and Table
+// -------------------- Delete Resource --------------------
 async function deleteResource(filePath, id, title) {
     if (!confirm(`Are you sure you want to delete the file: ${title}? This action cannot be undone.`)) return;
 
     try {
-        // Remove file from storage
-        const { error: storageError } = await sb.storage
-            .from(RESOURCES_BUCKET)
-            .remove([filePath]);
+        const { error: storageError } = await sb.storage.from(RESOURCES_BUCKET).remove([filePath]);
         if (storageError) throw storageError;
 
-        // Remove metadata from database
-        const { error: dbError } = await sb
-            .from('resources')
-            .delete()
-            .eq('id', id);
+        const { error: dbError } = await sb.from('resources').delete().eq('id', id);
         if (dbError) throw dbError;
 
         await logAudit('RESOURCE_DELETE', `Deleted resource: ${title} (${filePath}).`, id, 'SUCCESS');
@@ -2325,6 +2350,18 @@ async function deleteResource(filePath, id, title) {
         showFeedback(`❌ Failed to delete resource: ${e.message}`, 'error');
     }
 }
+
+// -------------------- Escape HTML --------------------
+function escapeHtml(text, forAttr = false) {
+    const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+    let escaped = text.replace(/[&<>"']/g, m => map[m]);
+    if (forAttr) escaped = escaped.replace(/`/g, '&#096;'); // safe for attribute
+    return escaped;
+}
+
+// -------------------- Initial Load --------------------
+loadResources();
+
 /*******************************************************
  * 12. Security & System Status (NEW STRATEGIC FEATURE)
  *******************************************************/
