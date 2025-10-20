@@ -151,6 +151,7 @@ async function loadSectionData(tabId) {
     
     switch(tabId) {
         case 'dashboard': 
+      
             loadDashboardData(); 
             break;
         case 'users': loadAllUsers(); break;
@@ -1260,24 +1261,28 @@ async function handleAddSession(e) {
     const session_type = $('session_type').value.trim();
     const session_title = $('session_title').value.trim();
     const session_date = $('session_date').value;
-    const session_time = $('session_time').value || null;
+    const session_time = $('session_time').value || '09:00:00'; // default if empty
     const target_program = $('session_program').value || null;
     const intake_year = $('session_intake').value;
     const block_term = $('session_block_term').value;
+    const program_type = $('session_program_type').value || 'Diploma'; // ADD this field
     const course_id = $('session_course_id').value || null;
 
-    if (!session_type || !session_title || !session_date || !target_program || !intake_year || !block_term) {
+    // Validate required fields
+    if (!session_type || !session_title || !session_date || !target_program || !intake_year || !block_term || !program_type) {
         showFeedback('Please fill in all required fields.', 'error');
         setButtonLoading(submitButton, false, originalText);
         return;
     }
 
     const sessionData = {
-        session_type,
-        session_title,
-        session_date,
-        session_time,
+        title: session_type,            // maps to 'title' column
+        session_title,                  // session_title column
+        session_date,                   // timestamp
+        session_time,                   // time
         target_program,
+        session_type,
+        program_type,                   // NEW
         intake_year,
         block_term,
         course_id,
@@ -1288,7 +1293,7 @@ async function handleAddSession(e) {
         const { error, data } = await sb.from('scheduled_sessions').insert([sessionData]).select('id');
 
         if (error) throw error;
-        
+
         await logAudit('SESSION_ADD', `Successfully scheduled session: ${session_title}.`, data?.[0]?.id, 'SUCCESS');
         showFeedback('✅ Session scheduled successfully!', 'success');
         e.target.reset();
@@ -1299,9 +1304,10 @@ async function handleAddSession(e) {
         await logAudit('SESSION_ADD', `Failed to schedule session: ${session_title}. Reason: ${error.message}`, null, 'FAILURE');
         showFeedback(`❌ Failed to schedule session: ${error.message}`, 'error');
     } finally {
-        setButtonLoading(submitButton, false, originalText); // FIX: Ensure button resets
+        setButtonLoading(submitButton, false, originalText);
     }
 }
+
 
 async function deleteSession(sessionId, sessionTitle) {
     if (!confirm(`Are you sure you want to delete session: ${sessionTitle}?`)) return;
