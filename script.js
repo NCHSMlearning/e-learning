@@ -1963,7 +1963,7 @@ function escapeHtml(str) {
 }
 
 function showFeedback(msg, type = 'info') {
-  alert(msg); // Replace with toast if desired
+  alert(msg); // Replace this with toast/snackbar if desired
 }
 
 function setButtonLoading(btn, isLoading, originalText) {
@@ -2013,7 +2013,7 @@ async function loadStudentMessages() {
       const div = document.createElement('div');
       div.className = 'student-message';
       div.innerHTML = `
-        <strong>${escapeHtml(msg.subject)}</strong> from ${escapeHtml(sender)} on ${date}
+        <strong>${escapeHtml(msg.subject || 'Message')}</strong> from ${escapeHtml(sender)} on ${date}
         <p>${escapeHtml(msg.message)}</p>
       `;
       container.appendChild(div);
@@ -2043,7 +2043,6 @@ async function handleSendMessage(e) {
   }
 
   try {
-    // Insert notification (without .select() to avoid RLS hang)
     const { error, data } = await sb.from('notifications').insert({
       target_program: target_program === 'ALL' ? null : target_program,
       subject,
@@ -2094,11 +2093,11 @@ async function loadAdminMessages() {
       tr.innerHTML = `
         <td>${escapeHtml(recipient)}</td>
         <td>${escapeHtml(senderName)}</td>
-        <td>${escapeHtml(msg.subject)}</td>
-        <td>${escapeHtml(msg.message.substring(0,80) + (msg.message.length > 80 ? '...' : ''))}</td>
+        <td>${escapeHtml(msg.subject || '')}</td>
+        <td>${escapeHtml(msg.message.substring(0, 80) + (msg.message.length > 80 ? '...' : ''))}</td>
         <td>${sendDate}</td>
         <td>
-          <button class="btn-action" onclick="showFeedback('Edit functionality not implemented yet.')">Edit</button>
+          <button class="btn-action" onclick="editNotification('${msg.id}')">Edit</button>
           <button class="btn btn-delete" onclick="deleteNotification('${msg.id}')">Delete</button>
         </td>
       `;
@@ -2113,6 +2112,42 @@ async function loadAdminMessages() {
   }
 }
 
+// ---------------- Edit & Delete Notifications ----------------
+window.editNotification = async function(id) {
+  try {
+    const { data, error } = await sb.from('notifications')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) {
+      showFeedback('Message not found.', 'error');
+      return;
+    }
+
+    const newSubject = prompt('Edit Subject:', data.subject || '');
+    if (newSubject === null) return;
+
+    const newMessage = prompt('Edit Message:', data.message || '');
+    if (newMessage === null) return;
+
+    const { error: updateError } = await sb.from('notifications')
+      .update({ subject: newSubject.trim(), message: newMessage.trim() })
+      .eq('id', id);
+
+    if (updateError) throw updateError;
+
+    await logAudit('NOTIFICATION_EDIT', `Edited notification ID: ${id}`, id, 'SUCCESS');
+    showFeedback('Message updated successfully!', 'success');
+    await loadAdminMessages();
+    await loadStudentMessages();
+  } catch (err) {
+    await logAudit('NOTIFICATION_EDIT', `Failed to edit notification ID: ${id}. Reason: ${err.message}`, id, 'FAILURE');
+    showFeedback(`Failed to edit message: ${err.message}`, 'error');
+  }
+};
+
 window.deleteNotification = async function(id) {
   if (!confirm('Are you sure you want to delete this message?')) return;
   try {
@@ -2125,44 +2160,44 @@ window.deleteNotification = async function(id) {
     await logAudit('NOTIFICATION_DELETE', `Failed to delete notification ID: ${id}. Reason: ${err.message}`, id, 'FAILURE');
     showFeedback(`Failed to delete message: ${err.message}`, 'error');
   }
-}
+};
 
 // ---------------- Public Announcements ----------------
 async function loadPublicAnnouncements() {
-  const container = document.getElementById('messages-list'); // matches your HTML
+  const container = document.getElementById('public-announcements');
   if (!container) return;
   container.innerHTML = '<p>Loading public announcements...</p>';
 
   try {
-    const { data: announcements, error } = await sb.from('announcements')
+    const { data, error } = await sb.from('notifications')
       .select('*')
+      .eq('subject', 'Official Announcement')
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    if (!announcements || announcements.length === 0) {
+    if (!data || data.length === 0) {
       container.innerHTML = '<p>No public announcements found.</p>';
       return;
     }
 
     container.innerHTML = '';
-    announcements.forEach(a => {
+    data.forEach(a => {
       const date = a.created_at ? new Date(a.created_at).toLocaleString() : 'Unknown';
       const div = document.createElement('div');
       div.className = 'announcement';
       div.innerHTML = `
-        <strong>${escapeHtml(a.title)}</strong> <em>on ${date}</em>
-        <p>${escapeHtml(a.content)}</p>
+        <strong>📣 Official Announcement:</strong> <em>${date}</em>
+        <p>${escapeHtml(a.message)}</p>
       `;
       container.appendChild(div);
     });
-
   } catch (err) {
     console.error('Failed to load announcements:', err);
     container.innerHTML = '<p>Error loading announcements. Please refresh.</p>';
   }
 }
 
-// Save official announcement
+// ---------------- Save Official Announcement ----------------
 document.getElementById('save-announcement').addEventListener('click', async () => {
   const textarea = document.getElementById('announcement-body');
   const content = textarea.value.trim();
@@ -2174,9 +2209,8 @@ document.getElementById('save-announcement').addEventListener('click', async () 
   }
 
   try {
-    // Insert as a system message to ALL students (target_program = null)
-    const { error, data } = await sb.from('notifications').insert({
-      target_program: null,           // Null = all students
+    const { error } = await sb.from('notifications').insert({
+      target_program: null,
       subject: 'Official Announcement',
       message: content,
       message_type: 'system',
@@ -2187,15 +2221,12 @@ document.getElementById('save-announcement').addEventListener('click', async () 
 
     feedback.textContent = 'Announcement saved successfully!';
     textarea.value = '';
-    
-    // Refresh the displayed announcements (optional)
-    await loadOfficialAnnouncement(); 
+    await loadPublicAnnouncements();
   } catch (err) {
     console.error(err);
     feedback.textContent = 'Failed to save announcement: ' + err.message;
   }
 });
-
 
 // ---------------- Initialization ----------------
 document.getElementById('send-message-form').addEventListener('submit', handleSendMessage);
