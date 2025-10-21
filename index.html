@@ -21,8 +21,11 @@
             display: flex; 
             flex-direction: column; 
             padding: 20px; 
-            /* Added transition for smoother mobile toggle if needed later */
-            transition: width 0.3s, transform 0.3s;
+            transition: transform 0.3s, width 0.3s;
+            position: sticky; /* Keep it visible on desktop scroll */
+            top: 0;
+            left: 0;
+            z-index: 1000;
         }
         .sidebar-header { text-align: center; margin-bottom: 30px; }
         .sidebar-header img { width: 60px; margin-bottom: 10px; filter: invert(1); }
@@ -220,29 +223,85 @@
         .resource-item a:hover {
             text-decoration: underline;
         }
-
+        
+        /* -------------------------------------- */
+        /* MOBILE NAV HEADER & TOGGLE */
+        /* -------------------------------------- */
+        .mobile-header {
+            display: none; /* Hidden by default */
+            background-color: #4C1D95;
+            color: white;
+            padding: 10px 15px;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            width: 100%;
+            box-sizing: border-box;
+            z-index: 1010;
+        }
+        .menu-toggle {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+        }
+        
         /* -------------------------------------- */
         /* RESPONSIVE ADJUSTMENTS (Mobile First) */
         /* -------------------------------------- */
         @media (max-width: 768px) {
             .container { 
-                /* We keep the container flexible, but the sidebar will handle the nav */
                 flex-direction: column; 
             }
-            
-            /* --- FORCE VERTICAL TABS ON MOBILE --- */
-            .sidebar { 
-                width: 100%; /* Full width sidebar at the top */
-                padding: 10px 0; 
-                height: auto; 
+
+            /* Show Mobile Header */
+            .mobile-header {
+                display: flex;
             }
+            
+            /* Hide the main sidebar off-screen initially */
+            .sidebar { 
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 70%; /* Takes up 70% of the screen */
+                height: 100%;
+                transform: translateX(-100%); /* CRITICAL: Hides the sidebar */
+                transition: transform 0.3s ease-in-out;
+                box-shadow: 4px 0 10px rgba(0,0,0,0.3);
+            }
+            
+            /* Class added by JS to show the menu */
+            .sidebar.open {
+                transform: translateX(0);
+            }
+
+            /* Full screen overlay to dim the content */
+            .overlay {
+                display: none;
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.5);
+                z-index: 999;
+            }
+            .overlay.active {
+                display: block;
+            }
+
             .sidebar-header { 
-                /* Display a compact header on mobile */
+                /* Compact header in the menu */
                 display: flex; 
-                justify-content: center; 
+                justify-content: flex-start; 
                 align-items: center;
                 gap: 10px;
-                margin-bottom: 0;
+                margin-bottom: 20px;
+                padding: 10px 0;
+                border-bottom: 1px solid #5B21B6;
             }
             .sidebar-header img { 
                 width: 40px; 
@@ -251,34 +310,23 @@
             .sidebar-header h2 {
                  font-size: 1.2rem;
             }
-            /* Rework navigation to a vertical list within the full-width sidebar */
+
+            /* Enforce vertical tabs within the mobile sidebar */
             .nav { 
                 display: flex; 
-                flex-direction: column; /* CRITICAL: FORCES VERTICAL TABS */
-                overflow-x: hidden; /* No horizontal scrolling */
-                padding: 10px 15px; 
-                background-color: #4C1D95;
+                flex-direction: column; 
+                padding: 0; 
                 margin: 0;
             }
-            .nav li { 
-                flex-shrink: 0; 
-                width: 100%; /* Links take full width */
-                margin: 0; /* Remove vertical margin */
-            }
-            
-            /* Ensure links are standard size and left-aligned */
             .nav a { 
-                white-space: normal; 
-                text-align: left; 
-                padding: 10px 15px; 
-                font-size: 1rem; 
-                border-radius: 0; /* Remove rounded corners for full-width list look */
+                padding: 12px 15px; 
+                border-radius: 0;
             }
 
-            /* Move logout to the bottom of the main content on mobile */
-            .logout { display: none; } 
-            
+            /* Move logout back to the sidebar on mobile, but at the bottom */
+            .logout { display: block; margin-top: auto; }
             .main { padding: 15px; } /* Reduce main padding */
+
             .cards { 
                 grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); 
                 gap: 15px; 
@@ -334,7 +382,13 @@
 
         /* Desktop-only styles (Re-enables vertical nav and full sidebar) */
         @media (min-width: 769px) {
-            .sidebar { width: 250px; flex-direction: column; padding: 20px; }
+            .sidebar { 
+                width: 250px; 
+                flex-direction: column; 
+                padding: 20px; 
+                position: sticky; /* Sticky on desktop */
+                transform: translateX(0); /* Ensure it's visible */
+            }
             .sidebar-header { display: block; text-align: center; } /* Restore full header */
             .sidebar-header h2 { font-size: 1.5rem; }
             .nav { display: block; overflow-x: visible; }
@@ -346,21 +400,30 @@
     </style>
 </head>
 <body>
+    
+    <div class="mobile-header">
+        <button class="menu-toggle" onclick="toggleMenu()">☰</button>
+        <span>NCHSM Student Portal</span>
+    </div>
+    
+    <div class="overlay" onclick="toggleMenu()"></div>
+
+
     <div class="container">
-        <aside class="sidebar">
+        <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <img src="https://raw.githubusercontent.com/NCHSMlearning/e-learning/main/images/Logo_NCHSM.png" alt="NCHSM Logo" style="width: 100px; margin-bottom: 10px; filter: none;"> 
                 <h2>STUDENT PORTAL</h2>
             </div>
             <ul class="nav">
-                <li><a href="#" data-tab="dashboard" class="active">🏠 Dashboard</a></li>
-                <li><a href="#" data-tab="profile">👤 Profile</a></li>
-                <li><a href="#" data-tab="calendar">📅 Academic Calendar</a></li> 
-                <li><a href="#" data-tab="courses">📚 My Courses</a></li>
-                <li><a href="#" data-tab="attendance">✅ Attendance</a></li>
-                <li><a href="#" data-tab="cats">📝 CATS/Exams</a></li>
-                <li><a href="#" data-tab="resources">📁 Resources</a></li>
-                <li><a href="#" data-tab="messages">💬 Messages</a></li>
+                <li><a href="#" data-tab="dashboard" class="active" onclick="closeMenu()">🏠 Dashboard</a></li>
+                <li><a href="#" data-tab="profile" onclick="closeMenu()">👤 Profile</a></li>
+                <li><a href="#" data-tab="calendar" onclick="closeMenu()">📅 Academic Calendar</a></li> 
+                <li><a href="#" data-tab="courses" onclick="closeMenu()">📚 My Courses</a></li>
+                <li><a href="#" data-tab="attendance" onclick="closeMenu()">✅ Attendance</a></li>
+                <li><a href="#" data-tab="cats" onclick="closeMenu()">📝 CATS/Exams</a></li>
+                <li><a href="#" data-tab="resources" onclick="closeMenu()">📁 Resources</a></li>
+                <li><a href="#" data-tab="messages" onclick="closeMenu()">💬 Messages</a></li>
             </ul>
             <div class="logout"><a href="#" onclick="logout()">Logout</a></div>
         </aside>
@@ -639,6 +702,33 @@
 
 
 <script>
+    // *************************************************************************
+    // *** NEW MOBILE MENU LOGIC ***
+    // *************************************************************************
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.querySelector('.overlay');
+
+    function toggleMenu() {
+        if (sidebar.classList.contains('open')) {
+            closeMenu();
+        } else {
+            openMenu();
+        }
+    }
+    
+    function openMenu() {
+        sidebar.classList.add('open');
+        overlay.classList.add('active');
+        document.body.style.overflow = 'hidden'; // Prevent scrolling the background content
+    }
+
+    function closeMenu() {
+        sidebar.classList.remove('open');
+        overlay.classList.remove('active');
+        document.body.style.overflow = 'auto'; // Restore scrolling
+    }
+
+
     // Hides the .html extension in the URL
     if (window.location.pathname.endsWith('.html')) {
         const cleanPath = window.location.pathname.replace(/\.html$/, '');
