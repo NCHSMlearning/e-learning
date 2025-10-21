@@ -1000,16 +1000,17 @@ async function handleUploadResource(e) {
         const publicUrl = urlData.publicUrl;
 
         // 3. Insert record into the database
-        const { error: dbError } = await sb.from(RESOURCES_TABLE).insert({
-            title: formData.title,
-            program: formData.program, // Filtered by program
-            block_term: formData.block,
-            intake_year: formData.intake,
-            file_url: publicUrl,
-            file_name: file.name,
-            uploaded_by_id: currentUserProfile.user_id,
-            course_id: 'N/A' 
-        });
+
+const { error: dbError } = await sb.from(RESOURCES_TABLE).insert({
+  title: formData.title,
+  program_type: formData.program,     // ✅ matches actual column name
+  block_term: formData.block,         // ✅ matches your table
+  intake_year: formData.intake,       // ✅ matches your table
+  file_url: publicUrl,
+  file_name: file.name,
+  uploaded_by: currentUserProfile.user_id,  // ✅ use correct column
+  allow_download: true,               // optional: include if your schema needs it
+});
             
         if (dbError) throw dbError;
         
