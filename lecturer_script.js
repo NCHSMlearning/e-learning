@@ -1,10 +1,10 @@
 // =================================================================
-// === 1. CONFIGURATION, CLIENT SETUP, & GLOBAL VARIABLES (LECTURER DASHBOARD) ===
+// === 1. CONFIGURATION, CLIENT SETUP, & GLOBAL VARIABLES ===
 // =================================================================
 
-// NCHSM LECTURER DASHBOARD SCRIPT
+// NCHSM LECTURER DASHBOARD SCRIPT - LIVE SUPABASE INTEGRATION
 
-// --- ⚠️ IMPORTANT: SUPABASE CONFIGURATION (Using your provided live keys) ---
+// --- ⚠️ IMPORTANT: SUPABASE CONFIGURATION ---
 const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co'; 
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
 
@@ -12,7 +12,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // --- Table and Bucket Constants ---
-const USER_PROFILE_TABLE = 'consolidated_user_profiles_table'; // Confirmed
+const USER_PROFILE_TABLE = 'consolidated_user_profiles_table'; 
 const COURSES_TABLE = 'courses'; 
 const EXAMS_TABLE = 'exams_cats'; 
 const SESSIONS_TABLE = 'scheduled_sessions'; 
@@ -24,9 +24,20 @@ const LECTURER_ASSIGNMENTS_TABLE = 'lecturer_course_assignments';
 
 const RESOURCES_BUCKET = 'resources'; 
 
-// --- Global Variables & Shorthand ---
+// --- Global Variables & Caches ---
 let currentUserProfile = null;
 let attendanceMap = null; 
+let allCourses = []; 
+let allStudents = []; // Cache to hold all students for selectors
+
+// --- 🎯 UPDATED INTAKE YEARS (UP TO 2028) ---
+let allIntakes = [
+    { id: '2024', name: '2024' },
+    { id: '2025', name: '2025' },
+    { id: '2026', name: '2026' },
+    { id: '2027', name: '2027' },
+    { id: '2028', name: '2028' }
+]; 
 
 // --- Academic Structure Constants ---
 const ACADEMIC_STRUCTURE = {
@@ -34,18 +45,15 @@ const ACADEMIC_STRUCTURE = {
     'TVET': ['Term 1', 'Term 2', 'Term 3']
 };
 
+
 // =================================================================
 // === 2. CORE UTILITY FUNCTIONS ===
 // =================================================================
 
-/**
- * Global shorthand for document.getElementById
- */
+/** Global shorthand for document.getElementById */
 function $(id){ return document.getElementById(id); }
 
-/**
- * Utility to populate select/dropdown elements.
- */
+/** Utility to populate select/dropdown elements. */
 function populateSelect(selectElement, data, valueKey, textKey, defaultText) {
     if (!selectElement) return;
     selectElement.innerHTML = `<option value="">-- ${defaultText} --</option>`;
@@ -58,9 +66,7 @@ function populateSelect(selectElement, data, valueKey, textKey, defaultText) {
     });
 }
 
-/**
- * Utility to filter table rows. (Retained)
- */
+/** Utility to filter table rows. */
 function filterTable(inputId, tableId, columnsToSearch = [0]) {
     const filter = $(inputId)?.value.toUpperCase() || '';
     const tbody = $(tableId);
@@ -89,9 +95,7 @@ function filterTable(inputId, tableId, columnsToSearch = [0]) {
     }
 }
 
-/**
- * Sets the loading state of a button. (Retained)
- */
+/** Sets the loading state of a button. */
 function setButtonLoading(button, isLoading, originalText) {
     if (!button) return;
     if (isLoading) {
@@ -105,9 +109,7 @@ function setButtonLoading(button, isLoading, originalText) {
     }
 }
 
-/**
- * Displays a non-intrusive feedback message. (Retained)
- */
+/** Displays a non-intrusive feedback message. */
 function showFeedback(message, type) {
     const feedbackEl = $('feedback-message'); 
     if (!feedbackEl) {
@@ -128,10 +130,7 @@ function showFeedback(message, type) {
     }
 }
 
-
-/**
- * Generic data fetching utility. (Retained)
- */
+/** Generic data fetching utility. */
 async function fetchData(tableName, selectQuery = '*', filters = {}, order = 'created_at', ascending = false) {
     let query = sb.from(tableName).select(selectQuery);
 
@@ -151,9 +150,7 @@ async function fetchData(tableName, selectQuery = '*', filters = {}, order = 'cr
     return { data, error: null };
 }
 
-/**
- * Reverse Geocoding using Nominatim. (Retained)
- */
+/** Reverse Geocoding using Nominatim. */
 async function reverseGeocodeAndDisplay(lat, lng, elementId) {
     const el = $(elementId);
     if (!el) return;
@@ -175,8 +172,9 @@ async function reverseGeocodeAndDisplay(lat, lng, elementId) {
     }
 }
 
+
 // =================================================================
-// === 3. CORE NAVIGATION & AUTHENTICATION (Initialization) ===
+// === 3. CORE NAVIGATION & AUTHENTICATION ===
 // =================================================================
 
 // --- Initialization Entry Point ---
@@ -185,14 +183,25 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 async function initSession() {
-    // --- 1. Get Supabase Session ---
     const { data: { session }, error: sessionError } = await sb.auth.getSession();
-    
-    // --- 2. Handle Authentication and Mock/Live Profile Loading ---
-    let user;
+    let authFailed = false;
+
     if (sessionError || !session) {
-        // Fallback/Mock Auth (for development without full login flow)
-        console.warn("No active Supabase session found. Using mock lecturer profile.");
+        console.warn("No active Supabase session found. Using mock lecturer profile for development.");
+        authFailed = true;
+    } else {
+        const { data: profile, error: profileError } = await sb.from(USER_PROFILE_TABLE).select('*').eq('user_id', session.user.id).single();
+        
+        if (profile && !profileError && profile.role === 'lecturer') {
+            currentUserProfile = profile;
+        } else {
+            console.error(`Access Denied. User role is ${profile?.role || 'unknown'}. Falling back to mock.`);
+            authFailed = true;
+        }
+    }
+
+    // --- MOCK PROFILE for DEV ---
+    if (authFailed) {
         currentUserProfile = { 
             user_id: '5445fb2c-5df5-4c72-954f-f75ffc1c98a7', 
             role: 'lecturer', 
@@ -200,33 +209,16 @@ async function initSession() {
             employee_id: 'L1023',
             email: 'jane.smith@nchsm.edu',
             phone: '+254712345678',
-            department: 'Maternal Health',
+            // --- Set to 'Maternal Health' which maps to KRCHN students for testing ---
+            department: 'Maternal Health', 
             join_date: '2020-08-15'
         };
-        // Skip profile fetch since we used mock data
-    } else {
-         // Live Auth: Fetch profile data from the consolidated table
-         user = session.user;
-         const { data: profile, error: profileError } = await sb.from(USER_PROFILE_TABLE).select('*').eq('user_id', user.id).single();
-         
-         if (profile && !profileError && profile.role === 'lecturer') {
-             currentUserProfile = profile;
-         } else {
-             // Handle unauthorized role or missing profile (Production flow)
-             console.error(`Access Denied. User role is ${profile?.role}. Redirecting to login.`);
-             // await sb.auth.signOut();
-             // window.location.href = "login.html"; 
-             // return;
-             
-             // For development, you might still force the mock profile if auth fails
-             console.warn("Live profile check failed. Falling back to mock profile.");
-             currentUserProfile = { /* ... (Same mock data as above) ... */ }; 
-         }
     }
 
-    // --- 3. Initialize Dashboard ---
+    // --- Initialize Dashboard ---
     if (currentUserProfile) {
         document.querySelector('header h1').textContent = `Welcome, ${currentUserProfile.full_name || 'Lecturer'}!`;
+        await fetchGlobalDataCaches(); 
         loadSectionData('profile'); 
         setupEventListeners();
     } else {
@@ -234,9 +226,18 @@ async function initSession() {
     }
 }
 
-/**
- * Tab switching logic: Handles active link class, active content section, and triggers data load.
- */
+/** Caches global data (e.g., all courses and all students) needed by forms. */
+async function fetchGlobalDataCaches() {
+    // 1. Fetch Courses
+    const { data: courses } = await fetchData(COURSES_TABLE, 'course_id, course_name', {}, 'course_name', true);
+    allCourses = courses || [];
+
+    // 2. Fetch All Students (for manual attendance/messaging selectors)
+    const { data: students } = await fetchData(USER_PROFILE_TABLE, 'user_id, full_name', { role: 'student' }, 'full_name', true);
+    allStudents = students || [];
+}
+
+/** Tab switching logic. */
 function loadSectionData(tabId) { 
     document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
     
@@ -252,22 +253,19 @@ function loadSectionData(tabId) {
         case 'cats': loadLecturerExams(); populateExamFormSelects(); break;
         case 'resources': loadLecturerResources(); populateResourceFormSelects(); break;
         case 'messages': loadLecturerMessages(); populateMessageFormSelects(); break;
-        case 'calendar': renderFullCalendar(); break;
+        case 'calendar': /* renderFullCalendar(); */ break;
     }
     
-    // --- UI/Tab Switching Logic (Ensures correct display) ---
-    // 1. Hide all content sections (using the .tab-content class)
+    // --- UI/Tab Switching Logic (Hides all, shows one) ---
     document.querySelectorAll('.tab-content').forEach(section => {
         section.classList.remove('active');
     });
     
-    // 2. Show the selected section (using the required ID format)
     const targetSection = $(tabId + '-content');
     if (targetSection) {
         targetSection.classList.add('active');
     }
 
-    // 3. Update active class in sidebar
     document.querySelectorAll('.nav a').forEach(link => {
         link.classList.remove('active');
     });
@@ -289,19 +287,17 @@ function setupEventListeners() {
     // ATTENDANCE TAB
     $('manual-attendance-form')?.addEventListener('submit', handleManualAttendance);
     $('attendance-search')?.addEventListener('keyup', () => filterTable('attendance-search', 'attendance-table', [0, 1, 2]));
-    $('lecturer-checkin-btn')?.addEventListener('click', lecturerCheckIn); // Mark My Attendance Button
+    $('lecturer-checkin-btn')?.addEventListener('click', lecturerCheckIn); 
 
     // CATS/EXAMS TAB 
     $('add-exam-form')?.addEventListener('submit', handleAddExam);
     $('exam-search')?.addEventListener('keyup', () => filterTable('exam-search', 'exams-table', [0, 1, 2, 5]));
-    // Rerun populate selects when program/intake changes
     $('exam_program')?.addEventListener('change', populateExamFormSelects);
     $('exam_intake')?.addEventListener('change', populateExamFormSelects);
 
     // RESOURCES TAB 
     $('upload-resource-form')?.addEventListener('submit', handleUploadResource);
     $('resource-search')?.addEventListener('keyup', () => filterTable('resource-search', 'resources-list', [0, 1, 3]));
-    // Rerun populate selects when program/intake changes
     $('resource_program')?.addEventListener('change', populateResourceFormSelects);
     $('resource_intake')?.addEventListener('change', populateResourceFormSelects);
     
@@ -331,26 +327,41 @@ async function logout() {
 
 
 // =================================================================
-// === X. CORE TAB DATA LOADERS (Live Supabase Implementation) ===
+// === 4. DATA LOADERS (Live Supabase Implementation) ===
 // =================================================================
 
-/**
- * Maps the lecturer's department to the student program they supervise.
- * In a real system, this would be fetched from a database table.
- */
+function loadLecturerProfile() {
+    if (!currentUserProfile) return;
+    $('profile_name').textContent = currentUserProfile.full_name || 'N/A';
+    $('profile_role').textContent = currentUserProfile.role || 'N/A';
+    $('profile_id').textContent = currentUserProfile.employee_id || 'N/A';
+    $('profile_email').textContent = currentUserProfile.email || 'N/A';
+    $('profile_phone').textContent = currentUserProfile.phone || 'N/A';
+    $('profile_dept').textContent = currentUserProfile.department || 'N/A';
+    $('profile_join_date').textContent = new Date(currentUserProfile.join_date).toLocaleDateString() || 'N/A';
+}
+
+function loadLecturerDashboardData() {
+    // NOTE: Card count logic requires Supabase functions for accurate aggregates.
+    $('total_courses_count').textContent = '...'; 
+    $('total_students_count').textContent = '...';
+    $('recent_sessions_count').textContent = '...';
+}
+
+// --- Dynamic Student Filtering Logic (Matches department to program) ---
 function getProgramFilterFromDepartment(department) {
-    // This implements your specific business rule:
-    if (department === 'Nursing') {
-        return 'KRCHN';
-    }
-    // Add other rules here (e.g., 'Clinical Medicine' -> 'TVET')
-    // else if (department === 'Clinical Medicine') {
-    //     return 'TVET';
-    // }
-    return null; // Return null if the department isn't assigned to a specific program
+    // This maps the lecturer's department to the student program they should see.
+    const programMap = {
+        'Nursing': 'KRCHN',
+        'Maternal Health': 'KRCHN',
+        'General Education': 'TVET',
+        'Clinical Medicine': 'TVET'
+    };
+    return programMap[department] || null; 
 }
 
 
+// --- Student Loader (Filtered by Lecturer Department) ---
 async function loadLecturerStudents() {
     if (!currentUserProfile) return;
 
@@ -362,19 +373,18 @@ async function loadLecturerStudents() {
     const targetProgram = getProgramFilterFromDepartment(currentUserProfile.department);
 
     if (!targetProgram) {
-        tbody.innerHTML = '<tr><td colspan="7">No specific student program is assigned to this lecturer\'s department.</td></tr>';
+        tbody.innerHTML = `<tr><td colspan="7">No specific student program is assigned to the lecturer's department: ${currentUserProfile.department}.</td></tr>`;
         return;
     }
 
-    // --- 🎯 Supabase Query: Filter students by role and the target program ---
+    // Live Supabase Query: Filters students by role and the target program
     const { data: students, error } = await sb.from(USER_PROFILE_TABLE)
         .select(`full_name, email, student_program, intake_year, block_term, status`)
         .eq('role', 'student')
-        .eq('student_program', targetProgram) // Filters to 'KRCHN' if department is 'Nursing'
+        .eq('student_program', targetProgram) 
         .order('full_name', { ascending: true });
 
     if (error) {
-        console.error("Error loading students:", error);
         tbody.innerHTML = `<tr><td colspan="7">Error loading students: ${error.message}</td></tr>`;
         return;
     }
@@ -384,7 +394,7 @@ async function loadLecturerStudents() {
         return;
     }
 
-    // --- Dynamic Table Population ---
+    // Dynamic Table Population
     tbody.innerHTML = students.map(s => `
         <tr>
             <td>${s.full_name || 'N/A'}</td>
@@ -400,19 +410,23 @@ async function loadLecturerStudents() {
     console.log(`Successfully loaded ${students.length} ${targetProgram} students.`);
 }
 
+// Placeholder for other essential data loaders:
+async function loadLecturerCourses() { $('lecturer-courses-list').innerHTML = '<li>Loading assigned courses... (Implementation needed)</li>'; }
+async function loadLecturerSessions() { $('sessions-table').innerHTML = '<tr><td colspan="6">Loading sessions... (Implementation needed)</td></tr>'; }
+async function loadLecturerExams() { $('exams-table').innerHTML = '<tr><td colspan="6">Loading exams/CATS... (Implementation needed)</td></tr>'; }
+async function loadLecturerResources() { $('resources-list').innerHTML = '<tr><td colspan="4">Loading resources... (Implementation needed)</td></tr>'; }
+async function loadLecturerMessages() { $('messages-table').innerHTML = '<tr><td colspan="5">Loading messages... (Implementation needed)</td></tr>'; }
+
+
 // =================================================================
-// === 4. ATTENDANCE & CHECK-IN (Updated Select Logic) ===
+// === 5. ATTENDANCE & MAP (Includes Fix for DOM Node Error) ===
 // =================================================================
 
 function loadAttendanceSelects() {
-    const mockStudents = [{id: 'S123', name: 'Student A'}, {id: 'S456', name: 'Student B'}];
-    const mockCourses = [{id: 'C101', name: 'Anatomy 101'}, {id: 'M202', name: 'Maternal Health'}];
-
-    populateSelect($('att_student_id'), mockStudents, 'id', 'name', 'Select Student');
-    populateSelect($('att_course_id'), mockCourses, 'id', 'name', 'Select Course (Optional)');
+    populateSelect($('att_student_id'), allStudents, 'user_id', 'full_name', 'Select Student');
+    populateSelect($('att_course_id'), allCourses, 'course_id', 'course_name', 'Select Course (Optional)');
 }
 
-// (lecturerCheckIn, handleManualAttendance, loadTodaysAttendanceRecords, viewCheckInMap logic remain here)
 async function lecturerCheckIn() {
     const button = $('lecturer-checkin-btn');
     setButtonLoading(button, true, 'Mark My Attendance');
@@ -563,6 +577,7 @@ async function loadTodaysAttendanceRecords() {
     });
 }
 
+/** Displays the check-in location map. Includes fix for Leaflet rendering inside modals. */
 function viewCheckInMap(lat, lng, name, locationElementId) {
     if (!lat || !lng || isNaN(parseFloat(lat)) || isNaN(parseFloat(lng))) {
         showFeedback('No valid geolocation data available for this record.', 'warning');
@@ -576,6 +591,7 @@ function viewCheckInMap(lat, lng, name, locationElementId) {
     const locationDetails = $(locationElementId)?.textContent || `Lat: ${parseFloat(lat).toFixed(4)}, Lng: ${parseFloat(lng).toFixed(4)}`;
     $('map-details').textContent = `Check-in location for ${name}: ${locationDetails}`;
 
+    // Increased timeout to 100ms to prevent "deferred DOM Node" error
     setTimeout(() => {
         if (attendanceMap) {
             attendanceMap.remove(); 
@@ -596,81 +612,70 @@ function viewCheckInMap(lat, lng, name, locationElementId) {
                 .bindPopup(`<b>${name}</b><br>Location recorded here.`)
                 .openPopup();
                 
+            // CRITICAL FIX: Forces Leaflet to recalculate the map size
             attendanceMap.invalidateSize(); 
         } else {
             $('map-details').textContent = `Map library not loaded. Coordinates: Lat: ${parsedLat.toFixed(4)}, Lng: ${parsedLng.toFixed(4)}`;
         }
-    }, 10); 
+    }, 100); 
 }
 
 
 // =================================================================
-// === 5. CATS / EXAMS (Updated Select Logic) ===
+// === 6. FORM POPULATION & HANDLERS (EXAMS, RESOURCES, MESSAGES) ===
 // =================================================================
 
 function populateExamFormSelects() {
-    // Programs are manually defined or fetched from a Programs table (Mocked here)
-    const programs = [{id: 'KRCHN', name: 'KRCHN'}, {id: 'TVET', name: 'TVET'}];
-    const courses = [{id: 'C101', name: 'Anatomy 101'}, {id: 'M202', name: 'Maternal Health'}];
-    const intakes = [{id: '2024', name: '2024'}, {id: '2025', name: '2025'}];
-
+    const programs = Object.keys(ACADEMIC_STRUCTURE).map(p => ({ id: p, name: p }));
+    
     populateSelect($('exam_program'), programs, 'id', 'name', 'Select Program');
-    populateSelect($('exam_course_id'), courses, 'id', 'name', 'Select Course');
-    populateSelect($('exam_intake'), intakes, 'id', 'name', 'Select Intake Year');
+    populateSelect($('exam_course_id'), allCourses, 'course_id', 'course_name', 'Select Course');
+    populateSelect($('exam_intake'), allIntakes, 'id', 'name', 'Select Intake Year');
 
-    // Dynamic Block/Term based on selected Program
     const selectedProgram = $('exam_program').value;
     const blockSelect = $('exam_block_term');
 
     if (selectedProgram && ACADEMIC_STRUCTURE[selectedProgram]) {
-        const blocks = ACADEMIC_STRUCTURE[selectedProgram].map(name => ({ id: name.replace(' ', '_'), name: name }));
+        const blocks = ACADEMIC_STRUCTURE[selectedProgram].map(name => ({ id: name, name: name }));
         populateSelect(blockSelect, blocks, 'id', 'name', `Select ${selectedProgram} Block/Term`);
     } else {
         blockSelect.innerHTML = '<option value="">-- Select Program First --</option>';
     }
 }
-// (handleAddExam, loadLecturerExams, openGradeModal, handleGradeSubmission, deleteExam logic remain here)
-
-
-// =================================================================
-// === 6. RESOURCES (Updated Select Logic) ===
-// =================================================================
 
 function populateResourceFormSelects() {
-    const mockPrograms = [{id: 'KRCHN', name: 'KRCHN'}, {id: 'TVET', name: 'TVET'}];
-    const mockIntakes = [{id: '2024', name: '2024'}, {id: '2025', name: '2025'}];
+    const programs = Object.keys(ACADEMIC_STRUCTURE).map(p => ({ id: p, name: p }));
+    
+    populateSelect($('resource_program'), programs, 'id', 'name', 'Select Target Program');
+    populateSelect($('resource_intake'), allIntakes, 'id', 'name', 'Select Target Intake');
 
-    populateSelect($('resource_program'), mockPrograms, 'id', 'name', 'Select Target Program');
-    populateSelect($('resource_intake'), mockIntakes, 'id', 'name', 'Select Target Intake');
-
-    // Dynamic Block/Term based on selected Program
     const selectedProgram = $('resource_program').value;
     const blockSelect = $('resource_block');
     
     if (selectedProgram && ACADEMIC_STRUCTURE[selectedProgram]) {
-        const blocks = ACADEMIC_STRUCTURE[selectedProgram].map(name => ({ id: name.replace(' ', '_'), name: name }));
+        const blocks = ACADEMIC_STRUCTURE[selectedProgram].map(name => ({ id: name, name: name }));
         populateSelect(blockSelect, blocks, 'id', 'name', `Select ${selectedProgram} Block/Term`);
     } else {
         blockSelect.innerHTML = '<option value="">-- Select Program First --</option>';
     }
 }
-// (handleUploadResource, loadLecturerResources, deleteResource logic remain here)
-
-
-// =================================================================
-// === 7. MESSAGES (Updated Select Logic) ===
-// =================================================================
 
 function populateMessageFormSelects() {
-    // Generate mock groups based on the ACADEMIC_STRUCTURE
-    const groups = [];
+    // Allows messaging all students or specific program/groups
+    const groups = [
+        { id: 'all', name: 'All Students' },
+        ...allStudents.map(s => ({ id: s.user_id, name: s.full_name }))
+    ];
     for (const program in ACADEMIC_STRUCTURE) {
         ACADEMIC_STRUCTURE[program].forEach(block => {
-            const groupName = `${program} - ${block}`;
-            groups.push({ id: `${program}_${block.replace(' ', '_')}`, name: groupName });
+            groups.push({ id: `${program}_${block}`, name: `${program} - ${block}` });
         });
     }
 
-    populateSelect($('msg_program'), groups, 'id', 'name', 'Select Target Program/Group');
+    populateSelect($('msg_target'), groups, 'id', 'name', 'Select Target Group or Student');
 }
-// (handleSendMessage logic remains here)
+
+// Placeholder functions for form submission handlers:
+async function handleAddExam(e) { e.preventDefault(); showFeedback('Add Exam function not fully implemented.', 'info'); }
+async function handleUploadResource(e) { e.preventDefault(); showFeedback('Upload Resource function not fully implemented.', 'info'); }
+async function handleSendMessage(e) { e.preventDefault(); showFeedback('Send Message function not fully implemented.', 'info'); }
