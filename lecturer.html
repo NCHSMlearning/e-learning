@@ -6,51 +6,349 @@
     <title>NCHSM Lecturer Dashboard</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/main.min.css">
-    <link rel="stylesheet" href="lecturer_style.css">
-    </head>
+
+    <style>
+        /* Global Reset/Base Layout */
+        body { margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f9; }
+        .container { display: flex; min-height: 100vh; }
+        .main { flex-grow: 1; padding: 20px; transition: margin-left 0.3s ease; }
+
+        /* --- Menu Toggle Button (For Mobile) --- */
+        .menu-toggle {
+            display: none; 
+            background: #007bff;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            cursor: pointer;
+            font-size: 1.1em;
+            position: fixed; 
+            top: 10px;
+            left: 10px;
+            z-index: 1001; 
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        /* --- Sidebar Styles --- */
+        .sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 250px;
+            height: 100%;
+            background-color: #2c3e50; /* Dark background */
+            color: white;
+            z-index: 1000;
+            padding-top: 20px;
+            overflow-y: auto;
+            transition: transform 0.3s ease;
+        }
+
+        .sidebar-header {
+            text-align: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #3c5067;
+            margin-bottom: 20px;
+        }
+        
+        .sidebar-header img {
+            max-width: 80px;
+            height: auto;
+            border-radius: 50%;
+            margin-bottom: 5px;
+        }
+
+        .sidebar-header h2 {
+            margin: 5px 0 10px;
+            font-size: 1.2em;
+        }
+
+        .nav {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .nav a {
+            display: block;
+            padding: 15px 20px;
+            color: #ecf0f1;
+            text-decoration: none;
+            transition: background-color 0.2s;
+            font-size: 0.95em;
+        }
+
+        .nav a:hover, .nav a.active {
+            background-color: #34495e; 
+            border-left: 4px solid #007bff;
+            padding-left: 16px; 
+        }
+
+        .logout {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            text-align: center;
+        }
+
+        .logout a {
+            color: #e74c3c;
+            text-decoration: none;
+            padding: 10px 20px;
+            display: inline-block;
+            font-weight: bold;
+        }
+
+        /* --- Tab Content Control (Initial State) --- */
+        .tab-content { 
+            display: none; 
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .tab-content.active { 
+            display: block; 
+        }
+
+        /* ================================================= */
+        /* === DESKTOP LAYOUT (min-width 769px) === */
+        /* ================================================= */
+        @media (min-width: 769px) {
+            .sidebar {
+                transform: translateX(0); 
+            }
+            .main {
+                margin-left: 250px; 
+            }
+            .menu-toggle {
+                display: none; 
+            }
+            header {
+                padding-top: 15px;
+            }
+        }
+
+        /* ================================================= */
+        /* === MOBILE LAYOUT (max-width 768px) === */
+        /* ================================================= */
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-250px); 
+                box-shadow: 2px 0 5px rgba(0,0,0,0.5);
+            }
+            .sidebar.active {
+                transform: translateX(0); 
+            }
+            .main {
+                margin-left: 0; 
+            }
+            .menu-toggle {
+                display: block; 
+            }
+            body.no-scroll {
+                overflow: hidden;
+            }
+            header {
+                margin-top: 40px; 
+            }
+            /* Stack cards and forms on mobile */
+            .cards { flex-direction: column; }
+            .inline-form { flex-direction: column; gap: 10px; }
+            /* Make tables scrollable horizontally */
+            .table-responsive { overflow-x: auto; }
+            .table-responsive table { min-width: 600px; }
+        }
+
+        /* ================================================= */
+        /* === GENERAL & COMPONENT STYLING === */
+        /* ================================================= */
+
+        header {
+            background: white;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        h1, h2, h3 {
+            color: #2c3e50;
+            margin-top: 0;
+        }
+
+        .cards {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap; 
+            margin-bottom: 20px;
+        }
+
+        .card {
+            flex: 1;
+            min-width: 200px;
+            padding: 20px;
+            background: #ecf0f1;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+
+        .data {
+            font-size: 2em;
+            font-weight: bold;
+            color: #007bff;
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        /* Button Styles */
+        .btn-action {
+            background-color: #2ecc71;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            font-weight: 500;
+        }
+
+        .btn-action:hover {
+            background-color: #27ae60;
+        }
+        
+        .btn-delete {
+            background-color: #e74c3c;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        /* Form Styling */
+        .inline-form {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+            background: #f9f9f9;
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid #eee;
+            margin-bottom: 20px;
+        }
+
+        .inline-form input:not([type="file"]), 
+        .inline-form select,
+        .inline-form textarea {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            min-width: 150px;
+            box-sizing: border-box;
+            flex: 1 1 auto;
+        }
+        
+        /* Table Styles */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 12px 15px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background-color: #f1f1f1;
+            font-weight: bold;
+            color: #555;
+        }
+
+        tbody tr:hover {
+            background-color: #f9f9f9;
+        }
+        
+        /* Feedback Box */
+        #feedback-message {
+            padding: 10px;
+            margin: 15px 0;
+            border-radius: 4px;
+            display: none;
+        }
+
+        .feedback-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .feedback-error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        /* Table Status */
+        .status-approved { color: green; font-weight: bold; }
+        .status-danger { color: #e74c3c; font-weight: bold; }
+        .status-pending { color: orange; font-weight: bold; }
+
+    </style>
+</head>
 <body>
 
-    <button class="menu-toggle" onclick="toggleSidebar()">☰ Menu</button>
+    <button id="menu-toggle" class="menu-toggle" onclick="toggleSidebar()">☰ Menu</button>
     
     <div class="container">
         
         <aside class="sidebar">
             <div class="sidebar-header">
-                <img src="images/Logo_NCHSM.png" alt="Logo" onerror="this.style.display='none'">
+                <img src="images/Logo_NCHSM.png" alt="Logo" onerror="this.onerror=null; this.src='https://placehold.co/80x80/2ecc71/white?text=NCHSM'"> 
                 <h2>Lecturer Panel</h2>
             </div>
             <ul class="nav" id="mainNav">
-                <li><a href="#" data-tab="dashboard" class="active">Dashboard</a></li>
-                <li><a href="#" data-tab="my-courses">My Courses & Students</a></li>
-                <li><a href="#" data-tab="sessions">Manage Sessions</a></li> 
-                <li><a href="#" data-tab="attendance">Attendance & Check-in</a></li> 
-                <li><a href="#" data-tab="cats">CATS/Exams</a></li>
-                <li><a href="#" data-tab="resources">Resources</a></li>
-                <li><a href="#" data-tab="messages">Inbox / Messages</a></li>
-                <li><a href="#" data-tab="calendar">System Calendar</a></li> 
+                <li><a href="#" data-tab="dashboard" class="active" onclick="loadSectionData('dashboard')">Dashboard</a></li>
+                <li><a href="#" data-tab="my-courses" onclick="loadSectionData('my-courses')">My Courses & Students</a></li>
+                <li><a href="#" data-tab="sessions" onclick="loadSectionData('sessions')">Manage Sessions</a></li> 
+                <li><a href="#" data-tab="attendance" onclick="loadSectionData('attendance')">Attendance & Check-in</a></li> 
+                <li><a href="#" data-tab="cats" onclick="loadSectionData('cats')">CATS/Exams</a></li>
+                <li><a href="#" data-tab="resources" onclick="loadSectionData('resources')">Resources</a></li>
+                <li><a href="#" data-tab="messages" onclick="loadSectionData('messages')">Inbox / Messages</a></li>
+                <li><a href="#" data-tab="calendar" onclick="loadSectionData('calendar')">System Calendar</a></li> 
             </ul>
-            <div class="logout"><a href="#" onclick="logout()">Logout</a></div>
+            <div class="logout"><a href="#" id="logout-btn" onclick="logout()">Logout</a></div>
         </aside>
 
         <main class="main">
             <header>
                 <h1>Welcome, Lecturer!</h1>
                 <p class="subtitle">Manage your classes, assessments, and communication</p>
+                <div id="feedback-message"></div>
             </header>
 
-            <section id="dashboard" class="tab-content active">
+            <section id="dashboard-content" class="tab-content active">
+                <h2>Dashboard Overview</h2>
                 <div id="lecturer-welcome-message">
                     <p>Welcome to your personal dashboard. Start by viewing your courses.</p>
                 </div>
                 <div class="cards">
-                    <div class="card" onclick="showTab('my-courses')"><h3>My Active Courses</h3><p class="data" id="lecturerActiveCourses">0</p></div>
-                    <div class="card" onclick="showTab('cats')"><h3>Pending Grading</h3><p class="data" id="pendingGrading">0</p></div>
-                    <div class="card" onclick="showTab('attendance')"><h3>Today's Scheduled Sessions</h3><p class="data" id="todaysSessions">0</p></div>
-                    <div class="card" onclick="showTab('messages')"><h3>New Messages</h3><p class="data" id="newMessagesCount">0</p></div>
+                    <div class="card" onclick="loadSectionData('my-courses')"><h3>My Active Courses</h3><p class="data" id="lecturerActiveCourses">0</p></div>
+                    <div class="card" onclick="loadSectionData('cats')"><h3>Pending Grading</h3><p class="data" id="pendingGrading">0</p></div>
+                    <div class="card" onclick="loadSectionData('attendance')"><h3>Today's Scheduled Sessions</h3><p class="data" id="todaysSessions">0</p></div>
+                    <div class="card" onclick="loadSectionData('messages')"><h3>New Messages</h3><p class="data" id="newMessagesCount">0</p></div>
                 </div>
             </section>
             
-            <section id="my-courses" class="tab-content">
+            <section id="my-courses-content" class="tab-content">
                 <h2>My Assigned Courses & Students</h2>
                 
                 <h3>1. My Courses</h3>
@@ -106,9 +404,9 @@
                         </tbody>
                     </table>
                 </div>
-                </section>
+            </section>
             
-            <section id="sessions" class="tab-content">
+            <section id="sessions-content" class="tab-content">
                 <h2>Manage Sessions (Class, Clinical, Events)</h2>
                 <p>Schedule sessions for the programs/groups you are assigned to. These will appear in the System Calendar.</p>
                 
@@ -135,7 +433,7 @@
                         <option value="">-- Select Block/Term --</option>
                     </select>
                     <select id="new_session_course"><option value="">-- Select Course (Optional) --</select>
-                    <button type="submit">Schedule Session</button>
+                    <button type="submit" class="btn-action">Schedule Session</button>
                 </form>
                 
                 <hr>
@@ -152,9 +450,9 @@
                         </tbody>
                     </table>
                 </div>
-                </section>
+            </section>
 
-            <section id="attendance" class="tab-content">
+            <section id="attendance-content" class="tab-content">
                 <h2>Daily Attendance & Geo Check-in</h2>
                 
                 <h3>Lecturer Self Check-in (Mark My Attendance) 📍</h3>
@@ -165,7 +463,7 @@
                 
                 <h3>Manual Student Check-in</h3>
                 <p>Manually mark attendance for a student in one of your assigned sessions.</p>
-                <form id="manual-attendance-form" class="inline-form">
+                <form id="manual-attendance-form" class="inline-form" onsubmit="handleManualAttendance(event)">
                     <select id="att_student_id" required><option value="">-- Select Student --</option></select>
                     <select id="att_session_type" required>
                         <option value="">-- Select Session Type --</option>
@@ -206,14 +504,14 @@
                             </tbody>
                         </table>
                     </div>
-                    </div>
+                </div>
             </section>
             
-            <section id="cats" class="tab-content">
+            <section id="cats-content" class="tab-content">
                 <h2>CATS / Exams Administration</h2>
                 <p>Post and manage assessments for your assigned courses.</p>
 
-                <form id="add-exam-form" class="inline-form">
+                <form id="add-exam-form" class="inline-form" onsubmit="handleAddExam(event)">
                     <select id="exam_type" required>
                         <option value="">-- Select Type --</option>
                         <option value="EXAM">Final Exam</option>
@@ -234,12 +532,12 @@
                     </select>
                     <select id="exam_intake"><option value="">-- Select Intake Year --</option></select>
                     <select id="exam_block_term"><option value="">-- Select Block/Term --</option></select>
-                    <button type="submit">Post Assessment</button>
+                    <button type="submit" class="btn-action">Post Assessment</button>
                 </form>
 
                 <div class="toolbar">
                     <input type="text" id="exam-search" placeholder="Search My Assessments...">
-                    <button class="btn-action export-btn">Export My Assessments (CSV)</button>
+                    <button onclick="exportTableToCSV('exams-table', 'My_Assessments_Export.csv')" class="btn-action export-btn">Export My Assessments (CSV)</button>
                 </div>
                 
                 <div class="table-responsive">
@@ -260,52 +558,25 @@
                         </tbody>
                     </table>
                 </div>
-                <div id="gradeModal" class="modal">
-                    <div class="modal-content">
-                    <span class="close">&times;</span>
-                    <h2>Grade Assessment</h2>
-                    <p id="gradeExamTitle">Assessment: <em>Loading...</em></p>
-                    <form id="grade-form">
-                        <div id="grade-students-list">
-                        <p>Loading enrolled students...</p>
-                        </div>
-                        <button type="submit">Save Grades</button>
-                    </form>
-                    </div>
-                </div>
             </section>
 
-            <section id="resources" class="tab-content">
+            <section id="resources-content" class="tab-content">
                 <h2>Resource Center</h2>
                 <p>Upload files to share with students in your assigned courses and groups.</p>
 
-                <form id="upload-resource-form" class="inline-form">
+                <form id="upload-resource-form" class="inline-form" onsubmit="handleResourceUpload(event)">
                     <select id="resource_program" required><option value="">-- Select Program --</option></select>
                     <select id="resource_intake" required><option value="">-- Select Intake Year --</option></select>
                     <select id="resource_block" required><option value="">-- Select Block/Term --</option></select>
                     
-                    <input 
-                        type="file" 
-                        id="resource-file" 
-                        required
-                        accept=".pdf, .doc, .docx, .ppt, .pptx, .xls, .xlsx" 
-                        title="Accepts PDF and common Microsoft Office documents."
-                    >
+                    <input type="file" id="resource-file" required accept=".pdf, .doc, .docx, .ppt, .pptx, .xls, .xlsx" title="Accepts PDF and common Microsoft Office documents.">
                     <input type="text" id="resource-title" placeholder="Title for file" required>
-                    <button type="submit">Upload</button>
+                    <button type="submit" class="btn-action">Upload</button>
                 </form>
 
                 <div class="toolbar">
-                    <input 
-                        type="text" 
-                        id="resource-search" 
-                        placeholder="Search My Resources..." 
-                    >
-                    <button 
-                        onclick="exportTableToCSV('resources-list', 'My_Resources_Index_Export.csv')" 
-                        class="btn-action export-btn">
-                        Export Resource List (CSV)
-                    </button>
+                    <input type="text" id="resource-search" placeholder="Search My Resources...">
+                    <button onclick="exportTableToCSV('resources-list', 'My_Resources_Index_Export.csv')" class="btn-action export-btn">Export Resource List (CSV)</button>
                 </div>
 
                 <div class="table-responsive">
@@ -325,21 +596,22 @@
                         </tbody>
                     </table>
                 </div>
-                </section>
+            </section>
             
-            <section id="messages" class="tab-content">
+            <section id="messages-content" class="tab-content">
                 <h2>Inbox / Messages</h2>
 
-                <form id="send-message-form" class="inline-form">
+                <form id="send-message-form" class="inline-form" onsubmit="handleSendMessage(event)">
                     <select id="msg_program" required>
                         <option value="">-- Select Program/Group --</option>
                     </select>
-                    <textarea id="msg_body" placeholder="Message Body" rows="3"></textarea>
-                    <button type="submit">Send Message</button>
+                    <textarea id="msg_body" placeholder="Message Body" rows="3" required></textarea>
+                    <button type="submit" class="btn-action">Send Message</button>
                 </form>
 
                 <div id="messages-list" style="margin-top:20px;">
-                    Loading student messages and announcements...
+                    <h3>Incoming Messages / Announcements</h3>
+                    <p>Loading student messages and announcements...</p>
                 </div>
 
                 <h3>Sent Messages (Lecturer History)</h3>
@@ -353,7 +625,7 @@
                             <tr>
                                 <th>To Program/Group</th>
                                 <th>Subject</th>
-                                <th>Message Body</th>
+                                <th>Message Body (Preview)</th>
                                 <th>Date Sent</th>
                                 <th>Actions</th>
                             </tr>
@@ -363,9 +635,9 @@
                         </tbody>
                     </table>
                 </div>
-                </section>
+            </section>
 
-            <section id="calendar" class="tab-content">
+            <section id="calendar-content" class="tab-content">
                 <h2>System Calendar</h2>
                 <p>View all relevant scheduled Sessions, Exams/CATS, and Clinical Rotations.</p>
                 <div id="fullCalendarDisplay"></div> 
@@ -379,6 +651,20 @@
             <h2>Geo Location Map</h2>
             <div id="mapbox-map" style="height: 400px;">Map will load here...</div> 
             <p id="map-details"></p>
+        </div>
+    </div>
+    
+    <div id="gradeModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="document.getElementById('gradeModal').style.display='none'">&times;</span>
+            <h2>Grade Assessment</h2>
+            <p id="gradeExamTitle">Assessment: <em>Loading...</em></p>
+            <form id="grade-form" onsubmit="handleGradeSubmission(event)">
+                <div id="grade-students-list">
+                <p>Loading enrolled students...</p>
+                </div>
+                <button type="submit" class="btn-action">Save Grades</button>
+            </form>
         </div>
     </div>
     
