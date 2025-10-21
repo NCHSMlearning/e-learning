@@ -1,11 +1,10 @@
 // =================================================================
-// === 1. CONFIGURATION, CLIENT SETUP, & GLOBAL VARIABLES ===
+// === NCHSM LECTURER DASHBOARD SCRIPT - FINAL INTEGRATED VERSION ===
 // =================================================================
 
-// NCHSM LECTURER DASHBOARD SCRIPT - LIVE SUPABASE INTEGRATION
+// === 1. CONFIGURATION, CLIENT SETUP, & GLOBAL VARIABLES ===
 
 // --- ⚠️ IMPORTANT: SUPABASE CONFIGURATION ---
-// REPLACE WITH YOUR ACTUAL SUPABASE DETAILS
 const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co'; 
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
 
@@ -28,9 +27,14 @@ let currentUserProfile = null;
 let attendanceMap = null; 
 let allCourses = []; 
 let allStudents = []; 
-let lecturerTargetProgram = null; 
+let lecturerTargetProgram = null; // e.g., 'KRCHN' or 'TVET'
 
-// --- CORRECTED INTAKE YEARS (UP TO 2028) ---
+// --- Academic Structure Constants (Used for filtering) ---
+const ACADEMIC_STRUCTURE = {
+    'KRCHN': ['Block A', 'Block B'],
+    'TVET': ['Term 1', 'Term 2', 'Term 3']
+};
+
 let allIntakes = [
     { id: '2024', name: '2024' },
     { id: '2025', name: '2025' },
@@ -39,15 +43,9 @@ let allIntakes = [
     { id: '2028', name: '2028' }
 ]; 
 
-// --- Academic Structure Constants (Used for filtering) ---
-const ACADEMIC_STRUCTURE = {
-    'KRCHN': ['Block A', 'Block B'],
-    'TVET': ['Term 1', 'Term 2', 'Term 3']
-};
-
 
 // =================================================================
-// === 2. CORE UTILITY FUNCTIONS ===
+// === 2. CORE UTILITY FUNCTIONS (WITH PROGRAM-FILTERED FETCH) ===
 // =================================================================
 
 function $(id){ return document.getElementById(id); }
@@ -125,6 +123,7 @@ function showFeedback(message, type) {
     }
 }
 
+// NOTE: This remains the generic fetch for non-program-specific tables (like messages/courses)
 async function fetchData(tableName, selectQuery = '*', filters = {}, order = 'created_at', ascending = false) {
     let query = sb.from(tableName).select(selectQuery);
 
@@ -139,6 +138,61 @@ async function fetchData(tableName, selectQuery = '*', filters = {}, order = 'cr
     const { data, error } = await query;
     if (error) {
         console.error(`Error loading ${tableName}:`, error);
+        return { data: null, error };
+    }
+    return { data, error: null };
+}
+
+/**
+ * CRITICAL: Program-Filtered Data Fetching Utility for Lecturers.
+ * Applies the lecturer's 'lecturerTargetProgram' (KRCHN/TVET) filter 
+ * to relevant tables (Students, Exams, Sessions, Resources).
+ */
+async function fetchDataForLecturer(tableName, selectQuery = '*', filters = {}, order = 'created_at', ascending = false) {
+    let query = sb.from(tableName).select(selectQuery);
+    
+    const isProgramTable = [
+        USER_PROFILE_TABLE, 'student_lecturer_view', // Students
+        EXAMS_TABLE,        // Exams/Cats
+        SESSIONS_TABLE,     // Sessions
+        RESOURCES_TABLE,    // Shared Resources
+        ATTENDANCE_TABLE    // Attendance
+    ].includes(tableName);
+
+    // Apply the lecturer's target program filter if it exists and the table is relevant
+    if (isProgramTable && lecturerTargetProgram) {
+        let programFieldName = '';
+        if (tableName === USER_PROFILE_TABLE || tableName === 'student_lecturer_view') {
+            programFieldName = 'student_program';
+        } else if (tableName === EXAMS_TABLE || tableName === SESSIONS_TABLE || tableName === RESOURCES_TABLE) {
+            programFieldName = 'program';
+        } else if (tableName === ATTENDANCE_TABLE) {
+            // Attendance filtering is often done post-query on related student profile, 
+            // but we can try filtering on the profile link if Supabase allows it.
+            // For now, we apply profile-link filter in the attendance load function itself 
+            // for simplicity, but we keep the logic here for other program tables.
+        }
+        
+        if (programFieldName) {
+            // Apply the program filter, unless a specific program filter was already provided
+            if (!filters[programFieldName]) {
+                 query = query.eq(programFieldName, lecturerTargetProgram);
+            }
+        }
+    }
+    
+    // Apply existing filters
+    for (const key in filters) {
+        if (filters[key] !== undefined && filters[key] !== null && filters[key] !== '') {
+            query = query.eq(key, filters[key]);
+        }
+    }
+    
+    query = query.order(order, { ascending });
+
+    const { data, error } = await query;
+    if (error) {
+        console.error(`Error loading ${tableName} (Program Filter Applied: ${lecturerTargetProgram}):`, error);
         return { data: null, error };
     }
     return { data, error: null };
@@ -167,7 +221,7 @@ async function reverseGeocodeAndDisplay(lat, lng, elementId) {
 
 
 // =================================================================
-// === 3. CORE NAVIGATION, AUTH & INITIALIZATION (FIXED) ===
+// === 3. CORE NAVIGATION, AUTH & INITIALIZATION ===
 // =================================================================
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -203,7 +257,6 @@ async function initSession() {
     }
     
     if (profile) {
-        // Successful login/session
         currentUserProfile = profile;
         lecturerTargetProgram = getProgramFilterFromDepartment(currentUserProfile.department);
 
@@ -212,16 +265,9 @@ async function initSession() {
         loadSectionData('dashboard'); 
         setupEventListeners();
     } else {
-        // --- ⚠️ CRITICAL FIX: FORCE REDIRECT ON AUTH FAILURE ---
         console.error("Initialization Failed, Redirecting to Login:", error);
-        
-        // Match screenshot behavior
         alert("Authentication Failed: No active session found.\n\nPlease log in again.");
-
-        // Reload the page, which will re-run initSession and confirm logout/failed session.
-        setTimeout(() => {
-            window.location.reload(); 
-        }, 100); 
+        window.location.reload(); 
     }
 }
 
@@ -237,15 +283,18 @@ function getProgramFilterFromDepartment(department) {
 
 
 async function fetchGlobalDataCaches() {
-    // Note: All courses are fetched, filtering happens later in UI or on specific API calls (exams/sessions)
+    // All courses are fetched without program filtering
     const { data: courses } = await fetchData(COURSES_TABLE, 'course_id, course_name', {}, 'course_name', true);
     allCourses = courses || [];
 
-    const filters = { role: 'student' };
-    if (lecturerTargetProgram) {
-        filters.student_program = lecturerTargetProgram;
-    }
-    const { data: students } = await fetchData(USER_PROFILE_TABLE, 'user_id, full_name, email, student_program, intake_year, block_term, status', filters, 'full_name', true);
+    // CRITICAL: Filter students by program using the new function
+    const { data: students } = await fetchDataForLecturer(
+        USER_PROFILE_TABLE, 
+        'user_id, full_name, email, student_program, intake_year, block_term, status', 
+        { role: 'student' },
+        'full_name', 
+        true
+    );
     allStudents = students || [];
 }
 
@@ -329,21 +378,16 @@ function toggleSidebar() {
     body.classList.toggle('no-scroll');
 }
 
-// === LOGOUT FIX APPLIED HERE (Simplified) ===
 async function logout() {
-    // Attempt to sign out from Supabase
     const { error } = await sb.auth.signOut();
     
     if (error) {
         console.error('Logout error:', error);
         showFeedback('Logout failed. Please try again.', 'error');
     } else {
-        // Sign-out successful: Force reload immediately.
-        // initSession() will handle the redirect on the reload.
         window.location.reload(); 
     }
 }
-// === END FIX ===
 
 
 // =================================================================
@@ -424,7 +468,9 @@ async function loadLecturerDashboardData() {
     $('total_students_count').textContent = allStudents.length || '0';
     
     const today = new Date().toISOString().split('T')[0];
-    const { data: recentSessions } = await fetchData(SESSIONS_TABLE, 'id', { 
+    
+    // Use fetchDataForLecturer to ensure program filtering on sessions
+    const { data: recentSessions } = await fetchDataForLecturer(SESSIONS_TABLE, 'id', { 
         lecturer_id: currentUserProfile.user_id,
         session_date: today 
     });
@@ -443,6 +489,7 @@ async function loadLecturerStudents() {
 
     tbody.innerHTML = '<tr><td colspan="7">Loading assigned students...</td></tr>';
     
+    // Students are already filtered by program in allStudents cache (see fetchGlobalDataCaches)
     const studentsHtml = allStudents.map(profile => {
         return `
             <tr>
@@ -516,7 +563,7 @@ async function handleAddSession(e) {
             session_topic: formData.topic,
             session_date: formData.date,
             session_time: formData.time,
-            program: formData.program,
+            program: formData.program, // Filtered by program
             block_term: formData.block_term,
             course_id: formData.course_id,
             lecturer_id: currentUserProfile.user_id,
@@ -540,7 +587,14 @@ async function loadLecturerSessions() {
     const tbody = $('sessions-table');
     tbody.innerHTML = '<tr><td colspan="6">Loading your scheduled sessions...</td></tr>';
     
-    const { data: sessions, error } = await fetchData(SESSIONS_TABLE, '*', { lecturer_id: currentUserProfile.user_id }, 'session_date', true);
+    // CRITICAL: Filtered by lecturer_id AND program via fetchDataForLecturer
+    const { data: sessions, error } = await fetchDataForLecturer(
+        SESSIONS_TABLE, 
+        '*', 
+        { lecturer_id: currentUserProfile.user_id }, 
+        'session_date', 
+        true
+    );
     
     if (error) {
         tbody.innerHTML = `<tr><td colspan="6">Error: ${error.message}</td></tr>`;
@@ -573,6 +627,7 @@ async function loadLecturerSessions() {
 // =================================================================
 
 function loadAttendanceSelects() {
+    // Uses allStudents cache which is already program-filtered
     populateSelect($('att_student_id'), allStudents, 'user_id', 'full_name', 'Select Student');
     populateSelect($('att_course_id'), allCourses, 'course_id', 'course_name', 'Select Course (Optional)');
 }
@@ -684,6 +739,7 @@ async function loadTodaysAttendanceRecords() {
     
     const today = new Date().toISOString().split('T')[0];
     
+    // Fetch all attendance logs for today. We filter them locally using the cached student profiles.
     const { data: logs, error } = await sb.from(ATTENDANCE_TABLE)
         .select(`*, user:user_id(full_name, student_program)`)
         .gte('check_in_time', today)
@@ -694,6 +750,7 @@ async function loadTodaysAttendanceRecords() {
         return;
     }
 
+    // Filter logs to only show records for students in the lecturer's program or the lecturer's own check-ins
     const filteredLogs = logs.filter(l => 
         l.user?.student_program === lecturerTargetProgram || l.user_role === 'lecturer'
     );
@@ -705,7 +762,7 @@ async function loadTodaysAttendanceRecords() {
 
     tbody.innerHTML = '';
     filteredLogs.forEach(l => {
-        const userName = l.user?.full_name || currentUserProfile.full_name || 'N/A';
+        const userName = l.user?.full_name || (l.user_role === 'lecturer' ? currentUserProfile.full_name : 'N/A');
         const target = allCourses.find(c => c.course_id === l.course_id)?.course_name || l.course_id || 'General';
         const dateTime = new Date(l.check_in_time).toLocaleTimeString();
         const locationText = l.location_details || 'N/A';
@@ -819,7 +876,7 @@ async function handleAddExam(e) {
             exam_name: formData.name,
             exam_date: formData.date,
             exam_type: formData.type,
-            program: formData.program,
+            program: formData.program, // Filtered by program
             intake: formData.intake,
             block_term: formData.block_term,
             course_id: formData.course_id,
@@ -844,7 +901,14 @@ async function loadLecturerExams() {
     const tbody = $('exams-table');
     tbody.innerHTML = '<tr><td colspan="6">Loading your exams/CATS...</td></tr>';
     
-    const { data: exams, error } = await fetchData(EXAMS_TABLE, '*', { lecturer_id: currentUserProfile.user_id }, 'exam_date', false);
+    // CRITICAL: Filtered by lecturer_id AND program via fetchDataForLecturer
+    const { data: exams, error } = await fetchDataForLecturer(
+        EXAMS_TABLE, 
+        '*', 
+        { lecturer_id: currentUserProfile.user_id }, 
+        'exam_date', 
+        false
+    );
     
     if (error) {
         tbody.innerHTML = `<tr><td colspan="6">Error: ${error.message}</td></tr>`;
@@ -938,7 +1002,7 @@ async function handleUploadResource(e) {
         // 3. Insert record into the database
         const { error: dbError } = await sb.from(RESOURCES_TABLE).insert({
             title: formData.title,
-            program: formData.program,
+            program: formData.program, // Filtered by program
             block_term: formData.block,
             intake_year: formData.intake,
             file_url: publicUrl,
@@ -965,7 +1029,14 @@ async function loadLecturerResources() {
     const tbody = $('resources-list');
     tbody.innerHTML = '<tr><td colspan="4">Loading shared resources...</td></tr>';
 
-    const { data: resources, error } = await fetchData(RESOURCES_TABLE, '*', { program: lecturerTargetProgram }, 'created_at', false);
+    // CRITICAL: Filtered by program via fetchDataForLecturer
+    const { data: resources, error } = await fetchDataForLecturer(
+        RESOURCES_TABLE, 
+        '*', 
+        {}, // Filtered by program in fetchDataForLecturer
+        'created_at', 
+        false
+    );
 
     if (error) {
         tbody.innerHTML = `<tr><td colspan="4">Error: ${error.message}</td></tr>`;
@@ -1004,6 +1075,7 @@ function populateMessageFormSelects() {
                 groups.push({ id: `${targetProgram}_${block}`, name: `Group: ${targetProgram} - ${block}` });
             });
         }
+        // Add individual students filtered by the lecturer's program (from allStudents cache)
         groups.push(...allStudents.map(s => ({ id: s.user_id, name: `Student: ${s.full_name}` })));
     } else {
         groups.push({ id: 'none', name: 'No target program defined' });
@@ -1029,7 +1101,6 @@ async function handleSendMessage(e) {
         return;
     }
     
-    // Determine the target type for database insertion
     const isStudentTarget = formData.target.length === 36; // Assuming Supabase UUID length for user_id
     const targetGroupName = isStudentTarget ? null : formData.target;
     const targetUserId = isStudentTarget ? formData.target : null;
@@ -1042,6 +1113,7 @@ async function handleSendMessage(e) {
             target_user_id: targetUserId,
             subject: formData.subject,
             body: formData.body,
+            program: lecturerTargetProgram, // Tag message with program
             status: 'Sent'
         });
 
@@ -1062,6 +1134,7 @@ async function loadLecturerMessages() {
     const tbody = $('messages-table');
     tbody.innerHTML = '<tr><td colspan="5">Loading sent messages...</td></tr>';
     
+    // Fetch messages sent by this lecturer
     const { data: messages, error } = await fetchData(MESSAGES_TABLE, '*', { sender_id: currentUserProfile.user_id }, 'created_at', false);
 
     if (error) {
@@ -1111,7 +1184,7 @@ function openGradeModal(examId, examName) {
         You are grading Exam ID **${examId}**. <br>
         <p style="margin-top: 15px;">
             Here you would typically load a list of students assigned to the course/program/intake for this exam,
-            along with input fields for scores.
+            which is already filtered by your assigned program (${lecturerTargetProgram}).
         </p>
         <button class="btn-action" style="margin-top: 15px;" onclick="showFeedback('Grading workflow started for ${examId}', 'info')">Start Grading</button>
     `;
