@@ -167,7 +167,7 @@ async function reverseGeocodeAndDisplay(lat, lng, elementId) {
 
 
 // =================================================================
-// === 3. CORE NAVIGATION, AUTH & INITIALIZATION ===
+// === 3. CORE NAVIGATION, AUTH & INITIALIZATION (FIXED) ===
 // =================================================================
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -182,7 +182,7 @@ async function initSession() {
         const { data: { session }, error: sessionError } = await sb.auth.getSession();
         
         if (sessionError || !session) {
-            error = sessionError || { message: "No active session found. Please log in." };
+            error = sessionError || { message: "No active session found." };
         } else {
             const { data: userProfile, error: profileError } = await sb.from(USER_PROFILE_TABLE)
                 .select('*')
@@ -203,6 +203,7 @@ async function initSession() {
     }
     
     if (profile) {
+        // Successful login/session
         currentUserProfile = profile;
         lecturerTargetProgram = getProgramFilterFromDepartment(currentUserProfile.department);
 
@@ -211,33 +212,32 @@ async function initSession() {
         loadSectionData('dashboard'); 
         setupEventListeners();
     } else {
-        console.error("Initialization Failed:", error);
-        document.body.innerHTML = `
-            <div style="padding: 50px; text-align: center; color: #4C1D95;">
-                <h1>Access Denied 🔒</h1>
-                <p>Failed to authenticate or load lecturer profile.</p>
-                <p style="color: #EF4444;">Error details: ${error?.message || 'Unknown error.'}</p>
-                <button onclick="window.location.reload()" 
-                        style="background-color: #4C1D95; color: white; padding: 10px 20px; border: none; border-radius: 6px; margin-top: 20px; cursor: pointer;">
-                    Go to Login Screen (Reload)
-                </button>
-            </div>
-        `;
+        // --- ⚠️ CRITICAL FIX: FORCE REDIRECT ON AUTH FAILURE ---
+        console.error("Initialization Failed, Redirecting to Login:", error);
+        
+        // Match screenshot behavior
+        alert("Authentication Failed: No active session found.\n\nPlease log in again.");
+
+        // Reload the page, which will re-run initSession and confirm logout/failed session.
+        setTimeout(() => {
+            window.location.reload(); 
+        }, 100); 
     }
 }
 
 function getProgramFilterFromDepartment(department) {
-    const programMap = {
-        'Nursing': 'KRCHN',
-        'Maternal Health': 'KRCHN',
-        'General Education': 'TVET',
-        'Clinical Medicine': 'TVET'
-    };
-    return programMap[department] || null; 
+    if (['Nursing', 'Maternal Health'].includes(department)) {
+        return 'KRCHN';
+    }
+    if (['General Education', 'Clinical Medicine'].includes(department)) {
+        return 'TVET';
+    }
+    return null; 
 }
 
 
 async function fetchGlobalDataCaches() {
+    // Note: All courses are fetched, filtering happens later in UI or on specific API calls (exams/sessions)
     const { data: courses } = await fetchData(COURSES_TABLE, 'course_id, course_name', {}, 'course_name', true);
     allCourses = courses || [];
 
@@ -329,7 +329,7 @@ function toggleSidebar() {
     body.classList.toggle('no-scroll');
 }
 
-// === FIX APPLIED HERE ===
+// === LOGOUT FIX APPLIED HERE (Simplified) ===
 async function logout() {
     // Attempt to sign out from Supabase
     const { error } = await sb.auth.signOut();
@@ -338,16 +338,9 @@ async function logout() {
         console.error('Logout error:', error);
         showFeedback('Logout failed. Please try again.', 'error');
     } else {
-        // Sign-out successful: Clear local state and simulate redirect.
-        currentUserProfile = null;
-        lecturerTargetProgram = null;
-        
-        showFeedback("Logged out successfully. Reloading...", "success"); 
-        
-        // Use a slight delay before reloading to allow feedback to be seen
-        setTimeout(() => {
-            window.location.reload(); 
-        }, 500); 
+        // Sign-out successful: Force reload immediately.
+        // initSession() will handle the redirect on the reload.
+        window.location.reload(); 
     }
 }
 // === END FIX ===
