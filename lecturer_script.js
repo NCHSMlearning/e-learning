@@ -18,7 +18,7 @@ const EXAMS_TABLE = 'exams_cats';
 const SESSIONS_TABLE = 'scheduled_sessions'; 
 const ATTENDANCE_TABLE = 'geo_attendance_logs'; 
 const MESSAGES_TABLE = 'announcements'; 
-const RESOURCES_TABLE = 'shared_resources'; 
+const RESOURCES_TABLE = 'resources'; 
 
 const RESOURCES_BUCKET = 'resources'; 
 
