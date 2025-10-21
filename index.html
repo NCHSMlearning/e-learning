@@ -13,7 +13,7 @@
         .container { display: flex; min-height: 100vh; }
 
 
-        /* Sidebar - Deep Purple Theme */
+        /* Sidebar - Deep Purple Theme (Vertical for Desktop) */
         .sidebar { 
             width: 250px;
             background-color: #4C1D95;
@@ -21,9 +21,13 @@
             display: flex; 
             flex-direction: column; 
             padding: 20px; 
+            /* Added transition for smoother mobile toggle if needed later */
+            transition: width 0.3s, transform 0.3s;
         }
         .sidebar-header { text-align: center; margin-bottom: 30px; }
         .sidebar-header img { width: 60px; margin-bottom: 10px; filter: invert(1); }
+        
+        /* Nav Container */
         .nav { list-style: none; padding: 0; flex-grow: 1; }
         .nav li { margin: 10px 0; }
         .nav a { color: #E5E7EB; text-decoration: none; padding: 10px; border-radius: 6px; display: block; transition: 0.2s; }
@@ -217,38 +221,58 @@
             text-decoration: underline;
         }
 
-
         /* -------------------------------------- */
         /* RESPONSIVE ADJUSTMENTS (Mobile First) */
         /* -------------------------------------- */
         @media (max-width: 768px) {
-            .container { flex-direction: column; }
-            .sidebar { width: 100%; padding: 0; height: auto; }
-            .sidebar-header { display: none; /* Hide header/logo on mobile to save space */ }
-
-            /* Rework navigation to a horizontal, scrollable menu bar */
-            .nav { 
-                display: flex; 
-                flex-wrap: nowrap; /* Prevent wrapping to force horizontal scroll */
-                justify-content: flex-start;
-                overflow-x: auto; /* Enable horizontal scrolling */
-                margin-top: 0;
-                padding: 5px 0; 
-                background-color: #4C1D95;
-            }
-            .nav li { 
-                flex-shrink: 0; /* Important: prevents links from shrinking */
-                width: auto; 
-                margin: 0 5px; 
+            .container { 
+                /* We keep the container flexible, but the sidebar will handle the nav */
+                flex-direction: column; 
             }
             
-            /* Make links smaller and more compact */
+            /* --- FORCE VERTICAL TABS ON MOBILE --- */
+            .sidebar { 
+                width: 100%; /* Full width sidebar at the top */
+                padding: 10px 0; 
+                height: auto; 
+            }
+            .sidebar-header { 
+                /* Display a compact header on mobile */
+                display: flex; 
+                justify-content: center; 
+                align-items: center;
+                gap: 10px;
+                margin-bottom: 0;
+            }
+            .sidebar-header img { 
+                width: 40px; 
+                margin-bottom: 0; 
+            }
+            .sidebar-header h2 {
+                 font-size: 1.2rem;
+            }
+            /* Rework navigation to a vertical list within the full-width sidebar */
+            .nav { 
+                display: flex; 
+                flex-direction: column; /* CRITICAL: FORCES VERTICAL TABS */
+                overflow-x: hidden; /* No horizontal scrolling */
+                padding: 10px 15px; 
+                background-color: #4C1D95;
+                margin: 0;
+            }
+            .nav li { 
+                flex-shrink: 0; 
+                width: 100%; /* Links take full width */
+                margin: 0; /* Remove vertical margin */
+            }
+            
+            /* Ensure links are standard size and left-aligned */
             .nav a { 
-                white-space: nowrap; 
-                text-align: center; 
-                padding: 8px 10px; 
-                font-size: 0.8rem; 
-                border-radius: 4px;
+                white-space: normal; 
+                text-align: left; 
+                padding: 10px 15px; 
+                font-size: 1rem; 
+                border-radius: 0; /* Remove rounded corners for full-width list look */
             }
 
             /* Move logout to the bottom of the main content on mobile */
@@ -308,12 +332,17 @@
             }
         }
 
-        /* Desktop-only styles */
+        /* Desktop-only styles (Re-enables vertical nav and full sidebar) */
         @media (min-width: 769px) {
+            .sidebar { width: 250px; flex-direction: column; padding: 20px; }
+            .sidebar-header { display: block; text-align: center; } /* Restore full header */
+            .sidebar-header h2 { font-size: 1.5rem; }
+            .nav { display: block; overflow-x: visible; }
+            .nav li { margin: 10px 0; }
+            .nav a { white-space: normal; text-align: left; padding: 10px; font-size: 1rem; border-radius: 6px; }
             .logout { display: block; }
+            .container { flex-direction: row; }
         }
-
-
     </style>
 </head>
 <body>
@@ -365,7 +394,7 @@
                     <div class="card" onclick="showTab('attendance')">
                         <h3>Attendance Rate</h3>
                         <p class="data" id="dashboard-attendance-rate">--%</p>
-                        <small>Last 30 days</small>
+                        <small>Overall Verified</small>
                     </div>
                     <div class="card" onclick="showTab('cats')">
                         <h3>Upcoming Exam</h3>
@@ -380,7 +409,7 @@
                     <div class="card" onclick="showTab('resources')">
                         <h3>New Resources</h3>
                         <p class="data" id="dashboard-new-resources">0</p>
-                        <small>Last updated week</small>
+                        <small>Last 7 days</small>
                     </div>
                 </div>
 
@@ -639,6 +668,7 @@
     let cachedCourses = []; 
     let cachedExams = [];
     let cachedClinicalAreas = [];
+    let cachedResources = []; // Added for new resource logic
 
 
     // ** UI ELEMENT REFERENCES **
@@ -682,13 +712,9 @@ function showTab(tabId) {
         updateTargetSelect(); // CRITICAL: Runs on tab switch to populate the target dropdown
     }
     if (tabId === 'dashboard' && currentUserId) {
-        // Run core loaders immediately for dashboard metrics
+        // Core loaders run in checkAuth, just refresh metrics
         loadWelcomeDetails();
-        loadCourses();
-        loadExams();
-        loadResources();
-        // Metrics should load after the data is cached
-        setTimeout(() => loadDashboardMetrics(currentUserId), 500);
+        loadDashboardMetrics(currentUserId);
     }
     if (tabId === 'courses' && currentUserId) loadCourses(); 
     if (tabId === 'resources' && currentUserId) loadResources();
@@ -768,32 +794,28 @@ async function loadStudentMessage(key, elementId) {
  * Calculates and updates all dashboard metrics.
  */
 async function loadDashboardMetrics(userId) {
-    // Ensure data caches are populated before proceeding (safety check)
-    // Note: loadCourses() and loadExams() are called in checkAuthAndLoad/showTab('dashboard')
-    if (cachedCourses.length === 0) await loadCourses();
-    if (cachedExams.length === 0) await loadExams();
-
-
     // --- ACTIVE COURSES ---
-    // NOTE: If the list is showing 8 and the metric 6, you need to align the filters 
-    // in loadCourses() to match the intended "Active" filter for the metric.
     document.getElementById('dashboard-active-courses').textContent = cachedCourses.length;
 
 
-    // --- OVERALL ATTENDANCE RATE ---
+    // --- OVERALL ATTENDANCE RATE (FIXED LOGIC) ---
     let attendanceRate = 0;
     try {
         const { data: logs, error: attendanceError } = await sb
             .from('geo_attendance_logs')
-            .select('check_in_time, is_verified')
-            .eq('student_id', userId); 
+            .select('is_verified')
+            .eq('student_id', userId)
+            // Filter logs to last 365 days for "Overall" metric, or remove filter for true "Overall"
+            // For now, let's keep it as true overall attendance
+            // .gte('check_in_time', new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString()); 
 
 
         if (attendanceError) throw attendanceError;
 
 
         const totalSessions = logs.length;
-        const attended = logs.filter(l => l.is_verified !== false).length; 
+        // Count verified logs, treating null/undefined as unverified for safety
+        const attended = logs.filter(l => l.is_verified === true).length; 
 
 
         attendanceRate = totalSessions > 0 ? Math.round((attended / totalSessions) * 100) : 0;
@@ -806,9 +828,8 @@ async function loadDashboardMetrics(userId) {
     }
 
 
-    // --- UPCOMING EXAM (FIXED LOGIC) ---
-    let nextExamText = 'No Exams Data'; // Default assumption: No data loaded/RLS failure
-
+    // --- UPCOMING EXAM ---
+    let nextExamText = 'No Exams Scheduled'; 
 
     if (cachedExams.length > 0) {
         // Filter cached exams to only include future dates and sort them
@@ -820,19 +841,20 @@ async function loadDashboardMetrics(userId) {
 
         if (upcomingExams.length > 0) {
             const upcomingExam = upcomingExams[0];
-            // Format the date for the dashboard snapshot
             const examDate = new Date(upcomingExam.exam_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-            // Show the next exam name and date
             nextExamText = `${upcomingExam.exam_name || 'Exam'} on ${examDate}`;
         } else {
-            // Exam data exists, but all dates are in the past
             nextExamText = 'Semester Completed'; 
         }
     } 
 
-
     document.getElementById('dashboard-upcoming-exam').textContent = nextExamText;
 
+
+    // --- NEW RESOURCES (FIXED LOGIC) ---
+    const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const newResourcesCount = cachedResources.filter(r => r.created_at >= oneWeekAgo).length;
+    document.getElementById('dashboard-new-resources').textContent = newResourcesCount;
 
 
     // --- PROFILE COMPLETION CHECK ---
@@ -864,47 +886,38 @@ async function checkAuthAndLoad() {
 
     if (user) {
         currentUserId = user.id;
-
-
-        // ** CRITICAL: Wait for profile to load before proceeding **
+        
+        // ** CRITICAL: Load all necessary data FIRST **
         await loadProfile(currentUserId);
-
-
-        // Load targets for the ATTENDANCE dropdown
         await loadClinicalTargets(); 
         await loadClassTargets(); 
-
-
-        // Load data for the DASHBOARD and other tabs
         await loadCourses(); 
         await loadExams(); 
-        await loadResources();
+        await loadResources(); // Load resources for the dashboard metric
 
-
+        // ** THEN, load UI elements and metrics **
         await loadWelcomeDetails();
-
-
         showTab('dashboard');
-        setTimeout(() => loadDashboardMetrics(currentUserId), 500);
+        loadDashboardMetrics(currentUserId);
 
 
     } else {
-        console.warn("No active user session found. Redirecting to login.");
+        console.warn("No active user session found. Redirecting to login. (MOCKING DATA LOAD)");
         // window.location.href = "login.html"; // Uncomment for real app
 
 
-    
-        await loadProfile(currentUserId);
+        // --- MOCK DATA LOAD FOR DEVELOPMENT ---
+        currentUserId = 'mock_student_uuid'; 
+        await loadProfile(currentUserId); // Mocks loading a profile
         await loadClinicalTargets(); 
         await loadClassTargets(); 
         await loadCourses(); 
         await loadExams(); 
         await loadResources();
+
         await loadWelcomeDetails();
-
-
         showTab('dashboard');
-        setTimeout(() => loadDashboardMetrics(currentUserId), 500);
+        loadDashboardMetrics(currentUserId);
         // --- END MOCK ---
     }
 }
@@ -935,16 +948,16 @@ async function loadProfile(userId) {
     if (error || !profile) {
         console.error('Error loading consolidated profile:', error);
         if (profileStatus) profileStatus.textContent = 'Profile data missing or restricted. Contact Admin.';
+        // Mock/Fallback profile data
         currentUserProfile = {
-            full_name: 'Unknown Student',
-            program: 'N/A', // Default to program for students
-            block: 'N/A',
-            intake_year: 'N/A',
-            email: 'N/A',
-            phone: 'N/A',
-            role_id: 'N/A',
-            student_id: 'N/A', // Added student_id fallback
-            department: 'N/A' // Default/Fallback
+            full_name: 'Mock Student (ID: ' + userId + ')',
+            program: 'ClinicalMedicine',
+            block: 'Block_B',
+            intake_year: '2024',
+            email: 'mock.student@nchsm.edu',
+            phone: '+254711000111',
+            student_id: 'REG/NCHS/001/2024',
+            department: 'ClinicalMedicine'
         };
     } else {
         currentUserProfile = profile;
@@ -956,7 +969,6 @@ async function loadProfile(userId) {
     if (document.getElementById('profile-name')) document.getElementById('profile-name').value = currentUserProfile.full_name || 'N/A';
     if (document.getElementById('profile-email')) document.getElementById('profile-email').value = currentUserProfile.email || 'N/A';
     if (document.getElementById('profile-phone')) document.getElementById('profile-phone').value = currentUserProfile.phone || 'N/A';
-    // FIX: Show Student's Program if available, fallback to Department
     if (document.getElementById('profile-program')) document.getElementById('profile-program').value = currentUserProfile.program || currentUserProfile.department || 'N/A'; 
     if (document.getElementById('profile-block')) document.getElementById('profile-block').value = currentUserProfile.block || 'N/A';
     if (document.getElementById('profile-intake-year')) document.getElementById('profile-intake-year').value = currentUserProfile.intake_year || 'N/A';
@@ -1138,7 +1150,7 @@ async function loadClinicalTargets() {
     try {
         let query = sb
             .from('clinical_areas')
-            .select('id, name')
+            .select('id, name, latitude, longitude') // IMPORTANT: Added lat/lon
             .eq('program', program)
             .eq('intake_year', intakeYear);
 
@@ -1157,7 +1169,13 @@ async function loadClinicalTargets() {
         if (error) throw error;
 
 
-        cachedClinicalAreas = data.map(area => ({ id: area.id, name: area.name }));
+        // Cache with location data for GeoCheckIn
+        cachedClinicalAreas = data.map(area => ({ 
+            id: area.id, 
+            name: area.name,
+            latitude: area.latitude,
+            longitude: area.longitude
+        }));
 
 
     } catch (error) {
@@ -1194,7 +1212,8 @@ async function loadClassTargets() {
     try {
         let query = sb
             .from('courses_sections') 
-            .select('id, name, code')
+            // IMPORTANT: Added lat/lon to query
+            .select('id, name, code, latitude, longitude') 
             .eq('program', program)
             .eq('intake_year', intakeYear);
 
@@ -1213,10 +1232,13 @@ async function loadClassTargets() {
         if (error) throw error;
 
 
+        // Cache with location data for GeoCheckIn
         cachedCourses = data.map(course => ({ 
             id: course.id, 
             name: course.name,
-            code: course.code 
+            code: course.code,
+            latitude: course.latitude,
+            longitude: course.longitude 
         }));
 
 
@@ -1406,8 +1428,10 @@ async function geoCheckIn() {
         // Get all locations for the selected target
         let allTargetLocations = [];
         if (sessionType === 'Clinical') {
+            // Filter cached clinical areas by the selected target ID
             allTargetLocations = cachedClinicalAreas.filter(c => c.id == targetId);
         } else if (sessionType === 'Class') {
+            // Filter cached courses by the selected target ID
             allTargetLocations = cachedCourses.filter(c => c.id == targetId);
         }
 
@@ -1428,16 +1452,16 @@ async function geoCheckIn() {
             return R * c;
         };
 
+        // Determine the location to use for comparison (first valid one is fine, as targets usually have only one set of coordinates)
         let closestTarget = allTargetLocations[0];
+        if (closestTarget.latitude === null || closestTarget.longitude === null) {
+            geoMessage.textContent = 'Error: Target location coordinates are missing in the database.';
+             if (button) button.disabled = false;
+            return;
+        }
+
         let minDist = getDistanceMeters(location.lat, location.lon, closestTarget.latitude, closestTarget.longitude);
 
-        for (const loc of allTargetLocations) {
-            const dist = getDistanceMeters(location.lat, location.lon, loc.latitude, loc.longitude);
-            if (dist < minDist) {
-                minDist = dist;
-                closestTarget = loc;
-            }
-        }
 
         const targetLat = closestTarget.latitude;
         const targetLon = closestTarget.longitude;
@@ -1445,7 +1469,7 @@ async function geoCheckIn() {
 
         // 50 meters + GPS accuracy buffer
         const MAX_RADIUS = 50;
-        const effectiveDistance = distanceToTarget - location.acc;
+        const effectiveDistance = distanceToTarget; // Distance is sufficient. Don't subtract accuracy.
         if (effectiveDistance > MAX_RADIUS) {
             geoMessage.textContent = `You are too far from the target (${distanceToTarget.toFixed(1)} m, GPS accuracy ±${location.acc.toFixed(1)} m). Move closer to check in.`;
             if (button) button.disabled = false;
@@ -1476,6 +1500,7 @@ async function geoCheckIn() {
         } else {
             geoMessage.textContent = `Check-in successful at ${new Date(checkInTime).toLocaleTimeString()} near **${location.friendly}**. Distance to target: ${distanceToTarget.toFixed(1)} m.`;
             loadGeoAttendanceHistory(currentUserId);
+            loadDashboardMetrics(currentUserId); // Update attendance metric
         }
 
     } catch (e) {
@@ -1494,42 +1519,27 @@ async function geoCheckIn() {
 
 
 /**
- * FIXED: loadCourses() ensures profile data is loaded first and uses the correct program field.
+ * loadCourses() fetches student-specific courses.
  */
 async function loadCourses() {
     const tableBody = document.getElementById('courses-table');
     if (!tableBody) return;
-
-
     tableBody.innerHTML = '<tr><td colspan="4">Loading courses...</td></tr>';
 
+    if (!currentUserProfile) await loadProfile(currentUserId); 
+    const program = currentUserProfile?.program || currentUserProfile?.department; 
+    const block = currentUserProfile?.block;
+    const intakeYear = currentUserProfile?.intake_year;
 
-    // ** CRITICAL FIX: Ensure profile is loaded **
-    if (!currentUserProfile || !currentUserProfile.program && !currentUserProfile.department || !currentUserProfile.intake_year) {
-        await loadProfile(currentUserId); 
+    if (!program || !intakeYear) {
+        tableBody.innerHTML = `<tr><td colspan="4">Missing program or intake year info. Cannot load courses.</td></tr>`;
+        cachedCourses = [];
+        return;
     }
 
-
     try {
-        // ✅ FIX: Prioritize 'program' (Student) over 'department' (Lecturer/Fallback)
-        const program = currentUserProfile?.program || currentUserProfile?.department; 
-        const block = currentUserProfile?.block;
-        const intakeYear = currentUserProfile?.intake_year;
-
-
-        if (!program || !block || !intakeYear) {
-            tableBody.innerHTML = `<tr><td colspan="4">Missing program, block, or intake year info. Cannot load courses.</td></tr>`;
-            cachedCourses = [];
-            return;
-        }
-
-
-        console.log(`Running Course Query with: Program=${program}, Block=${block}, IntakeYear=${intakeYear}`); // Diagnostic log
-
-
         // Flexible filter for the block field
         const blockFilter = `block.eq.${block},block.is.null,block.eq.General`;
-
 
         const { data: courses, error } = await sb
             .from('courses')
@@ -1539,14 +1549,10 @@ async function loadCourses() {
             .or(blockFilter)
             .order('course_name', { ascending: true });
 
-
         if (error) throw error;
 
-
         cachedCourses = courses || [];
-        console.log("Courses Retrieved:", cachedCourses.length); // Diagnostic log
-
-
+        
         tableBody.innerHTML = '';
         if (cachedCourses.length > 0) {
             cachedCourses.forEach(c => {
@@ -1560,9 +1566,8 @@ async function loadCourses() {
                 `;
             });
         } else {
-            tableBody.innerHTML = `<tr><td colspan="4">No courses found for ${program}, Block ${block}, Intake ${intakeYear}.</td></tr>`;
+            tableBody.innerHTML = `<tr><td colspan="4">No courses found.</td></tr>`;
         }
-
 
     } catch (error) {
         console.error("❌ Failed to load courses:", error);
@@ -1570,12 +1575,10 @@ async function loadCourses() {
         cachedCourses = [];
     }
 
-
     if (typeof loadDashboardMetrics === "function") {
         loadDashboardMetrics(currentUserId);
     }
 }
-
 
 
 // Utility to safely escape HTML
@@ -1600,23 +1603,18 @@ async function loadExams() {
 
   tableBody.innerHTML = '<tr><td colspan="8">Loading your exams and grades...</td></tr>';
 
-  // ✅ Ensure profile is loaded
-  if (!currentUserProfile || !currentUserProfile.program || !currentUserProfile.intake_year) {
-    await loadProfile(currentUserId);
+  if (!currentUserProfile) await loadProfile(currentUserId);
+  const program = currentUserProfile?.program || currentUserProfile?.department;
+  const block = currentUserProfile?.block;
+  const intakeYear = currentUserProfile?.intake_year;
+
+  if (!program || !intakeYear) {
+    tableBody.innerHTML = `<tr><td colspan="8">Missing program or intake year info. Cannot load exams.</td></tr>`;
+    cachedExams = [];
+    return;
   }
 
   try {
-    const program = currentUserProfile?.program || currentUserProfile?.department;
-    const block = currentUserProfile?.block;
-    const intakeYear = currentUserProfile?.intake_year;
-
-    if (!program || !block || !intakeYear) {
-      tableBody.innerHTML = `<tr><td colspan="8">Missing program, block, or intake year info. Cannot load exams.</td></tr>`;
-      cachedExams = [];
-      return;
-    }
-
-    // ✅ Fetch exams joined with grades (LEFT JOIN to include exams without grades)
     const { data: exams, error } = await sb
       .from('exams_with_courses')
       .select(`
@@ -1630,7 +1628,7 @@ async function loadExams() {
         exam_grades!left(student_id, cat_score, exam_score, total_score)
       `)
       .or(`program_type.eq.${program},program_type.eq.General`)
-      .eq('block_term', block)
+      .or(`block_term.eq.${block},block_term.is.null,block_term.eq.General`)
       .eq('intake_year', intakeYear)
       .order('exam_date', { ascending: true });
 
@@ -1643,13 +1641,12 @@ async function loadExams() {
       tableBody.innerHTML = `
         <tr>
           <td colspan="8">
-            No exams or CATs scheduled for ${program}, Block ${block}, Intake ${intakeYear}.
+            No exams or CATs scheduled.
           </td>
         </tr>`;
       return;
     }
 
-    // ✅ Render each exam row
     cachedExams.forEach(exam => {
       const dateStr = exam.exam_date
         ? new Date(exam.exam_date).toLocaleDateString('en-US', {
@@ -1694,80 +1691,121 @@ async function loadExams() {
 }
 
 
-
-// Load learning resources for student dashboard
+/**
+ * loadResources() fetches student-specific learning materials and caches them.
+ * FIXED: Ensures the resource list is generated on load.
+ */
 async function loadResources() {
     // Ensure profile data is loaded
-    if (!currentUserProfile || !currentUserProfile.program || !currentUserProfile.intake_year) {
-        await loadProfile(currentUserId); 
-    }
+    if (!currentUserProfile) await loadProfile(currentUserId); 
 
-    const resourceList = document.getElementById('resources-list');
-    if (!resourceList) return;
-    resourceList.innerHTML = 'Loading resources...';
+    const resourceListContainer = document.getElementById('resources-list');
+    if (!resourceListContainer) return;
+    resourceListContainer.innerHTML = 'Loading resources...';
+    cachedResources = []; // Clear old cache
 
     try {
         const program = currentUserProfile?.program || currentUserProfile?.department;
-        let block = currentUserProfile?.block || '';
-        block = block.replace(/^Block_/, '');
-        const intakeYear = currentUserProfile?.intake_year || currentUserProfile?.intake;
+        const block = currentUserProfile?.block;
+        const intakeYear = currentUserProfile?.intake_year;
 
-        if (!program || !block || !intakeYear) {
-            resourceList.innerHTML = '<p>Missing enrollment details (program, block, or intake year).</p>';
+        if (!program || !intakeYear) {
+            resourceListContainer.innerHTML = '<p>Missing enrollment details (program or intake year).</p>';
             return;
         }
 
+        // --- Supabase Query ---
         const { data: resources, error } = await sb
             .from('resources')
             .select('id, title, file_path, file_url, program_type, block_term, block, intake_year, intake, uploaded_by_name, created_at, allow_download')
             .or(`program_type.eq.${program},program_type.eq.General`)
-            .or(`block_term.eq.${block},block.eq.${block},block_term.is.null,block.is.null`)
-            .or(`intake_year.eq.${intakeYear},intake.eq.${intakeYear},intake_year.is.null,intake.is.null`)
+            // Match against both block_term (for resources) and block (from profile)
+            .or(`block_term.eq.${block},block_term.is.null,block_term.eq.General`)
+            // Match against both intake_year (for resources) and intake (from profile)
+            .or(`intake_year.eq.${intakeYear},intake_year.is.null`)
             .order('created_at', { ascending: false });
 
         if (error) throw error;
 
-        resourceList.innerHTML = '';
-        if (!resources.length) {
-            resourceList.innerHTML = `<p>No learning resources found for ${program}, Block ${block}, Intake ${intakeYear}.</p>`;
+        cachedResources = resources || [];
+        
+        // --- Render List ---
+        resourceListContainer.innerHTML = '';
+        if (cachedResources.length === 0) {
+            resourceListContainer.innerHTML = `<p>No learning resources found.</p>`;
             return;
         }
 
-        resources.forEach(res => {
-            let preview = '';
-            const ext = (res.file_path || '').split('.').pop().toLowerCase();
-            if (ext === 'pdf') {
-                preview = `<iframe src="${res.file_url}" width="100%" height="500px"></iframe>`;
-            } else if (['doc', 'docx', 'ppt', 'pptx'].includes(ext)) {
-                const encoded = encodeURIComponent(res.file_url);
-                preview = `<iframe src="https://view.officeapps.live.com/op/embed.aspx?src=${encoded}" width="100%" height="500px"></iframe>`;
-            } else {
-                preview = `<a href="${res.file_url}" target="_blank">View File</a>`;
-            }
-
-            const downloadBtn = res.allow_download 
-                ? `<a href="${res.file_url}" download class="btn btn-sm btn-primary" style="margin-top:5px;">Download</a>` 
-                : '';
-
-            resourceList.innerHTML += `
-                <div class="resource-item" style="margin-bottom:20px;">
-                    <strong>${res.title}</strong>
-                    <p style="margin:5px 0 5px;font-size:0.9em;color:#6B7280;">
-                        ${res.program_type === 'General' ? 'General' : `${res.program_type}, Block ${res.block_term || res.block}, Intake ${res.intake_year || res.intake}`}
-                        • Uploaded: ${new Date(res.created_at).toLocaleDateString()}
+        cachedResources.forEach(res => {
+             const displayDate = new Date(res.created_at).toLocaleDateString('en-US');
+             resourceListContainer.innerHTML += `
+                <div class="resource-item" onclick="viewResource('${res.id}')" style="cursor:pointer; flex-direction: column; align-items: flex-start;">
+                    <strong style="color: #4C1D95;">${escapeHtml(res.title)}</strong>
+                    <p style="margin:5px 0 0;font-size:0.8em;color:#6B7280;">
+                        Uploaded: ${displayDate} 
+                        (${res.program_type === 'General' ? 'General' : res.program_type})
                     </p>
-                    ${preview}
-                    ${downloadBtn}
                 </div>
             `;
         });
-
+        
+        // Load the first resource automatically
+        if(cachedResources.length > 0) {
+            viewResource(cachedResources[0].id);
+        }
+        
     } catch (error) {
         console.error("❌ Failed to load resources:", error);
-        resourceList.innerHTML = `<p style="color:#EF4444;">Error loading resources: ${error.message}</p>`;
+        resourceListContainer.innerHTML = `<p style="color:#EF4444;">Error loading resources: ${error.message}</p>`;
+    }
+
+    if (typeof loadDashboardMetrics === "function") {
+        loadDashboardMetrics(currentUserId); // Update the dashboard metric
     }
 }
 
+
+/**
+ * Generates and displays the iframe for the selected resource.
+ */
+function viewResource(resourceId) {
+    const resourceViewer = document.getElementById('resource-viewer');
+    const resource = cachedResources.find(r => r.id == resourceId);
+
+    if (!resource || !resourceViewer) {
+        resourceViewer.innerHTML = 'Resource not found.';
+        return;
+    }
+
+    let previewHtml = '';
+    const fileUrl = resource.file_url;
+    const ext = (resource.file_path || '').split('.').pop().toLowerCase();
+    
+    // Default to PDF view
+    if (ext === 'pdf') {
+        previewHtml = `<iframe src="${fileUrl}" width="100%" height="580px" style="border:none;"></iframe>`;
+    } 
+    // Office file preview via Microsoft Viewer
+    else if (['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'].includes(ext)) {
+        const encoded = encodeURIComponent(fileUrl);
+        previewHtml = `<iframe src="https://view.officeapps.live.com/op/embed.aspx?src=${encoded}" width="100%" height="580px" style="border:none;"></iframe>`;
+    } 
+    // Simple link for other types
+    else {
+        previewHtml = `<p>This file type (<strong>.${ext}</strong>) cannot be previewed directly.</p>`;
+    }
+
+    const downloadBtn = resource.allow_download 
+        ? `<a href="${fileUrl}" download class="profile-button" style="display:block; text-align:center; margin-top:10px; background-color: #10B981;">Download File</a>` 
+        : `<p style="color:#EF4444; margin-top:10px;">Download not permitted for this resource.</p>`;
+
+    resourceViewer.innerHTML = `
+        <h3 style="color: #4C1D95; margin-bottom: 5px;">${escapeHtml(resource.title)}</h3>
+        <p style="font-size: 0.9em; color: #6B7280;">Uploaded by: ${escapeHtml(resource.uploaded_by_name || 'Admin')} on ${new Date(resource.created_at).toLocaleDateString()}</p>
+        ${previewHtml}
+        ${downloadBtn}
+    `;
+}
 
 
 // *************************************************************************
@@ -1804,7 +1842,7 @@ async function fetchAllScheduleData() {
         .from('calendar_events')
         .select('event_name, event_date, type, description, target_program, target_block, target_intake_year')
         .or(`target_program.eq.${program},target_program.eq.General`)
-        .eq('target_block', block)
+        .or(`target_block.eq.${block},target_block.is.null`)
         .eq('target_intake_year', intakeYear)
         .then(({ data, error }) => {
             if (error) { console.error("Events error:", error); return []; }
