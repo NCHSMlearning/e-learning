@@ -2174,20 +2174,28 @@ document.getElementById('save-announcement').addEventListener('click', async () 
   }
 
   try {
-    const { error, data } = await sb.from('announcements').insert({
-      title: 'Official Announcement',
-      content
+    // Insert as a system message to ALL students (target_program = null)
+    const { error, data } = await sb.from('notifications').insert({
+      target_program: null,           // Null = all students
+      subject: 'Official Announcement',
+      message: content,
+      message_type: 'system',
+      sender_id: currentUserProfile.id
     });
 
     if (error) throw error;
+
     feedback.textContent = 'Announcement saved successfully!';
     textarea.value = '';
-    await loadPublicAnnouncements();
+    
+    // Refresh the displayed announcements (optional)
+    await loadOfficialAnnouncement(); 
   } catch (err) {
     console.error(err);
     feedback.textContent = 'Failed to save announcement: ' + err.message;
   }
 });
+
 
 // ---------------- Initialization ----------------
 document.getElementById('send-message-form').addEventListener('submit', handleSendMessage);
