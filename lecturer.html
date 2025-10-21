@@ -4,738 +4,560 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NCHSM Lecturer Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/main.min.css">
-
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    
     <style>
-        /* Global Reset/Base Layout */
-        body { margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f9; }
-        .container { display: flex; min-height: 100vh; }
-        .main { flex-grow: 1; padding: 20px; transition: margin-left 0.3s ease; }
-
-        /* --- Menu Toggle Button (For Mobile) --- */
-        .menu-toggle {
-            display: none; 
-            background: #007bff;
-            color: white;
-            padding: 10px 15px;
-            border: none;
-            cursor: pointer;
-            font-size: 1.1em;
-            position: fixed; 
-            top: 10px;
-            left: 10px;
-            z-index: 1001; 
-            border-radius: 4px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-        }
-
-        /* --- Sidebar Styles --- */
-        .sidebar {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 250px;
-            height: 100%;
-            background-color: #2c3e50; /* Dark background */
-            color: white;
-            z-index: 1000;
-            padding-top: 20px;
-            overflow-y: auto;
-            transition: transform 0.3s ease;
-        }
-
-        .sidebar-header {
-            text-align: center;
-            padding: 10px 0;
-            border-bottom: 1px solid #3c5067;
-            margin-bottom: 20px;
-        }
-        
-        .sidebar-header img {
-            max-width: 80px;
-            height: auto;
-            border-radius: 50%;
-            margin-bottom: 5px;
-        }
-
-        .sidebar-header h2 {
-            margin: 5px 0 10px;
-            font-size: 1.2em;
-        }
-
-        .nav {
-            list-style: none;
-            padding: 0;
+        /* Base Reset and Layout */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
+            padding: 0;
+            background-color: #f4f7f6;
+            display: flex;
+            min-height: 100vh;
+            color: #333;
         }
-
-        .nav a {
-            display: block;
-            padding: 15px 20px;
-            color: #ecf0f1;
-            text-decoration: none;
-            transition: background-color 0.2s;
-            font-size: 0.95em;
+        
+        /* Sidebar Styling */
+        .sidebar {
+            width: 250px;
+            background-color: #004d40; /* NCHSM Primary Color */
+            color: white;
+            padding: 20px 0;
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            height: 100%;
+            transition: transform 0.3s ease;
+            z-index: 1000;
         }
-
-        .nav a:hover, .nav a.active {
-            background-color: #34495e; 
-            border-left: 4px solid #007bff;
-            padding-left: 16px; 
-        }
-
-        .logout {
-            position: absolute;
-            bottom: 20px;
-            width: 100%;
+        .logo {
             text-align: center;
-        }
-
-        .logout a {
-            color: #e74c3c;
-            text-decoration: none;
-            padding: 10px 20px;
-            display: inline-block;
+            padding-bottom: 20px;
+            font-size: 1.5em;
             font-weight: bold;
-        }
-
-        /* --- Tab Content Control (Initial State) --- */
-        .tab-content { 
-            display: none; 
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
             margin-bottom: 20px;
         }
-        .tab-content.active { 
-            display: block; 
-        }
-
-        /* ================================================= */
-        /* === DESKTOP LAYOUT (min-width 769px) === */
-        /* ================================================= */
-        @media (min-width: 769px) {
-            .sidebar {
-                transform: translateX(0); 
-            }
-            .main {
-                margin-left: 250px; 
-            }
-            .menu-toggle {
-                display: none; 
-            }
-            header {
-                padding-top: 15px;
-            }
-        }
-
-        /* ================================================= */
-        /* === MOBILE LAYOUT (max-width 768px) === */
-        /* ================================================= */
-        @media (max-width: 768px) {
-            .sidebar {
-                transform: translateX(-250px); 
-                box-shadow: 2px 0 5px rgba(0,0,0,0.5);
-            }
-            .sidebar.active {
-                transform: translateX(0); 
-            }
-            .main {
-                margin-left: 0; 
-            }
-            .menu-toggle {
-                display: block; 
-            }
-            body.no-scroll {
-                overflow: hidden;
-            }
-            header {
-                margin-top: 40px; 
-            }
-            /* Stack cards and forms on mobile */
-            .cards { flex-direction: column; }
-            .inline-form { flex-direction: column; gap: 10px; }
-            /* Make tables scrollable horizontally */
-            .table-responsive { overflow-x: auto; }
-            .table-responsive table { min-width: 600px; }
-        }
-
-        /* ================================================= */
-        /* === GENERAL & COMPONENT STYLING === */
-        /* ================================================= */
-
-        header {
-            background: white;
+        .nav a {
             padding: 15px 20px;
-            margin-bottom: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-decoration: none;
+            color: white;
+            display: block;
+            transition: background-color 0.2s;
+            border-left: 5px solid transparent;
         }
-
-        h1, h2, h3 {
-            color: #2c3e50;
-            margin-top: 0;
+        .nav a:hover, .nav a.active {
+            background-color: #00332c;
+            border-left-color: #ff9800; /* Accent Color */
         }
-
-        .cards {
-            display: flex;
-            gap: 20px;
-            flex-wrap: wrap; 
-            margin-bottom: 20px;
-        }
-
-        .card {
-            flex: 1;
-            min-width: 200px;
+        .logout-section {
+            margin-top: auto;
             padding: 20px;
-            background: #ecf0f1;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: transform 0.2s;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
         }
-
-        .card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-        }
-
-        .data {
-            font-size: 2em;
-            font-weight: bold;
-            color: #007bff;
-        }
-
-        .toolbar {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 15px;
-            flex-wrap: wrap;
-            align-items: center;
-        }
-
-        /* Button Styles */
-        .btn-action {
-            background-color: #2ecc71;
+        #logout-btn {
+            width: 100%;
+            padding: 10px;
+            background-color: #c62828;
             color: white;
             border: none;
-            padding: 8px 12px;
-            border-radius: 4px;
+            border-radius: 5px;
             cursor: pointer;
             transition: background-color 0.2s;
-            font-weight: 500;
+        }
+        #logout-btn:hover {
+            background-color: #e53935;
         }
 
-        .btn-action:hover {
-            background-color: #27ae60;
+        /* Main Content Styling */
+        .main-content {
+            margin-left: 250px;
+            flex-grow: 1;
+            padding: 20px;
+            transition: margin-left 0.3s ease;
+        }
+        header {
+            background-color: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        header h1 {
+            margin: 0;
+            font-size: 1.8em;
+            color: #004d40;
+        }
+        .content-area {
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .tab-content {
+            display: none;
+            animation: fadeIn 0.5s;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        h2 {
+            color: #004d40;
+            border-bottom: 2px solid #ff9800;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+
+        /* General Components */
+        .card-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .card {
+            background-color: #e0f2f1;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        .card h3 {
+            margin: 0 0 10px 0;
+            color: #004d40;
+            font-size: 1.1em;
+        }
+        .card-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #ff9800;
         }
         
-        .btn-delete {
-            background-color: #e74c3c;
+        /* Buttons */
+        .btn-primary, .btn-primary-small {
+            background-color: #ff9800;
             color: white;
             border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .btn-primary:hover, .btn-primary-small:hover {
+            background-color: #f57c00;
+        }
+        .btn-secondary {
+            background-color: #ccc;
+            color: #333;
+            border: 1px solid #aaa;
             padding: 8px 12px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .btn-action {
+            padding: 5px 10px;
+            font-size: 0.85em;
+            background-color: #00796b;
+            color: white;
+            border: none;
             border-radius: 4px;
             cursor: pointer;
         }
 
-        /* Form Styling */
-        .inline-form {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-            align-items: center;
-            background: #f9f9f9;
-            padding: 15px;
-            border-radius: 6px;
-            border: 1px solid #eee;
-            margin-bottom: 20px;
-        }
-
-        .inline-form input:not([type="file"]), 
-        .inline-form select,
-        .inline-form textarea {
-            padding: 8px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            min-width: 150px;
-            box-sizing: border-box;
-            flex: 1 1 auto;
-        }
-
-        /* Profile Details Grid Styling */
-        .profile-details {
-            display: grid;
-            grid-template-columns: 1fr 2fr;
-            gap: 10px;
-            max-width: 600px;
-            margin: 20px 0;
-            padding: 15px;
-            border: 1px solid #eee;
-            border-radius: 6px;
-            background-color: #f9f9f9;
-        }
-
-        .profile-details label {
-            font-weight: bold;
-            color: #555;
-            padding-right: 10px;
-        }
-
-        .profile-details span {
-            color: #2c3e50;
-        }
-        
-        /* Table Styles */
-        table {
+        /* Tables */
+        .data-table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 10px;
+            margin-top: 15px;
         }
-
-        th, td {
+        .data-table th, .data-table td {
+            border: 1px solid #ddd;
+            padding: 10px;
             text-align: left;
-            padding: 12px 15px;
-            border-bottom: 1px solid #ddd;
         }
-
-        th {
-            background-color: #f1f1f1;
-            font-weight: bold;
-            color: #555;
+        .data-table th {
+            background-color: #004d40;
+            color: white;
+            font-weight: normal;
         }
-
-        tbody tr:hover {
+        .data-table tr:nth-child(even) {
             background-color: #f9f9f9;
         }
         
-        /* Feedback Box */
-        #feedback-message {
+        /* Forms */
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%;
             padding: 10px;
-            margin: 15px 0;
+            border: 1px solid #ccc;
             border-radius: 4px;
-            display: none;
+            box-sizing: border-box;
         }
 
-        .feedback-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-        .feedback-error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-        /* Table Status */
-        .status-approved { color: green; font-weight: bold; }
-        .status-danger { color: #e74c3c; font-weight: bold; }
-        .status-pending { color: orange; font-weight: bold; }
+        /* Profile Specific Styling */
+        .profile-container {
+            display: flex;
+            gap: 30px;
+            align-items: flex-start;
+        }
+        .profile-photo-card {
+            flex: 0 0 250px;
+            text-align: center;
+            padding: 20px;
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        .profile-photo-wrapper {
+            width: 180px;
+            height: 180px;
+            margin: 0 auto 15px;
+            border-radius: 50%;
+            overflow: hidden;
+            border: 5px solid #004d40;
+        }
+        .profile-photo-wrapper img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .btn-primary-small {
+            padding: 8px 12px;
+            font-size: 0.9em;
+        }
+        .profile-details-card {
+            flex-grow: 1;
+            padding: 20px;
+            border-radius: 8px;
+            background-color: #e8f5e9;
+        }
+        .profile-details-card h3 {
+            color: #004d40;
+            border-bottom: 1px solid #ccc;
+            padding-bottom: 5px;
+            margin-top: 0;
+            margin-bottom: 15px;
+        }
+        .detail-row {
+            display: flex;
+            margin-bottom: 10px;
+        }
+        .detail-label {
+            font-weight: bold;
+            flex: 0 0 150px;
+            color: #333;
+        }
+        .detail-value {
+            flex-grow: 1;
+            color: #00796b;
+        }
 
+        /* Feedback Message */
+        #feedback-message {
+            padding: 10px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            display: none;
+            font-weight: bold;
+        }
+        .feedback-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .feedback-error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .feedback-warning { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+        .feedback-info { background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+
+        /* Modal */
+        .modal {
+            display: none; 
+            position: fixed; 
+            z-index: 2000; 
+            left: 0;
+            top: 0;
+            width: 100%; 
+            height: 100%; 
+            overflow: auto; 
+            background-color: rgba(0,0,0,0.4); 
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 10% auto; 
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%; 
+            max-width: 600px;
+            border-radius: 8px;
+            position: relative;
+        }
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+        }
+        .close:hover,
+        .close:focus {
+            color: #000;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        #mapbox-map {
+            height: 400px; 
+            width: 100%; 
+            margin-top: 15px;
+        }
     </style>
 </head>
 <body>
 
-    <button id="menu-toggle" class="menu-toggle" onclick="toggleSidebar()">☰ Menu</button>
-    
-    <div class="container">
-        
-        <aside class="sidebar">
-            <div class="sidebar-header">
-                <img src="images/Logo_NCHSM.png" alt="Logo" onerror="this.onerror=null; this.src='https://placehold.co/80x80/2ecc71/white?text=NCHSM'"> 
-                <h2>Lecturer Panel</h2>
-            </div>
-            <ul class="nav" id="mainNav">
-                <li><a href="#" data-tab="profile" onclick="loadSectionData('profile')">My Profile</a></li>
-                <li><a href="#" data-tab="dashboard" class="active" onclick="loadSectionData('dashboard')">Dashboard</a></li>
-                <li><a href="#" data-tab="my-courses" onclick="loadSectionData('my-courses')">My Courses & Students</a></li>
-                <li><a href="#" data-tab="sessions" onclick="loadSectionData('sessions')">Manage Sessions</a></li> 
-                <li><a href="#" data-tab="attendance" onclick="loadSectionData('attendance')">Attendance & Check-in</a></li> 
-                <li><a href="#" data-tab="cats" onclick="loadSectionData('cats')">CATS/Exams</a></li>
-                <li><a href="#" data-tab="resources" onclick="loadSectionData('resources')">Resources</a></li>
-                <li><a href="#" data-tab="messages" onclick="loadSectionData('messages')">Inbox / Messages</a></li>
-                <li><a href="#" data-tab="calendar" onclick="loadSectionData('calendar')">System Calendar</a></li> 
-            </ul>
-            <div class="logout"><a href="#" id="logout-btn" onclick="logout()">Logout</a></div>
-        </aside>
+    <div class="sidebar">
+        <div class="logo">NCHSM LECTURER</div>
+        <nav class="nav">
+            <a href="#" data-tab="dashboard" onclick="loadSectionData('dashboard')">Dashboard</a>
+            <a href="#" data-tab="profile" onclick="loadSectionData('profile')">Profile</a>
+            <a href="#" data-tab="my-courses" onclick="loadSectionData('my-courses')">My Students & Courses</a>
+            <a href="#" data-tab="sessions" onclick="loadSectionData('sessions')">Sessions</a>
+            <a href="#" data-tab="attendance" onclick="loadSectionData('attendance')">Attendance Logs</a>
+            <a href="#" data-tab="cats" onclick="loadSectionData('cats')">Exams & CATS</a>
+            <a href="#" data-tab="resources" onclick="loadSectionData('resources')">Shared Resources</a>
+            <a href="#" data-tab="messages" onclick="loadSectionData('messages')">Messages</a>
+            <a href="#" data-tab="calendar" onclick="loadSectionData('calendar')">Academic Calendar</a>
+        </nav>
+        <div class="logout-section">
+            <button id="logout-btn">Logout</button>
+        </div>
+    </div>
 
-        <main class="main">
-            <header>
-                <h1>Welcome, Lecturer!</h1>
-                <p class="subtitle">Manage your classes, assessments, and communication</p>
-                <div id="feedback-message"></div>
-            </header>
+    <div class="main-content">
+        <header>
+            <button id="menu-toggle" style="display:none;">☰</button>
+            <h1>Welcome, Lecturer!</h1>
+        </header>
 
-            <section id="profile-content" class="tab-content">
-                <h2>My Profile and Credentials</h2>
-                <p>View your personal details, role, and current assignments.</p>
+        <div class="content-area">
+            <div id="feedback-message" style="display: none;"></div>
 
-                <h3>Personal Details</h3>
-                <div class="profile-details">
-                    <label>Full Name:</label><span id="profile_full_name">Loading...</span>
-                    <label>Employee ID:</label><span id="profile_employee_id">Loading...</span>
-                    <label>Email:</label><span id="profile_email">Loading...</span>
-                    <label>Phone:</label><span id="profile_phone">N/A</span>
-                    <label>Department:</label><span id="profile_department">N/A</span>
-                    <label>Joined Since:</label><span id="profile_join_date">Loading...</span>
+            <section id="dashboard-content" class="tab-content active">
+                <h2>Lecturer Dashboard Summary 📊</h2>
+                <div class="card-container">
+                    <div class="card">
+                        <h3>Total Assigned Courses</h3>
+                        <div class="card-value" id="total_courses_count">0</div>
+                    </div>
+                    <div class="card">
+                        <h3>Students Under Program</h3>
+                        <div class="card-value" id="total_students_count">0</div>
+                    </div>
+                    <div class="card">
+                        <h3>Recent Sessions Taught</h3>
+                        <div class="card-value" id="recent_sessions_count">0</div>
+                    </div>
+                    <div class="card">
+                        <h3>Unmarked Assignments</h3>
+                        <div class="card-value">0</div>
+                    </div>
                 </div>
-                
-                <hr>
 
-                <h3>Account Management</h3>
-                <button class="btn-action">Update Profile Details</button>
-                <button class="btn-action btn-delete">Change Password</button>
-
-                <hr>
-
-                <h3>Current Assignments</h3>
-                <p>Courses and groups currently assigned to you.</p>
-                <div class="table-responsive">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Assignment Type</th>
-                                <th>Course/Program</th>
-                                <th>Block/Term</th>
-                            </tr>
-                        </thead>
-                        <tbody id="profile-assignments-table">
-                            <tr><td colspan="3">Loading assignments...</td></tr>
-                        </tbody>
-                    </table>
+                <h3>Quick Actions</h3>
+                <div class="card-container" style="grid-template-columns: repeat(2, 1fr);">
+                    <button class="btn-primary">Schedule New Session</button>
+                    <button class="btn-primary">Upload Resource</button>
                 </div>
             </section>
-            
-            <section id="dashboard-content" class="tab-content active">
-                <h2>Dashboard Overview</h2>
-                <div id="lecturer-welcome-message">
-                    <p>Welcome to your personal dashboard. Start by viewing your courses.</p>
-                </div>
-                <div class="cards">
-                    <div class="card" onclick="loadSectionData('my-courses')"><h3>My Active Courses</h3><p class="data" id="lecturerActiveCourses">0</p></div>
-                    <div class="card" onclick="loadSectionData('cats')"><h3>Pending Grading</h3><p class="data" id="pendingGrading">0</p></div>
-                    <div class="card" onclick="loadSectionData('attendance')"><h3>Today's Scheduled Sessions</h3><p class="data" id="todaysSessions">0</p></div>
-                    <div class="card" onclick="loadSectionData('messages')"><h3>New Messages</h3><p class="data" id="newMessagesCount">0</p></div>
+
+            <section id="profile-content" class="tab-content">
+                <h2>Lecturer Profile 🧑‍🏫</h2>
+                <div class="profile-container">
+                    
+                    <div class="profile-photo-card">
+                        <div class="profile-photo-wrapper">
+                            <img id="profile-img" src="default_passport.png" alt="Profile Picture">
+                        </div>
+                        <button id="update-photo-btn" class="btn-primary-small">
+                            Update Photo/Passport 📸
+                        </button>
+                        <input type="file" id="photo-upload-input" accept="image/*" style="display: none;">
+                    </div>
+                    
+                    <div class="profile-details-card">
+                        <h3>Personal Details</h3>
+                        <div class="detail-row">
+                            <span class="detail-label">Full Name:</span>
+                            <span id="profile_name" class="detail-value">Loading...</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Role:</span>
+                            <span id="profile_role" class="detail-value">Loading...</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Employee ID:</span>
+                            <span id="profile_id" class="detail-value">Loading...</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Department:</span>
+                            <span id="profile_dept" class="detail-value">Loading...</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Joined Date:</span>
+                            <span id="profile_join_date" class="detail-value">Loading...</span>
+                        </div>
+                        
+                        <h3>Contact Information</h3>
+                        <div class="detail-row">
+                            <span class="detail-label">Email:</span>
+                            <span id="profile_email" class="detail-value">Loading...</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Phone:</span>
+                            <span id="profile_phone" class="detail-value">Loading...</span>
+                        </div>
+                        
+                        <button class="btn-secondary" onclick="openProfileUpdateModal()">Edit Details</button>
+                    </div>
                 </div>
             </section>
             
             <section id="my-courses-content" class="tab-content">
-                <h2>My Assigned Courses & Students</h2>
-                
-                <h3>1. My Courses</h3>
-                <p>Courses you are currently assigned to teach.</p>
-                <div class="toolbar">
-                    <input type="text" id="my-course-search" placeholder="Search my courses..." onkeyup="filterTable('my-course-search', 'lecturer-courses-table', [0, 1])">
-                    <button onclick="exportTableToCSV('lecturer-courses-table', 'My_Courses_Export.csv')" class="btn-action export-btn">Export My Courses (CSV)</button>
-                </div>
-                
-                <div class="table-responsive">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Course Name</th>
-                                <th>Unit Code</th>
-                                <th>Program</th>
-                                <th>Block/Term</th>
-                                <th>Total Students</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="lecturer-courses-table">
-                            <tr><td colspan="6">Loading your assigned courses...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-                <hr>
-
-                <h3>2. Students in My Assigned Groups</h3>
-                <p>Students enrolled in the Programs, Intakes, and Blocks you are currently assigned to teach.</p>
-                <div class="toolbar inline-form">
-                    <select id="lecturer_student_filter_program" onchange="loadLecturerStudents()"><option value="">-- Filter by Program --</option></select>
-                    <select id="lecturer_student_filter_block" onchange="loadLecturerStudents()"><option value="">-- Filter by Block/Term --</option></select>
-                    <input type="text" id="lecturer-student-search" placeholder="Search students by name..." onkeyup="filterTable('lecturer-student-search', 'lecturer-students-table', [0, 1])">
-                    <button onclick="exportTableToCSV('lecturer-students-table', 'My_Student_List_Export.csv')" class="btn-action export-btn">Export List (CSV)</button>
-                </div>
-                
-                <div class="table-responsive">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Student Name</th>
-                                <th>Email</th>
-                                <th>Program</th>
-                                <th>Intake</th>
-                                <th>Block/Term</th>
-                                <th>Status</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="lecturer-students-table">
-                            <tr><td colspan="7">Loading students...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </section>
-            
-            <section id="sessions-content" class="tab-content">
-                <h2>Manage Sessions (Class, Clinical, Events)</h2>
-                <p>Schedule sessions for the programs/groups you are assigned to. These will appear in the System Calendar.</p>
-                
-                <h3>Add New Session</h3>
-                <form id="add-session-form" class="inline-form" onsubmit="handleScheduleSession(event)">
-                    <select id="new_session_type" required>
-                        <option value="">-- Select Session Type --</option>
-                        <option value="class">Class Session</option>
-                        <option value="clinical">Clinical Rotation</option>
-                        <option value="event">General Event</option>
-                    </select>
-                    <input type="text" id="new_session_title" placeholder="Title/Topic" required>
-                    <input type="date" id="new_session_date" required>
-                    <input type="time" id="new_session_start_time" placeholder="Start Time" required>
-                    <input type="time" id="new_session_end_time" placeholder="End Time (Optional)">
-
-                    <select id="new_session_program" required>
-                        <option value="">-- Select Program --</option>
-                    </select>
-                    <select id="new_session_intake_year" required>
-                        <option value="">-- Select Intake Year --</option>
-                    </select>
-                    <select id="new_session_block_term" required>
-                        <option value="">-- Select Block/Term --</option>
-                    </select>
-                    <select id="new_session_course"><option value="">-- Select Course (Optional) --</select>
-                    <button type="submit" class="btn-action">Schedule Session</button>
-                </form>
-                
-                <hr>
-                
-                <h3>Scheduled Sessions (My Sessions)</h3>
-                <div class="toolbar">
-                    <button onclick="exportTableToCSV('scheduledSessionsTableBody', 'Scheduled_Sessions_Export.csv')" class="btn-action export-btn">Export My Sessions (CSV)</button>
-                </div>
-                <div class="table-responsive">
-                    <table>
-                        <thead><tr><th>Type</th><th>Title</th><th>Date/Time</th><th>Program</th><th>Block/Term</th><th>Actions</th></tr></thead>
-                        <tbody id="scheduledSessionsTableBody">
-                            <tr><td colspan="6">Loading your scheduled sessions...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </section>
-
-            <section id="attendance-content" class="tab-content">
-                <h2>Daily Attendance & Geo Check-in</h2>
-                
-                <h3>Lecturer Self Check-in (Mark My Attendance) 📍</h3>
-                <p>Confirm your presence for the day. (Uses current location/time).</p>
-                <button onclick="lecturerCheckIn()" class="btn-action">Mark My Attendance Now</button>
-                
-                <hr>
-                
-                <h3>Manual Student Check-in</h3>
-                <p>Manually mark attendance for a student in one of your assigned sessions.</p>
-                <form id="manual-attendance-form" class="inline-form" onsubmit="handleManualAttendance(event)">
-                    <select id="att_student_id" required><option value="">-- Select Student --</option></select>
-                    <select id="att_session_type" required>
-                        <option value="">-- Select Session Type --</option>
-                        <option value="classroom">Classroom</option>
-                        <option value="clinical">Clinical Rotation</option>
-                        <option value="virtual">Virtual</option>
-                        <option value="call">On Call</option>
-                    </select>
-                    <input type="text" id="att_department" placeholder="Department/Area" required>
-                    <select id="att_course_id"><option value="">-- Select Course (Optional) --</select>
-                    <input id="att_location" placeholder="Location">
-                    <input id="att_date" type="date" required>
-                    <input id="att_time" type="time">
-                    <button type="submit" class="btn-action">Mark Attendance</button>
-                </form>
-
-                <div id="attendance-records">
-                    <h3>Today's Attendance Records (My Classes/Groups)</h3>
-                    <input type="text" id="attendance-search" placeholder="Search by Student Name...">
-                    <div class="toolbar">
-                        <button onclick="exportTableToCSV('attendance-table', 'Todays_Attendance_Export.csv')" class="btn-action export-btn">Export Today's Records (CSV)</button>
+                <h2>My Students & Courses 📚</h2>
+                <div class="content-split">
+                    <div style="flex: 1;">
+                        <h3>Courses Assigned to Me</h3>
+                        <ul id="lecturer-courses-list" style="list-style: none; padding: 0;"></ul>
                     </div>
-                    <div class="table-responsive">
-                        <table>
+                    <div style="flex: 2;">
+                        <h3>Students in My Assigned Program</h3>
+                        <input type="text" id="student-search" placeholder="Search students..." style="width: 100%; margin-bottom: 10px; padding: 8px;">
+                        <table class="data-table">
                             <thead>
                                 <tr>
-                                    <th>Student</th>
-                                    <th>Session Type</th>
-                                    <th>Target (Course/Clinical)</th>
-                                    <th>Department/Location</th>
-                                    <th>Date/Time</th>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Program</th>
+                                    <th>Intake</th>
+                                    <th>Block/Term</th>
                                     <th>Status</th>
-                                    <th>Actions</th>
+                                    <th>Action</th>
                                 </tr>
                             </thead>
-                            <tbody id="attendance-table">
-                                <tr><td colspan="7">Loading today's records...</td></tr>
+                            <tbody id="lecturer-students-table">
+                                <tr><td colspan="7">Select the 'My Students & Courses' tab to load data.</td></tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
             </section>
-            
-            <section id="cats-content" class="tab-content">
-                <h2>CATS / Exams Administration</h2>
-                <p>Post and manage assessments for your assigned courses.</p>
 
-                <form id="add-exam-form" class="inline-form" onsubmit="handleAddExam(event)">
-                    <select id="exam_type" required>
-                        <option value="">-- Select Type --</option>
-                        <option value="EXAM">Final Exam</option>
-                        <option value="CAT">Continuous Assessment Test (CAT)</option>
-                    </select>
-                    <select id="exam_program" required><option value="">-- Select Program --</option></select>
-                    <select id="exam_course_id" required><option value="">-- Select Course --</option></select>
-                    <input type="text" id="exam_title" placeholder="Assessment Title" required>
-                    <input type="url" id="exam_link" placeholder="(Optional) Online Exam/Quiz Link">
-                    <input type="number" id="exam_duration_minutes" placeholder="Duration (Minutes)" required min="5">
-                    <input type="date" id="exam_date" required>
-                    <input type="time" id="exam_start_time" required>
+            <section id="sessions-content" class="tab-content">
+                <h2>Scheduled Sessions 📅</h2>
+                <button class="btn-primary" onclick="showSessionModal()">Add New Session</button>
+                <p>Sessions Table and form will be displayed here.</p>
+                <table class="data-table">
+                    <thead><tr><th>Date</th><th>Time</th><th>Course</th><th>Type</th><th>Location</th><th>Action</th></tr></thead>
+                    <tbody id="sessions-table"></tbody>
+                </table>
+            </section>
 
-                    <select id="exam_status">
-                        <option value="Upcoming">Upcoming</option>
-                        <option value="Completed">Completed</option>
-                        <option value="InProgress">In Progress</option>
-                    </select>
-                    <select id="exam_intake"><option value="">-- Select Intake Year --</option></select>
-                    <select id="exam_block_term"><option value="">-- Select Block/Term --</option></select>
-                    <button type="submit" class="btn-action">Post Assessment</button>
-                </form>
-
-                <div class="toolbar">
-                    <input type="text" id="exam-search" placeholder="Search My Assessments...">
-                    <button onclick="exportTableToCSV('exams-table', 'My_Assessments_Export.csv')" class="btn-action export-btn">Export My Assessments (CSV)</button>
-                </div>
+            <section id="attendance-content" class="tab-content">
+                <h2>Attendance Logs 📋</h2>
                 
-                <div class="table-responsive">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Type</th>
-                                <th>Course</th>
-                                <th>Title</th>
-                                <th>Date/Time</th>
-                                <th>Duration</th>
-                                <th>Status</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="exams-table">
-                            <tr><td colspan="7">Loading your assessments...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
+                <h3>Quick Check-in</h3>
+                <button id="lecturer-checkin-btn" class="btn-primary">Mark My Attendance</button>
+                
+                <h3>Today's Attendance Records</h3>
+                <input type="text" id="attendance-search" placeholder="Search logs by name or course..." style="width: 100%; margin-bottom: 10px; padding: 8px;">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>Session Type</th>
+                            <th>Course/Target</th>
+                            <th>Location Details</th>
+                            <th>Time In</th>
+                            <th>Status</th>
+                            <th>Map</th>
+                        </tr>
+                    </thead>
+                    <tbody id="attendance-table">
+                        <tr><td colspan="7">Loading records...</td></tr>
+                    </tbody>
+                </table>
+                
+                <h3>Manual Attendance Entry</h3>
+                <form id="manual-attendance-form" style="margin-top: 20px; border-top: 1px solid #ccc; padding-top: 15px;">
+                    <div class="form-group"><label>Student:</label><select id="att_student_id" required></select></div>
+                    <div class="form-group"><label>Session Type:</label><input type="text" id="att_session_type" value="Lecture" required></div>
+                    <div class="form-group"><label>Course (Optional):</label><select id="att_course_id"></select></div>
+                    <div class="form-group"><label>Location:</label><input type="text" id="att_location" required></div>
+                    <div class="form-group"><label>Date:</label><input type="date" id="att_date" value="2025-10-21" required></div>
+                    <div class="form-group"><label>Time:</label><input type="time" id="att_time" value="09:00" required></div>
+                    <button type="submit" class="btn-primary">Mark Manual Attendance</button>
+                </form>
+            </section>
+
+            <section id="cats-content" class="tab-content">
+                <h2>Exams and CATS Grading 📝</h2>
+                <p>Exam management forms and tables will be here.</p>
             </section>
 
             <section id="resources-content" class="tab-content">
-                <h2>Resource Center</h2>
-                <p>Upload files to share with students in your assigned courses and groups.</p>
-
-                <form id="upload-resource-form" class="inline-form" onsubmit="handleResourceUpload(event)">
-                    <select id="resource_program" required><option value="">-- Select Program --</option></select>
-                    <select id="resource_intake" required><option value="">-- Select Intake Year --</option></select>
-                    <select id="resource_block" required><option value="">-- Select Block/Term --</option></select>
-                    
-                    <input type="file" id="resource-file" required accept=".pdf, .doc, .docx, .ppt, .pptx, .xls, .xlsx" title="Accepts PDF and common Microsoft Office documents.">
-                    <input type="text" id="resource-title" placeholder="Title for file" required>
-                    <button type="submit" class="btn-action">Upload</button>
-                </form>
-
-                <div class="toolbar">
-                    <input type="text" id="resource-search" placeholder="Search My Resources...">
-                    <button onclick="exportTableToCSV('resources-list', 'My_Resources_Index_Export.csv')" class="btn-action export-btn">Export Resource List (CSV)</button>
-                </div>
-
-                <div class="table-responsive">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Program</th>
-                                <th>Title</th>
-                                <th>Intake</th>
-                                <th>Block/Term</th>
-                                <th>Date</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="resources-list">
-                            <tr><td colspan="6">Loading your resources...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
+                <h2>Shared Resources 📂</h2>
+                <p>Resource sharing and management will be here.</p>
             </section>
-            
+
             <section id="messages-content" class="tab-content">
-                <h2>Inbox / Messages</h2>
-
-                <form id="send-message-form" class="inline-form" onsubmit="handleSendMessage(event)">
-                    <select id="msg_program" required>
-                        <option value="">-- Select Program/Group --</option>
-                    </select>
-                    <textarea id="msg_body" placeholder="Message Body" rows="3" required></textarea>
-                    <button type="submit" class="btn-action">Send Message</button>
-                </form>
-
-                <div id="messages-list" style="margin-top:20px;">
-                    <h3>Incoming Messages / Announcements</h3>
-                    <p>Loading student messages and announcements...</p>
-                </div>
-
-                <h3>Sent Messages (Lecturer History)</h3>
-                <div class="toolbar">
-                    <button onclick="exportTableToCSV('lecturerMessagesTableBody', 'Sent_Message_History_Export.csv')" class="btn-action export-btn">Export Sent Messages (CSV)</button>
-                </div>
-
-                <div class="table-responsive">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>To Program/Group</th>
-                                <th>Subject</th>
-                                <th>Message Body (Preview)</th>
-                                <th>Date Sent</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="lecturerMessagesTableBody">
-                            <tr><td colspan="5">Loading sent messages...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
+                <h2>Messages 📧</h2>
+                <p>Messaging platform interface will be here.</p>
             </section>
 
-            <section id="calendar-content" class="tab-content">
-                <h2>System Calendar</h2>
-                <p>View all relevant scheduled Sessions, Exams/CATS, and Clinical Rotations.</p>
-                <div id="fullCalendarDisplay"></div> 
+             <section id="calendar-content" class="tab-content">
+                <h2>Academic Calendar 🗓️</h2>
+                <p>Calendar view using a library like FullCalendar will be integrated here.</p>
             </section>
-        </main>
+
+        </div>
     </div>
-    
+
     <div id="mapModal" class="modal">
         <div class="modal-content">
-            <span class="close" onclick="document.getElementById('mapModal').style.display='none'">&times;</span>
-            <h2>Geo Location Map</h2>
-            <div id="mapbox-map" style="height: 400px;">Map will load here...</div> 
-            <p id="map-details"></p>
+            <span class="close">&times;</span>
+            <h3>Check-in Location</h3>
+            <p id="map-details">Loading location details...</p>
+            <div id="mapbox-map"></div>
         </div>
     </div>
     
     <div id="gradeModal" class="modal">
         <div class="modal-content">
-            <span class="close" onclick="document.getElementById('gradeModal').style.display='none'">&times;</span>
-            <h2>Grade Assessment</h2>
-            <p id="gradeExamTitle">Assessment: <em>Loading...</em></p>
-            <form id="grade-form" onsubmit="handleGradeSubmission(event)">
-                <div id="grade-students-list">
-                <p>Loading enrolled students...</p>
-                </div>
-                <button type="submit" class="btn-action">Save Grades</button>
-            </form>
+            <span class="close">&times;</span>
+            <h3>Enter Grades</h3>
+            <p>Grade entry form will go here.</p>
         </div>
     </div>
-    
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script> 
+
     <script src="lecturer_script.js"></script>
-    
+    <script>
+        // Manually trigger initial load for the profile to be visible first
+        document.addEventListener('DOMContentLoaded', () => {
+            // Note: initSession() in lecturer_script.js calls loadSectionData('profile') 
+            // once the user profile is loaded/mocked, ensuring the correct starting tab.
+        });
+    </script>
+
 </body>
 </html>
