@@ -612,8 +612,8 @@ function updateBlockTermOptions(programSelectId, blockTermSelectId) {
   let options = [];
   if (program === 'KRCHN') {
     options = [
-      { value: 'Block_A', text: 'Block A' },
-      { value: 'Block_B', text: 'Block B' }
+      { value: 'A', text: 'Block A' },
+      { value: 'B', text: 'Block B' }
     ];
   } else if (program === 'TVET') {
     options = [
@@ -624,9 +624,9 @@ function updateBlockTermOptions(programSelectId, blockTermSelectId) {
   } else {
     // Default or other programs
     options = [
-      { value: 'Block_A', text: 'Block A / Term 1' },
-      { value: 'Block_B', text: 'Block B / Term 2' },
-      { value: 'Block_C', text: 'Block C / Term 3' }
+      { value: 'A', text: 'Block A / Term 1' },
+      { value: 'B', text: 'Block B / Term 2' },
+  
     ];
   }
 
