@@ -740,25 +740,26 @@ async function loadTodaysAttendanceRecords() {
     const today = new Date().toISOString().split('T')[0];
     
     // Fetch all attendance logs for today. We filter them locally using the cached student profiles.
-    const { data: logs, error } = await sb.from(ATTENDANCE_TABLE)
-        .select(`*, user:user_id(full_name, student_program)`)
-        .gte('check_in_time', today)
-        .order('check_in_time', { ascending: false });
-        
-    if (error) {
-        tbody.innerHTML = `<tr><td colspan="7">Error loading logs: ${error.message}</td></tr>`;
-        return;
-    }
+const { data: logs, error } = await sb
+  .from(ATTENDANCE_TABLE)
+  .select(`*, user:student_id(full_name, program)`)   // ✅ use student_id and actual column name
+  .gte('check_in_time', today)
+  .order('check_in_time', { ascending: false });
 
-    // Filter logs to only show records for students in the lecturer's program or the lecturer's own check-ins
-    const filteredLogs = logs.filter(l => 
-        l.user?.student_program === lecturerTargetProgram || l.user_role === 'lecturer'
-    );
+if (error) {
+  tbody.innerHTML = `<tr><td colspan="7">Error loading logs: ${error.message}</td></tr>`;
+  return;
+}
 
-    if (!filteredLogs || filteredLogs.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7">No relevant attendance records found for today.</td></tr>';
-        return;
-    }
+// Filter logs to only show records for students in the lecturer's program or the lecturer's own check-ins
+const filteredLogs = logs.filter(l =>
+  l.user?.program === lecturerTargetProgram || l.role === 'lecturer'   // ✅ your column is "program" and "role"
+);
+
+if (!filteredLogs || filteredLogs.length === 0) {
+  tbody.innerHTML = '<tr><td colspan="7">No relevant attendance records found for today.</td></tr>';
+  return;
+}
 
     tbody.innerHTML = '';
     filteredLogs.forEach(l => {
