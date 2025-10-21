@@ -28,9 +28,9 @@ const RESOURCES_BUCKET = 'resources';
 let currentUserProfile = null;
 let attendanceMap = null; 
 let allCourses = []; 
-let allStudents = []; // Cache to hold all students for selectors
+let allStudents = []; 
 
-// --- 🎯 UPDATED INTAKE YEARS (UP TO 2028) ---
+// --- 🎯 CORRECTED INTAKE YEARS (UP TO 2028) ---
 let allIntakes = [
     { id: '2024', name: '2024' },
     { id: '2025', name: '2025' },
@@ -209,9 +209,10 @@ async function initSession() {
             employee_id: 'L1023',
             email: 'jane.smith@nchsm.edu',
             phone: '+254712345678',
-            // --- Set to 'Maternal Health' which maps to KRCHN students for testing ---
+            // Set to 'Maternal Health' for KRCHN filter test. Change to 'Clinical Medicine' for TVET test.
             department: 'Maternal Health', 
-            join_date: '2020-08-15'
+            join_date: '2020-08-15',
+            avatar_url: null // Added for profile photo logic
         };
     }
 
@@ -219,7 +220,8 @@ async function initSession() {
     if (currentUserProfile) {
         document.querySelector('header h1').textContent = `Welcome, ${currentUserProfile.full_name || 'Lecturer'}!`;
         await fetchGlobalDataCaches(); 
-        loadSectionData('profile'); 
+        // Start on the Dashboard, as requested (Profile is now the second tab)
+        loadSectionData('dashboard'); 
         setupEventListeners();
     } else {
         alert("Failed to load user profile. Please log in again.");
@@ -245,7 +247,7 @@ function loadSectionData(tabId) {
     
     // --- Data Load Trigger ---
     switch(tabId) {
-        case 'profile': loadLecturerProfile(); break;
+        case 'profile': loadLecturerProfile(); break; // Loads the profile info
         case 'dashboard': loadLecturerDashboardData(); break;
         case 'my-courses': loadLecturerCourses(); loadLecturerStudents(); break;
         case 'sessions': loadLecturerSessions(); populateSessionFormSelects(); break;
@@ -284,6 +286,12 @@ function setupEventListeners() {
     $('menu-toggle')?.addEventListener('click', toggleSidebar);
     $('logout-btn')?.addEventListener('click', logout);
     
+    // PROFILE PHOTO TAB
+    $('update-photo-btn')?.addEventListener('click', () => {
+        $('photo-upload-input').click();
+    });
+    $('photo-upload-input')?.addEventListener('change', handleProfilePhotoChange); 
+
     // ATTENDANCE TAB
     $('manual-attendance-form')?.addEventListener('submit', handleManualAttendance);
     $('attendance-search')?.addEventListener('keyup', () => filterTable('attendance-search', 'attendance-table', [0, 1, 2]));
@@ -332,6 +340,12 @@ async function logout() {
 
 function loadLecturerProfile() {
     if (!currentUserProfile) return;
+    
+    // Display Profile Picture
+    const avatarUrl = currentUserProfile.avatar_url || 'default_passport.png';
+    $('profile-img').src = avatarUrl;
+    
+    // Display Details
     $('profile_name').textContent = currentUserProfile.full_name || 'N/A';
     $('profile_role').textContent = currentUserProfile.role || 'N/A';
     $('profile_id').textContent = currentUserProfile.employee_id || 'N/A';
@@ -419,7 +433,82 @@ async function loadLecturerMessages() { $('messages-table').innerHTML = '<tr><td
 
 
 // =================================================================
-// === 5. ATTENDANCE & MAP (Includes Fix for DOM Node Error) ===
+// === 5. PROFILE PHOTO HANDLERS & UPLOAD LOGIC ===
+// =================================================================
+
+/** Handles file selection and sets up the file for upload. */
+function handleProfilePhotoChange(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // 1. Display temporary image preview
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        $('profile-img').src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+
+    // 2. Trigger the upload process
+    handlePhotoUpload(file);
+}
+
+
+/** Mock implementation for handling the Supabase photo upload. */
+async function handlePhotoUpload(file) {
+    const userId = currentUserProfile.user_id;
+    if (!userId) {
+        showFeedback('Error: User ID not found.', 'error');
+        return;
+    }
+
+    const fileExtension = file.name.split('.').pop();
+    const filePath = `avatars/${userId}.${fileExtension}`; 
+    
+    showFeedback(`Uploading photo: ${file.name}...`, 'info');
+
+    try {
+        // --- Supabase Storage Upload (Using 'resources' bucket placeholder) ---
+        const { error: uploadError } = await sb.storage
+            .from(RESOURCES_BUCKET)
+            .upload(filePath, file, {
+                cacheControl: '3600',
+                upsert: true // Overwrite existing file for this user
+            });
+
+        if (uploadError) throw uploadError;
+        
+        // 3. Get the public URL and update the user profile
+        const { data: urlData } = sb.storage.from(RESOURCES_BUCKET).getPublicUrl(filePath);
+        const publicUrl = urlData.publicUrl;
+
+        const { error: updateError } = await sb.from(USER_PROFILE_TABLE)
+            .update({ avatar_url: publicUrl })
+            .eq('user_id', userId);
+            
+        if (updateError) throw updateError;
+        
+        // Update the current profile cache and UI
+        currentUserProfile.avatar_url = publicUrl;
+        $('profile-img').src = publicUrl; 
+        
+        showFeedback('✅ Profile photo updated successfully!', 'success');
+        
+    } catch (error) {
+        console.error('Photo Upload Error:', error);
+        showFeedback(`Photo upload failed: ${error.message}`, 'error');
+        // Reload original profile image if upload fails
+        loadLecturerProfile(); 
+    }
+}
+
+/** Placeholder function for the 'Edit Details' button */
+function openProfileUpdateModal() {
+    showFeedback('Profile editing feature placeholder activated.', 'info');
+}
+
+
+// =================================================================
+// === 6. ATTENDANCE & MAP LOGIC ===
 // =================================================================
 
 function loadAttendanceSelects() {
@@ -591,7 +680,7 @@ function viewCheckInMap(lat, lng, name, locationElementId) {
     const locationDetails = $(locationElementId)?.textContent || `Lat: ${parseFloat(lat).toFixed(4)}, Lng: ${parseFloat(lng).toFixed(4)}`;
     $('map-details').textContent = `Check-in location for ${name}: ${locationDetails}`;
 
-    // Increased timeout to 100ms to prevent "deferred DOM Node" error
+    // CRITICAL FIX: Increased timeout to 100ms and invalidateSize() to prevent "deferred DOM Node" error
     setTimeout(() => {
         if (attendanceMap) {
             attendanceMap.remove(); 
@@ -612,7 +701,6 @@ function viewCheckInMap(lat, lng, name, locationElementId) {
                 .bindPopup(`<b>${name}</b><br>Location recorded here.`)
                 .openPopup();
                 
-            // CRITICAL FIX: Forces Leaflet to recalculate the map size
             attendanceMap.invalidateSize(); 
         } else {
             $('map-details').textContent = `Map library not loaded. Coordinates: Lat: ${parsedLat.toFixed(4)}, Lng: ${parsedLng.toFixed(4)}`;
@@ -622,7 +710,7 @@ function viewCheckInMap(lat, lng, name, locationElementId) {
 
 
 // =================================================================
-// === 6. FORM POPULATION & HANDLERS (EXAMS, RESOURCES, MESSAGES) ===
+// === 7. FORM POPULATION & HANDLERS (EXAMS, RESOURCES, MESSAGES) ===
 // =================================================================
 
 function populateExamFormSelects() {
@@ -679,3 +767,8 @@ function populateMessageFormSelects() {
 async function handleAddExam(e) { e.preventDefault(); showFeedback('Add Exam function not fully implemented.', 'info'); }
 async function handleUploadResource(e) { e.preventDefault(); showFeedback('Upload Resource function not fully implemented.', 'info'); }
 async function handleSendMessage(e) { e.preventDefault(); showFeedback('Send Message function not fully implemented.', 'info'); }
+
+// Placeholder for sessions form selects (uses course/program data)
+function populateSessionFormSelects() { 
+    // This function will populate course/program selects for the 'sessions' tab.
+}
