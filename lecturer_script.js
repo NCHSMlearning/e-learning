@@ -173,7 +173,7 @@ async function reverseGeocodeAndDisplay(lat, lng, elementId) {
 
 
 // =================================================================
-// === 3. CORE NAVIGATION, AUTH & INITIALIZATION ===
+// === 3. CORE NAVIGATION, AUTH & INITIALIZATION (MOCK REMOVED) ===
 // =================================================================
 
 // --- Initialization Entry Point ---
@@ -182,46 +182,41 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 async function initSession() {
-    // --- AUTHENTICATION MOCK / FALLBACK ---
-    let authFailed = true; // Assume failed until proven otherwise
-    
+    let profile = null;
+    let error = null;
+
     try {
+        // 1. Get the current Supabase session
         const { data: { session }, error: sessionError } = await sb.auth.getSession();
         
-        if (session && !sessionError) {
-            const { data: profile, error: profileError } = await sb.from(USER_PROFILE_TABLE)
+        if (sessionError || !session) {
+            error = sessionError || { message: "No active session found." };
+        } else {
+            
+            // 2. Fetch the user profile using the session's user ID
+            const { data: userProfile, error: profileError } = await sb.from(USER_PROFILE_TABLE)
                 .select('*')
                 .eq('user_id', session.user.id)
                 .single();
             
-            if (profile && !profileError && profile.role === 'lecturer') {
-                currentUserProfile = profile;
-                authFailed = false;
+            if (profileError) {
+                error = profileError;
+            } else if (userProfile.role !== 'lecturer') {
+                error = { message: `Access Denied. User role is '${userProfile.role}', expected 'lecturer'.` };
+            } else {
+                profile = userProfile;
             }
         }
+
     } catch (e) {
-        console.error("Supabase session check failed:", e);
+        // Catch network or client initialization errors
+        error = e;
     }
-
-    // --- MOCK PROFILE for DEV (Set department to test KRCHN or TVET) ---
-    if (authFailed) {
-        currentUserProfile = { 
-            user_id: '5445fb2c-5df5-4c72-954f-f75ffc1c98a7', 
-            role: 'lecturer', 
-            full_name: 'Dr. Jane Smith (MOCK)',
-            employee_id: 'L1023',
-            email: 'jane.smith@nchsm.edu',
-            phone: '+254712345678',
-            // Set department to 'Maternal Health' for KRCHN filter test, or 'Clinical Medicine' for TVET test
-            department: 'Maternal Health', 
-            join_date: '2020-08-15',
-            avatar_url: null 
-        };
-        console.warn(`Using MOCK profile. Assigned Program: ${getProgramFilterFromDepartment(currentUserProfile.department)}`);
-    }
-
-    // --- Initialize Dashboard ---
-    if (currentUserProfile) {
+    
+    // --- Initialize Dashboard or Handle Failure ---
+    if (profile) {
+        currentUserProfile = profile;
+        
         // Cache the target program immediately
         lecturerTargetProgram = getProgramFilterFromDepartment(currentUserProfile.department);
 
@@ -230,8 +225,21 @@ async function initSession() {
         loadSectionData('dashboard'); 
         setupEventListeners();
     } else {
-        alert("Failed to load user profile. Please log in again.");
-        // Redirect to login or show error page
+        console.error("Initialization Failed:", error);
+        alert(`Authentication Failed: ${error?.message || 'Could not load lecturer profile.'}\n\nPlease log in again.`);
+        
+        // Block UI and provide a link to reload/login
+        document.body.innerHTML = `
+            <div style="padding: 50px; text-align: center; color: #4C1D95;">
+                <h1>Access Denied 🔒</h1>
+                <p>Failed to authenticate or load lecturer profile. Session invalid or role is incorrect.</p>
+                <p style="color: #EF4444;">Error details: ${error?.message || 'Unknown error.'}</p>
+                <button onclick="window.location.reload()" 
+                        style="background-color: #4C1D95; color: white; padding: 10px 20px; border: none; border-radius: 6px; margin-top: 20px; cursor: pointer;">
+                    Go to Login Screen (Reload)
+                </button>
+            </div>
+        `;
     }
 }
 
@@ -248,6 +256,7 @@ function getProgramFilterFromDepartment(department) {
 
 
 /** Caches global data (courses and students filtered by program) needed by forms. */
+// NOTE: This function remains unchanged as it relies on global variables set by initSession.
 async function fetchGlobalDataCaches() {
     // 1. Fetch Courses
     const { data: courses } = await fetchData(COURSES_TABLE, 'course_id, course_name', {}, 'course_name', true);
@@ -263,10 +272,11 @@ async function fetchGlobalDataCaches() {
 }
 
 /** Tab switching logic. */
+// NOTE: This function remains unchanged.
 function loadSectionData(tabId) { 
     document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
     
-    if (!currentUserProfile) return;
+    if (!currentUserProfile) return; // Critical guard, though initSession should prevent this state
     
     // --- Data Load Trigger ---
     switch(tabId) {
@@ -337,7 +347,7 @@ function toggleSidebar() {
 async function logout() {
     await sb.auth.signOut();
     // In a real app, this should redirect to your login page
-    alert("Logged out. Redirecting to mock login."); 
+    alert("Logged out. Please log in to continue."); 
     window.location.reload();
 }
 
