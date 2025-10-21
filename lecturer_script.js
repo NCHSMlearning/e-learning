@@ -16,6 +16,9 @@ const EXAMS_TABLE = 'exams_cats'; // Used for assessments
 const RESOURCES_BUCKET = 'resources';
 const MESSAGES_TABLE = 'messages'; // Used for messaging
 
+// ADDED: Hypothetical table for storing student marks
+const STUDENT_GRADES_TABLE = 'student_grades'; 
+
 // Global Variables
 let currentUserProfile = null;
 let attendanceMap = null; // Used for Leaflet instance
@@ -203,6 +206,24 @@ async function logout() {
 }
 
 
+/**
+ * Sets the loading state of a button (REQUIRED UTILITY)
+ */
+function setButtonLoading(button, isLoading, originalText) {
+    if (!button) return;
+    if (isLoading) {
+        button.disabled = true;
+        button.textContent = 'Processing...';
+        // Store original text if not already stored
+        button.dataset.originalText = originalText || button.textContent;
+    } else {
+        button.disabled = false;
+        button.textContent = button.dataset.originalText || originalText || 'Submit';
+        delete button.dataset.originalText; // Clean up
+    }
+}
+
+
 /*******************************************************
  * 2. LECTURER INITIALIZATION & DATA LOADING
  * (Focus on fetching data assigned to the current lecturer)
@@ -268,6 +289,9 @@ function setupEventListeners() {
     
     // MESSAGES TAB
     $('send-message-form')?.addEventListener('submit', handleSendMessage);
+    
+    // MODAL CLOSING
+    document.querySelector('#gradeModal .close')?.addEventListener('click', () => { $('gradeModal').style.display = 'none'; });
 }
 
 
@@ -303,12 +327,13 @@ async function loadLecturerDashboardData() {
     $('lecturerActiveCourses').textContent = coursesCount || 0;
 
     // 2. Pending Grading
+    // Note: This filter is weak. A better system requires joining with the student_grades table.
     const { count: pendingGrading } = await sb
         .from(EXAMS_TABLE)
         .select('id', { count: 'exact' })
         .eq('lecturer_id', currentUserProfile.user_id) // ASSUMPTION: Exams are linked to lecturer_id
-        .eq('status', 'Completed');
-    $('pendingGrading').textContent = pendingGrading || 0; // Filter needs refinement
+        .eq('status', 'Completed'); // Assuming 'Completed' means students have finished, pending grading
+    $('pendingGrading').textContent = pendingGrading || 0; 
 
     // 3. Today's Scheduled Sessions
     const today = new Date().toISOString().split('T')[0];
@@ -320,7 +345,6 @@ async function loadLecturerDashboardData() {
     $('todaysSessions').textContent = todaysSessions || 0;
     
     // 4. New Messages (Simulated)
-    // This would ideally count unread messages directed to the lecturer
     const { count: newMessagesCount } = await sb
         .from(MESSAGES_TABLE)
         .select('id', { count: 'exact' })
@@ -470,7 +494,7 @@ async function handleScheduleSession(e) {
         e.target.reset();
         loadLecturerSessions(); 
         // Trigger calendar refresh (function defined later)
-        if (document.getElementById('fullCalendarDisplay').classList.contains('active')) {
+        if (document.getElementById('fullCalendarDisplay')?.classList.contains('active')) {
             renderFullCalendar();
         }
 
@@ -830,9 +854,7 @@ function openGradeModal(examId, title) {
     $('grade-form').onsubmit = (e) => handleGradeSubmission(e, examId);
 }
 
-// Close modal logic
-document.querySelector('#gradeModal .close')?.addEventListener('click', () => { $('gradeModal').style.display = 'none'; });
-
+// Function to handle grade submission (COMPLETED)
 async function handleGradeSubmission(e, examId) {
     e.preventDefault();
     const submitButton = e.submitter;
@@ -841,38 +863,67 @@ async function handleGradeSubmission(e, examId) {
     
     // Logic to collect and save grades (usually to a 'student_grades' table)
     const formData = new FormData(e.target);
-    const updates = [];
-    
-    // Example logic to process grades (needs proper table structure)
+    const gradeRecords = [];
+    const timestamp = new Date().toISOString();
+    const lecturerId = currentUserProfile.user_id;
+
     for (const [key, value] of formData.entries()) {
         if (key.startsWith('grade_')) {
-            const studentId = key.split('_')[1];
-            const grade = parseInt(value);
-            if (!isNaN(grade)) {
-                updates.push({
+            const student_id = key.substring(6); // Extract ID from 'grade_STUDENTID'
+            const grade = parseInt(value, 10);
+
+            // Only process valid grades
+            if (!isNaN(grade) && grade >= 0) {
+                gradeRecords.push({
                     exam_id: examId,
-                    student_id: studentId,
-                    grade: grade
+                    student_id: student_id,
+                    grade: grade,
+                    graded_by_id: lecturerId,
+                    updated_at: timestamp,
                 });
             }
         }
     }
+    
+    if (gradeRecords.length === 0) {
+        showFeedback('No valid grades were entered or processed.', 'warning');
+        setButtonLoading(submitButton, false, originalText);
+        return;
+    }
 
     try {
-        // ASSUMPTION: You have a 'student_grades' table for saving individual scores
-        // const { error } = await sb.from('student_grades').upsert(updates);
-        // if (error) throw error;
+        // Use upsert to insert new grades or update existing ones
+        // Assuming 'exam_id' and 'student_id' form a unique composite key for upsert
+        const { error } = await sb.from(STUDENT_GRADES_TABLE)
+            .upsert(gradeRecords, { onConflict: 'exam_id, student_id' }); 
         
-        // Update the exam status to 'Graded'
-        await sb.from(EXAMS_TABLE).update({ status: 'Graded' }).eq('id', examId);
+        if (error) throw error;
         
-        showFeedback(`Grades saved successfully for assessment ID ${examId.substring(0, 8)}!`, 'success');
+        // Update the EXAMS_TABLE status after grading
+        await sb.from(EXAMS_TABLE).update({ status: 'Graded', updated_at: timestamp }).eq('id', examId);
+        
+        showFeedback(`Successfully saved ${gradeRecords.length} grades and updated assessment status.`, 'success');
+        
+        // Close modal and refresh list
         $('gradeModal').style.display = 'none';
-        loadLecturerExams();
+        loadLecturerExams(); 
+
     } catch (err) {
-        showFeedback(`Failed to save grades: ${err.message}`, 'error');
+        showFeedback(`Failed to submit grades: ${err.message}`, 'error');
     } finally {
         setButtonLoading(submitButton, false, originalText);
+    }
+}
+
+
+async function deleteExam(id) {
+    if (!confirm('Are you sure you want to delete this assessment?')) return;
+    const { error } = await sb.from(EXAMS_TABLE).delete().eq('id', id);
+    if (error) {
+        showFeedback(`Failed to delete assessment: ${error.message}`, 'error');
+    } else {
+        showFeedback('Assessment deleted.', 'success');
+        loadLecturerExams();
     }
 }
 
@@ -882,14 +933,13 @@ async function handleGradeSubmission(e, examId) {
  *******************************************************/
 
 function populateResourceFormSelects() {
-    // Mock Data for demonstration
-    const programs = [{id: 'KRCHN', name: 'KRCHN'}, {id: 'TVET', name: 'TVET'}];
-    const intakes = [{id: '2024', name: '2024'}, {id: '2025', name: '2025'}];
-    const blocks = [{id: 'Block_A', name: 'Block A'}, {id: 'Term_1', name: 'Term 1'}];
+    const mockPrograms = [{id: 'KRCHN', name: 'KRCHN'}, {id: 'TVET', name: 'TVET'}];
+    const mockIntakes = [{id: '2024', name: '2024'}, {id: '2025', name: '2025'}];
+    const mockCourses = [{id: 'C101', name: 'Anatomy 101'}, {id: 'M202', name: 'Maternal Health'}];
 
-    populateSelect($('resource_program'), programs, 'id', 'name', 'Select Program');
-    populateSelect($('resource_intake'), intakes, 'id', 'name', 'Select Intake Year');
-    populateSelect($('resource_block'), blocks, 'id', 'name', 'Select Block/Term');
+    populateSelect($('resource_program'), mockPrograms, 'id', 'name', 'Select Target Program');
+    populateSelect($('resource_intake'), mockIntakes, 'id', 'name', 'Select Target Intake');
+    populateSelect($('resource_course_id'), mockCourses, 'id', 'name', 'Select Related Course (Optional)');
 }
 
 async function handleUploadResource(e) {
@@ -898,53 +948,66 @@ async function handleUploadResource(e) {
     const originalText = submitButton.textContent;
     setButtonLoading(submitButton, true, originalText);
 
-    const fileInput = $('resource-file');
+    const fileInput = $('resource_file');
     const file = fileInput.files[0];
+    
     if (!file) {
-        showFeedback('Please select a file to upload.', 'error');
+        showFeedback('Please select a file to upload.', 'warning');
         setButtonLoading(submitButton, false, originalText);
         return;
     }
 
-    const title = $('resource-title').value.trim();
-    const program = $('resource_program').value;
-    const intake = $('resource_intake').value;
-    const block = $('resource_block').value;
-    
-    const filePath = `${program}/${block}/${Date.now()}-${file.name}`;
+    const resourceTitle = $('resource_title').value.trim();
+    const resourceProgram = $('resource_program').value;
+    const resourceCourse = $('resource_course_id').value || 'general';
+    const resourceType = $('resource_type').value;
 
+    if (!resourceTitle || !resourceProgram) {
+        showFeedback('Title and Program are required.', 'warning');
+        setButtonLoading(submitButton, false, originalText);
+        return;
+    }
+
+    const filePath = `${currentUserProfile.user_id}/${resourceCourse}/${Date.now()}_${file.name}`;
+    
     try {
-        // 1. Upload file to Supabase Storage
-        const { data: uploadData, error: uploadError } = await sb.storage
+        // 1. Upload file to Supabase Storage Bucket
+        const { data: fileData, error: uploadError } = await sb.storage
             .from(RESOURCES_BUCKET)
-            .upload(filePath, file);
+            .upload(filePath, file, {
+                cacheControl: '3600',
+                upsert: false
+            });
 
         if (uploadError) throw uploadError;
 
-        // 2. Insert metadata into a 'resources_metadata' table (ASSUMPTION)
-        const publicURL = sb.storage.from(RESOURCES_BUCKET).getPublicUrl(filePath).data.publicUrl;
+        // 2. Insert metadata into a 'resources' table (Hypothetical Table)
+        const { data: resourceMetadata, error: dbError } = await sb.from('resources').insert([
+            {
+                title: resourceTitle,
+                file_path: filePath,
+                file_size: file.size,
+                file_type: file.type,
+                program: resourceProgram,
+                course_id: resourceCourse,
+                type: resourceType,
+                uploaded_by_id: currentUserProfile.user_id
+            }
+        ]);
         
-        const resourceMetadata = {
-            lecturer_id: currentUserProfile.user_id,
-            file_name: file.name,
-            title: title,
-            program: program,
-            intake_year: intake,
-            block: block,
-            public_url: publicURL,
-            size_kb: (file.size / 1024).toFixed(2)
-        };
-        
-        const { error: dbError } = await sb.from('resources_metadata').insert([resourceMetadata]);
-        
-        if (dbError) throw dbError;
+        if (dbError) {
+            // Rollback: Attempt to delete the file if metadata insert fails
+            await sb.storage.from(RESOURCES_BUCKET).remove([filePath]);
+            throw dbError;
+        }
 
-        showFeedback(`Resource "${title}" uploaded successfully!`, 'success');
+        showFeedback('Resource uploaded and linked successfully!', 'success');
         e.target.reset();
-        loadLecturerResources();
+        loadLecturerResources(); 
 
     } catch (err) {
-        showFeedback(`Resource upload failed: ${err.message}`, 'error');
+        showFeedback(`Upload failed: ${err.message}`, 'error');
+        console.error("Upload/DB Error:", err);
     } finally {
         setButtonLoading(submitButton, false, originalText);
     }
@@ -952,56 +1015,75 @@ async function handleUploadResource(e) {
 
 async function loadLecturerResources() {
     const tbody = $('resources-list');
-    tbody.innerHTML = '<tr><td colspan="6">Loading your resources...</td></tr>';
-
-    const { data: resources, error } = await sb.from('resources_metadata')
-        .select('*')
-        .eq('lecturer_id', currentUserProfile.user_id)
+    tbody.innerHTML = '<tr><td colspan="5">Loading shared resources...</td></tr>';
+    
+    // Assuming a 'resources' table exists
+    const { data: resources, error } = await sb.from('resources')
+        .select('*, uploader:uploaded_by_id(full_name)')
+        .eq('uploaded_by_id', currentUserProfile.user_id) // Show only resources uploaded by this lecturer
         .order('created_at', { ascending: false });
 
     if (error) {
-        tbody.innerHTML = `<tr><td colspan="6">Error loading resources: ${error.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="5">Error loading resources: ${error.message}</td></tr>`;
         return;
     }
 
     if (!resources || resources.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6">You have not uploaded any resources.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5">You have not uploaded any resources.</td></tr>';
         return;
     }
 
     tbody.innerHTML = '';
     resources.forEach(r => {
+        const fileLink = sb.storage.from(RESOURCES_BUCKET).getPublicUrl(r.file_path).data.publicUrl;
+        
         tbody.innerHTML += `
             <tr>
-                <td>${r.program}</td>
                 <td>${r.title}</td>
-                <td>${r.intake_year}</td>
-                <td>${r.block}</td>
-                <td>${new Date(r.created_at).toLocaleDateString()}</td>
+                <td>${r.program}</td>
+                <td>${r.course_id}</td>
+                <td>${r.type}</td>
                 <td>
-                    <a href="${r.public_url}" target="_blank" class="btn-action">View/Download</a>
-                    <button onclick="deleteResource('${r.id}', '${r.file_name}')" class="btn-delete">Delete</button>
+                    <a href="${fileLink}" target="_blank" class="btn-action">Download</a>
+                    <button onclick="deleteResource('${r.id}', '${r.file_path}')" class="btn-delete">Delete</button>
                 </td>
             </tr>
         `;
     });
 }
 
+async function deleteResource(id, filePath) {
+    if (!confirm('Are you sure you want to delete this resource (file and metadata)?')) return;
+    
+    try {
+        // 1. Delete from storage
+        const { error: storageError } = await sb.storage.from(RESOURCES_BUCKET).remove([filePath]);
+        if (storageError) console.warn("Storage deletion warning (may already be gone):", storageError.message);
+
+        // 2. Delete metadata from table
+        const { error: dbError } = await sb.from('resources').delete().eq('id', id);
+        if (dbError) throw dbError;
+
+        showFeedback('Resource deleted successfully.', 'success');
+        loadLecturerResources();
+        
+    } catch (err) {
+        showFeedback(`Failed to delete resource: ${err.message}`, 'error');
+    }
+}
+
 
 /*******************************************************
- * 7. MESSAGES (messages tab)
+ * 7. MESSAGING (messages tab)
  *******************************************************/
 
 function populateMessageFormSelects() {
-    // Fetch/Mock the groups the lecturer can message (based on their assignments)
-    const mockGroups = [
-        {id: 'KRCHN_2024_A', name: 'KRCHN 2024 Block A'}, 
-        {id: 'TVET_2025_T1', name: 'TVET 2025 Term 1'}
-    ];
-    populateSelect($('msg_program'), mockGroups, 'id', 'name', 'Select Program/Group');
-    
-    loadLecturerMessages(); // Load received messages
-    loadLecturerSentMessages(); // Load sent history
+    // Mock Data for demonstration
+    const mockStudents = [{id: 'S123', name: 'Student A'}, {id: 'S456', name: 'Student B'}];
+    const mockGroups = [{id: 'KRCHN_2024', name: 'KRCHN 2024 Intake'}, {id: 'TVET_BlockA', name: 'TVET Block A'}];
+
+    populateSelect($('message_recipient_user'), mockStudents, 'id', 'name', 'Select Individual Student');
+    populateSelect($('message_recipient_group'), mockGroups, 'id', 'name', 'Select Group/Class');
 }
 
 async function handleSendMessage(e) {
@@ -1010,33 +1092,39 @@ async function handleSendMessage(e) {
     const originalText = submitButton.textContent;
     setButtonLoading(submitButton, true, originalText);
 
-    const recipientGroup = $('msg_program').value;
-    const messageBody = $('msg_body').value.trim();
-    
-    if (!recipientGroup || !messageBody) {
-        showFeedback('Please select a group and enter a message body.', 'warning');
+    const recipientUser = $('message_recipient_user').value;
+    const recipientGroup = $('message_recipient_group').value;
+    const messageSubject = $('message_subject').value.trim();
+    const messageBody = $('message_body').value.trim();
+
+    const recipientId = recipientUser || recipientGroup;
+    const recipientType = recipientUser ? 'user' : (recipientGroup ? 'group' : null);
+
+    if (!recipientId || !messageBody) {
+        showFeedback('Please select a recipient and enter a message body.', 'warning');
         setButtonLoading(submitButton, false, originalText);
         return;
     }
-    
-    // In a real system, you would parse the group ID to get program/intake/block
+
     const messageData = {
         sender_id: currentUserProfile.user_id,
-        sender_role: 'lecturer',
-        recipient_group: recipientGroup, // E.g., 'KRCHN_2024_A'
-        subject: `Message from Lecturer ${currentUserProfile.full_name}`,
+        sender_role: currentUserProfile.role,
+        recipient_id: recipientId,
+        recipient_type: recipientType, // 'user' or 'group'
+        subject: messageSubject,
         body: messageBody,
-        status: 'Sent'
+        read_status: false
     };
 
     try {
+        // NOTE: Group messaging would require a trigger/function on Supabase to fan-out to individual user records
         const { error } = await sb.from(MESSAGES_TABLE).insert([messageData]);
         
         if (error) throw error;
         
-        showFeedback('Message sent successfully to the selected group!', 'success');
+        showFeedback('Message sent successfully!', 'success');
         e.target.reset();
-        loadLecturerSentMessages(); 
+        loadLecturerMessages(); 
 
     } catch (err) {
         showFeedback(`Failed to send message: ${err.message}`, 'error');
@@ -1046,136 +1134,72 @@ async function handleSendMessage(e) {
 }
 
 async function loadLecturerMessages() {
-    const listDiv = $('messages-list');
-    listDiv.innerHTML = 'Loading student messages and announcements...';
-
-    // Fetch messages where recipient_group matches the lecturer's assigned groups, or where recipient_id is the lecturer's ID.
-    // For simplicity, fetch all recent messages and announcements
+    const tbody = $('inbox-list');
+    tbody.innerHTML = '<tr><td colspan="4">Loading inbox...</td></tr>';
+    
+    // Fetch messages where the current user is the recipient
     const { data: messages, error } = await sb.from(MESSAGES_TABLE)
-        .select('*')
-        // Filter: where recipient_id is the lecturer OR recipient_group is relevant group
-        .or(`recipient_id.eq.${currentUserProfile.user_id}, recipient_group.eq.GLOBAL_ANNOUNCEMENT`) 
-        .order('created_at', { ascending: false })
-        .limit(10); // Show recent messages
-
-    if (error) {
-        listDiv.innerHTML = `Error loading messages: ${error.message}`;
-        return;
-    }
-    
-    if (!messages || messages.length === 0) {
-        listDiv.innerHTML = 'No new inbox messages or announcements.';
-        return;
-    }
-
-    listDiv.innerHTML = messages.map(m => `
-        <div class="message-card">
-            <strong>[${m.sender_role.toUpperCase()}] To: ${m.recipient_group || m.recipient_id.substring(0, 8)}</strong>
-            <p><strong>Subject:</strong> ${m.subject}</p>
-            <p>${m.body}</p>
-            <small>${new Date(m.created_at).toLocaleString()}</small>
-        </div>
-    `).join('');
-}
-
-async function loadLecturerSentMessages() {
-    const tbody = $('lecturerMessagesTableBody');
-    tbody.innerHTML = '<tr><td colspan="5">Loading sent messages...</td></tr>';
-    
-    // Fetch messages sent by the current lecturer
-    const { data: sentMessages, error } = await sb.from(MESSAGES_TABLE)
-        .select('*')
-        .eq('sender_id', currentUserProfile.user_id)
+        .select('*, sender:sender_id(full_name)')
+        .eq('recipient_id', currentUserProfile.user_id)
         .order('created_at', { ascending: false });
 
     if (error) {
-        tbody.innerHTML = `<tr><td colspan="5">Error loading sent messages: ${error.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="4">Error loading messages: ${error.message}</td></tr>`;
         return;
     }
 
-    if (!sentMessages || sentMessages.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5">No messages found in your sent history.</td></tr>';
+    if (!messages || messages.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4">Your inbox is empty.</td></tr>';
         return;
     }
 
     tbody.innerHTML = '';
-    sentMessages.forEach(m => {
+    messages.forEach(m => {
+        const senderName = m.sender?.full_name || 'System/Admin';
+        const readClass = m.read_status ? '' : 'message-unread';
+        
         tbody.innerHTML += `
-            <tr>
-                <td>${m.recipient_group || m.recipient_id || 'N/A'}</td>
+            <tr class="${readClass}" onclick="viewMessageDetails('${m.id}')">
+                <td>${senderName}</td>
                 <td>${m.subject}</td>
-                <td>${m.body.substring(0, 50)}...</td>
                 <td>${new Date(m.created_at).toLocaleString()}</td>
-                <td><button onclick="viewMessage('${m.id}')" class="btn-action">View</button></td>
+                <td>${m.read_status ? 'Read' : 'Unread'}</td>
             </tr>
         `;
     });
 }
 
-// Placeholder for viewing message details
-function viewMessage(id) {
-    showFeedback(`View full message ID: ${id} functionality needs modal implementation.`, 'info');
+function viewMessageDetails(id) {
+    showFeedback(`Viewing message ${id}. Functionality to mark as read and display body needs modal implementation.`, 'info');
+    // Implement a modal here to display the full body and mark as read via Supabase update.
 }
 
-
-/*******************************************************
- * 8. CALENDAR (calendar tab)
- *******************************************************/
-
-async function renderFullCalendar() {
-    const calendarEl = document.getElementById('fullCalendarDisplay');
-    if (!calendarEl) return;
+// Placeholder for full calendar rendering (requires FullCalendar library)
+function renderFullCalendar() {
+    const calendarEl = $('fullCalendarDisplay');
+    if (!calendarEl || typeof FullCalendar === 'undefined') {
+        // If FullCalendar is not loaded, just skip this section or show a message
+        calendarEl.innerHTML = '<p>Calendar library (FullCalendar) not loaded. Cannot display calendar.</p>';
+        return;
+    }
     
-    // Fetch all relevant events (Sessions, Exams/CATS)
-    const [sessions, exams] = await Promise.all([
-        sb.from(SESSIONS_TABLE).select('*').eq('lecturer_id', currentUserProfile.user_id),
-        sb.from(EXAMS_TABLE).select('*').eq('lecturer_id', currentUserProfile.user_id)
-    ]);
-    
-    const events = [];
-    
-    // Map Sessions to FullCalendar events
-    sessions.data?.forEach(s => {
-        events.push({
-            id: s.id,
-            title: `${s.session_type.toUpperCase()}: ${s.title}`,
-            start: `${s.session_date}T${s.start_time}`,
-            end: s.end_time ? `${s.session_date}T${s.end_time}` : null,
-            allDay: false,
-            color: s.session_type === 'class' ? '#3788d8' : (s.session_type === 'clinical' ? '#ff9f89' : '#00a896')
-        });
-    });
-    
-    // Map Exams/CATS to FullCalendar events
-    exams.data?.forEach(e => {
-        events.push({
-            id: e.id,
-            title: `${e.type}: ${e.title}`,
-            start: `${e.exam_date}T${e.start_time}`,
-            end: e.duration_minutes ? moment(`${e.exam_date}T${e.start_time}`).add(e.duration_minutes, 'minutes').toISOString() : null,
-            allDay: false,
-            color: '#ff5c5c' // Red for exams
-        });
-    });
+    // Mock event data based on scheduled sessions (simplified for this script)
+    const mockEvents = [
+        { title: 'Anatomy 101 Lecture', start: new Date().toISOString().split('T')[0] + 'T09:00:00', end: new Date().toISOString().split('T')[0] + 'T11:00:00' },
+        { title: 'TVET Block B CAT', start: '2025-10-25' }
+    ];
 
     const calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: 'dayGridMonth',
         headerToolbar: {
             left: 'prev,next today',
             center: 'title',
-            right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek'
+            right: 'dayGridMonth,timeGridWeek,timeGridDay'
         },
-        events: events,
-        eventClick: function(info) {
-            alert('Event: ' + info.event.title + '\nStart: ' + info.event.start.toLocaleString());
-        }
+        events: mockEvents,
+        // Add Supabase event fetching logic here to pull from SESSIONS_TABLE
     });
 
     calendar.render();
 }
-
-
-/*******************************************************
- * INITIATE APP
- *******************************************************/
-document.addEventListener('DOMContentLoaded', initSession);
+// End of script.
