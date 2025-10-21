@@ -331,131 +331,74 @@ async function logout() {
 
 
 // =================================================================
-// === X. CORE TAB DATA LOADERS (MOCK IMPLEMENTATIONS) ===
+// === X. CORE TAB DATA LOADERS (Live Supabase Implementation) ===
 // =================================================================
 
-async function loadLecturerProfile() {
-    const profile = currentUserProfile;
-    // (Profile details population logic remains here)
-    $('profile_full_name').textContent = profile.full_name || 'N/A';
-    // ... (rest of profile population)
-    
-    // Load Assignments (Mock/Placeholder)
-    const tbody = $('profile-assignments-table');
-    const mockAssignments = [
-         { assignment_type: 'Course Lead', course_id: 'Maternal Health', program: 'KRCHN', block_term: 'Block C' },
-         { assignment_type: 'CAT Marker', course_id: 'Anatomy 101', program: 'KRCHN', block_term: 'Block B' }
-    ];
-
-    tbody.innerHTML = mockAssignments.map(a => `
-        <tr>
-            <td>${a.assignment_type || 'Course'}</td>
-            <td>${a.course_id || a.program}</td>
-            <td>${a.block_term || 'N/A'}</td>
-        </tr>
-    `).join('');
-}
-
-async function loadLecturerDashboardData() {
-    $('lecturerActiveCourses').textContent = '3';
-    $('pendingGrading').textContent = '4';
-    $('todaysSessions').textContent = '1';
-    $('newMessagesCount').textContent = '2';
-}
-
-async function loadLecturerCourses() {
-    const tbody = $('lecturer-courses-table');
-    const mockCourses = [
-        { course_name: 'Maternal Health', unit_code: 'MCH 201', program: 'KRCHN', block_term: 'Block C', total_students: 45 },
-    ];
-    // (Rest of the courses table population logic)
-    if (tbody) {
-        tbody.innerHTML = mockCourses.map(c => `
-            <tr>
-                <td>${c.course_name}</td>
-                <td>${c.unit_code}</td>
-                <td>${c.program}</td>
-                <td>${c.block_term}</td>
-                <td>${c.total_students}</td>
-                <td><button class="btn-action">View Class</button></td>
-            </tr>
-        `).join('');
+/**
+ * Maps the lecturer's department to the student program they supervise.
+ * In a real system, this would be fetched from a database table.
+ */
+function getProgramFilterFromDepartment(department) {
+    // This implements your specific business rule:
+    if (department === 'Nursing') {
+        return 'KRCHN';
     }
+    // Add other rules here (e.g., 'Clinical Medicine' -> 'TVET')
+    // else if (department === 'Clinical Medicine') {
+    //     return 'TVET';
+    // }
+    return null; // Return null if the department isn't assigned to a specific program
 }
-// (The rest of the mock data loaders like loadLecturerStudents, loadLecturerSessions, etc., remain here)
+
+
 async function loadLecturerStudents() {
+    if (!currentUserProfile) return;
+
     const tbody = $('lecturer-students-table');
-    const mockStudents = [
-        { name: 'Alice Johnson', email: 'alice@nchsm.edu', program: 'KRCHN', intake: '2024', block: 'Block C', status: 'Active' },
-    ];
-    if (tbody) {
-        tbody.innerHTML = mockStudents.map(s => `
-            <tr>
-                <td>${s.name}</td>
-                <td>${s.email}</td>
-                <td>${s.program}</td>
-                <td>${s.intake}</td>
-                <td>${s.block}</td>
-                <td>${s.status}</td>
-                <td><button class="btn-action">Message</button></td>
-            </tr>
-        `).join('');
-    }
-}
+    if (!tbody) return;
 
-async function loadLecturerSessions() {
-    const tbody = $('scheduledSessionsTableBody');
-    const mockSessions = [
-        { type: 'class', title: 'Cardiology Review', date_time: '2025-10-22 09:00', program: 'KRCHN', block_term: 'Block C' },
-    ];
+    tbody.innerHTML = '<tr><td colspan="7">Loading assigned students from Supabase...</td></tr>';
+    
+    const targetProgram = getProgramFilterFromDepartment(currentUserProfile.department);
 
-    if (tbody) {
-        tbody.innerHTML = mockSessions.map(s => `
-            <tr>
-                <td>${s.type}</td>
-                <td>${s.title}</td>
-                <td>${s.date_time}</td>
-                <td>${s.program} (${s.block_term})</td>
-                <td><button class="btn-delete">Cancel</button></td>
-            </tr>
-        `).join('');
-    }
-}
-
-async function loadAttendanceData() {
-    loadAttendanceSelects();
-    loadTodaysAttendanceRecords();
-}
-
-async function loadLecturerMessages() {
-    const tbody = $('lecturerMessagesTableBody');
-    const mockMessages = [
-        { to: 'KRCHN Block C', subject: 'Assignment Deadline', body_preview: 'The deadline for the final assignment...', date_sent: '2025-10-20' },
-    ];
-
-    if (tbody) {
-        tbody.innerHTML = mockMessages.map(m => `
-            <tr>
-                <td>${m.to}</td>
-                <td>${m.subject}</td>
-                <td>${m.body_preview.substring(0, 50)}...</td>
-                <td>${m.date_sent}</td>
-                <td><button class="btn-action">View</button></td>
-            </tr>
-        `).join('');
-    }
-}
-
-// (FullCalendar logic remains here)
-async function renderFullCalendar() {
-    const calendarEl = $('fullCalendarDisplay');
-    if (!calendarEl || typeof FullCalendar === 'undefined') {
-        console.error("FullCalendar or its container not found.");
+    if (!targetProgram) {
+        tbody.innerHTML = '<tr><td colspan="7">No specific student program is assigned to this lecturer\'s department.</td></tr>';
         return;
     }
-    // Render calendar...
-}
 
+    // --- 🎯 Supabase Query: Filter students by role and the target program ---
+    const { data: students, error } = await sb.from(USER_PROFILE_TABLE)
+        .select(`full_name, email, student_program, intake_year, block_term, status`)
+        .eq('role', 'student')
+        .eq('student_program', targetProgram) // Filters to 'KRCHN' if department is 'Nursing'
+        .order('full_name', { ascending: true });
+
+    if (error) {
+        console.error("Error loading students:", error);
+        tbody.innerHTML = `<tr><td colspan="7">Error loading students: ${error.message}</td></tr>`;
+        return;
+    }
+
+    if (!students || students.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7">No ${targetProgram} students found in the database.</td></tr>`;
+        return;
+    }
+
+    // --- Dynamic Table Population ---
+    tbody.innerHTML = students.map(s => `
+        <tr>
+            <td>${s.full_name || 'N/A'}</td>
+            <td>${s.email || 'N/A'}</td>
+            <td>${s.student_program || 'N/A'}</td>
+            <td>${s.intake_year || 'N/A'}</td>
+            <td>${s.block_term || 'N/A'}</td>
+            <td>${s.status || 'Active'}</td>
+            <td><button class="btn-action">Message</button></td>
+        </tr>
+    `).join('');
+
+    console.log(`Successfully loaded ${students.length} ${targetProgram} students.`);
+}
 
 // =================================================================
 // === 4. ATTENDANCE & CHECK-IN (Updated Select Logic) ===
