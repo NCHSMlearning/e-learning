@@ -61,8 +61,12 @@ async function fetchData(tableName, selectQuery = '*', filters = {}, order = 'cr
     return { data, error: null };
 }
 
+/* ================================================= */
+/* === 2. UTILITY FUNCTIONS (Reusable Helpers) === */
+/* ================================================= */
+
 /**
- * Utility to populate select/dropdown elements (Simplified)
+ * Utility to populate select/dropdown elements.
  */
 function populateSelect(selectElement, data, valueKey, textKey, defaultText) {
     selectElement.innerHTML = `<option value="">-- ${defaultText} --</option>`;
@@ -76,10 +80,10 @@ function populateSelect(selectElement, data, valueKey, textKey, defaultText) {
 }
 
 /**
- * Core CSV Export Function (Retained as is)
+ * Core CSV Export Function.
  */
 function exportTableToCSV(tableId, filename) {
-    const table = document.getElementById(tableId);
+    const table = $(tableId);
     if (!table) { console.error("Export Error: Table not found with ID:", tableId); return; }
 
     const rows = table.querySelectorAll('tr');
@@ -92,8 +96,7 @@ function exportTableToCSV(tableId, filename) {
         if (headerRow) {
             const headerCols = headerRow.querySelectorAll('th');
             const header = [];
-            // Exclude the last column ('Actions')
-            for (let j = 0; j < headerCols.length - 1; j++) { 
+            for (let j = 0; j < headerCols.length - 1; j++) { // Exclude 'Actions'
                 let data = headerCols[j].innerText.trim();
                 data = data.replace(/"/g, '""'); 
                 header.push('"' + data + '"');
@@ -107,11 +110,9 @@ function exportTableToCSV(tableId, filename) {
         const row = [];
         const cols = rows[i].querySelectorAll('td'); 
         
-        // Skip empty/status rows
-        if (cols.length < 2) continue;
+        if (cols.length < 2) continue; // Skip empty/status rows
 
-        // Exclude the last column ('Actions')
-        for (let j = 0; j < cols.length - 1; j++) { 
+        for (let j = 0; j < cols.length - 1; j++) { // Exclude 'Actions'
             let data = cols[j].innerText.trim();
             data = data.replace(/"/g, '""'); 
             row.push('"' + data + '"');
@@ -133,7 +134,7 @@ function exportTableToCSV(tableId, filename) {
 }
 
 /**
- * Generic function to filter table rows (Retained as is)
+ * Generic function to filter table rows.
  */
 function filterTable(inputId, tableId, columnsToSearch = [0]) {
     const filter = $(inputId)?.value.toUpperCase() || '';
@@ -145,7 +146,7 @@ function filterTable(inputId, tableId, columnsToSearch = [0]) {
     for (let i = 0; i < trs.length; i++) {
         let rowMatches = false;
 
-        // Skip rows that span the entire table (e.g., "Loading..." or "No data")
+        // Skip rows that span the entire table (e.g., "Loading...")
         if (trs[i].getElementsByTagName('td').length <= 1) {
             trs[i].style.display = "";
             continue;
@@ -166,70 +167,31 @@ function filterTable(inputId, tableId, columnsToSearch = [0]) {
     }
 }
 
-
-// Tab switching logic (Modified to call lecturer-specific loaders)
-function showTab(tabId) { // Added for the onclick events on dashboard cards
-    const link = document.querySelector(`.nav a[data-tab="${tabId}"]`);
-    if (link) {
-        document.querySelectorAll('.nav a').forEach(l => l.classList.remove('active'));
-        link.classList.add('active');
-    }
-    
-    document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
-    const targetTab = document.getElementById(tabId);
-    if (targetTab) targetTab.classList.add('active');
-    
-    loadSectionData(tabId);
-}
-
-async function loadSectionData(tabId) {
-    document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
-    
-    // Only load sections relevant to the Lecturer HTML
-    switch(tabId) {
-        case 'dashboard': loadLecturerDashboardData(); break;
-        case 'my-courses': loadLecturerCourses(); loadLecturerStudents(); break;
-        case 'sessions': loadLecturerSessions(); populateSessionFormSelects(); break;
-        case 'attendance': loadAttendanceSelects(); break;
-        case 'cats': loadLecturerExams(); populateExamFormSelects(); break;
-        case 'resources': loadLecturerResources(); populateResourceFormSelects(); break;
-        case 'messages': loadLecturerMessages(); populateMessageFormSelects(); break;
-        case 'calendar': renderFullCalendar(); break;
-    }
-}
-
-// Logout (Retained as is, simplified by removing Audit Log if not implemented)
-async function logout() {
-    await sb.auth.signOut();
-    localStorage.removeItem("loggedInUser");
-    window.location.href = "login.html";
-}
-
-
 /**
- * Sets the loading state of a button (REQUIRED UTILITY)
+ * Sets the loading state of a button.
  */
 function setButtonLoading(button, isLoading, originalText) {
     if (!button) return;
     if (isLoading) {
         button.disabled = true;
         button.textContent = 'Processing...';
-        // Store original text if not already stored
         button.dataset.originalText = originalText || button.textContent;
     } else {
         button.disabled = false;
         button.textContent = button.dataset.originalText || originalText || 'Submit';
-        delete button.dataset.originalText; // Clean up
+        delete button.dataset.originalText;
     }
 }
 
+/* ================================================= */
+/* === 3. CORE NAVIGATION & AUTHENTICATION (Initialization) === */
+/* ================================================= */
 
-/*******************************************************
- * 2. LECTURER INITIALIZATION & DATA LOADING
- * (Focus on fetching data assigned to the current lecturer)
- *******************************************************/
+// --- Initialization Entry Point ---
+document.addEventListener('DOMContentLoaded', () => {
+    initSession(); 
+});
 
-// --- Session / Init ---
 async function initSession() {
     const { data: { session }, error: sessionError } = await sb.auth.getSession();
     
@@ -238,9 +200,9 @@ async function initSession() {
         return;
     }
 
-    sb.auth.setSession(session);
     const user = session.user;
     
+    // Fetch user profile to verify role
     const { data: profile, error: profileError } = await sb.from(USER_PROFILE_TABLE).select('*').eq('user_id', user.id).single();
     
     if (profile && !profileError) {
@@ -248,7 +210,8 @@ async function initSession() {
         
         if (currentUserProfile.role !== 'lecturer') {
             alert(`Access Denied. You are logged in as ${currentUserProfile.role}. Redirecting.`);
-            window.location.href = "login.html"; // Or relevant admin page
+            await sb.auth.signOut();
+            window.location.href = "login.html"; 
             return;
         }
         
@@ -261,9 +224,30 @@ async function initSession() {
         return;
     }
     
-    // Start the Lecturer Dashboard
+    // Once profile is confirmed, load dashboard and set up listeners
     loadSectionData('dashboard');
     setupEventListeners();
+}
+
+/**
+ * Tab switching logic: Handles active link class, active content section, and triggers data load.
+ */
+function loadSectionData(tabId) { 
+    document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
+    
+    if (!currentUserProfile) return;
+    
+    // Triggers the relevant data loading function for the tab
+    switch(tabId) {
+        case 'dashboard': loadLecturerDashboardData(); break;
+        case 'my-courses': loadLecturerCourses(); loadLecturerStudents(); break;
+        case 'sessions': loadLecturerSessions(); populateSessionFormSelects(); break;
+        case 'attendance': loadAttendanceData(); loadAttendanceSelects(); break;
+        case 'cats': loadLecturerExams(); populateExamFormSelects(); break;
+        case 'resources': loadLecturerResources(); populateResourceFormSelects(); break;
+        case 'messages': loadLecturerMessages(); populateMessageFormSelects(); break;
+        case 'calendar': renderFullCalendar(); break;
+    }
 }
 
 function setupEventListeners() {
@@ -294,159 +278,15 @@ function setupEventListeners() {
     document.querySelector('#gradeModal .close')?.addEventListener('click', () => { $('gradeModal').style.display = 'none'; });
 }
 
-
-// --- LECTURER-SPECIFIC DATA FETCHERS ---
-
-/**
- * Helper: Gets program/block filters assigned to the lecturer.
- * In a real system, this should query a 'lecturer_assignments' table.
- * For now, we simulate by using the lecturer's own profile info.
- */
-function getLecturerFilters() {
-    return {
-        // Assuming lecturer is assigned based on their own program/intake/block for simplicity
-        program: currentUserProfile?.program || null,
-        intake_year: currentUserProfile?.intake_year || null,
-        block: currentUserProfile?.block || null,
-        // In a real system, you'd use lecturer_id
-    };
+// Logout 
+async function logout() {
+    await sb.auth.signOut();
+    localStorage.removeItem("loggedInUser");
+    window.location.href = "login.html";
 }
 
-/**
- * Load Main Dashboard Cards
- */
-async function loadLecturerDashboardData() {
-    const filters = getLecturerFilters();
-
-    // 1. My Active Courses
-    const { count: coursesCount } = await sb
-        .from(COURSES_TABLE)
-        .select('id', { count: 'exact' })
-        .eq('lecturer_id', currentUserProfile.user_id) // ASSUMPTION: Courses are linked to lecturer_id
-        .eq('status', 'active');
-    $('lecturerActiveCourses').textContent = coursesCount || 0;
-
-    // 2. Pending Grading
-    // Note: This filter is weak. A better system requires joining with the student_grades table.
-    const { count: pendingGrading } = await sb
-        .from(EXAMS_TABLE)
-        .select('id', { count: 'exact' })
-        .eq('lecturer_id', currentUserProfile.user_id) // ASSUMPTION: Exams are linked to lecturer_id
-        .eq('status', 'Completed'); // Assuming 'Completed' means students have finished, pending grading
-    $('pendingGrading').textContent = pendingGrading || 0; 
-
-    // 3. Today's Scheduled Sessions
-    const today = new Date().toISOString().split('T')[0];
-    const { count: todaysSessions } = await sb
-        .from(SESSIONS_TABLE)
-        .select('id', { count: 'exact' })
-        .eq('lecturer_id', currentUserProfile.user_id) // ASSUMPTION: Sessions linked to lecturer_id
-        .eq('session_date', today);
-    $('todaysSessions').textContent = todaysSessions || 0;
-    
-    // 4. New Messages (Simulated)
-    const { count: newMessagesCount } = await sb
-        .from(MESSAGES_TABLE)
-        .select('id', { count: 'exact' })
-        .eq('recipient_id', currentUserProfile.user_id)
-        .eq('read_status', false);
-    $('newMessagesCount').textContent = newMessagesCount || 0;
-}
-
-
-/**
- * Load Lecturer's Assigned Courses (my-courses tab)
- */
-async function loadLecturerCourses() {
-    const tbody = $('lecturer-courses-table');
-    tbody.innerHTML = '<tr><td colspan="6">Loading your courses...</td></tr>';
-    
-    // In a real system, this would join a mapping table or filter courses by lecturer_id
-    const { data: courses, error } = await sb.from(COURSES_TABLE)
-        .select('*, program(*)') // Assuming relationship to a program table
-        .eq('lecturer_id', currentUserProfile.user_id)
-        .order('course_name', { ascending: true });
-
-    if (error) {
-        tbody.innerHTML = `<tr><td colspan="6">Error loading courses: ${error.message}</td></tr>`;
-        return;
-    }
-
-    if (!courses || courses.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6">You are not currently assigned any courses.</td></tr>';
-        return;
-    }
-
-    tbody.innerHTML = '';
-    courses.forEach(c => {
-        tbody.innerHTML += `
-            <tr>
-                <td>${c.course_name}</td>
-                <td>${c.unit_code}</td>
-                <td>${c.program_id || 'N/A'}</td>
-                <td>${c.block || 'N/A'}</td>
-                <td>${c.total_students || 0}</td>
-                <td><button onclick="viewCourseStudents('${c.course_id}')" class="btn-action">View Students</button></td>
-            </tr>
-        `;
-    });
-}
-
-/**
- * Load Students in Lecturer's Assigned Groups (my-courses tab)
- */
-async function loadLecturerStudents() {
-    const tbody = $('lecturer-students-table');
-    tbody.innerHTML = '<tr><td colspan="8">Loading students...</td></tr>';
-
-    const programFilter = $('lecturer_student_filter_program')?.value;
-    const blockFilter = $('lecturer_student_filter_block')?.value;
-    
-    // Get all students
-    let query = sb.from(USER_PROFILE_TABLE)
-        .select('*')
-        .eq('role', 'student');
-        
-    // Apply filters based on lecturer assignments (simulated)
-    if (programFilter) query = query.eq('program', programFilter);
-    if (blockFilter) query = query.eq('block', blockFilter);
-
-    const { data: students, error } = await query.order('full_name', { ascending: true });
-
-    if (error) {
-        tbody.innerHTML = `<tr><td colspan="8">Error loading students: ${error.message}</td></tr>`;
-        return;
-    }
-
-    // Populate filter dropdowns (simulated options)
-    const mockPrograms = [{id: 'KRCHN', name: 'KRCHN'}, {id: 'TVET', name: 'TVET'}];
-    const mockBlocks = [{id: 'Block_A', name: 'Block A'}, {id: 'Block_B', name: 'Block B'}, {id: 'Term_1', name: 'Term 1'}];
-    
-    populateSelect($('lecturer_student_filter_program'), mockPrograms, 'id', 'name', 'Filter by Program');
-    populateSelect($('lecturer_student_filter_block'), mockBlocks, 'id', 'name', 'Filter by Block/Term');
-
-
-    if (!students || students.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8">No students found matching the criteria.</td></tr>';
-        return;
-    }
-
-    tbody.innerHTML = '';
-    students.forEach(s => {
-        tbody.innerHTML += `
-            <tr>
-                <td>${s.full_name}</td>
-                <td>${s.email}</td>
-                <td>${s.program || 'N/A'}</td>
-                <td>${s.intake_year || 'N/A'}</td>
-                <td>${s.block || 'N/A'}</td>
-                <td class="status-${s.status}">${s.status}</td>
-                <td><button onclick="sendMessageToUser('${s.user_id}')" class="btn-action">Message</button></td>
-            </tr>
-        `;
-    });
-}
-
+// NOTE: All data loading functions (loadLecturerDashboardData, loadLecturerCourses, etc.) 
+// should be defined below these core functions.
 
 /*******************************************************
  * 3. SESSIONS MANAGEMENT (sessions tab)
