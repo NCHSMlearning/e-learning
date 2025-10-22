@@ -29,15 +29,15 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 */
 
 // --- Table and Bucket Constants ---
-const USER_PROFILE_TABLE = 'consolidated_user_profiles_table'; 
-const COURSES_TABLE = 'courses'; 
-const EXAMS_TABLE = 'exams_cats'; 
-const SESSIONS_TABLE = 'scheduled_sessions'; 
-const ATTENDANCE_TABLE = 'geo_attendance_logs'; 
-const MESSAGES_TABLE = 'announcements'; 
-const RESOURCES_TABLE = 'resources'; 
+const USER_PROFILE_TABLE = 'consolidated_user_profiles_table';
+const COURSES_TABLE = 'courses';
+const EXAMS_TABLE = 'cats_exams';  // ✅ Corrected table name
+const SESSIONS_TABLE = 'scheduled_sessions';
+const ATTENDANCE_TABLE = 'geo_attendance_logs';
+const MESSAGES_TABLE = 'messages'; // ✅ 'announcements' doesn’t exist
+const RESOURCES_TABLE = 'resources';
 
-const RESOURCES_BUCKET = 'resources'; 
+
 
 // --- Global Variables & Caches ---
 let currentUserProfile = null;
@@ -842,130 +842,131 @@ function viewCheckInMap(lat, lng, name, locationElementId) {
 }
 
 // =================================================================
-// === 8. EXAMS / CATS IMPLEMENTATION ===
+// === 8. EXAMS / CATS IMPLEMENTATION (LECTURER DASHBOARD) ===
 // =================================================================
 
-// Table constant
-const EXAMS_TABLE = 'cats_exams';
-
-// Populate selects for exam creation form
+// --- Helper: Populate selects for exam creation ---
 function populateExamFormSelects() {
-  const targetProgram = lecturerTargetProgram;
-  const programs = targetProgram ? [{ id: targetProgram, name: targetProgram }] : [];
+    const targetProgram = lecturerTargetProgram;
+    const programs = targetProgram ? [{ id: targetProgram, name: targetProgram }] : [];
 
-  const examProgramSelect = $('exam_program');
-  populateSelect(examProgramSelect, programs, 'id', 'name', 'Select Program');
+    // Populate program select
+    const examProgramSelect = $('exam_program');
+    populateSelect(examProgramSelect, programs, 'id', 'name', 'Select Program');
+    if (targetProgram) {
+        examProgramSelect.value = targetProgram;
+        examProgramSelect.disabled = true;
+    } else {
+        examProgramSelect.disabled = false;
+    }
 
-  if (targetProgram) {
-    examProgramSelect.value = targetProgram;
-    examProgramSelect.disabled = true;
-  } else {
-    examProgramSelect.disabled = false;
-  }
+    // Populate courses and intake years
+    populateSelect($('exam_course_id'), allCourses, 'course_id', 'course_name', 'Select Course');
+    populateSelect($('exam_intake'), allIntakes, 'id', 'name', 'Select Intake Year');
 
-  populateSelect($('exam_course_id'), allCourses, 'course_id', 'course_name', 'Select Course');
-  populateSelect($('exam_intake'), allIntakes, 'id', 'name', 'Select Intake Year');
+    // Populate block/term
+    const blockSelect = $('exam_block_term');
+    const selectedProgram = targetProgram;
 
-  const blockSelect = $('exam_block_term');
-  const selectedProgram = targetProgram;
-
-  if (selectedProgram && ACADEMIC_STRUCTURE[selectedProgram]) {
-    const blocks = ACADEMIC_STRUCTURE[selectedProgram].map(name => ({ id: name, name: name }));
-    populateSelect(blockSelect, blocks, 'id', 'name', `Select ${selectedProgram} Block/Term`);
-  } else {
-    blockSelect.innerHTML = '<option value="">-- Select Program First --</option>';
-  }
+    if (selectedProgram && ACADEMIC_STRUCTURE[selectedProgram]) {
+        const blocks = ACADEMIC_STRUCTURE[selectedProgram].map(name => ({ id: name, name: name }));
+        populateSelect(blockSelect, blocks, 'id', 'name', `Select ${selectedProgram} Block/Term`);
+    } else {
+        blockSelect.innerHTML = '<option value="">-- Select Program First --</option>';
+    }
 }
 
-// Handle new exam creation
+// --- Create a new exam/CAT record ---
 async function handleAddExam(e) {
-  e.preventDefault();
-  const button = e.submitter;
-  setButtonLoading(button, true, 'Create Exam Record');
+    e.preventDefault();
+    const button = e.submitter;
+    setButtonLoading(button, true, 'Creating...');
 
-  const formData = {
-    name: $('exam_name').value,
-    date: $('exam_date').value,
-    type: $('exam_type').value,
-    program: $('exam_program').value,
-    intake: $('exam_intake').value,
-    block_term: $('exam_block_term').value,
-    course_id: $('exam_course_id').value
-  };
+    const formData = {
+        name: $('exam_name').value.trim(),
+        date: $('exam_date').value,
+        type: $('exam_type').value,
+        program: $('exam_program').value,
+        intake: $('exam_intake').value,
+        block_term: $('exam_block_term').value,
+        course_id: $('exam_course_id').value
+    };
 
-  if (Object.values(formData).some(v => !v)) {
-    showFeedback('Please fill in all exam details.', 'error');
-    setButtonLoading(button, false);
-    return;
-  }
+    // Validate
+    if (Object.values(formData).some(v => !v)) {
+        showFeedback('Please fill in all exam details.', 'error');
+        setButtonLoading(button, false);
+        return;
+    }
 
-  try {
-    const { error } = await sb.from(EXAMS_TABLE).insert({
-      exam_name: formData.name,
-      exam_date: formData.date,
-      exam_type: formData.type,
-      program: formData.program,
-      intake: formData.intake,
-      block_term: formData.block_term,
-      course_id: formData.course_id,
-      lecturer_id: currentUserProfile.user_id,
-      status: 'Pending Grading'
-    });
+    try {
+        const { error } = await sb.from(EXAMS_TABLE).insert({
+            exam_name: formData.name,
+            exam_date: formData.date,
+            exam_type: formData.type,
+            target_program: formData.program,
+            intake_year: formData.intake,
+            block_term: formData.block_term,
+            course_id: formData.course_id,
+            created_by: currentUserProfile.user_id,
+            status: 'Pending Grading'
+        });
 
-    if (error) throw error;
+        if (error) throw error;
 
-    showFeedback(`✅ Exam "${formData.name}" created successfully!`, 'success');
-    e.target.reset();
-    loadLecturerExams();
-  } catch (error) {
-    console.error('Exam creation failed:', error);
-    showFeedback(`Exam creation failed: ${error.message}`, 'error');
-  } finally {
-    setButtonLoading(button, false);
-  }
+        showFeedback(`Exam "${formData.name}" created successfully!`, 'success');
+        e.target.reset();
+        loadLecturerExams();
+    } catch (error) {
+        console.error('Exam creation failed:', error);
+        showFeedback(`Exam creation failed: ${error.message}`, 'error');
+    } finally {
+        setButtonLoading(button, false);
+    }
 }
 
-// Load all exams created by the lecturer
+// --- Load exams/CATs created by the current lecturer ---
 async function loadLecturerExams() {
-  const tbody = $('exams-table');
-  tbody.innerHTML = '<tr><td colspan="6">Loading your exams/CATs...</td></tr>';
+    const tbody = $('exams-table');
+    if (!tbody) return;
 
-  const { data: exams, error } = await fetchDataForLecturer(
-    EXAMS_TABLE,
-    '*',
-    { lecturer_id: currentUserProfile.user_id },
-    'exam_date',
-    false
-  );
+    tbody.innerHTML = '<tr><td colspan="6">Loading your exams/CATs...</td></tr>';
 
-  if (error) {
-    tbody.innerHTML = `<tr><td colspan="6">Error: ${error.message}</td></tr>`;
-    return;
-  }
+    try {
+        const { data: exams, error } = await sb
+            .from(EXAMS_TABLE)
+            .select('*')
+            .eq('created_by', currentUserProfile.user_id)
+            .order('exam_date', { ascending: false });
 
-  if (!exams || exams.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6">No exam/CAT records found.</td></tr>';
-    return;
-  }
+        if (error) throw error;
 
-  tbody.innerHTML = exams.map(e => {
-    const courseName = allCourses.find(c => c.course_id === e.course_id)?.course_name || e.course_id;
-    return `
-      <tr>
-        <td>${e.exam_name}</td>
-        <td>${courseName}</td>
-        <td>${new Date(e.exam_date).toLocaleDateString()}</td>
-        <td>${e.exam_type}</td>
-        <td>${e.program} (${e.block_term})</td>
-        <td>
-          <button class="btn-action" onclick="openGradeModal('${e.id}', '${e.exam_name}')">
-            Grade / Action
-          </button>
-        </td>
-      </tr>
-    `;
-  }).join('');
+        if (!exams || exams.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6">No exam/CAT records found.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = exams.map(e => {
+            const courseName =
+                allCourses.find(c => c.course_id === e.course_id)?.course_name || e.course_id;
+
+            return `
+                <tr>
+                    <td>${e.exam_name}</td>
+                    <td>${courseName}</td>
+                    <td>${new Date(e.exam_date).toLocaleDateString()}</td>
+                    <td>${e.exam_type}</td>
+                    <td>${e.target_program} (${e.block_term})</td>
+                    <td><button class="btn-action" onclick="openGradeModal('${e.id}', '${e.exam_name}')">Grade / Action</button></td>
+                </tr>
+            `;
+        }).join('');
+    } catch (error) {
+        console.error('Error loading exams:', error);
+        tbody.innerHTML = `<tr><td colspan="6">Error: ${error.message}</td></tr>`;
+    }
 }
+
 
 
 
