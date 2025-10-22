@@ -1467,6 +1467,10 @@ function getDeviceId() {
     return deviceId;
 }
 
+
+// ---------------------------
+// Improved geoCheckIn()
+// ---------------------------
 async function geoCheckIn() {
     if (!currentUserProfile) await loadProfile(currentUserId);
     const studentProfile = currentUserProfile;
@@ -1490,24 +1494,100 @@ async function geoCheckIn() {
     if (button) button.disabled = true;
     geoMessage.textContent = 'Attempting to get high-accuracy location...';
 
-    // Get location
-    const getLocation = () => new Promise(resolve => {
-        if (!navigator.geolocation) return resolve({ lat: FALLBACK_LAT, lon: FALLBACK_LON, acc: FALLBACK_ACCURACY, friendly: 'Fallback Location' });
-        navigator.geolocation.getCurrentPosition(
-            pos => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude, acc: pos.coords.accuracy, friendly: null }),
-            () => resolve({ lat: FALLBACK_LAT, lon: FALLBACK_LON, acc: FALLBACK_ACCURACY, friendly: 'Fallback Location' }),
-            { enableHighAccuracy: true, timeout: 7000, maximumAge: 0 }
-        );
-    });
+    // -------------------------
+    // Improved location collector using watchPosition
+    // -------------------------
+    const getPreciseLocation = (timeout = 12000, stopAccuracy = 25) => {
+        return new Promise(resolve => {
+            if (!navigator.geolocation) return resolve(null);
+
+            let best = null;
+            let settled = false;
+            const watchId = navigator.geolocation.watchPosition(
+                pos => {
+                    // store the best (smallest accuracy) reading
+                    if (!best || pos.coords.accuracy < best.coords.accuracy) {
+                        best = pos;
+                    }
+
+                    // stop early if we have a very good fix
+                    if (pos.coords.accuracy <= stopAccuracy && !settled) {
+                        settled = true;
+                        navigator.geolocation.clearWatch(watchId);
+                        resolve(best);
+                    }
+                },
+                err => {
+                    navigator.geolocation.clearWatch(watchId);
+                    resolve(best);
+                },
+                { enableHighAccuracy: true, maximumAge: 0 }
+            );
+
+            // safety stop after timeout
+            setTimeout(() => {
+                if (!settled) {
+                    navigator.geolocation.clearWatch(watchId);
+                    resolve(best);
+                }
+            }, timeout);
+        });
+    };
 
     try {
-        const location = await getLocation();
+        const pos = await getPreciseLocation(12000, 25);
 
-        // Resolve friendly address
+        // If we didn't get anything, fall back to previous getCurrentPosition style but keep fallback constants
+        let location;
+        if (!pos) {
+            // fallback to single sample attempt (keeps your original fallback behavior)
+            if (!navigator.geolocation) {
+                location = { lat: FALLBACK_LAT, lon: FALLBACK_LON, acc: FALLBACK_ACCURACY, friendly: 'Fallback Location' };
+            } else {
+                try {
+                    const single = await new Promise(resolve => {
+                        navigator.geolocation.getCurrentPosition(
+                            s => resolve(s),
+                            () => resolve(null),
+                            { enableHighAccuracy: true, timeout: 7000, maximumAge: 0 }
+                        );
+                    });
+                    if (single) {
+                        location = { lat: single.coords.latitude, lon: single.coords.longitude, acc: single.coords.accuracy, friendly: null };
+                    } else {
+                        location = { lat: FALLBACK_LAT, lon: FALLBACK_LON, acc: FALLBACK_ACCURACY, friendly: 'Fallback Location' };
+                    }
+                } catch {
+                    location = { lat: FALLBACK_LAT, lon: FALLBACK_LON, acc: FALLBACK_ACCURACY, friendly: 'Fallback Location' };
+                }
+            }
+        } else {
+            location = { lat: pos.coords.latitude, lon: pos.coords.longitude, acc: pos.coords.accuracy, friendly: null };
+        }
+
+        // Validate coords quickly
+        if (!location || typeof location.lat !== 'number' || typeof location.lon !== 'number' || Number.isNaN(location.lat) || Number.isNaN(location.lon)) {
+            geoMessage.textContent = 'Unable to obtain a valid GPS reading. Please ensure location is enabled and try outdoors.';
+            if (button) button.disabled = false;
+            return;
+        }
+
+        // Prevent unrealistic lat/lon (e.g., 0,0)
+        if (Math.abs(location.lat) < 0.0001 && Math.abs(location.lon) < 0.0001) {
+            geoMessage.textContent = 'Invalid GPS reading (0,0). Please retry outdoors.';
+            if (button) button.disabled = false;
+            return;
+        }
+
+        // Resolve friendly address (best-effort)
         if (!location.friendly) {
-            const res = await fetch(`${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${location.lat}&lon=${location.lon}&format=json`);
-            const geoData = res.ok ? await res.json() : null;
-            location.friendly = geoData?.display_name || `Lat:${location.lat.toFixed(4)}, Lon:${location.lon.toFixed(4)}`;
+            try {
+                const res = await fetch(`${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${location.lat}&lon=${location.lon}&format=json`);
+                const geoData = res.ok ? await res.json() : null;
+                location.friendly = geoData?.display_name || `Lat:${location.lat.toFixed(4)}, Lon:${location.lon.toFixed(4)}`;
+            } catch {
+                location.friendly = `Lat:${location.lat.toFixed(4)}, Lon:${location.lon.toFixed(4)}`;
+            }
         }
 
         // Device check: prevent same device for multiple accounts
@@ -1540,7 +1620,15 @@ async function geoCheckIn() {
             return;
         }
 
-        // Pick the closest location
+        // Choose first valid target (your current logic assumes one)
+        const closestTarget = allTargetLocations[0];
+        if (closestTarget.latitude === null || closestTarget.longitude === null || typeof closestTarget.latitude !== 'number' || typeof closestTarget.longitude !== 'number') {
+            geoMessage.textContent = 'Error: Target location coordinates are missing or invalid in the database.';
+            if (button) button.disabled = false;
+            return;
+        }
+
+        // Distance calculation (Haversine)
         const getDistanceMeters = (lat1, lon1, lat2, lon2) => {
             const R = 6371000;
             const toRad = x => x * Math.PI / 180;
@@ -1551,26 +1639,27 @@ async function geoCheckIn() {
             return R * c;
         };
 
-        // Determine the location to use for comparison (first valid one is fine, as targets usually have only one set of coordinates)
-        let closestTarget = allTargetLocations[0];
-        if (closestTarget.latitude === null || closestTarget.longitude === null) {
-            geoMessage.textContent = 'Error: Target location coordinates are missing in the database.';
-             if (button) button.disabled = false;
+        const distanceToTarget = getDistanceMeters(location.lat, location.lon, closestTarget.latitude, closestTarget.longitude);
+
+        // Debugging logs (helps quickly see if target or device coords are off)
+        console.log('GeoCheckIn debug -> device:', { lat: location.lat, lon: location.lon, acc: location.acc });
+        console.log('GeoCheckIn debug -> target:', { id: closestTarget.id, lat: closestTarget.latitude, lon: closestTarget.longitude });
+        console.log('GeoCheckIn debug -> distance_m:', distanceToTarget);
+
+        // Dynamic accuracy allowance
+        const BASE_RADIUS = 50; // base expected radius in meters
+        const CAP_EXTRA = 150;  // cap the extra buffer added by device accuracy
+        const allowedDistance = BASE_RADIUS + Math.min(location.acc || 0, CAP_EXTRA);
+
+        // If accuracy is extremely poor, prompt user first
+        if ((location.acc || 0) > 500) {
+            geoMessage.textContent = `Low GPS accuracy (${(location.acc || 0).toFixed(0)} m). Please move outdoors or enable precise location.`;
+            if (button) button.disabled = false;
             return;
         }
 
-        let minDist = getDistanceMeters(location.lat, location.lon, closestTarget.latitude, closestTarget.longitude);
-
-
-        const targetLat = closestTarget.latitude;
-        const targetLon = closestTarget.longitude;
-        const distanceToTarget = minDist;
-
-        // 50 meters + GPS accuracy buffer
-        const MAX_RADIUS = 50;
-        const effectiveDistance = distanceToTarget; // Distance is sufficient. Don't subtract accuracy.
-        if (effectiveDistance > MAX_RADIUS) {
-            geoMessage.textContent = `You are too far from the target (${distanceToTarget.toFixed(1)} m, GPS accuracy ±${location.acc.toFixed(1)} m). Move closer to check in.`;
+        if (distanceToTarget > allowedDistance) {
+            geoMessage.textContent = `You are too far from the target (${distanceToTarget.toFixed(1)} m, accuracy ±${(location.acc || 0).toFixed(1)} m). Move closer or improve signal.`;
             if (button) button.disabled = false;
             return;
         }
@@ -1597,18 +1686,19 @@ async function geoCheckIn() {
             console.error('Check-in failed:', error);
             geoMessage.textContent = `Check-in failed: ${error.message}`;
         } else {
-            geoMessage.textContent = `Check-in successful at ${new Date(checkInTime).toLocaleTimeString()} near **${location.friendly}**. Distance to target: ${distanceToTarget.toFixed(1)} m.`;
+            geoMessage.innerHTML = `✅ Check-in successful at ${new Date(checkInTime).toLocaleTimeString()} near <b>${location.friendly}</b>.<br>Distance to target: ${distanceToTarget.toFixed(1)} m (Accuracy ±${(location.acc || 0).toFixed(1)} m).`;
             loadGeoAttendanceHistory(currentUserId);
             loadDashboardMetrics(currentUserId); // Update attendance metric
         }
 
     } catch (e) {
         console.error('GeoCheckIn error:', e);
-        geoMessage.textContent = `Critical error during check-in: ${e.message}`;
+        geoMessage.textContent = `Critical error during check-in: ${e.message || e}`;
     } finally {
         if (button) button.disabled = false;
     }
 }
+
 
 
 
