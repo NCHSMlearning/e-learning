@@ -36,6 +36,8 @@ const SESSIONS_TABLE = 'scheduled_sessions';
 const ATTENDANCE_TABLE = 'geo_attendance_logs';
 const MESSAGES_TABLE = 'messages'; // ✅ 'announcements' doesn’t exist
 const RESOURCES_TABLE = 'resources';
+// --- Storage Buckets ---
+const RESOURCES_BUCKET = 'resources';  // 👈 use your actual Supabase storage bucket name
 
 
 
