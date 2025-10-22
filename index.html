@@ -1254,7 +1254,7 @@ async function loadClinicalTargets() {
 
 
         if (block) {
-             const blockFilter = block.eq.${block},block.is.null; 
+             const blockFilter = `block.eq.${block},block.is.null`; 
              query = query.or(blockFilter);
         } else {
              query = query.is('block', null); 
@@ -1317,7 +1317,7 @@ async function loadClassTargets() {
 
 
         if (block) {
-             const blockFilter = block.eq.${block},block.is.null,block.eq.General; 
+             const blockFilter = `block.eq.${block},block.is.null,block.eq.General`; 
              query = query.or(blockFilter);
         } else {
              query = query.is('block', null); 
@@ -1396,7 +1396,7 @@ async function loadGeoAttendanceHistory(userId) {
 
     } catch (error) {
         console.error("Failed to load attendance history:", error);
-        tableBody.innerHTML = <tr><td colspan="6" style="color:#EF4444;">Error loading attendance logs: ${error.message}</td></tr>;
+        tableBody.innerHTML = `<tr><td colspan="6" style="color:#EF4444;">Error loading attendance logs: ${error.message}</td></tr>`;
     }
 }
 
@@ -1418,7 +1418,7 @@ function updateTargetSelect() {
         targetList = cachedClinicalAreas.map(d => ({ 
             id: d.id, 
             name: d.name, 
-            text: ${d.name} (Clinical) 
+            text: `${d.name} (Clinical)` 
         }));
         label = 'Department/Area:';
     } else if (sessionType === 'Class') {
@@ -1426,7 +1426,7 @@ function updateTargetSelect() {
             id: c.id, 
             name: c.name,
             code: c.code,
-            text: ${c.code ? c.code + ' - ' : ''}${c.name} (Class) 
+            text: `${c.code ? c.code + ' - ' : ''}${c.name} (Class)` 
         }));
         label = 'Course/Subject:';
     }
@@ -1438,22 +1438,22 @@ function updateTargetSelect() {
 
     if (targetList.length === 0) {
         const message = sessionType === 'Class' ? 'No active courses found for your block.' : 'No clinical areas assigned to your block.';
-        attendanceTargetSelect.innerHTML = <option value="">${message}</option>;
+        attendanceTargetSelect.innerHTML = `<option value="">${message}</option>`;
     } else {
         const defaultOption = document.createElement('option');
         defaultOption.value = '';
-        defaultOption.textContent = -- Select a ${label.replace(':', '')} --;
+        defaultOption.textContent = `-- Select a ${label.replace(':', '')} --`;
         attendanceTargetSelect.appendChild(defaultOption);
 
 
         targetList.forEach(target => {
             const option = document.createElement('option');
-            option.value = ${target.id}|${target.name}; 
+            option.value = `${target.id}|${target.name}`; 
             option.textContent = target.text;
             attendanceTargetSelect.appendChild(option);
         });
     }
-    geoMessage.innerHTML = Please select a specific **${label.replace(':', '')}** to check in.;
+    geoMessage.innerHTML = `Please select a specific **${label.replace(':', '')}** to check in.`;
 }
 
     // Persistent device ID
@@ -1504,9 +1504,9 @@ async function geoCheckIn() {
 
         // Resolve friendly address
         if (!location.friendly) {
-            const res = await fetch(${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${location.lat}&lon=${location.lon}&format=json);
+            const res = await fetch(`${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${location.lat}&lon=${location.lon}&format=json`);
             const geoData = res.ok ? await res.json() : null;
-            location.friendly = geoData?.display_name || Lat:${location.lat.toFixed(4)}, Lon:${location.lon.toFixed(4)};
+            location.friendly = geoData?.display_name || `Lat:${location.lat.toFixed(4)}, Lon:${location.lon.toFixed(4)}`;
         }
 
         // Device check: prevent same device for multiple accounts
@@ -1545,7 +1545,7 @@ async function geoCheckIn() {
             const toRad = x => x * Math.PI / 180;
             const dLat = toRad(lat2 - lat1);
             const dLon = toRad(lon2 - lon1);
-            const a = Math.sin(dLat/2)*2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)*2;
+            const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
             return R * c;
         };
@@ -1569,7 +1569,7 @@ async function geoCheckIn() {
         const MAX_RADIUS = 50;
         const effectiveDistance = distanceToTarget; // Distance is sufficient. Don't subtract accuracy.
         if (effectiveDistance > MAX_RADIUS) {
-            geoMessage.textContent = You are too far from the target (${distanceToTarget.toFixed(1)} m, GPS accuracy ±${location.acc.toFixed(1)} m). Move closer to check in.;
+            geoMessage.textContent = `You are too far from the target (${distanceToTarget.toFixed(1)} m, GPS accuracy ±${location.acc.toFixed(1)} m). Move closer to check in.`;
             if (button) button.disabled = false;
             return;
         }
@@ -1594,20 +1594,21 @@ async function geoCheckIn() {
 
         if (error) {
             console.error('Check-in failed:', error);
-            geoMessage.textContent = Check-in failed: ${error.message};
+            geoMessage.textContent = `Check-in failed: ${error.message}`;
         } else {
-            geoMessage.textContent = Check-in successful at ${new Date(checkInTime).toLocaleTimeString()} near **${location.friendly}**. Distance to target: ${distanceToTarget.toFixed(1)} m.;
+            geoMessage.textContent = `Check-in successful at ${new Date(checkInTime).toLocaleTimeString()} near **${location.friendly}**. Distance to target: ${distanceToTarget.toFixed(1)} m.`;
             loadGeoAttendanceHistory(currentUserId);
             loadDashboardMetrics(currentUserId); // Update attendance metric
         }
 
     } catch (e) {
         console.error('GeoCheckIn error:', e);
-        geoMessage.textContent = Critical error during check-in: ${e.message};
+        geoMessage.textContent = `Critical error during check-in: ${e.message}`;
     } finally {
-        if (button) button.disabled = false;
-    }
+        if (button) button.disabled = false;
+    }
 }
+
 
 // *************************************************************************
 // *** 6. SUPABASE DATA LOADING FUNCTIONS (Courses, Exams, Resources) ***
