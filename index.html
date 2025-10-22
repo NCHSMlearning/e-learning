@@ -1218,7 +1218,6 @@ if (uploadButton) {
     });
 }
 
-
 // *************************************************************************
 // *** 5. ATTENDANCE LOGIC (GeoCheckIn - final) ***
 // *************************************************************************
@@ -1239,7 +1238,7 @@ const CLINICAL_SITES = [
   { name: "Bahati Sub County Hospital", lat: -0.17024189527085296, lon: 36.12342488124838 }
 ];
 
-// Adjust verification radius here (meters) — set to 50 by default
+// Adjust verification radius here (meters)
 const VERIFICATION_RADIUS_METERS = 50;
 
 // ====== GEO UTILITIES ======
@@ -1249,14 +1248,15 @@ function getDistanceMeters(lat1, lon1, lat2, lon2) {
   const R = 6371000;
   const dLat = toRad(lat2 - lat1);
   const dLon = toRad(lon2 - lon1);
-  const a = Math.sin(dLat / 2) ** 2 +
-            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-            Math.sin(dLon / 2) ** 2;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+    Math.sin(dLon / 2) ** 2;
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 }
 
-// Wait for best GPS reading (watchPosition) up to timeoutMs, stop if desiredAcc reached
+// Wait for best GPS reading (watchPosition)
 function getAccuratePosition(timeoutMs = 15000, desiredAcc = 20) {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) return reject(new Error("Geolocation not supported"));
@@ -1265,10 +1265,8 @@ function getAccuratePosition(timeoutMs = 15000, desiredAcc = 20) {
     let settled = false;
     const watchId = navigator.geolocation.watchPosition(
       pos => {
-        // keep the best (smallest accuracy)
         if (!best || pos.coords.accuracy < best.coords.accuracy) best = pos;
 
-        // if good enough, stop early
         if (pos.coords.accuracy <= desiredAcc && !settled) {
           settled = true;
           navigator.geolocation.clearWatch(watchId);
@@ -1277,7 +1275,6 @@ function getAccuratePosition(timeoutMs = 15000, desiredAcc = 20) {
       },
       err => {
         navigator.geolocation.clearWatch(watchId);
-        // Resolve with best if any; otherwise reject with error
         if (best) resolve(best);
         else reject(err);
       },
@@ -1292,11 +1289,6 @@ function getAccuratePosition(timeoutMs = 15000, desiredAcc = 20) {
     }, timeoutMs);
   });
 }
-
-/**
- * 💡 FIX: Removed the unreliable findClinicalSiteByName helper function
- * and moved the robust matching logic directly into geoCheckIn().
- */
 
 // ---------------------------
 // Improved geoCheckIn()
@@ -1327,12 +1319,11 @@ async function geoCheckIn() {
   geoMessage.textContent = 'Acquiring accurate GPS — please wait (up to 15s)...';
 
   try {
-    // 1) Get accurate position (best effort)
+    // 1) Get accurate position
     let pos;
     try {
-      pos = await getAccuratePosition(15000, 20); // 15s timeout, 20m desired accuracy
+      pos = await getAccuratePosition(15000, 20);
     } catch (err) {
-      // If we timed out or error, try single-shot as fallback
       try {
         pos = await new Promise((resolve, reject) => {
           navigator.geolocation.getCurrentPosition(
@@ -1342,7 +1333,6 @@ async function geoCheckIn() {
           );
         });
       } catch (e2) {
-        // fallback to error
         throw new Error('Unable to get location. Ensure location is enabled and try again.');
       }
     }
@@ -1353,8 +1343,8 @@ async function geoCheckIn() {
       acc: pos.coords.accuracy
     };
 
-    // Validate coords
-    if (typeof location.lat !== 'number' || typeof location.lon !== 'number' || Number.isNaN(location.lat) || Number.isNaN(location.lon)) {
+    if (typeof location.lat !== 'number' || typeof location.lon !== 'number' ||
+        Number.isNaN(location.lat) || Number.isNaN(location.lon)) {
       geoMessage.textContent = 'Invalid GPS reading — try again outdoors.';
       if (button) button.disabled = false;
       return;
@@ -1366,64 +1356,55 @@ async function geoCheckIn() {
       return;
     }
 
-  // Resolve friendly address (best-effort)
-let friendly = `Lat:${location.lat.toFixed(5)}, Lon:${location.lon.toFixed(5)}`;
-try {
-  const res = await fetch(
-    `${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${location.lat}&lon=${location.lon}&format=json`
-  );
-  if (res.ok) {
-    const geoData = await res.json();
-    friendly = geoData.display_name || friendly;
-  }
-} catch (e) {
-  console.warn("Reverse geocoding failed, using coordinates instead.");
-}
+    // Resolve friendly address
+    let friendly = `Lat:${location.lat.toFixed(5)}, Lon:${location.lon.toFixed(5)}`;
+    try {
+      const res = await fetch(
+        `${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${location.lat}&lon=${location.lon}&format=json`
+      );
+      if (res.ok) {
+        const geoData = await res.json();
+        friendly = geoData.display_name || friendly;
+      }
+    } catch (e) {
+      console.warn("Reverse geocoding failed, using coordinates instead.");
+    }
 
-
-    // 2) Determine official target coordinates
+    // 2) Determine target coordinates
     let targetCoords = null;
     let targetTypeName = null;
 
     if (sessionType === 'Class') {
-      // For class sessions, use the college coords (one campus)
       targetCoords = { lat: COLLEGE_COORDS.lat, lon: COLLEGE_COORDS.lon, name: COLLEGE_COORDS.name };
       targetTypeName = COLLEGE_COORDS.name;
     } else if (sessionType === 'Clinical') {
-      
-      // 💡 FIX: Robustly match selected target name/ID to known coordinates.
-      
-      // 1. Try to match the selected targetName to a clinical site from our hardcoded list
-      const matchedSite = CLINICAL_SITES.find(site => 
-        targetName.toLowerCase().includes(site.name.toLowerCase()) || 
+      const matchedSite = CLINICAL_SITES.find(site =>
+        targetName.toLowerCase().includes(site.name.toLowerCase()) ||
         site.name.toLowerCase().includes(targetName.toLowerCase())
       );
 
       if (matchedSite) {
         targetCoords = { lat: matchedSite.lat, lon: matchedSite.lon, name: matchedSite.name };
         targetTypeName = matchedSite.name;
-      } else {
-        // 2. Fallback: Check cached Clinical Areas (data loaded from Supabase)
-        if (Array.isArray(cachedClinicalAreas) && cachedClinicalAreas.length) {
-          const matched = cachedClinicalAreas.find(c => 
-            (String(c.id) === String(targetId) || (c.name && targetName.toLowerCase().includes(c.name.toLowerCase()))) &&
-            typeof c.latitude === 'number' && 
-            typeof c.longitude === 'number'
-          );
-          if (matched) {
-            targetCoords = { lat: matched.latitude, lon: matched.longitude, name: matched.name };
-            targetTypeName = matched.name;
-          }
+      } else if (Array.isArray(cachedClinicalAreas) && cachedClinicalAreas.length) {
+        const matched = cachedClinicalAreas.find(c =>
+          (String(c.id) === String(targetId) ||
+           (c.name && targetName.toLowerCase().includes(c.name.toLowerCase()))) &&
+          typeof c.latitude === 'number' &&
+          typeof c.longitude === 'number'
+        );
+        if (matched) {
+          targetCoords = { lat: matched.latitude, lon: matched.longitude, name: matched.name };
+          targetTypeName = matched.name;
         }
       }
     }
 
-    // If we still don't have target coords, warn but still log unverified
     if (!targetCoords) {
       geoMessage.textContent = 'Warning: No official coordinates found for this target. Check-in will be recorded as unverified.';
     }
 
-    // 3) Compute distance to target (if available)
+    // 3) Compute distance
     let distanceToTarget = null;
     if (targetCoords) {
       distanceToTarget = getDistanceMeters(location.lat, location.lon, targetCoords.lat, targetCoords.lon);
@@ -1432,21 +1413,17 @@ try {
     // 4) Decide verification
     let isVerified = false;
     if (distanceToTarget !== null) {
-      // dynamic allowance: allow buffer by device accuracy if you want
-      const allowed = VERIFICATION_RADIUS_METERS + Math.min(location.acc || 0, 150); // small buffer using accuracy, cap 150m
+      const allowed = VERIFICATION_RADIUS_METERS + Math.min(location.acc || 0, 150);
       if (distanceToTarget <= allowed) isVerified = true;
-    } else {
-      // no target coords -> cannot verify
-      isVerified = false;
     }
 
-    // Build payload fields to pass to RPC/insert
+    // Build payload
     const payload = {
       p_student_id: currentUserId,
       p_check_in_time: checkInTime,
       p_session_type: sessionType,
       p_target_id: targetId || null,
-      p_target_name: targetName || (targetTypeName || null),
+      p_target_name: targetName || targetTypeName || null,
       p_latitude: location.lat,
       p_longitude: location.lon,
       p_accuracy_m: location.acc,
@@ -1458,7 +1435,7 @@ try {
       p_is_verified: isVerified
     };
 
-    // Try RPC first (keeps your existing business logic)
+    // Try RPC
     let rpcError = null;
     try {
       const { error } = await sb.rpc('check_in_and_defer_fk', payload);
@@ -1467,11 +1444,10 @@ try {
       rpcError = rpcEx;
     }
 
-    // If RPC failed, fallback to direct insert into geo_attendance_logs
+    // Fallback insert
     if (rpcError) {
       console.warn('RPC failed, falling back to direct insert:', rpcError);
       try {
-        // Map fields to geo_attendance_logs column names
         const insertObj = {
           student_id: currentUserId,
           check_in_time: checkInTime,
@@ -1480,8 +1456,7 @@ try {
           accuracy_meters: location.acc,
           accuracy_m: location.acc,
           is_verified: isVerified,
-          // Use null for target_id, relying on target_name for human readability unless you know the FK relationship
-          target_id: null, 
+          target_id: null,
           course_id: (sessionType === 'Class' ? targetId : null),
           session_type: sessionType,
           target_name: targetName || targetTypeName,
@@ -1499,46 +1474,41 @@ try {
         };
 
         const { error: insertErr } = await sb.from('geo_attendance_logs').insert(insertObj);
-        if (insertErr) {
-          throw insertErr;
-        }
+        if (insertErr) throw insertErr;
       } catch (insertEx) {
         console.error('Direct insert failed:', insertEx);
         throw insertEx;
       }
     }
 
-   // 5) Final UI messages + history refresh
-if (isVerified) {
-  const distText = distanceToTarget !== null ? `${distanceToTarget.toFixed(1)} m` : 'N/A';
-  geoMessage.innerHTML = `✅ Auto-verified${targetTypeName ? ' at ' + targetTypeName : ''} — distance ${distText} (accuracy ±${location.acc.toFixed(1)} m).`;
-} else {
-  const distText = distanceToTarget !== null ? `${distanceToTarget.toFixed(1)} m` : 'unknown';
-  geoMessage.innerHTML = `⏳ Check-in recorded (unverified). Distance: ${distText} (accuracy ±${location.acc.toFixed(1)} m). Admin verification required.`;
+    // 5) Final UI messages + refresh
+    if (isVerified) {
+      const distText = distanceToTarget !== null ? `${distanceToTarget.toFixed(1)} m` : 'N/A';
+      geoMessage.innerHTML = `✅ Auto-verified${targetTypeName ? ' at ' + targetTypeName : ''} — distance ${distText} (accuracy ±${location.acc.toFixed(1)} m).`;
+    } else {
+      const distText = distanceToTarget !== null ? `${distanceToTarget.toFixed(1)} m` : 'unknown';
+      geoMessage.innerHTML = `⏳ Check-in recorded (unverified). Distance: ${distText} (accuracy ±${location.acc.toFixed(1)} m). Admin verification required.`;
+    }
+
+    console.log('GeoCheckIn result', {
+      targetCoords,
+      location,
+      distanceToTarget,
+      isVerified,
+      payload,
+      rpcError
+    });
+
+    loadGeoAttendanceHistory(currentUserId);
+    loadDashboardMetrics(currentUserId);
+
+  } catch (e) {
+    console.error('GeoCheckIn error:', e);
+    geoMessage.textContent = `Error during check-in: ${e.message || e}`;
+  } finally {
+    if (button) button.disabled = false;
+  }
 }
-
-// Save some debugging info to console
-console.log('GeoCheckIn result', {
-  targetCoords,
-  location,
-  distanceToTarget,
-  isVerified,
-  payload,
-  rpcError
-});
-
-// Refresh UI
-loadGeoAttendanceHistory(currentUserId);
-loadDashboardMetrics(currentUserId);
-
-} catch (e) {
-  console.error('GeoCheckIn error:', e);
-  geoMessage.textContent = `Error during check-in: ${e.message || e}`;
-} finally {
-  if (button) button.disabled = false;
-}
-
-
 
 
 // *************************************************************************
