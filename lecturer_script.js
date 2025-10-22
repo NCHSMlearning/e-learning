@@ -957,129 +957,205 @@ async function loadLecturerExams() {
 
 
 
-
 // =================================================================
-// === 9. RESOURCES IMPLEMENTATION ===
+// === 9. RESOURCES IMPLEMENTATION (Upload, Edit, Delete) ===
 // =================================================================
 
 function populateResourceFormSelects() {
-    const targetProgram = lecturerTargetProgram;
-    const programs = targetProgram ? [{ id: targetProgram, name: targetProgram }] : [];
-    
-    const resourceProgramSelect = $('resource_program');
-    populateSelect(resourceProgramSelect, programs, 'id', 'name', 'Select Target Program');
-    if (targetProgram) {
-        resourceProgramSelect.value = targetProgram;
-        resourceProgramSelect.disabled = true;
-    } else {
-        resourceProgramSelect.disabled = false;
-    }
+  const targetProgram = lecturerTargetProgram;
+  const programs = targetProgram ? [{ id: targetProgram, name: targetProgram }] : [];
 
-    populateSelect($('resource_intake'), allIntakes, 'id', 'name', 'Select Target Intake');
+  const resourceProgramSelect = $('resource_program');
+  populateSelect(resourceProgramSelect, programs, 'id', 'name', 'Select Target Program');
+  if (targetProgram) {
+    resourceProgramSelect.value = targetProgram;
+    resourceProgramSelect.disabled = true;
+  } else {
+    resourceProgramSelect.disabled = false;
+  }
 
-    const blockSelect = $('resource_block');
-    const selectedProgram = targetProgram;
-    
-    if (selectedProgram && ACADEMIC_STRUCTURE[selectedProgram]) {
-        const blocks = ACADEMIC_STRUCTURE[selectedProgram].map(name => ({ id: name, name: name }));
-        populateSelect(blockSelect, blocks, 'id', 'name', `Select ${selectedProgram} Block/Term`);
-    } else {
-        blockSelect.innerHTML = '<option value="">-- Select Program First --</option>';
-    }
+  populateSelect($('resource_intake'), allIntakes, 'id', 'name', 'Select Target Intake');
+
+  const blockSelect = $('resource_block');
+  const selectedProgram = targetProgram;
+
+  if (selectedProgram && ACADEMIC_STRUCTURE[selectedProgram]) {
+    const blocks = ACADEMIC_STRUCTURE[selectedProgram].map(name => ({ id: name, name: name }));
+    populateSelect(blockSelect, blocks, 'id', 'name', `Select ${selectedProgram} Block/Term`);
+  } else {
+    blockSelect.innerHTML = '<option value="">-- Select Program First --</option>';
+  }
 }
 
+// === Upload Resource ===
 async function handleUploadResource(e) {
-    e.preventDefault();
-    const button = e.submitter;
-    setButtonLoading(button, true, 'Upload Resource');
+  e.preventDefault();
+  const button = e.submitter;
+  setButtonLoading(button, true, 'Upload Resource');
 
-    const file = $('resource_file').files[0];
-    const formData = {
-        title: $('resource_title').value,
-        program: $('resource_program').value,
-        intake: $('resource_intake').value,
-        block: $('resource_block').value
-    };
+  const file = $('resource_file').files[0];
+  const formData = {
+    title: $('resource_title').value,
+    program: $('resource_program').value,
+    intake: $('resource_intake').value,
+    block: $('resource_block').value
+  };
 
-    if (Object.values(formData).some(v => !v) || !file) {
-        showFeedback('Please fill in all details and select a file.', 'error');
-        setButtonLoading(button, false);
-        return;
-    }
-    
-    const filePath = `documents/${formData.program}/${formData.block}/${Date.now()}_${file.name}`; 
+  if (Object.values(formData).some(v => !v) || !file) {
+    showFeedback('Please fill in all details and select a file.', 'error');
+    setButtonLoading(button, false);
+    return;
+  }
 
-    try {
-        // 1. Upload file to Storage
-        const { error: uploadError } = await sb.storage
-            .from(RESOURCES_BUCKET)
-            .upload(filePath, file);
+  const filePath = `documents/${formData.program}/${formData.block}/${Date.now()}_${file.name}`;
 
-        if (uploadError) throw uploadError;
-        
-        // 2. Get Public URL
-        const { data: urlData } = sb.storage.from(RESOURCES_BUCKET).getPublicUrl(filePath);
-        const publicUrl = urlData.publicUrl;
+  try {
+    // 1. Upload file to Storage
+    const { error: uploadError } = await sb.storage
+      .from(RESOURCES_BUCKET)
+      .upload(filePath, file);
+    if (uploadError) throw uploadError;
 
-        // 3. Insert record into the database
+    // 2. Get Public URL
+    const { data: urlData } = sb.storage.from(RESOURCES_BUCKET).getPublicUrl(filePath);
+    const publicUrl = urlData.publicUrl;
 
-const { error: dbError } = await sb.from(RESOURCES_TABLE).insert({
-  title: formData.title,
-  program_type: formData.program,     // ✅ matches actual column name
-  block_term: formData.block,         // ✅ matches your table
-  intake_year: formData.intake,       // ✅ matches your table
-  file_url: publicUrl,
-  file_name: file.name,
-  uploaded_by: currentUserProfile.user_id,  // ✅ use correct column
-  allow_download: true,               // optional: include if your schema needs it
-});
-            
-        if (dbError) throw dbError;
-        
-        showFeedback(`✅ Resource "${formData.title}" uploaded successfully!`, 'success');
-        e.target.reset();
-        loadLecturerResources();
-        
-    } catch (error) {
-        console.error('Resource Upload Error:', error);
-        showFeedback(`Upload failed: ${error.message}`, 'error');
-    } finally {
-        setButtonLoading(button, false);
-    }
+    // 3. Insert record into database
+    const { error: dbError } = await sb.from(RESOURCES_TABLE).insert({
+      title: formData.title,
+      program_type: formData.program,
+      block_term: formData.block,
+      intake_year: formData.intake,
+      file_url: publicUrl,
+      file_name: file.name,
+      uploaded_by: currentUserProfile.user_id,
+      uploaded_by_name: currentUserProfile.full_name || currentUserProfile.name || 'Lecturer',
+      allow_download: true
+    });
+
+    if (dbError) throw dbError;
+
+    showFeedback(`✅ Resource "${formData.title}" uploaded successfully!`, 'success');
+    e.target.reset();
+    loadLecturerResources();
+  } catch (error) {
+    console.error('Resource Upload Error:', error);
+    showFeedback(`Upload failed: ${error.message}`, 'error');
+  } finally {
+    setButtonLoading(button, false);
+  }
 }
 
-async function loadLecturerResources() { 
-    const tbody = $('resources-list');
-    tbody.innerHTML = '<tr><td colspan="4">Loading shared resources...</td></tr>';
+// === Load Lecturer Resources ===
+async function loadLecturerResources() {
+  const tbody = $('resources-list');
+  tbody.innerHTML = '<tr><td colspan="6">Loading shared resources...</td></tr>';
 
-    // CRITICAL: Filtered by program via fetchDataForLecturer
-    const { data: resources, error } = await fetchDataForLecturer(
-        RESOURCES_TABLE, 
-        '*', 
-        {}, // Filtered by program in fetchDataForLecturer
-        'created_at', 
-        false
-    );
+  const { data: resources, error } = await fetchDataForLecturer(
+    RESOURCES_TABLE,
+    '*',
+    {},
+    'created_at',
+    false
+  );
 
-    if (error) {
-        tbody.innerHTML = `<tr><td colspan="4">Error: ${error.message}</td></tr>`;
-        return;
-    }
+  if (error) {
+    tbody.innerHTML = `<tr><td colspan="6">Error: ${error.message}</td></tr>`;
+    return;
+  }
 
-    if (resources.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4">No resources shared for this program yet.</td></tr>';
-        return;
-    }
+  if (!resources || resources.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6">No resources shared for this program yet.</td></tr>';
+    return;
+  }
 
-    tbody.innerHTML = resources.map(r => `
-        <tr>
-            <td><a href="${r.file_url}" target="_blank" style="color: #4C1D95; text-decoration: underline;">${r.title}</a></td>
-            <td>${r.course_id || 'General'}</td>
-            <td>${r.program_type}/${r.block_term} (${r.intake_year})</td>
-            <td>${new Date(r.created_at).toLocaleDateString()}</td>
-        </tr>
-    `).join('');
+  tbody.innerHTML = resources
+    .map(
+      r => `
+      <tr>
+        <td><a href="${r.file_url}" target="_blank" style="color:#4C1D95;text-decoration:underline;">${r.title}</a></td>
+        <td>${r.course_id || 'General'}</td>
+        <td>${r.program_type}/${r.block_term} (${r.intake_year})</td>
+        <td>${r.allow_download ? 'Yes' : 'No'}</td>
+        <td>${new Date(r.created_at).toLocaleDateString()}</td>
+        <td>
+          <button class="btn-action" onclick="openEditResourceModal(${r.id})">Edit</button>
+          <button class="btn-action btn-delete" onclick="deleteResource(${r.id})">Delete</button>
+        </td>
+      </tr>`
+    )
+    .join('');
 }
+
+// === Edit Modal Controls ===
+function openEditResourceModal(id) {
+  const modal = $('editResourceModal');
+  modal.dataset.resourceId = id;
+
+  // Fetch resource details
+  const row = [...document.querySelectorAll('#resources-list tr')].find(tr =>
+    tr.querySelector(`button[onclick="openEditResourceModal(${id})"]`)
+  );
+
+  if (!row) return;
+
+  const cells = row.querySelectorAll('td');
+  $('edit_resource_title').value = cells[0].textContent.trim();
+  $('edit_allow_download').checked = cells[3].textContent.trim() === 'Yes';
+
+  modal.style.display = 'flex';
+}
+
+function closeEditResourceModal() {
+  $('editResourceModal').style.display = 'none';
+}
+
+async function saveResourceEdits(e) {
+  e.preventDefault();
+  const id = $('editResourceModal').dataset.resourceId;
+  const title = $('edit_resource_title').value.trim();
+  const allowDownload = $('edit_allow_download').checked;
+
+  try {
+    const { error } = await sb
+      .from(RESOURCES_TABLE)
+      .update({ title, allow_download: allowDownload })
+      .eq('id', id);
+
+    if (error) throw error;
+
+    showFeedback('✅ Resource updated successfully.', 'success');
+    closeEditResourceModal();
+    loadLecturerResources();
+  } catch (err) {
+    console.error('Edit Error:', err);
+    showFeedback('Update failed: ' + err.message, 'error');
+  }
+}
+
+// === Delete Resource ===
+async function deleteResource(id) {
+  if (!confirm('Are you sure you want to delete this resource?')) return;
+
+  try {
+    const { error } = await sb.from(RESOURCES_TABLE).delete().eq('id', id);
+    if (error) throw error;
+
+    showFeedback('✅ Resource deleted successfully.', 'success');
+    loadLecturerResources();
+  } catch (err) {
+    console.error('Delete Error:', err);
+    showFeedback('Delete failed: ' + err.message, 'error');
+  }
+}
+
+// === Initialize ===
+$('upload-resource-form')?.addEventListener('submit', handleUploadResource);
+$('resource-search')?.addEventListener('keyup', () =>
+  filterTable('resource-search', 'resources-list', [0, 1, 2])
+);
+$('edit-resource-form')?.addEventListener('submit', saveResourceEdits);
+$('closeEditResourceModal')?.addEventListener('click', closeEditResourceModal);
 
 
 // =================================================================
