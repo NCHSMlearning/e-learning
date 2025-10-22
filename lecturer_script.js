@@ -2,7 +2,7 @@
 // === NCHSM LECTURER DASHBOARD SCRIPT - FINAL INTEGRATED VERSION ===
 // =================================================================
 
-// === 1. CONFIGURATION, CLIENT SETUP, & GLOBAL VARIABLES ===
+// === 1. CONFIGURATION, CLIENT SETUP, & GLOBAL VARIABLES (CORRECTION APPLIED HERE) ===
 
 if (window.location.pathname.endsWith('.html')) {
     const cleanPath = window.location.pathname.replace(/\.html$/, '');
@@ -11,8 +11,13 @@ if (window.location.pathname.endsWith('.html')) {
 // --- ⚠️ IMPORTANT: SUPABASE CONFIGURATION ---
 const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co'; 
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
-    
-// 🔒 Redirect to login if not authenticated
+
+// --- Global Supabase Client ---
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// 🔒 REDUNDANT BLOCK REMOVED/COMMENTED OUT: 
+// The initial session check logic is handled cleanly by initSession() called later.
+/*
   (async () => {
     const { data: { session } } = await sb.auth.getSession();
     if (!session) {
@@ -21,9 +26,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
       currentUserId = session.user.id;
     }
   })();
-
-// --- Global Supabase Client ---
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+*/
 
 // --- Table and Bucket Constants ---
 const USER_PROFILE_TABLE = 'consolidated_user_profiles_table'; 
@@ -38,6 +41,7 @@ const RESOURCES_BUCKET = 'resources';
 
 // --- Global Variables & Caches ---
 let currentUserProfile = null;
+let currentUserId = null; // Defined here for clarity, though it was set in the old redundant block
 let attendanceMap = null; 
 let allCourses = []; 
 let allStudents = []; 
@@ -235,7 +239,7 @@ async function reverseGeocodeAndDisplay(lat, lng, elementId) {
 
 
 // =================================================================
-// === 3. CORE NAVIGATION, AUTH & INITIALIZATION ===
+// === 3. CORE NAVIGATION, AUTH & INITIALIZATION (CORRECTION APPLIED HERE) ===
 // =================================================================
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -252,6 +256,7 @@ async function initSession() {
         if (sessionError || !session) {
             error = sessionError || { message: "No active session found." };
         } else {
+            currentUserId = session.user.id; // Ensure currentUserId is set here if session is valid
             const { data: userProfile, error: profileError } = await sb.from(USER_PROFILE_TABLE)
                 .select('*')
                 .eq('user_id', session.user.id)
@@ -279,9 +284,10 @@ async function initSession() {
         loadSectionData('dashboard'); 
         setupEventListeners();
     } else {
+        // 🚨 FIX: Redirect to /login instead of reloading, which prevents the infinite error pop-up
         console.error("Initialization Failed, Redirecting to Login:", error);
         alert("Authentication Failed: No active session found.\n\nPlease log in again.");
-        window.location.reload(); 
+        window.location.href = '/login'; // ✅ CLEAN REDIRECTION
     }
 }
 
@@ -399,7 +405,8 @@ async function logout() {
         console.error('Logout error:', error);
         showFeedback('Logout failed. Please try again.', 'error');
     } else {
-        window.location.reload(); 
+        // 🚨 FIX: Redirect to /login instead of reloading, which prevents the error pop-up
+        window.location.href = '/login'; // ✅ CLEAN REDIRECTION
     }
 }
 
@@ -756,7 +763,7 @@ async function loadTodaysAttendanceRecords() {
     // Fetch all attendance logs for today. We filter them locally using the cached student profiles.
 const { data: logs, error } = await sb
   .from(ATTENDANCE_TABLE)
-  .select(`*, user:student_id(full_name, program)`)   // ✅ use student_id and actual column name
+  .select(`*, user:user_id(full_name, student_program)`)   // Select 'student_program' from the joined profile
   .gte('check_in_time', today)
   .order('check_in_time', { ascending: false });
 
@@ -767,7 +774,8 @@ if (error) {
 
 // Filter logs to only show records for students in the lecturer's program or the lecturer's own check-ins
 const filteredLogs = logs.filter(l =>
-  l.user?.program === lecturerTargetProgram || l.role === 'lecturer'   // ✅ your column is "program" and "role"
+  l.user_role === 'lecturer' || // Keep lecturer's own log
+  (l.user_role === 'student' && l.user?.student_program === lecturerTargetProgram) // Keep student logs only if they match the program
 );
 
 if (!filteredLogs || filteredLogs.length === 0) {
@@ -1068,7 +1076,7 @@ async function loadLecturerResources() {
         <tr>
             <td><a href="${r.file_url}" target="_blank" style="color: #4C1D95; text-decoration: underline;">${r.title}</a></td>
             <td>${r.course_id || 'General'}</td>
-            <td>${r.program}/${r.block_term} (${r.intake_year})</td>
+            <td>${r.program_type}/${r.block_term} (${r.intake_year})</td>
             <td>${new Date(r.created_at).toLocaleDateString()}</td>
         </tr>
     `).join('');
