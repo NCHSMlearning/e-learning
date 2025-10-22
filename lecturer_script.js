@@ -467,7 +467,6 @@ async function handlePhotoUpload(file) {
     }
 }
 
-
 // =================================================================
 // === 5. STUDENT, COURSE & DASHBOARD LOADERS ===
 // =================================================================
@@ -478,18 +477,20 @@ async function loadLecturerDashboardData() {
     
     const today = new Date().toISOString().split('T')[0];
     
-    // Use fetchDataForLecturer to ensure program filtering on sessions
-    const { data: recentSessions } = await fetchDataForLecturer(SESSIONS_TABLE, 'id', { 
-        lecturer_id: currentUserProfile.user_id,
-        session_date: today 
-    });
+    // Fetch today's sessions for this lecturer
+    const { data: recentSessions } = await fetchDataForLecturer(
+        SESSIONS_TABLE,
+        'id',
+        { lecturer_id: currentUserProfile.user_id, session_date: today }
+    );
     
     $('recent_sessions_count').textContent = recentSessions?.length || '0';
 }
 
 async function loadLecturerStudents() {
     if (!currentUserProfile || !lecturerTargetProgram) {
-        $('lecturer-students-table').innerHTML = `<tr><td colspan="7">No student program is assigned to your department.</td></tr>`;
+        $('lecturer-students-table').innerHTML = `
+            <tr><td colspan="7">No student program is assigned to your department.</td></tr>`;
         return;
     }
 
@@ -498,26 +499,36 @@ async function loadLecturerStudents() {
 
     tbody.innerHTML = '<tr><td colspan="7">Loading assigned students...</td></tr>';
     
-    // Students are already filtered by program in allStudents cache (see fetchGlobalDataCaches)
-    const studentsHtml = allStudents.map(profile => {
-        return `
-            <tr>
-                <td>${profile.full_name || 'N/A'}</td>
-                <td>${profile.email || 'N/A'}</td>
-                <td>${profile.student_program || 'N/A'}</td>
-                <td>${profile.intake_year || 'N/A'}</td>
-                <td>${profile.block_term || 'N/A'}</td>
-                <td><span style="color:${profile.status === 'Active' ? '#10B981' : '#F59E0B'}">${profile.status || 'Active'}</span></td>
-                <td><button class="btn-action" onclick="showSendMessageModal('${profile.user_id}', '${profile.full_name}')">Message</button></td>
-            </tr>
-        `;
-    }).join('');
+    // Filter only students in this lecturer's assigned program
+    const filteredStudents = allStudents.filter(
+        s => s.program === lecturerTargetProgram
+    );
+
+    const studentsHtml = filteredStudents.map(profile => `
+        <tr>
+            <td>${profile.full_name || 'N/A'}</td>
+            <td>${profile.email || 'N/A'}</td>
+            <td>${profile.program || 'N/A'}</td>
+            <td>${profile.intake_year || 'N/A'}</td>
+            <td>${profile.block || 'N/A'}</td>
+            <td>
+                <span style="color:${profile.status === 'Active' ? '#10B981' : '#F59E0B'}">
+                    ${profile.status || 'Active'}
+                </span>
+            </td>
+            <td>
+                <button class="btn-action" 
+                        onclick="showSendMessageModal('${profile.user_id}', '${profile.full_name}')">
+                    Message
+                </button>
+            </td>
+        </tr>
+    `).join('');
 
     tbody.innerHTML = studentsHtml.length > 0 
         ? studentsHtml 
         : `<tr><td colspan="7">No ${lecturerTargetProgram} students found.</td></tr>`;
 }
-
 
 // =================================================================
 // === 6. SESSIONS IMPLEMENTATION ===
