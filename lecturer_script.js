@@ -186,29 +186,28 @@ async function fetchDataForLecturer(
         ATTENDANCE_TABLE          // Attendance
     ].includes(tableName);
 
+    // Apply program filter if table supports it
     if (isProgramTable && lecturerTargetProgram) {
         let programFieldName = '';
 
         // Determine which column holds the program for each table
         if (tableName === USER_PROFILE_TABLE || tableName === 'student_lecturer_view') {
-            programFieldName = 'student_program';
+            programFieldName = 'program'; // ✅ Correct for your students table
         } else if (tableName === EXAMS_TABLE || tableName === SESSIONS_TABLE) {
-            programFieldName = 'target_program';
+            programFieldName = 'target_program'; // ✅ Matches exams_cats & sessions
         } else if (tableName === RESOURCES_TABLE) {
-            programFieldName = 'program_type'; // ✅ Correct column name in your resources table
+            programFieldName = 'program_type'; // ✅ Matches your resources table
         } else if (tableName === ATTENDANCE_TABLE) {
-            // Attendance filtering may be done in related queries later
-            programFieldName = null;
+            programFieldName = null; // handled elsewhere
         }
 
-        if (programFieldName) {
-            if (!filters[programFieldName]) {
-                query = query.eq(programFieldName, lecturerTargetProgram);
-            }
+        // Apply filter unless already provided
+        if (programFieldName && !filters[programFieldName]) {
+            query = query.eq(programFieldName, lecturerTargetProgram);
         }
     }
 
-    // Apply any additional filters
+    // Apply additional filters
     for (const key in filters) {
         if (filters[key] !== undefined && filters[key] !== null && filters[key] !== '') {
             query = query.eq(key, filters[key]);
@@ -225,6 +224,7 @@ async function fetchDataForLecturer(
     }
     return { data, error: null };
 }
+
 
 // =================================================================
 // === 3. CORE NAVIGATION, AUTH & INITIALIZATION (CORRECTION APPLIED HERE) ===
