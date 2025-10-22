@@ -166,46 +166,54 @@ async function fetchData(tableName, selectQuery = '*', filters = {}, order = 'cr
  * Applies the lecturer's 'lecturerTargetProgram' (KRCHN/TVET) filter 
  * to relevant tables (Students, Exams, Sessions, Resources).
  */
-async function fetchDataForLecturer(tableName, selectQuery = '*', filters = {}, order = 'created_at', ascending = false) {
+async function fetchDataForLecturer(
+    tableName,
+    selectQuery = '*',
+    filters = {},
+    order = 'created_at',
+    ascending = false
+) {
     let query = sb.from(tableName).select(selectQuery);
 
     const isProgramTable = [
-        USER_PROFILE_TABLE, 'student_lecturer_view', // Students
-        EXAMS_TABLE,        // Exams/Cats
-        SESSIONS_TABLE,     // Sessions
-        RESOURCES_TABLE,    // Shared Resources
-        ATTENDANCE_TABLE    // Attendance
+        USER_PROFILE_TABLE,       // Students / Profiles
+        'student_lecturer_view',  // View for lecturer-student mapping
+        EXAMS_TABLE,              // Exams/CATs
+        SESSIONS_TABLE,           // Sessions
+        RESOURCES_TABLE,          // Shared Resources
+        ATTENDANCE_TABLE          // Attendance
     ].includes(tableName);
 
-    // Apply the lecturer's target program filter if it exists and the table is relevant
     if (isProgramTable && lecturerTargetProgram) {
         let programFieldName = '';
+
+        // Determine which column holds the program for each table
         if (tableName === USER_PROFILE_TABLE || tableName === 'student_lecturer_view') {
             programFieldName = 'student_program';
-        } else if (tableName === EXAMS_TABLE || tableName === SESSIONS_TABLE || tableName === RESOURCES_TABLE) {
-            programFieldName = 'program';
+        } else if (tableName === EXAMS_TABLE || tableName === SESSIONS_TABLE) {
+            programFieldName = 'target_program';
+        } else if (tableName === RESOURCES_TABLE) {
+            programFieldName = 'program_type'; // ✅ Correct column name in your resources table
         } else if (tableName === ATTENDANCE_TABLE) {
-            // Attendance filtering is often done post-query on related student profile, 
-            // but we can try filtering on the profile link if Supabase allows it.
-            // For now, we apply profile-link filter in the attendance load function itself 
-            // for simplicity, but we keep the logic here for other program tables.
+            // Attendance filtering may be done in related queries later
+            programFieldName = null;
         }
-        
+
         if (programFieldName) {
-            // Apply the program filter, unless a specific program filter was already provided
             if (!filters[programFieldName]) {
-                 query = query.eq(programFieldName, lecturerTargetProgram);
+                query = query.eq(programFieldName, lecturerTargetProgram);
             }
         }
     }
-    
-    // Apply existing filters
+
+    // Apply any additional filters
     for (const key in filters) {
         if (filters[key] !== undefined && filters[key] !== null && filters[key] !== '') {
             query = query.eq(key, filters[key]);
         }
     }
-    
+
+    // Apply sorting
     query = query.order(order, { ascending });
 
     const { data, error } = await query;
@@ -215,28 +223,6 @@ async function fetchDataForLecturer(tableName, selectQuery = '*', filters = {}, 
     }
     return { data, error: null };
 }
-
-async function reverseGeocodeAndDisplay(lat, lng, elementId) {
-    const el = $(elementId);
-    if (!el) return;
-    el.textContent = `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)} (Fetching address...)`;
-
-    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`;
-    
-    try {
-        const response = await fetch(url);
-        const data = await response.json();
-        if (data.display_name) {
-            el.textContent = data.display_name;
-        } else {
-            el.textContent = `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)} (Address not found)`;
-        }
-    } catch (error) {
-        console.error("Reverse Geocoding Error:", error);
-        el.textContent = `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)} (Geocoding failed)`;
-    }
-}
-
 
 // =================================================================
 // === 3. CORE NAVIGATION, AUTH & INITIALIZATION (CORRECTION APPLIED HERE) ===
