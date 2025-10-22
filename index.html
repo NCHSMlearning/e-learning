@@ -1293,21 +1293,10 @@ function getAccuratePosition(timeoutMs = 15000, desiredAcc = 20) {
   });
 }
 
-// Helper: try to match a target name to a clinical site from CLINICAL_SITES
-function findClinicalSiteByName(targetName) {
-  if (!targetName) return null;
-  const tn = targetName.toLowerCase();
-  // First try contains match for each site name
-  for (const s of CLINICAL_SITES) {
-    if (tn.includes(s.name.toLowerCase())) return s;
-  }
-  // Try token match (if targetName is short or slightly different)
-  for (const s of CLINICAL_SITES) {
-    const tokens = s.name.toLowerCase().split(/\s+/);
-    if (tokens.every(tok => tok.length < 3 || tn.includes(tok))) return s;
-  }
-  return null;
-}
+/**
+ * 💡 FIX: Removed the unreliable findClinicalSiteByName helper function
+ * and moved the robust matching logic directly into geoCheckIn().
+ */
 
 // ---------------------------
 // Improved geoCheckIn()
@@ -1378,9 +1367,9 @@ async function geoCheckIn() {
     }
 
     // Resolve friendly address (best-effort)
-    let friendly = `Lat:${location.lat.toFixed(5)}, Lon:${location.lon.toFixed(5)}`;
+    let friendly = Lat:${location.lat.toFixed(5)}, Lon:${location.lon.toFixed(5)};
     try {
-      const res = await fetch(`${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${location.lat}&lon=${location.lon}&format=json`);
+      const res = await fetch(${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${location.lat}&lon=${location.lon}&format=json);
       if (res.ok) {
         const geoData = await res.json();
         friendly = geoData.display_name || friendly;
@@ -1398,17 +1387,27 @@ async function geoCheckIn() {
       targetCoords = { lat: COLLEGE_COORDS.lat, lon: COLLEGE_COORDS.lon, name: COLLEGE_COORDS.name };
       targetTypeName = COLLEGE_COORDS.name;
     } else if (sessionType === 'Clinical') {
-      // Try to match the selected targetName to a clinical site from our list
-      const matchedSite = findClinicalSiteByName(targetName) || null;
+      
+      // 💡 FIX: Robustly match selected target name/ID to known coordinates.
+      
+      // 1. Try to match the selected targetName to a clinical site from our hardcoded list
+      const matchedSite = CLINICAL_SITES.find(site => 
+        targetName.toLowerCase().includes(site.name.toLowerCase()) || 
+        site.name.toLowerCase().includes(targetName.toLowerCase())
+      );
 
       if (matchedSite) {
         targetCoords = { lat: matchedSite.lat, lon: matchedSite.lon, name: matchedSite.name };
         targetTypeName = matchedSite.name;
       } else {
-        // Fallback: if cachedClinicalAreas has coordinates, use first match by id
+        // 2. Fallback: Check cached Clinical Areas (data loaded from Supabase)
         if (Array.isArray(cachedClinicalAreas) && cachedClinicalAreas.length) {
-          const matched = cachedClinicalAreas.find(c => String(c.id) === String(targetId) || (c.name && targetName.toLowerCase().includes(c.name.toLowerCase())));
-          if (matched && typeof matched.latitude === 'number' && typeof matched.longitude === 'number') {
+          const matched = cachedClinicalAreas.find(c => 
+            (String(c.id) === String(targetId) || (c.name && targetName.toLowerCase().includes(c.name.toLowerCase()))) &&
+            typeof c.latitude === 'number' && 
+            typeof c.longitude === 'number'
+          );
+          if (matched) {
             targetCoords = { lat: matched.latitude, lon: matched.longitude, name: matched.name };
             targetTypeName = matched.name;
           }
@@ -1416,7 +1415,7 @@ async function geoCheckIn() {
       }
     }
 
-    // If we still don't have target coords, warn but still log unverified (user asked to allow check-ins even if far)
+    // If we still don't have target coords, warn but still log unverified
     if (!targetCoords) {
       geoMessage.textContent = 'Warning: No official coordinates found for this target. Check-in will be recorded as unverified.';
     }
@@ -1478,7 +1477,8 @@ async function geoCheckIn() {
           accuracy_meters: location.acc,
           accuracy_m: location.acc,
           is_verified: isVerified,
-          target_id: null, // if you want to store uuid of target, adjust mapping accordingly
+          // Use null for target_id, relying on target_name for human readability unless you know the FK relationship
+          target_id: null, 
           course_id: (sessionType === 'Class' ? targetId : null),
           session_type: sessionType,
           target_name: targetName || targetTypeName,
@@ -1507,11 +1507,11 @@ async function geoCheckIn() {
 
     // 5) Final UI messages + history refresh
     if (isVerified) {
-      const distText = distanceToTarget !== null ? `${distanceToTarget.toFixed(1)} m` : 'N/A';
-      geoMessage.innerHTML = `✅ Auto-verified${targetTypeName ? ' at ' + targetTypeName : ''} — distance ${distText} (accuracy ±${location.acc.toFixed(1)} m).`;
+      const distText = distanceToTarget !== null ? ${distanceToTarget.toFixed(1)} m : 'N/A';
+      geoMessage.innerHTML = ✅ Auto-verified${targetTypeName ? ' at ' + targetTypeName : ''} — distance ${distText} (accuracy ±${location.acc.toFixed(1)} m).;
     } else {
-      const distText = distanceToTarget !== null ? `${distanceToTarget.toFixed(1)} m` : 'unknown';
-      geoMessage.innerHTML = `⏳ Check-in recorded (unverified). Distance: ${distText} (accuracy ±${location.acc.toFixed(1)} m). Admin verification required.`;
+      const distText = distanceToTarget !== null ? ${distanceToTarget.toFixed(1)} m : 'unknown';
+      geoMessage.innerHTML = ⏳ Check-in recorded (unverified). Distance: ${distText} (accuracy ±${location.acc.toFixed(1)} m). Admin verification required.;
     }
 
     // Save some debugging info to console
@@ -1525,11 +1525,12 @@ async function geoCheckIn() {
 
   } catch (e) {
     console.error('GeoCheckIn error:', e);
-    geoMessage.textContent = `Error during check-in: ${e.message || e}`;
+    geoMessage.textContent = Error during check-in: ${e.message || e};
   } finally {
-    if (button) button.disabled = false;
-  }
+    if (button) button.disabled = false;
+  }
 }
+
 
 
 // *************************************************************************
