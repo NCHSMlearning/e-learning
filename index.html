@@ -1222,14 +1222,13 @@ if (uploadButton) {
 // *** 5. ATTENDANCE LOGIC (GeoCheckIn) ***
 // *************************************************************************
 
-// Loads clinical areas for the student's cohort.
+// Load clinical areas for the student's cohort
 async function loadClinicalTargets() {
-    if (!currentUserProfile || !currentUserProfile.program && !currentUserProfile.department || !currentUserProfile.intake_year) {
+    if (!currentUserProfile || (!currentUserProfile.program && !currentUserProfile.department) || !currentUserProfile.intake_year) {
         await loadProfile(currentUserId); 
     }
 
     const program = currentUserProfile?.program || currentUserProfile?.department;
-
     if (!program || !currentUserProfile.intake_year) {
         cachedClinicalAreas = [];
         return;
@@ -1241,26 +1240,22 @@ async function loadClinicalTargets() {
     try {
         let query = sb
             .from('clinical_areas')
-            .select('id, name, latitude, longitude')
+            .select('id, name')
             .eq('program', program)
             .eq('intake_year', intakeYear);
 
         if (block) {
-             const blockFilter = `block.eq.${block},block.is.null`; 
-             query = query.or(blockFilter);
+            query = query.or(`block.eq.${block},block.is.null`);
         } else {
-             query = query.is('block', null); 
+            query = query.is('block', null);
         }
 
         const { data, error } = await query.order('name');
-
         if (error) throw error;
 
-        cachedClinicalAreas = data.map(area => ({ 
-            id: area.id, 
-            name: area.name,
-            latitude: area.latitude,
-            longitude: area.longitude
+        cachedClinicalAreas = data.map(area => ({
+            id: area.id,
+            name: area.name
         }));
 
     } catch (error) {
@@ -1269,16 +1264,13 @@ async function loadClinicalTargets() {
     }
 }
 
-/**
- * Loads courses specifically for the 'Class' attendance check-in dropdown.
- */
+// Load courses for the 'Class' attendance dropdown
 async function loadClassTargets() {
-    if (!currentUserProfile || !currentUserProfile.program && !currentUserProfile.department || !currentUserProfile.intake_year) {
+    if (!currentUserProfile || (!currentUserProfile.program && !currentUserProfile.department) || !currentUserProfile.intake_year) {
         await loadProfile(currentUserId); 
     }
 
     const program = currentUserProfile?.program || currentUserProfile?.department;
-
     if (!program || !currentUserProfile.intake_year) {
         cachedCourses = [];
         return;
@@ -1289,28 +1281,24 @@ async function loadClassTargets() {
 
     try {
         let query = sb
-            .from('courses') 
-            .select('id, name, code, latitude, longitude') 
+            .from('courses')
+            .select('id, name, code')
             .eq('program', program)
             .eq('intake_year', intakeYear);
 
         if (block) {
-             const blockFilter = `block.eq.${block},block.is.null,block.eq.General`; 
-             query = query.or(blockFilter);
+            query = query.or(`block.eq.${block},block.is.null,block.eq.General`);
         } else {
-             query = query.is('block', null); 
+            query = query.is('block', null);
         }
 
         const { data, error } = await query.order('name');
-
         if (error) throw error;
 
-        cachedCourses = data.map(course => ({ 
-            id: course.id, 
+        cachedCourses = data.map(course => ({
+            id: course.id,
             name: course.name,
-            code: course.code,
-            latitude: course.latitude,
-            longitude: course.longitude 
+            code: course.code
         }));
 
     } catch (error) {
@@ -1319,9 +1307,7 @@ async function loadClassTargets() {
     }
 }
 
-/**
- * Function responsible for fetching and displaying the student's geo check-in history.
- */
+// Fetch and display student's geo check-in history
 async function loadGeoAttendanceHistory(userId) {
     const tableBody = document.getElementById('geo-attendance-history');
     if (!tableBody) return;
@@ -1333,12 +1319,11 @@ async function loadGeoAttendanceHistory(userId) {
             .select('check_in_time, session_type, target_name, location_friendly_name, accuracy_m, is_verified')
             .eq('student_id', userId)
             .order('check_in_time', { ascending: false })
-            .limit(100); 
+            .limit(100);
 
         if (error) throw error;
 
         tableBody.innerHTML = '';
-
         if (logs.length === 0) {
             tableBody.innerHTML = '<tr><td colspan="6">No check-in logs found.</td></tr>';
             return;
@@ -1347,7 +1332,7 @@ async function loadGeoAttendanceHistory(userId) {
         logs.forEach(log => {
             const timeStr = new Date(log.check_in_time).toLocaleString();
             const verifiedText = log.is_verified === true ? '✅ Yes' : (log.is_verified === false ? '❌ No' : '⏳ Pending');
-            const row = `
+            tableBody.innerHTML += `
                 <tr>
                     <td>${timeStr}</td>
                     <td>${log.session_type}</td>
@@ -1357,7 +1342,6 @@ async function loadGeoAttendanceHistory(userId) {
                     <td>${verifiedText}</td>
                 </tr>
             `;
-            tableBody.innerHTML += row;
         });
 
     } catch (error) {
@@ -1366,29 +1350,20 @@ async function loadGeoAttendanceHistory(userId) {
     }
 }
 
+// Update target select dropdown based on session type
 function updateTargetSelect() {
-    if (!sessionTypeSelect || !attendanceTargetSelect || !geoMessage) return; 
+    if (!sessionTypeSelect || !attendanceTargetSelect || !geoMessage) return;
 
     const sessionType = sessionTypeSelect.value;
     attendanceTargetSelect.innerHTML = '';
-
     let targetList = [];
     let label = 'Department/Course:';
 
     if (sessionType === 'Clinical') {
-        targetList = cachedClinicalAreas.map(d => ({ 
-            id: d.id, 
-            name: d.name, 
-            text: `${d.name} (Clinical)` 
-        }));
+        targetList = cachedClinicalAreas.map(d => ({ id: d.id, name: d.name, text: `${d.name} (Clinical)` }));
         label = 'Department/Area:';
     } else if (sessionType === 'Class') {
-        targetList = cachedCourses.map(c => ({ 
-            id: c.id, 
-            name: c.name,
-            code: c.code,
-            text: `${c.code ? c.code + ' - ' : ''}${c.name} (Class)` 
-        }));
+        targetList = cachedCourses.map(c => ({ id: c.id, name: c.name, code: c.code, text: `${c.code ? c.code + ' - ' : ''}${c.name} (Class)` }));
         label = 'Course/Subject:';
     }
 
@@ -1406,11 +1381,12 @@ function updateTargetSelect() {
 
         targetList.forEach(target => {
             const option = document.createElement('option');
-            option.value = `${target.id}|${target.name}`; 
+            option.value = `${target.id}|${target.name}`;
             option.textContent = target.text;
             attendanceTargetSelect.appendChild(option);
         });
     }
+
     geoMessage.innerHTML = `Please select a specific **${label.replace(':', '')}** to check in.`;
 }
 
@@ -1418,12 +1394,13 @@ function updateTargetSelect() {
 function getDeviceId() {
     let deviceId = localStorage.getItem('device_id');
     if (!deviceId) {
-        deviceId = crypto.randomUUID(); // generate a new UUID
+        deviceId = crypto.randomUUID();
         localStorage.setItem('device_id', deviceId);
     }
     return deviceId;
 }
 
+// GeoCheckIn function without requiring target coordinates
 async function geoCheckIn() {
     if (!currentUserProfile) await loadProfile(currentUserId);
     const studentProfile = currentUserProfile;
@@ -1445,28 +1422,37 @@ async function geoCheckIn() {
     }
 
     if (button) button.disabled = true;
-    geoMessage.textContent = 'Attempting to get high-accuracy location...';
+    geoMessage.textContent = 'Processing check-in...';
 
-    // Get location
-    const getLocation = () => new Promise(resolve => {
-        if (!navigator.geolocation) return resolve({ lat: FALLBACK_LAT, lon: FALLBACK_LON, acc: FALLBACK_ACCURACY, friendly: 'Fallback Location' });
-        navigator.geolocation.getCurrentPosition(
-            pos => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude, acc: pos.coords.accuracy, friendly: null }),
-            () => resolve({ lat: FALLBACK_LAT, lon: FALLBACK_LON, acc: FALLBACK_ACCURACY, friendly: 'Fallback Location' }),
-            { enableHighAccuracy: true, timeout: 7000, maximumAge: 0 }
-        );
-    });
+    // Optional: get location
+    let location = { lat: null, lon: null, acc: null, friendly: 'N/A' };
+    if (navigator.geolocation) {
+        try {
+            await new Promise(resolve => {
+                navigator.geolocation.getCurrentPosition(
+                    pos => {
+                        location = {
+                            lat: pos.coords.latitude,
+                            lon: pos.coords.longitude,
+                            acc: pos.coords.accuracy,
+                            friendly: null
+                        };
+                        resolve();
+                    },
+                    () => resolve(),
+                    { enableHighAccuracy: true, timeout: 7000, maximumAge: 0 }
+                );
+            });
+
+            if (!location.friendly && location.lat && location.lon) {
+                const res = await fetch(`${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${location.lat}&lon=${location.lon}&format=json`);
+                const geoData = res.ok ? await res.json() : null;
+                location.friendly = geoData?.display_name || `Lat:${location.lat.toFixed(4)}, Lon:${location.lon.toFixed(4)}`;
+            }
+        } catch {}
+    }
 
     try {
-        const location = await getLocation();
-
-        // Resolve friendly address
-        if (!location.friendly) {
-            const res = await fetch(`${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${location.lat}&lon=${location.lon}&format=json`);
-            const geoData = res.ok ? await res.json() : null;
-            location.friendly = geoData?.display_name || `Lat:${location.lat.toFixed(4)}, Lon:${location.lon.toFixed(4)}`;
-        }
-
         // Device check
         const { data: existing, error: deviceError } = await sb
             .from('geo_attendance_logs')
@@ -1481,48 +1467,12 @@ async function geoCheckIn() {
             return;
         }
 
-        // Get all locations for the selected target
-        let allTargetLocations = [];
-        if (sessionType === 'Clinical') allTargetLocations = cachedClinicalAreas.filter(c => c.id == targetId);
-        else if (sessionType === 'Class') allTargetLocations = cachedCourses.filter(c => c.id == targetId);
-
-        if (allTargetLocations.length === 0) {
-            geoMessage.textContent = 'Error: Target location coordinates not found.';
-            if (button) button.disabled = false;
-            return;
-        }
-
-        const closestTarget = allTargetLocations[0];
-        if (closestTarget.latitude === null || closestTarget.longitude === null) {
-            geoMessage.textContent = 'Error: Target location coordinates are missing in the database.';
-            if (button) button.disabled = false;
-            return;
-        }
-
-        const getDistanceMeters = (lat1, lon1, lat2, lon2) => {
-            const R = 6371000;
-            const toRad = x => x * Math.PI / 180;
-            const dLat = toRad(lat2 - lat1);
-            const dLon = toRad(lon2 - lon1);
-            const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-            return R * c;
-        };
-
-        const distanceToTarget = getDistanceMeters(location.lat, location.lon, closestTarget.latitude, closestTarget.longitude);
-
-        const MAX_RADIUS = 50;
-        if (distanceToTarget > MAX_RADIUS) {
-            geoMessage.textContent = `You are too far from the target (${distanceToTarget.toFixed(1)} m, GPS accuracy ±${location.acc.toFixed(1)} m). Move closer to check in.`;
-            if (button) button.disabled = false;
-            return;
-        }
-
+        // Log attendance without coordinates validation
         const studentProgram = studentProfile.program || studentProfile.department;
         const { error } = await sb.rpc('check_in_and_defer_fk', {
             p_student_id: currentUserId,
             p_check_in_time: checkInTime,
-            p_session_type: sessionType === 'Clinical' ? 'Clinical' : 'Class',
+            p_session_type: sessionType,
             p_target_id: targetId,
             p_target_name: targetName,
             p_latitude: location.lat,
@@ -1536,21 +1486,20 @@ async function geoCheckIn() {
         });
 
         if (error) {
-            console.error('Check-in failed:', error);
             geoMessage.textContent = `Check-in failed: ${error.message}`;
         } else {
-            geoMessage.textContent = `Check-in successful at ${new Date(checkInTime).toLocaleTimeString()} near **${location.friendly}**. Distance to target: ${distanceToTarget.toFixed(1)} m.`;
+            geoMessage.textContent = `Check-in successful at ${new Date(checkInTime).toLocaleTimeString()}.`;
             loadGeoAttendanceHistory(currentUserId);
             loadDashboardMetrics(currentUserId);
         }
 
     } catch (e) {
-        console.error('GeoCheckIn error:', e);
         geoMessage.textContent = `Critical error during check-in: ${e.message}`;
     } finally {
         if (button) button.disabled = false;
     }
-}     
+}
+
 
 // *************************************************************************
 // *** 6. SUPABASE DATA LOADING FUNCTIONS (Courses, Exams, Resources) ***
