@@ -2258,6 +2258,11 @@ document.addEventListener('DOMContentLoaded', initMessagesSection);
  *******************************************************/
  
 // -------------------- Handle Upload Form --------------------
+/*******************************************************
+ * 11. Resources Tab (Fully Corrected)
+ *******************************************************/
+ 
+// -------------------- Handle Upload Form --------------------
 $('upload-resource-form')?.addEventListener('submit', async e => {
     e.preventDefault();
     const submitButton = e.submitter;
@@ -2293,22 +2298,20 @@ $('upload-resource-form')?.addEventListener('submit', async e => {
             .getPublicUrl(filePath);
 
         // 3️⃣ Insert metadata into 'resources' table
-      const { error: dbError, data } = await sb
-    .from('resources')
-    .insert({
-        title: title,
-        program_type: program,
-        intake_year: intake,
-        intake: intake,            // <-- add this line
-        block: block,          // <-- add this line
-        block_term: block,     // keep for display if needed
-        file_path: filePath,
-        file_name: file.name,
-        file_url: publicUrl,
-        uploaded_by: currentUserProfile?.id,
-        uploaded_by_name: currentUserProfile?.full_name,
-        created_at: new Date().toISOString()
-    });
+        const { error: dbError, data } = await sb
+            .from('resources')
+            .insert({
+                title: title,
+                program_type: program,
+                intake: intake,
+                block: block,
+                file_path: filePath,
+                file_name: file.name,
+                file_url: publicUrl,
+                uploaded_by: currentUserProfile?.id,
+                uploaded_by_name: currentUserProfile?.full_name,
+                created_at: new Date().toISOString()
+            }).select('id');
 
         if (dbError) throw dbError;
 
@@ -2324,7 +2327,6 @@ $('upload-resource-form')?.addEventListener('submit', async e => {
         setButtonLoading(submitButton, false, originalText);
     }
 });
-
 // -------------------- Load Resources Table --------------------
 async function loadResources() {
     const tableBody = $('resources-list');
