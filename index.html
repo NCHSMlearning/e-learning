@@ -1854,22 +1854,22 @@ async function loadResources() {
     cachedResources = [];
 
     try {
-        const program = currentUserProfile?.program || currentUserProfile?.department;
+        const program = currentUserProfile?.program;
         const block = currentUserProfile?.block;
-        const intake = currentUserProfile?.intake; // ✅ match column name in table
+        const intakeYear = currentUserProfile?.intake_year;
 
-        if (!program || !intake) {
-            resourceListContainer.innerHTML = '<p>Missing enrollment details (program or intake).</p>';
+        if (!program || !intakeYear || !block) {
+            resourceListContainer.innerHTML = '<p>Missing enrollment details (program, block, or intake year).</p>';
             return;
         }
 
-        // ✅ Filter resources exactly as stored in DB: program_type, block, intake
+        // ✅ Filter strictly by program, block, and intake_year (mapped to intake in resources)
         const { data: resources, error } = await sb
             .from('resources')
             .select('id, title, file_path, file_url, program_type, block, intake, uploaded_by_name, created_at')
             .eq('program_type', program)
             .eq('block', block)
-            .eq('intake', intake)
+            .eq('intake', intakeYear)
             .order('created_at', { ascending: false });
 
         if (error) throw error;
@@ -1878,24 +1878,24 @@ async function loadResources() {
         resourceListContainer.innerHTML = '';
 
         if (!cachedResources.length) {
-            resourceListContainer.innerHTML = `<p>No learning resources found for your current block.</p>`;
+            resourceListContainer.innerHTML = `<p>No learning resources found for your program, block, and intake.</p>`;
             return;
         }
 
-        // ✅ Render student resources
+        // Render mobile-friendly cards
         cachedResources.forEach(res => {
             const displayDate = new Date(res.created_at).toLocaleDateString();
             const itemDiv = document.createElement('div');
             itemDiv.className = 'resource-item';
             itemDiv.innerHTML = `
                 <strong>${escapeHtml(res.title)}</strong>
-                <p>Uploaded: ${displayDate} (${res.program_type})</p>
+                <p>Uploaded: ${displayDate} (${escapeHtml(res.program_type)})</p>
             `;
             itemDiv.addEventListener('click', () => viewResource(res.id));
             resourceListContainer.appendChild(itemDiv);
         });
 
-        // ✅ Auto view first resource
+        // Auto view first resource
         viewResource(cachedResources[0].id);
 
     } catch (err) {
@@ -1907,6 +1907,7 @@ async function loadResources() {
         loadDashboardMetrics(currentUserId);
     }
 }
+
 
 
 // *************************************************************************
