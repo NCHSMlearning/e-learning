@@ -700,6 +700,8 @@
         </main>
     </div>
 
+<!-- PDF.js Library -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.9.179/pdf.min.js"></script>
 
 <script>
     // *************************************************************************
@@ -1826,11 +1828,11 @@ function viewResource(resourceId) {
 
     if (ext === 'pdf') {
         resourceViewer.innerHTML += `
-            <div id="pdf-container" style="position:relative;">
-                <canvas id="pdf-canvas"></canvas>
-                <div style="position:absolute; top:10px; right:10px;">
-                    <button id="prev-page">Prev</button>
-                    <button id="next-page">Next</button>
+            <div id="pdf-container" style="position:relative; width:100%; overflow-x:auto;">
+                <canvas id="pdf-canvas" style="width:100%; height:auto;"></canvas>
+                <div style="position:absolute; top:10px; right:10px; display:flex; gap:5px;">
+                    <button id="prev-page" style="padding:8px 12px; font-size:1em;">Prev</button>
+                    <button id="next-page" style="padding:8px 12px; font-size:1em;">Next</button>
                     <span>Page: <span id="page-num"></span> / <span id="page-count"></span></span>
                 </div>
             </div>
@@ -1849,10 +1851,16 @@ function viewResource(resourceId) {
 
         function renderPage(num) {
             pdfDoc.getPage(num).then(page => {
-                const viewport = page.getViewport({ scale: 1.2 });
-                canvas.width = viewport.width;
-                canvas.height = viewport.height;
-                page.render({ canvasContext: ctx, viewport }).promise.then(() => {
+                const container = document.getElementById('pdf-container');
+                const containerWidth = container.clientWidth; // responsive width
+                const viewport = page.getViewport({ scale: 1.0 });
+                const scale = containerWidth / viewport.width; // scale to container
+                const scaledViewport = page.getViewport({ scale });
+
+                canvas.width = scaledViewport.width;
+                canvas.height = scaledViewport.height;
+
+                page.render({ canvasContext: ctx, viewport: scaledViewport }).promise.then(() => {
                     document.getElementById('page-num').textContent = pageNum;
                 });
             });
@@ -1882,6 +1890,7 @@ function viewResource(resourceId) {
         resourceViewer.innerHTML += `<p>This file type (<strong>.${ext}</strong>) cannot be previewed directly.</p>`;
     }
 }
+
 
 // *************************************************************************
 // *** 7. ACADEMIC CALENDAR LOGIC ***
