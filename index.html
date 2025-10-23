@@ -1856,47 +1856,46 @@ async function loadResources() {
     try {
         const program = currentUserProfile?.program || currentUserProfile?.department;
         const block = currentUserProfile?.block;
-        const intakeYear = currentUserProfile?.intake_year;
+        const intake = currentUserProfile?.intake; // ✅ match column name in table
 
-        if (!program || !intakeYear) {
-            resourceListContainer.innerHTML = '<p>Missing enrollment details (program or intake year).</p>';
+        if (!program || !intake) {
+            resourceListContainer.innerHTML = '<p>Missing enrollment details (program or intake).</p>';
             return;
         }
 
-       // Filter resources strictly per program, block, intake_year (no General/null)
-const { data: resources, error } = await sb
-    .from('resources')
-    .select('id, title, file_path, file_url, program_type, block, intake_year, uploaded_by_name, created_at')
-    .eq('program_type', program)       // exact program match
-    .eq('block', block)                // exact block match
-    .eq('intake_year', intakeYear)     // exact intake year match
-    .order('created_at', { ascending: false });
+        // ✅ Filter resources exactly as stored in DB: program_type, block, intake
+        const { data: resources, error } = await sb
+            .from('resources')
+            .select('id, title, file_path, file_url, program_type, block, intake, uploaded_by_name, created_at')
+            .eq('program_type', program)
+            .eq('block', block)
+            .eq('intake', intake)
+            .order('created_at', { ascending: false });
 
-if (error) throw error;
+        if (error) throw error;
 
-cachedResources = resources || [];
-resourceListContainer.innerHTML = '';
+        cachedResources = resources || [];
+        resourceListContainer.innerHTML = '';
 
-if (!cachedResources.length) {
-    resourceListContainer.innerHTML = `<p>No learning resources found.</p>`;
-    return;
-}
+        if (!cachedResources.length) {
+            resourceListContainer.innerHTML = `<p>No learning resources found for your current block.</p>`;
+            return;
+        }
 
-
-        // Render mobile-friendly cards
+        // ✅ Render student resources
         cachedResources.forEach(res => {
             const displayDate = new Date(res.created_at).toLocaleDateString();
             const itemDiv = document.createElement('div');
             itemDiv.className = 'resource-item';
             itemDiv.innerHTML = `
                 <strong>${escapeHtml(res.title)}</strong>
-                <p>Uploaded: ${displayDate} (${res.program_type === 'General' ? 'General' : res.program_type})</p>
+                <p>Uploaded: ${displayDate} (${res.program_type})</p>
             `;
             itemDiv.addEventListener('click', () => viewResource(res.id));
             resourceListContainer.appendChild(itemDiv);
         });
 
-        // Auto view first resource
+        // ✅ Auto view first resource
         viewResource(cachedResources[0].id);
 
     } catch (err) {
