@@ -1730,56 +1730,119 @@ async function loadExams() {
 }
 
 
+
+let cachedResources = [];
+
 /**
  * Escapes HTML to prevent XSS.
  */
 function escapeHtml(text) {
-    const map = {
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#039;'
-    };
-    return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+    const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+    return text.replace(/[&<>"']/g, m => map[m]);
 }
 
 /**
- * viewResource() opens a resource based on file type.
+ * Detect mobile
+ */
+function isMobile() {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+}
+
+/**
+ * viewResource() renders PDFs via PDF.js, other Office files in iframe.
  */
 window.viewResource = function(resourceId) {
-    const res = cachedResources.find(r => r.id === resourceId);
-    if (!res) return alert("Resource not found.");
+    const resourceViewer = document.getElementById('resource-viewer');
+    const resource = cachedResources.find(r => r.id == resourceId);
 
-    const viewerContainer = document.getElementById('resource-viewer');
-    if (!viewerContainer) return;
-
-    const fileUrl = res.file_url;
-    const fileExt = res.file_path.split('.').pop().toLowerCase();
-
-    let embedHtml = '';
-
-    if (fileExt === 'pdf') {
-        embedHtml = `<iframe src="${fileUrl}#toolbar=0" style="width:100%; height:60vh;"></iframe>`;
-    } else if (['doc','docx','xls','xlsx','ppt','pptx'].includes(fileExt)) {
-        embedHtml = `<iframe src="https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fileUrl)}" style="width:100%; height:60vh;"></iframe>`;
-    } else {
-        embedHtml = `<p>Preview not available. File type: ${fileExt}</p>`;
+    if (!resource || !resourceViewer) {
+        if(resourceViewer) resourceViewer.innerHTML = 'Resource not found.';
+        return;
     }
 
-    viewerContainer.innerHTML = `
-        <div style="margin-bottom:10px;">
-            <strong>${escapeHtml(res.title)}</strong>
-            <p style="font-size:0.8em;color:#6B7280;">Uploaded by: ${res.uploaded_by_name}</p>
-        </div>
-        ${embedHtml}
+    const fileUrl = resource.file_url;
+    const ext = (resource.file_path || '').split('.').pop().toLowerCase();
+
+    resourceViewer.innerHTML = `
+        <h3 style="color: #4C1D95; margin-bottom: 5px;">${escapeHtml(resource.title)}</h3>
+        <p style="font-size: 0.9em; color: #6B7280;">
+            Uploaded by: ${escapeHtml(resource.uploaded_by_name || 'Admin')} on ${new Date(resource.created_at).toLocaleDateString()}
+        </p>
     `;
 
-    viewerContainer.scrollIntoView({ behavior: 'smooth' });
+    if (ext === 'pdf') {
+        // Mobile fallback: open PDF in new tab
+        if (isMobile()) {
+            window.open(fileUrl, '_blank');
+            return;
+        }
+
+        // PDF container + controls
+        resourceViewer.innerHTML += `
+            <div id="pdf-container" style="width:100%;">
+                <canvas id="pdf-canvas" style="width:100%; height:auto;"></canvas>
+            </div>
+            <div id="pdf-controls" style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                <button id="prev-page" style="padding:6px 10px; font-size:1em;">Prev</button>
+                <button id="next-page" style="padding:6px 10px; font-size:1em;">Next</button>
+                <span>Page: <span id="page-num"></span> / <span id="page-count"></span></span>
+            </div>
+        `;
+
+        const canvas = document.getElementById('pdf-canvas');
+        const ctx = canvas.getContext('2d');
+        let pdfDoc = null;
+        let pageNum = 1;
+
+        pdfjsLib.getDocument(fileUrl).promise.then(pdf => {
+            pdfDoc = pdf;
+            document.getElementById('page-count').textContent = pdf.numPages;
+            renderPage(pageNum);
+        }).catch(err => {
+            resourceViewer.innerHTML += `<p style="color:#EF4444;">Failed to load PDF: ${err.message}</p>`;
+        });
+
+        function renderPage(num) {
+            pdfDoc.getPage(num).then(page => {
+                const containerWidth = document.getElementById('pdf-container').clientWidth;
+                const viewport = page.getViewport({ scale: 1 });
+                const scale = containerWidth / viewport.width;
+                const scaledViewport = page.getViewport({ scale });
+                canvas.width = scaledViewport.width;
+                canvas.height = scaledViewport.height;
+                page.render({ canvasContext: ctx, viewport: scaledViewport }).promise.then(() => {
+                    document.getElementById('page-num').textContent = pageNum;
+                });
+            });
+        }
+
+        document.getElementById('prev-page').onclick = () => {
+            if (pageNum <= 1) return;
+            pageNum--;
+            renderPage(pageNum);
+        };
+        document.getElementById('next-page').onclick = () => {
+            if (pageNum >= pdfDoc.numPages) return;
+            pageNum++;
+            renderPage(pageNum);
+        };
+
+    } else if (['doc','docx','ppt','pptx','xls','xlsx'].includes(ext)) {
+        const encoded = encodeURIComponent(fileUrl);
+        if (isMobile()) {
+            window.open(`https://view.officeapps.live.com/op/view.aspx?src=${encoded}`, '_blank');
+        } else {
+            resourceViewer.innerHTML += `
+                <iframe src="https://view.officeapps.live.com/op/embed.aspx?src=${encoded}" width="100%" height="580px" style="border:none;"></iframe>
+            `;
+        }
+    } else {
+        resourceViewer.innerHTML += `<p>This file type (<strong>.${ext}</strong>) cannot be previewed directly.</p>`;
+    }
 };
 
 /**
- * loadResources() fetches student-specific resources and renders mobile-friendly cards.
+ * loadResources() fetches and displays student-specific resources.
  */
 async function loadResources() {
     if (!currentUserProfile) await loadProfile(currentUserId);
@@ -1799,35 +1862,27 @@ async function loadResources() {
             return;
         }
 
-        // Correct Supabase OR logic to filter by program/block/intakeYear including General/null
+        // Filter resources correctly per program, block, intake_year (including General/null)
         const { data: resources, error } = await sb
             .from('resources')
             .select('id, title, file_path, file_url, program_type, block, intake_year, uploaded_by_name, created_at')
-            .or(
-                `program_type.eq.${program},program_type.eq.General`
-            )
-            .or(
-                `block.eq.${block},block.is.null,block.eq.General`
-            )
-            .or(
-                `intake_year.eq.${intakeYear},intake_year.is.null`
-            )
+            .or(`program_type.eq.${program},program_type.eq.General`)
+            .or(`block.eq.${block},block.is.null,block.eq.General`)
+            .or(`intake_year.eq.${intakeYear},intake_year.is.null`)
             .order('created_at', { ascending: false });
 
         if (error) throw error;
-
         cachedResources = resources || [];
         resourceListContainer.innerHTML = '';
 
-        if (cachedResources.length === 0) {
+        if (!cachedResources.length) {
             resourceListContainer.innerHTML = `<p>No learning resources found.</p>`;
             return;
         }
 
-        // Render resources as responsive cards
+        // Render mobile-friendly cards
         cachedResources.forEach(res => {
-            const displayDate = new Date(res.created_at).toLocaleDateString('en-US');
-
+            const displayDate = new Date(res.created_at).toLocaleDateString();
             const itemDiv = document.createElement('div');
             itemDiv.className = 'resource-item';
             itemDiv.innerHTML = `
@@ -1838,20 +1893,18 @@ async function loadResources() {
             resourceListContainer.appendChild(itemDiv);
         });
 
-        // Automatically view first resource
-        if (cachedResources.length > 0) viewResource(cachedResources[0].id);
+        // Auto view first resource
+        viewResource(cachedResources[0].id);
 
-    } catch (error) {
-        console.error("❌ Failed to load resources:", error);
-        resourceListContainer.innerHTML = `<p style="color:#EF4444;">Error loading resources: ${error.message}</p>`;
+    } catch (err) {
+        console.error("Error loading resources:", err);
+        resourceListContainer.innerHTML = `<p style="color:#EF4444;">Error loading resources: ${err.message}</p>`;
     }
 
-    if (typeof loadDashboardMetrics === "function") {
+    if (typeof loadDashboardMetrics === 'function') {
         loadDashboardMetrics(currentUserId);
     }
 }
-
-
 
 
 // *************************************************************************
