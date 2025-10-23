@@ -2298,7 +2298,8 @@ $('upload-resource-form')?.addEventListener('submit', async e => {
     .insert({
         title: title,
         program_type: program,
-        intake_year: intake,   // match filter
+        intake_year: intake,
+        intake: intake,            // <-- add this line
         block: block,          // <-- add this line
         block_term: block,     // keep for display if needed
         file_path: filePath,
