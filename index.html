@@ -1766,13 +1766,19 @@ async function loadResources() {
             return;
         }
 
-        // Correct AND-style filtering with .in()
+        // Correct Supabase OR logic to include General/null values
         const { data: resources, error } = await sb
             .from('resources')
-            .select('id, title, file_path, file_url, program_type, block_term, intake_year, uploaded_by_name, created_at')
-            .in('program_type', [program, 'General'])
-            .in('block_term', [block, null, 'General'])
-            .in('intake_year', [intakeYear, null])
+            .select('id, title, file_path, file_url, program_type, block, intake_year, uploaded_by_name, created_at')
+            .or(
+                `program_type.eq.${program},program_type.eq.General`
+            )
+            .or(
+                `block.eq.${block},block.is.null,block.eq.General`
+            )
+            .or(
+                `intake_year.eq.${intakeYear},intake_year.is.null`
+            )
             .order('created_at', { ascending: false });
 
         if (error) throw error;
@@ -1799,7 +1805,7 @@ async function loadResources() {
         });
 
         // Automatically view first resource
-        viewResource(cachedResources[0].id);
+        if (cachedResources.length > 0) viewResource(cachedResources[0].id);
 
     } catch (error) {
         console.error("❌ Failed to load resources:", error);
