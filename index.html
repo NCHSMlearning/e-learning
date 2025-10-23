@@ -1827,14 +1827,15 @@ function viewResource(resourceId) {
     `;
 
     if (ext === 'pdf') {
+        // PDF container + controls
         resourceViewer.innerHTML += `
-            <div id="pdf-container" style="position:relative; width:100%; overflow-x:auto;">
+            <div id="pdf-container" style="width:100%;">
                 <canvas id="pdf-canvas" style="width:100%; height:auto;"></canvas>
-                <div style="position:absolute; top:10px; right:10px; display:flex; gap:5px;">
-                    <button id="prev-page" style="padding:8px 12px; font-size:1em;">Prev</button>
-                    <button id="next-page" style="padding:8px 12px; font-size:1em;">Next</button>
-                    <span>Page: <span id="page-num"></span> / <span id="page-count"></span></span>
-                </div>
+            </div>
+            <div id="pdf-controls" style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                <button id="prev-page" style="padding:6px 10px; font-size:1em;">Prev</button>
+                <button id="next-page" style="padding:6px 10px; font-size:1em;">Next</button>
+                <span>Page: <span id="page-num"></span> / <span id="page-count"></span></span>
             </div>
         `;
 
@@ -1843,18 +1844,20 @@ function viewResource(resourceId) {
         let pdfDoc = null;
         let pageNum = 1;
 
+        // Load PDF
         pdfjsLib.getDocument(fileUrl).promise.then(pdf => {
             pdfDoc = pdf;
             document.getElementById('page-count').textContent = pdf.numPages;
             renderPage(pageNum);
+        }).catch(err => {
+            resourceViewer.innerHTML += `<p style="color:#EF4444;">Failed to load PDF: ${err.message}</p>`;
         });
 
         function renderPage(num) {
             pdfDoc.getPage(num).then(page => {
-                const container = document.getElementById('pdf-container');
-                const containerWidth = container.clientWidth; // responsive width
-                const viewport = page.getViewport({ scale: 1.0 });
-                const scale = containerWidth / viewport.width; // scale to container
+                const containerWidth = document.getElementById('pdf-container').clientWidth;
+                const viewport = page.getViewport({ scale: 1 });
+                const scale = containerWidth / viewport.width;
                 const scaledViewport = page.getViewport({ scale });
 
                 canvas.width = scaledViewport.width;
@@ -1878,6 +1881,7 @@ function viewResource(resourceId) {
         };
 
     } else if (['doc','docx','ppt','pptx','xls','xlsx'].includes(ext)) {
+        // Office file preview via Office Online
         const encoded = encodeURIComponent(fileUrl);
         resourceViewer.innerHTML += `
             <iframe 
@@ -1887,6 +1891,7 @@ function viewResource(resourceId) {
                 style="border:none;">
             </iframe>`;
     } else {
+        // Other file types
         resourceViewer.innerHTML += `<p>This file type (<strong>.${ext}</strong>) cannot be previewed directly.</p>`;
     }
 }
