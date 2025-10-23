@@ -1738,7 +1738,7 @@ function escapeHtml(text) {
 
 /**
  * loadResources() fetches student-specific learning materials and caches them.
- * Updated: resources are view-only; no downloads allowed.
+ * Updated: PDFs open in a custom viewer (no download), other files preview as before.
  */
 async function loadResources() {
     if (!currentUserProfile) await loadProfile(currentUserId); 
@@ -1746,7 +1746,7 @@ async function loadResources() {
     const resourceListContainer = document.getElementById('resources-list');
     if (!resourceListContainer) return;
     resourceListContainer.innerHTML = 'Loading resources...';
-    cachedResources = []; // Clear old cache
+    cachedResources = [];
 
     try {
         const program = currentUserProfile?.program || currentUserProfile?.department;
@@ -1769,16 +1769,16 @@ async function loadResources() {
         if (error) throw error;
 
         cachedResources = resources || [];
-        
         resourceListContainer.innerHTML = '';
+
         if (cachedResources.length === 0) {
             resourceListContainer.innerHTML = `<p>No learning resources found.</p>`;
             return;
         }
 
         cachedResources.forEach(res => {
-             const displayDate = new Date(res.created_at).toLocaleDateString('en-US');
-             resourceListContainer.innerHTML += `
+            const displayDate = new Date(res.created_at).toLocaleDateString('en-US');
+            resourceListContainer.innerHTML += `
                 <div class="resource-item" onclick="viewResource('${res.id}')" style="cursor:pointer; flex-direction: column; align-items: flex-start;">
                     <strong style="color: #4C1D95;">${escapeHtml(res.title)}</strong>
                     <p style="margin:5px 0 0;font-size:0.8em;color:#6B7280;">
@@ -1788,11 +1788,10 @@ async function loadResources() {
                 </div>
             `;
         });
-        
-        if(cachedResources.length > 0) {
-            viewResource(cachedResources[0].id);
-        }
-        
+
+        // Automatically view first resource
+        viewResource(cachedResources[0].id);
+
     } catch (error) {
         console.error("❌ Failed to load resources:", error);
         resourceListContainer.innerHTML = `<p style="color:#EF4444;">Error loading resources: ${error.message}</p>`;
@@ -1804,8 +1803,7 @@ async function loadResources() {
 }
 
 /**
- * Generates and displays the iframe for the selected resource.
- * Updated: view-only; download disabled.
+ * viewResource() renders PDFs in a secure canvas via PDF.js, other files in iframe.
  */
 function viewResource(resourceId) {
     const resourceViewer = document.getElementById('resource-viewer');
@@ -1816,41 +1814,74 @@ function viewResource(resourceId) {
         return;
     }
 
-    let previewHtml = '';
     const fileUrl = resource.file_url;
     const ext = (resource.file_path || '').split('.').pop().toLowerCase();
-
-    if (ext === 'pdf') {
-        // PDF in sandboxed iframe
-        previewHtml = `<iframe 
-            src="${fileUrl}" 
-            width="100%" 
-            height="580px" 
-            style="border:none;" 
-            sandbox="allow-scripts allow-same-origin">
-            </iframe>`;
-    } else if (['doc','docx','ppt','pptx','xls','xlsx'].includes(ext)) {
-        const encoded = encodeURIComponent(fileUrl);
-        previewHtml = `<iframe 
-            src="https://view.officeapps.live.com/op/embed.aspx?src=${encoded}" 
-            width="100%" 
-            height="580px" 
-            style="border:none;">
-            </iframe>`;
-    } else {
-        previewHtml = `<p>This file type (<strong>.${ext}</strong>) cannot be previewed directly.</p>`;
-    }
 
     resourceViewer.innerHTML = `
         <h3 style="color: #4C1D95; margin-bottom: 5px;">${escapeHtml(resource.title)}</h3>
         <p style="font-size: 0.9em; color: #6B7280;">
             Uploaded by: ${escapeHtml(resource.uploaded_by_name || 'Admin')} on ${new Date(resource.created_at).toLocaleDateString()}
         </p>
-        ${previewHtml}
     `;
+
+    if (ext === 'pdf') {
+        resourceViewer.innerHTML += `
+            <div id="pdf-container" style="position:relative;">
+                <canvas id="pdf-canvas"></canvas>
+                <div style="position:absolute; top:10px; right:10px;">
+                    <button id="prev-page">Prev</button>
+                    <button id="next-page">Next</button>
+                    <span>Page: <span id="page-num"></span> / <span id="page-count"></span></span>
+                </div>
+            </div>
+        `;
+
+        const canvas = document.getElementById('pdf-canvas');
+        const ctx = canvas.getContext('2d');
+        let pdfDoc = null;
+        let pageNum = 1;
+
+        pdfjsLib.getDocument(fileUrl).promise.then(pdf => {
+            pdfDoc = pdf;
+            document.getElementById('page-count').textContent = pdf.numPages;
+            renderPage(pageNum);
+        });
+
+        function renderPage(num) {
+            pdfDoc.getPage(num).then(page => {
+                const viewport = page.getViewport({ scale: 1.2 });
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+                page.render({ canvasContext: ctx, viewport }).promise.then(() => {
+                    document.getElementById('page-num').textContent = pageNum;
+                });
+            });
+        }
+
+        document.getElementById('prev-page').onclick = () => {
+            if (pageNum <= 1) return;
+            pageNum--;
+            renderPage(pageNum);
+        };
+        document.getElementById('next-page').onclick = () => {
+            if (pageNum >= pdfDoc.numPages) return;
+            pageNum++;
+            renderPage(pageNum);
+        };
+
+    } else if (['doc','docx','ppt','pptx','xls','xlsx'].includes(ext)) {
+        const encoded = encodeURIComponent(fileUrl);
+        resourceViewer.innerHTML += `
+            <iframe 
+                src="https://view.officeapps.live.com/op/embed.aspx?src=${encoded}" 
+                width="100%" 
+                height="580px" 
+                style="border:none;">
+            </iframe>`;
+    } else {
+        resourceViewer.innerHTML += `<p>This file type (<strong>.${ext}</strong>) cannot be previewed directly.</p>`;
+    }
 }
-
-
 
 // *************************************************************************
 // *** 7. ACADEMIC CALENDAR LOGIC ***
