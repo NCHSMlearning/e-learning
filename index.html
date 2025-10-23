@@ -22,16 +22,32 @@
             flex-direction: column; 
             padding: 20px; 
             transition: transform 0.3s, width 0.3s;
-            position: sticky; /* Keep it visible on desktop scroll */
+            position: sticky; 
             top: 0;
             left: 0;
             z-index: 1000;
+            /* CRITICAL FIX: Ensure sidebar can scroll on desktop if content is long */
+            height: 100vh; 
+            box-sizing: border-box; 
+            overflow-y: auto; /* Enable scrolling for the whole sidebar */
         }
-        .sidebar-header { text-align: center; margin-bottom: 30px; }
+        .sidebar-header { 
+            text-align: center; 
+            margin-bottom: 30px; 
+            /* Fix header from scrolling with nav links */
+            flex-shrink: 0;
+        }
         .sidebar-header img { width: 60px; margin-bottom: 10px; filter: invert(1); }
         
         /* Nav Container */
-        .nav { list-style: none; padding: 0; flex-grow: 1; }
+        .nav { 
+            list-style: none; 
+            padding: 0; 
+            flex-grow: 1; 
+            /* Let the nav area grow and take available space */
+            overflow-y: visible; 
+            /* No need for separate scrolling here, let the parent .sidebar handle it */
+        }
         .nav li { margin: 10px 0; }
         .nav a { color: #E5E7EB; text-decoration: none; padding: 10px; border-radius: 6px; display: block; transition: 0.2s; }
         .nav a:hover { background-color: #5B21B6; }
@@ -40,7 +56,11 @@
             color: #1F2937;
             font-weight: bold;
         }
-        .logout { margin-top: auto; text-align: center; }
+        .logout { 
+            margin-top: auto; 
+            text-align: center; 
+            flex-shrink: 0;
+        }
         .logout a { 
             display: inline-block; 
             margin-top: 20px; 
@@ -266,11 +286,13 @@
                 position: fixed;
                 top: 0;
                 left: 0;
-                width: 70%; /* Takes up 70% of the screen */
-                height: 100%;
-                transform: translateX(-100%); /* CRITICAL: Hides the sidebar */
+                width: 70%; 
+                height: 100%; /* Important for mobile overlay */
+                transform: translateX(-100%); 
                 transition: transform 0.3s ease-in-out;
                 box-shadow: 4px 0 10px rgba(0,0,0,0.3);
+                overflow-y: auto; /* Ensure mobile menu is scrollable */
+                padding-bottom: 20px; /* Padding for the bottom of the scrollable area */
             }
             
             /* Class added by JS to show the menu */
@@ -294,7 +316,6 @@
             }
 
             .sidebar-header { 
-                /* Compact header in the menu */
                 display: flex; 
                 justify-content: flex-start; 
                 align-items: center;
@@ -302,6 +323,7 @@
                 margin-bottom: 20px;
                 padding: 10px 0;
                 border-bottom: 1px solid #5B21B6;
+                flex-shrink: 0;
             }
             .sidebar-header img { 
                 width: 40px; 
@@ -317,6 +339,7 @@
                 flex-direction: column; 
                 padding: 0; 
                 margin: 0;
+                flex-grow: 1;
             }
             .nav a { 
                 padding: 12px 15px; 
@@ -324,7 +347,7 @@
             }
 
             /* Move logout back to the sidebar on mobile, but at the bottom */
-            .logout { display: block; margin-top: auto; }
+            .logout { display: block; margin-top: 15px; flex-shrink: 0;}
             .main { padding: 15px; } /* Reduce main padding */
 
             .cards { 
@@ -386,10 +409,12 @@
                 width: 250px; 
                 flex-direction: column; 
                 padding: 20px; 
-                position: sticky; /* Sticky on desktop */
-                transform: translateX(0); /* Ensure it's visible */
+                position: sticky; 
+                transform: translateX(0); 
+                /* Sidebar height is 100vh and it handles its own scrolling */
+                height: 100vh; 
             }
-            .sidebar-header { display: block; text-align: center; } /* Restore full header */
+            .sidebar-header { display: block; text-align: center; } 
             .sidebar-header h2 { font-size: 1.5rem; }
             .nav { display: block; overflow-x: visible; }
             .nav li { margin: 10px 0; }
@@ -439,17 +464,17 @@
             <section id="dashboard" class="tab-content active">
                 
                 <div id="welcome-section" class="welcome-card">
-  <h2 id="welcome-header">Hello, Student!</h2>
-  <p id="student-welcome-message">Loading your welcome message...</p>
-</div>
+                    <h2 id="welcome-header">Hello, Student!</h2>
+                    <p id="student-welcome-message">Loading your welcome message...</p>
+                </div>
 
-<div id="announcement-banner" class="announcement-card">
-  <span class="info-icon">📣</span>
-  <div>
-    <strong>Official Announcement:</strong>
-    <p id="student-announcement">Loading latest announcement...</p>
-  </div>
-</div>
+                <div id="announcement-banner" class="announcement-card">
+                    <span class="info-icon">📣</span>
+                    <div>
+                        <strong>Official Announcement:</strong>
+                        <p id="student-announcement">Loading latest announcement...</p>
+                    </div>
+                </div>
 
 
                 <h2 style="margin-top: 30px; color: #4C1D95;">Quick Snapshot</h2>
@@ -457,7 +482,8 @@
                     <div class="card" onclick="showTab('attendance')">
                         <h3>Attendance Rate</h3>
                         <p class="data" id="dashboard-attendance-rate">--%</p>
-                        <small>Overall Verified</small>
+                        <small>Verified Check-ins: <strong id="dashboard-verified-count">0</strong> / <strong id="dashboard-total-count">0</strong></small>
+                        <small style="display:block; margin-top: 5px; color:#EF4444;">Pending Review: <strong id="dashboard-pending-count">0</strong></small>
                     </div>
                     <div class="card" onclick="showTab('cats')">
                         <h3>Upcoming Exam</h3>
@@ -894,39 +920,44 @@ async function loadStudentMessage(key, elementId) {
 
 /**
  * Calculates and updates all dashboard metrics.
+ * FIX: Updated to show Verified, Total, and Pending counts.
  */
 async function loadDashboardMetrics(userId) {
     // --- ACTIVE COURSES ---
     document.getElementById('dashboard-active-courses').textContent = cachedCourses.length;
 
-
+    
     // --- OVERALL ATTENDANCE RATE (FIXED LOGIC) ---
     let attendanceRate = 0;
     try {
         const { data: logs, error: attendanceError } = await sb
             .from('geo_attendance_logs')
             .select('is_verified')
-            .eq('student_id', userId)
-            // Filter logs to last 365 days for "Overall" metric, or remove filter for true "Overall"
-            // For now, let's keep it as true overall attendance
-            // .gte('check_in_time', new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString()); 
-
+            .eq('student_id', userId); 
 
         if (attendanceError) throw attendanceError;
 
+        const totalLogs = logs.length;
+        // Count verified logs (is_verified = true)
+        const verifiedCount = logs.filter(l => l.is_verified === true).length;
+        // Count logs that are null or false (pending review or explicitly rejected)
+        const pendingCount = logs.filter(l => l.is_verified === null || l.is_verified === false).length; 
 
-        const totalSessions = logs.length;
-        // Count verified logs, treating null/undefined as unverified for safety
-        const attended = logs.filter(l => l.is_verified === true).length; 
+        // Calculate rate based ONLY on verified / total check-ins
+        attendanceRate = totalLogs > 0 ? Math.round((verifiedCount / totalLogs) * 100) : 0;
 
+        // Update the UI elements
+        document.getElementById('dashboard-attendance-rate').textContent = attendanceRate + '%';
+        document.getElementById('dashboard-verified-count').textContent = verifiedCount;
+        document.getElementById('dashboard-total-count').textContent = totalLogs;
+        document.getElementById('dashboard-pending-count').textContent = pendingCount; // NEW METRIC
 
-        attendanceRate = totalSessions > 0 ? Math.round((attended / totalSessions) * 100) : 0;
-
-
-       document.getElementById('dashboard-attendance-rate').textContent = attendanceRate + '%';
     } catch (err) {
         console.error("Failed to load overall attendance metrics:", err);
         document.getElementById('dashboard-attendance-rate').textContent = 'N/A';
+        document.getElementById('dashboard-verified-count').textContent = '0';
+        document.getElementById('dashboard-total-count').textContent = '0';
+        document.getElementById('dashboard-pending-count').textContent = '0'; // Handle error case
     }
 
 
