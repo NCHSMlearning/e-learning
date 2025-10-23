@@ -1857,23 +1857,25 @@ async function loadResources() {
             return;
         }
 
-        // Filter resources correctly per program, block, intake_year (including General/null)
-        const { data: resources, error } = await sb
-            .from('resources')
-            .select('id, title, file_path, file_url, program_type, block, intake_year, uploaded_by_name, created_at')
-            .or(`program_type.eq.${program},program_type.eq.General`)
-            .or(`block.eq.${block},block.is.null,block.eq.General`)
-            .or(`intake_year.eq.${intakeYear},intake_year.is.null`)
-            .order('created_at', { ascending: false });
+       // Filter resources strictly per program, block, intake_year (no General/null)
+const { data: resources, error } = await sb
+    .from('resources')
+    .select('id, title, file_path, file_url, program_type, block, intake_year, uploaded_by_name, created_at')
+    .eq('program_type', program)       // exact program match
+    .eq('block', block)                // exact block match
+    .eq('intake_year', intakeYear)     // exact intake year match
+    .order('created_at', { ascending: false });
 
-        if (error) throw error;
-        cachedResources = resources || [];
-        resourceListContainer.innerHTML = '';
+if (error) throw error;
 
-        if (!cachedResources.length) {
-            resourceListContainer.innerHTML = `<p>No learning resources found.</p>`;
-            return;
-        }
+cachedResources = resources || [];
+resourceListContainer.innerHTML = '';
+
+if (!cachedResources.length) {
+    resourceListContainer.innerHTML = `<p>No learning resources found.</p>`;
+    return;
+}
+
 
         // Render mobile-friendly cards
         cachedResources.forEach(res => {
