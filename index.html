@@ -1723,11 +1723,24 @@ async function loadExams() {
 
 
 /**
+ * Escapes HTML to prevent XSS.
+ */
+function escapeHtml(text) {
+    const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+    return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+}
+
+/**
  * loadResources() fetches student-specific learning materials and caches them.
- * FIXED: Ensures the resource list is generated on load.
+ * Updated: resources are view-only; no downloads allowed.
  */
 async function loadResources() {
-    // Ensure profile data is loaded
     if (!currentUserProfile) await loadProfile(currentUserId); 
 
     const resourceListContainer = document.getElementById('resources-list');
@@ -1745,14 +1758,11 @@ async function loadResources() {
             return;
         }
 
-        // --- Supabase Query ---
         const { data: resources, error } = await sb
             .from('resources')
-            .select('id, title, file_path, file_url, program_type, block_term, block, intake_year, intake, uploaded_by_name, created_at, allow_download')
+            .select('id, title, file_path, file_url, program_type, block_term, block, intake_year, intake, uploaded_by_name, created_at')
             .or(`program_type.eq.${program},program_type.eq.General`)
-            // Match against both block_term (for resources) and block (from profile)
             .or(`block_term.eq.${block},block_term.is.null,block_term.eq.General`)
-            // Match against both intake_year (for resources) and intake (from profile)
             .or(`intake_year.eq.${intakeYear},intake_year.is.null`)
             .order('created_at', { ascending: false });
 
@@ -1760,7 +1770,6 @@ async function loadResources() {
 
         cachedResources = resources || [];
         
-        // --- Render List ---
         resourceListContainer.innerHTML = '';
         if (cachedResources.length === 0) {
             resourceListContainer.innerHTML = `<p>No learning resources found.</p>`;
@@ -1780,7 +1789,6 @@ async function loadResources() {
             `;
         });
         
-        // Load the first resource automatically
         if(cachedResources.length > 0) {
             viewResource(cachedResources[0].id);
         }
@@ -1791,52 +1799,57 @@ async function loadResources() {
     }
 
     if (typeof loadDashboardMetrics === "function") {
-        loadDashboardMetrics(currentUserId); // Update the dashboard metric
+        loadDashboardMetrics(currentUserId);
     }
 }
 
-
 /**
  * Generates and displays the iframe for the selected resource.
+ * Updated: view-only; download disabled.
  */
 function viewResource(resourceId) {
     const resourceViewer = document.getElementById('resource-viewer');
     const resource = cachedResources.find(r => r.id == resourceId);
 
     if (!resource || !resourceViewer) {
-        resourceViewer.innerHTML = 'Resource not found.';
+        if(resourceViewer) resourceViewer.innerHTML = 'Resource not found.';
         return;
     }
 
     let previewHtml = '';
     const fileUrl = resource.file_url;
     const ext = (resource.file_path || '').split('.').pop().toLowerCase();
-    
-    // Default to PDF view
+
     if (ext === 'pdf') {
-        previewHtml = `<iframe src="${fileUrl}" width="100%" height="580px" style="border:none;"></iframe>`;
-    } 
-    // Office file preview via Microsoft Viewer
-    else if (['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'].includes(ext)) {
+        // PDF in sandboxed iframe
+        previewHtml = `<iframe 
+            src="${fileUrl}" 
+            width="100%" 
+            height="580px" 
+            style="border:none;" 
+            sandbox="allow-scripts allow-same-origin">
+            </iframe>`;
+    } else if (['doc','docx','ppt','pptx','xls','xlsx'].includes(ext)) {
         const encoded = encodeURIComponent(fileUrl);
-        previewHtml = `<iframe src="https://view.officeapps.live.com/op/embed.aspx?src=${encoded}" width="100%" height="580px" style="border:none;"></iframe>`;
-    } 
-    // Simple link for other types
-    else {
+        previewHtml = `<iframe 
+            src="https://view.officeapps.live.com/op/embed.aspx?src=${encoded}" 
+            width="100%" 
+            height="580px" 
+            style="border:none;">
+            </iframe>`;
+    } else {
         previewHtml = `<p>This file type (<strong>.${ext}</strong>) cannot be previewed directly.</p>`;
     }
 
-    const downloadBtn = resource.allow_download 
-        ? `<a href="${fileUrl}" download class="profile-button" style="display:block; text-align:center; margin-top:10px; background-color: #10B981;">Download File</a>` 
-        : `<p style="color:#EF4444; margin-top:10px;">Download not permitted for this resource.</p>`;
-
     resourceViewer.innerHTML = `
         <h3 style="color: #4C1D95; margin-bottom: 5px;">${escapeHtml(resource.title)}</h3>
-        <p style="font-size: 0.9em; color: #6B7280;">Uploaded by: ${escapeHtml(resource.uploaded_by_name || 'Admin')} on ${new Date(resource.created_at).toLocaleDateString()}</p>
+        <p style="font-size: 0.9em; color: #6B7280;">
+            Uploaded by: ${escapeHtml(resource.uploaded_by_name || 'Admin')} on ${new Date(resource.created_at).toLocaleDateString()}
+        </p>
         ${previewHtml}
-        ${downloadBtn}
     `;
 }
+
 
 
 // *************************************************************************
