@@ -2296,17 +2296,18 @@ $('upload-resource-form')?.addEventListener('submit', async e => {
         const { error: dbError, data } = await sb
             .from('resources')
             .insert({
-                title: title,
-                program_type: program,
-                intake: intake,
-                block: block,
-                file_path: filePath,
-                file_name: file.name,
-                file_url: publicUrl,
-                uploaded_by: currentUserProfile?.id,
-                uploaded_by_name: currentUserProfile?.full_name,
-                created_at: new Date().toISOString()
-            }).select('id');
+    title: title,
+    program_type: program,
+    intake_year: intake,   // match filter
+    block_term: block,     // match filter
+    file_path: filePath,
+    file_name: file.name,
+    file_url: publicUrl,
+    uploaded_by: currentUserProfile?.id,
+    uploaded_by_name: currentUserProfile?.full_name,
+    created_at: new Date().toISOString()
+})
+
 
         if (dbError) throw dbError;
 
