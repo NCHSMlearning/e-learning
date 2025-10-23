@@ -1767,12 +1767,14 @@ async function loadResources() {
         }
 
         const { data: resources, error } = await sb
-            .from('resources')
-            .select('id, title, file_path, file_url, program_type, block_term, block, intake_year, intake, uploaded_by_name, created_at')
-            .or(`program_type.eq.${program},program_type.eq.General`)
-            .or(`block_term.eq.${block},block_term.is.null,block_term.eq.General`)
-            .or(`intake_year.eq.${intakeYear},intake_year.is.null`)
-            .order('created_at', { ascending: false });
+    .from('resources')
+    .select('id, title, file_path, file_url, program_type, block_term, intake_year, uploaded_by_name, created_at')
+    .or(`
+        (program_type.eq.${program},program_type.eq.General)
+        & (block_term.eq.${block},block_term.is.null,block_term.eq.General)
+        & (intake_year.eq.${intakeYear},intake_year.is.null)
+    `)
+    .order('created_at', { ascending: false });
 
         if (error) throw error;
 
