@@ -1730,6 +1730,8 @@ async function loadExams() {
 }
 
 
+let cachedResources = [];
+
 /**
  * Escapes HTML to prevent XSS.
  */
@@ -1745,8 +1747,7 @@ function escapeHtml(text) {
 }
 
 /**
- * viewResource() opens a resource based on its file type.
- * PDFs open in a custom viewer, other files preview via online viewer.
+ * viewResource() opens a resource based on file type.
  */
 window.viewResource = function(resourceId) {
     const res = cachedResources.find(r => r.id === resourceId);
@@ -1761,9 +1762,9 @@ window.viewResource = function(resourceId) {
     let embedHtml = '';
 
     if (fileExt === 'pdf') {
-        embedHtml = `<iframe src="${fileUrl}#toolbar=0" style="width:100%; height:80vh; border:none;"></iframe>`;
+        embedHtml = `<iframe src="${fileUrl}#toolbar=0" style="width:100%; height:60vh;"></iframe>`;
     } else if (['doc','docx','xls','xlsx','ppt','pptx'].includes(fileExt)) {
-        embedHtml = `<iframe src="https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fileUrl)}" style="width:100%; height:80vh; border:none;"></iframe>`;
+        embedHtml = `<iframe src="https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fileUrl)}" style="width:100%; height:60vh;"></iframe>`;
     } else {
         embedHtml = `<p>Preview not available. File type: ${fileExt}</p>`;
     }
@@ -1780,8 +1781,7 @@ window.viewResource = function(resourceId) {
 };
 
 /**
- * loadResources() fetches student-specific learning materials and caches them.
- * PDFs open in a custom viewer, other files preview as before.
+ * loadResources() fetches student-specific resources and renders mobile-friendly cards.
  */
 async function loadResources() {
     if (!currentUserProfile) await loadProfile(currentUserId);
@@ -1801,7 +1801,7 @@ async function loadResources() {
             return;
         }
 
-        // Supabase query: include General/null values
+        // Correct Supabase OR logic to filter by program/block/intakeYear including General/null
         const { data: resources, error } = await sb
             .from('resources')
             .select('id, title, file_path, file_url, program_type, block, intake_year, uploaded_by_name, created_at')
@@ -1826,22 +1826,15 @@ async function loadResources() {
             return;
         }
 
-        // Render each resource using event listeners
+        // Render resources as responsive cards
         cachedResources.forEach(res => {
             const displayDate = new Date(res.created_at).toLocaleDateString('en-US');
 
             const itemDiv = document.createElement('div');
             itemDiv.className = 'resource-item';
-            itemDiv.style.cursor = 'pointer';
-            itemDiv.style.flexDirection = 'column';
-            itemDiv.style.alignItems = 'flex-start';
-            itemDiv.style.marginBottom = '10px';
             itemDiv.innerHTML = `
-                <strong style="color: #4C1D95;">${escapeHtml(res.title)}</strong>
-                <p style="margin:5px 0 0;font-size:0.8em;color:#6B7280;">
-                    Uploaded: ${displayDate} 
-                    (${res.program_type === 'General' ? 'General' : res.program_type})
-                </p>
+                <strong>${escapeHtml(res.title)}</strong>
+                <p>Uploaded: ${displayDate} (${res.program_type === 'General' ? 'General' : res.program_type})</p>
             `;
             itemDiv.addEventListener('click', () => viewResource(res.id));
             resourceListContainer.appendChild(itemDiv);
@@ -1859,6 +1852,7 @@ async function loadResources() {
         loadDashboardMetrics(currentUserId);
     }
 }
+
 
 
 
