@@ -1745,8 +1745,43 @@ function escapeHtml(text) {
 }
 
 /**
+ * viewResource() opens a resource based on its file type.
+ * PDFs open in a custom viewer, other files preview via online viewer.
+ */
+window.viewResource = function(resourceId) {
+    const res = cachedResources.find(r => r.id === resourceId);
+    if (!res) return alert("Resource not found.");
+
+    const viewerContainer = document.getElementById('resource-viewer');
+    if (!viewerContainer) return;
+
+    const fileUrl = res.file_url;
+    const fileExt = res.file_path.split('.').pop().toLowerCase();
+
+    let embedHtml = '';
+
+    if (fileExt === 'pdf') {
+        embedHtml = `<iframe src="${fileUrl}#toolbar=0" style="width:100%; height:80vh; border:none;"></iframe>`;
+    } else if (['doc','docx','xls','xlsx','ppt','pptx'].includes(fileExt)) {
+        embedHtml = `<iframe src="https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fileUrl)}" style="width:100%; height:80vh; border:none;"></iframe>`;
+    } else {
+        embedHtml = `<p>Preview not available. File type: ${fileExt}</p>`;
+    }
+
+    viewerContainer.innerHTML = `
+        <div style="margin-bottom:10px;">
+            <strong>${escapeHtml(res.title)}</strong>
+            <p style="font-size:0.8em;color:#6B7280;">Uploaded by: ${res.uploaded_by_name}</p>
+        </div>
+        ${embedHtml}
+    `;
+
+    viewerContainer.scrollIntoView({ behavior: 'smooth' });
+};
+
+/**
  * loadResources() fetches student-specific learning materials and caches them.
- * PDFs open in a custom viewer (no download), other files preview as before.
+ * PDFs open in a custom viewer, other files preview as before.
  */
 async function loadResources() {
     if (!currentUserProfile) await loadProfile(currentUserId);
@@ -1766,7 +1801,7 @@ async function loadResources() {
             return;
         }
 
-        // Correct Supabase OR logic to include General/null values
+        // Supabase query: include General/null values
         const { data: resources, error } = await sb
             .from('resources')
             .select('id, title, file_path, file_url, program_type, block, intake_year, uploaded_by_name, created_at')
@@ -1791,17 +1826,25 @@ async function loadResources() {
             return;
         }
 
+        // Render each resource using event listeners
         cachedResources.forEach(res => {
             const displayDate = new Date(res.created_at).toLocaleDateString('en-US');
-            resourceListContainer.innerHTML += `
-                <div class="resource-item" onclick="viewResource('${res.id}')" style="cursor:pointer; flex-direction: column; align-items: flex-start;">
-                    <strong style="color: #4C1D95;">${escapeHtml(res.title)}</strong>
-                    <p style="margin:5px 0 0;font-size:0.8em;color:#6B7280;">
-                        Uploaded: ${displayDate} 
-                        (${res.program_type === 'General' ? 'General' : res.program_type})
-                    </p>
-                </div>
+
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'resource-item';
+            itemDiv.style.cursor = 'pointer';
+            itemDiv.style.flexDirection = 'column';
+            itemDiv.style.alignItems = 'flex-start';
+            itemDiv.style.marginBottom = '10px';
+            itemDiv.innerHTML = `
+                <strong style="color: #4C1D95;">${escapeHtml(res.title)}</strong>
+                <p style="margin:5px 0 0;font-size:0.8em;color:#6B7280;">
+                    Uploaded: ${displayDate} 
+                    (${res.program_type === 'General' ? 'General' : res.program_type})
+                </p>
             `;
+            itemDiv.addEventListener('click', () => viewResource(res.id));
+            resourceListContainer.appendChild(itemDiv);
         });
 
         // Automatically view first resource
@@ -1816,6 +1859,7 @@ async function loadResources() {
         loadDashboardMetrics(currentUserId);
     }
 }
+
 
 
 // *************************************************************************
