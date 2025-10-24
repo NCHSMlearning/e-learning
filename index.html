@@ -1520,21 +1520,24 @@ async function geoCheckIn() {
         }
 
         // 3. Location Accuracy Check (NEW VALIDATION)
-        let isVerified = false; // ✅ change from null → false
-         let distanceToTarget = null; // ✅ ensure defined
-        
-        if (location.acc > MAX_ALLOWED_ACCURACY) {
-            geoMessage.textContent = `⚠️ Location accuracy (${location.acc.toFixed(1)} m) is too low (Max ${MAX_ALLOWED_ACCURACY}m allowed). Check-in recorded as pending review.`;
-            isVerified = null;
-        } else {
+let isVerified = false; // default
+let distanceToTarget = null; // ensure defined
 
-            // 4. Reverse Geocoding (UX step)
-            if (!location.friendly) {
-                geoMessage.textContent = '🌐 Location acquired. Verifying friendly name...';
-                const res = await fetch(`${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${location.lat}&lon=${location.lon}&format=json`);
-                const geoData = res.ok ? await res.json() : null;
-                location.friendly = geoData?.display_name || `Lat:${location.lat.toFixed(4)}, Lon:${location.lon.toFixed(4)}`;
-            }
+if (location.acc > MAX_ALLOWED_ACCURACY) {
+    geoMessage.textContent = `⚠️ Location accuracy (${location.acc.toFixed(1)} m) is too low (Max ${MAX_ALLOWED_ACCURACY}m allowed). Check-in recorded as pending review.`;
+    // Keep isVerified = false, don't set null
+} else {
+    // Calculate distance
+    distanceToTarget = haversineDistance(location.lat, location.lon, targetLat, targetLon);
+
+    if (distanceToTarget <= MAX_DISTANCE_RADIUS) {
+        isVerified = true;
+        geoMessage.textContent = `✅ Within check-in area (${distanceToTarget.toFixed(1)} m). Verified check-in.`;
+    } else {
+        isVerified = false;
+        geoMessage.textContent = `❌ You are ${distanceToTarget.toFixed(1)} m away (Max ${MAX_DISTANCE_RADIUS}m). Check-in recorded as pending review.`;
+    }
+}
 
 
             // 5. Find Target Coordinates & Distance Check
