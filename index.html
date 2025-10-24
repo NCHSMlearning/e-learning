@@ -4,8 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NCHSM Digital Student Dashboard </title>
-        <!-- ✅ Favicon -->
-<link rel="icon" type="image/png" href="https://raw.githubusercontent.com/NCHSMlearning/e-learning/main/images/Logo_NCHSM.png" sizes="32x32">
+        <link rel="icon" type="image/png" href="https://raw.githubusercontent.com/NCHSMlearning/e-learning/main/images/Logo_NCHSM.png" sizes="32x32">
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -776,16 +775,6 @@
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk'; // <--- Update with your actual Anon Key
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
       
-    // 🔒 Redirect to login if not authenticated
-  (async () => {
-    const { data: { session } } = await sb.auth.getSession();
-    if (!session) {
-      window.location.href = '/login';
-    } else {
-      currentUserId = session.user.id;
-    }
-  })();
-
     // ** LOCATIONIQ CONFIGURATION (Geocoding API) **
     const LOCATIONIQ_API_KEY = 'pk.cbe61eae35ecbe1d1d682c347d81381c'; 
     const LOCATIONIQ_API_URL = 'https://us1.locationiq.com/v1/reverse.php';
@@ -816,6 +805,31 @@
     // ** GEO-ATTENDANCE CONSTANTS **
     const MAX_ALLOWED_ACCURACY = 30; // Max meters allowed for device-reported accuracy
     const MAX_DISTANCE_RADIUS = 200; // Max meters from the target location allowed for a verified check-in
+
+
+// *************************************************************************
+// *** 1. ENFORCED AUTHENTICATION CHECK (REVISED AND ENFORCED) ***
+// *************************************************************************
+
+/**
+ * 🔒 CRITICAL: Enforce redirect to login.html if no active session is found.
+ * This function runs immediately upon page load.
+ */
+(async function enforceAuth() {
+    const { data: { session }, error } = await sb.auth.getSession();
+
+    // Check for explicit error or no session
+    if (error || !session || !session.user) {
+        console.warn("No active user session or session error. Redirecting to login.html.");
+        // Mandatory redirect to login
+        window.location.href = "login.html"; 
+        return; // Stop further script execution
+    } else {
+        currentUserId = session.user.id;
+        // Proceed with checkAuthAndLoad() only if authenticated
+        checkAuthAndLoad();
+    }
+})();
 
 
 // *************************************************************************
@@ -1010,50 +1024,32 @@ async function loadDashboardMetrics(userId) {
 }
 
 
-// *** 4. AUTHENTICATION AND PROFILE MANAGEMENT ***
+// *************************************************************************
+// *** 4. AUTHENTICATION AND PROFILE MANAGEMENT (CLEANED) ***
 // *************************************************************************
 
-
 async function checkAuthAndLoad() {
-    const { data: { user } } = await sb.auth.getUser();
-
-
-    if (user) {
-        currentUserId = user.id;
-        
-        // ** CRITICAL: Load all necessary data FIRST **
-        await loadProfile(currentUserId);
-        await loadClinicalTargets(); 
-        await loadClassTargets(); 
-        await loadCourses(); 
-        await loadExams(); 
-        await loadResources(); // Load resources for the dashboard metric
-
-        // ** THEN, load UI elements and metrics **
-        await loadWelcomeDetails();
-        showTab('dashboard');
-        loadDashboardMetrics(currentUserId);
-
-
-    } else {
-        console.warn("No active user session found. Redirecting to login. (MOCKING DATA LOAD)");
-        // window.location.href = "login.html"; // Uncomment for real app
-
-
-        // --- MOCK DATA LOAD FOR DEVELOPMENT ---
-        currentUserId = 'mock_student_uuid'; 
-        await loadProfile(currentUserId); // Mocks loading a profile
-        await loadClinicalTargets(); 
-        await loadClassTargets(); 
-        await loadCourses(); 
-        await loadExams(); 
-        await loadResources();
-
-        await loadWelcomeDetails();
-        showTab('dashboard');
-        loadDashboardMetrics(currentUserId);
-        // --- END MOCK ---
+    // This function is now only called IF enforceAuth() has confirmed a valid session.
+    
+    // We already have the currentUserId from the session check.
+    if (!currentUserId) {
+         // Should not happen, but safe to redirect again
+         window.location.href = "login.html"; 
+         return;
     }
+
+    // ** CRITICAL: Load all necessary data FIRST **
+    await loadProfile(currentUserId);
+    await loadClinicalTargets(); 
+    await loadClassTargets(); 
+    await loadCourses(); 
+    await loadExams(); 
+    await loadResources(); // Load resources for the dashboard metric
+
+    // ** THEN, load UI elements and metrics **
+    await loadWelcomeDetails();
+    showTab('dashboard');
+    loadDashboardMetrics(currentUserId);
 }
 
 
@@ -1082,17 +1078,8 @@ async function loadProfile(userId) {
     if (error || !profile) {
         console.error('Error loading consolidated profile:', error);
         if (profileStatus) profileStatus.textContent = 'Profile data missing or restricted. Contact Admin.';
-        // Mock/Fallback profile data
-        currentUserProfile = {
-            full_name: 'Mock Student (ID: ' + userId + ')',
-            program: 'ClinicalMedicine',
-            block: 'Block_B',
-            intake_year: '2024',
-            email: 'mock.student@nchsm.edu',
-            phone: '+254711000111',
-            student_id: 'REG/NCHS/001/2024',
-            department: 'ClinicalMedicine'
-        };
+        // IMPORTANT: No mock data here. If profile fails to load, data fields will show N/A.
+        currentUserProfile = {}; // Initialize as empty object to prevent crashes
     } else {
         currentUserProfile = profile;
         if (profileStatus) profileStatus.textContent = '';
@@ -2139,10 +2126,8 @@ async function loadStudentMessagesAndAnnouncements() {
 // *** 9. INITIALIZATION ***
 // *************************************************************************
 
-
-// Start the authentication check once the script is loaded
-checkAuthAndLoad();
-
+// NOTE: The initial call to checkAuthAndLoad() is now handled within the enforceAuth() function,
+// which runs immediately upon script loading. No additional call is needed here.
 
 </script>
 </body>
