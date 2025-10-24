@@ -1527,6 +1527,13 @@ if (location.acc > MAX_ALLOWED_ACCURACY) {
             geoMessage.textContent = `⚠️ Location accuracy (${location.acc.toFixed(1)} m) is too low (Max ${MAX_ALLOWED_ACCURACY}m allowed). Check-in recorded as pending review.`;
             isVerified = null;
         } else {
+    // 4. Reverse Geocoding (UX step)
+            if (!location.friendly) {
+                geoMessage.textContent = '🌐 Location acquired. Verifying friendly name...';
+                const res = await fetch(`${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${location.lat}&lon=${location.lon}&format=json`);
+                const geoData = res.ok ? await res.json() : null;
+                location.friendly = geoData?.display_name || `Lat:${location.lat.toFixed(4)}, Lon:${location.lon.toFixed(4)}`;
+            }
 
             // 5. Find Target Coordinates & Distance Check
             const allTargetLocations = sessionType === 'Clinical'
