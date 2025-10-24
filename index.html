@@ -1548,49 +1548,26 @@ if (location.acc > MAX_ALLOWED_ACCURACY) {
 
             const closestTarget = allTargetLocations[0];
 
-           // --- Distance Calculation and Verification ---
-const getDistanceMeters = (lat1, lon1, lat2, lon2) => {
-    const R = 6371000;
-    const toRad = x => x * Math.PI / 180;
-    const dLat = toRad(lat2 - lat1);
-    const dLon = toRad(lon2 - lon1);
-    const a = Math.sin(dLat / 2) ** 2 +
-              Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-              Math.sin(dLon / 2) ** 2;
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-};
+            const getDistanceMeters = (lat1, lon1, lat2, lon2) => {
+                const R = 6371000;
+                const toRad = x => x * Math.PI / 180;
+                const dLat = toRad(lat2 - lat1);
+                const dLon = toRad(lon2 - lon1);
+                const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                return R * c;
+            };
 
-// 3. Location Accuracy Check (NEW VALIDATION)
-let isVerified = null; // Default to pending
-let distanceToTarget = null; // ensure defined
+            const distanceToTarget = getDistanceMeters(location.lat, location.lon, closestTarget.latitude, closestTarget.longitude);
 
-if (location.acc > MAX_ALLOWED_ACCURACY) {
-    geoMessage.textContent = `⚠️ Accuracy (${location.acc.toFixed(1)} m) is too low (max ${MAX_ALLOWED_ACCURACY} m). Check-in recorded as pending review.`;
-    isVerified = null;
-} else {
-    // 4. Find Target Coordinates & Distance Check
-    const allTargetLocations = sessionType === 'Clinical'
-        ? cachedClinicalAreas.filter(c => c.id == targetId)
-        : cachedCourses.filter(c => c.id == targetId);
-
-    if (allTargetLocations.length === 0 || allTargetLocations[0].latitude === null || allTargetLocations[0].longitude === null) {
-        geoMessage.textContent = 'Error: Target location coordinates not found in the database.';
-        if (button) button.disabled = false;
-        return;
-    }
-
-    const closestTarget = allTargetLocations[0];
-    distanceToTarget = getDistanceMeters(location.lat, location.lon, closestTarget.latitude, closestTarget.longitude);
-
-    if (distanceToTarget <= MAX_DISTANCE_RADIUS) {
-        isVerified = true;
-        geoMessage.textContent = `✅ Within check-in area (${distanceToTarget.toFixed(1)} m). Verified check-in.`;
-    } else {
-        isVerified = null;
-        geoMessage.textContent = `ℹ️ You are ${distanceToTarget.toFixed(1)} m away (max ${MAX_DISTANCE_RADIUS} m). Check-in recorded as pending review.`;
-    }
-}
+            if (distanceToTarget <= MAX_DISTANCE_RADIUS) {
+                isVerified = true;
+                geoMessage.textContent = `✅ Within check-in area (${distanceToTarget.toFixed(1)} m). Verified check-in.`;
+            } else {
+                isVerified = false;
+                geoMessage.textContent = `❌ You are ${distanceToTarget.toFixed(1)} m away (Max ${MAX_DISTANCE_RADIUS}m). Check-in recorded as pending review.`;
+            }
+        }
 
 
         // 6. Log to Database
