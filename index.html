@@ -1377,6 +1377,7 @@ async function loadGeoAttendanceHistory(userId) {
                     ? '❌ No'
                     : '⏳ Pending Review');
             
+            // Updated content to show GPS and Accuracy together
             const gpsAndAccuracy = `${log.latitude.toFixed(4)}, ${log.longitude.toFixed(4)} / ${log.accuracy_m ? log.accuracy_m.toFixed(1) : 'N/A'}m`;
             
             const row = `
@@ -1445,7 +1446,8 @@ function updateTargetSelect() {
             option.textContent = target.text;
             attendanceTargetSelect.appendChild(option);
         });
-
+        
+        // Ensure the default option is selected, forcing user to make a choice
         attendanceTargetSelect.selectedIndex = 0;
     }
 
@@ -1472,7 +1474,7 @@ async function geoCheckIn() {
     const checkInTime = new Date().toISOString();
     const button = document.getElementById('check-in-button');
 
-    if (!studentProfile || !sessionType || !targetSelect) {
+    if (!studentProfile || !sessionType || !targetSelect || targetSelect === '') {
         geoMessage.textContent = 'Error: Select session type and target, and ensure profile is loaded.';
         return;
     }
@@ -1484,21 +1486,25 @@ async function geoCheckIn() {
     }
 
     if (button) button.disabled = true;
+    
+    // 1. Initial feedback to user
     geoMessage.textContent = '⏱️ Requesting device location... (Allow up to 15 seconds for GPS lock)';
 
-    const getLocation = () => new Promise(resolve => {
+
+   const getLocation = () => new Promise(resolve => {
         if (!navigator.geolocation)
             return resolve({ lat: FALLBACK_LAT, lon: FALLBACK_LON, acc: FALLBACK_ACCURACY, friendly: 'Fallback Location' });
         navigator.geolocation.getCurrentPosition(
             pos => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude, acc: pos.coords.accuracy, friendly: null }),
             () => resolve({ lat: FALLBACK_LAT, lon: FALLBACK_LON, acc: FALLBACK_ACCURACY, friendly: 'Fallback Location' }),
-            { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+            // Increased timeout for better accuracy lock, MaximumAge = 0 forces a fresh reading
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 } 
         );
     });
 
     try {
         const location = await getLocation();
-
+        
         // 2. Device Sharing Check
         const { data: existing, error: deviceError } = await sb
             .from('geo_attendance_logs')
@@ -1508,58 +1514,65 @@ async function geoCheckIn() {
             .limit(1);
         if (deviceError) throw deviceError;
         if (existing?.length > 0) {
-            geoMessage.textContent = '⛔ Check-in blocked: This device is registered to another student. Please use your personal device or contact Admin.';
+            geoMessage.textContent = '⛔ Check-in blocked: This device is registered to another student. Please use your registered personal device or contact the Administrator.';
             if (button) button.disabled = false;
             return;
         }
 
-        // 3. Get Target Coordinates
-        const allTargetLocations = sessionType === 'Clinical'
-            ? cachedClinicalAreas.filter(c => c.id == targetId)
-            : cachedCourses.filter(c => c.id == targetId);
+          // 3. Location Accuracy Check (NEW VALIDATION)
+let isVerified = false; // default
+let distanceToTarget = null; // ensure defined
 
-        if (allTargetLocations.length === 0 || allTargetLocations[0].latitude == null || allTargetLocations[0].longitude == null) {
-            geoMessage.textContent = 'Error: Target location coordinates not found.';
-            if (button) button.disabled = false;
-            return;
+if (location.acc > MAX_ALLOWED_ACCURACY) {
+    geoMessage.textContent = `⚠️ Location accuracy (${location.acc.toFixed(1)} m) is too low (Max ${MAX_ALLOWED_ACCURACY}m allowed). Check-in recorded as pending review.`;
+    // Keep isVerified = false, don't set null
+} else {
+    // Calculate distance
+    distanceToTarget = haversineDistance(location.lat, location.lon, targetLat, targetLon);
+
+    if (distanceToTarget <= MAX_DISTANCE_RADIUS) {
+        isVerified = true;
+        geoMessage.textContent = `✅ Within check-in area (${distanceToTarget.toFixed(1)} m). Verified check-in.`;
+    } else {
+        isVerified = false;
+        geoMessage.textContent = `❌ You are ${distanceToTarget.toFixed(1)} m away (Max ${MAX_DISTANCE_RADIUS}m). Check-in recorded as pending review.`;
+    }
+}
+
+            // 5. Find Target Coordinates & Distance Check
+            const allTargetLocations = sessionType === 'Clinical'
+                ? cachedClinicalAreas.filter(c => c.id == targetId)
+                : cachedCourses.filter(c => c.id == targetId);
+
+            if (allTargetLocations.length === 0 || allTargetLocations[0].latitude === null || allTargetLocations[0].longitude === null) {
+                geoMessage.textContent = 'Error: Target location coordinates not found in the database.';
+                if (button) button.disabled = false;
+                return;
+            }
+
+            const closestTarget = allTargetLocations[0];
+
+            const getDistanceMeters = (lat1, lon1, lat2, lon2) => {
+                const R = 6371000;
+                const toRad = x => x * Math.PI / 180;
+                const dLat = toRad(lat2 - lat1);
+                const dLon = toRad(lon2 - lon1);
+                const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                return R * c;
+            };
+
+            const distanceToTarget = getDistanceMeters(location.lat, location.lon, closestTarget.latitude, closestTarget.longitude);
+
+            if (distanceToTarget <= MAX_DISTANCE_RADIUS) {
+                isVerified = true;
+                geoMessage.textContent = `✅ Within check-in area (${distanceToTarget.toFixed(1)} m). Verified check-in.`;
+            } else {
+                isVerified = false;
+                geoMessage.textContent = `❌ You are ${distanceToTarget.toFixed(1)} m away (Max ${MAX_DISTANCE_RADIUS}m). Check-in recorded as pending review.`;
+            }
         }
-
-        const closestTarget = allTargetLocations[0];
-
-        // Distance calculator
-        const getDistanceMeters = (lat1, lon1, lat2, lon2) => {
-            const R = 6371000;
-            const toRad = x => x * Math.PI / 180;
-            const dLat = toRad(lat2 - lat1);
-            const dLon = toRad(lon2 - lon1);
-            const a = Math.sin(dLat / 2) ** 2 +
-                Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-                Math.sin(dLon / 2) ** 2;
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-            return R * c;
-        };
-
-        // 4. Accuracy and Distance Verification
-        let isVerified = false;
-        const distanceToTarget = getDistanceMeters(location.lat, location.lon, closestTarget.latitude, closestTarget.longitude);
-
-        if (location.acc > MAX_ALLOWED_ACCURACY) {
-            geoMessage.textContent = `⚠️ Location accuracy (${location.acc.toFixed(1)} m) is too low. Max allowed: ${MAX_ALLOWED_ACCURACY}m. Check-in pending review.`;
-            isVerified = false;
-        } else if (distanceToTarget <= MAX_DISTANCE_RADIUS) {
-            isVerified = true;
-            geoMessage.textContent = `✅ Within check-in area (${distanceToTarget.toFixed(1)} m). Verified check-in.`;
-        } else {
-            isVerified = false;
-            geoMessage.textContent = `❌ ${distanceToTarget.toFixed(1)} m away (Max ${MAX_DISTANCE_RADIUS}m). Check-in pending review.`;
-        }
-
-        // 5. Reverse Geocoding
-        if (!location.friendly) {
-            const res = await fetch(`${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${location.lat}&lon=${location.lon}&format=json`);
-            const geoData = res.ok ? await res.json() : null;
-            location.friendly = geoData?.display_name || `Lat:${location.lat.toFixed(4)}, Lon:${location.lon.toFixed(4)}`;
-        }
+        
 
         // 6. Log to Database
         const studentProgram = studentProfile.program || studentProfile.department;
@@ -1577,7 +1590,7 @@ async function geoCheckIn() {
             p_block: studentProfile.block,
             p_intake_year: studentProfile.intake_year,
             p_device_id: deviceId,
-            p_is_verified: isVerified
+            p_is_verified: isVerified // Logs the result of the new validation
         });
 
         if (error) {
@@ -1585,14 +1598,14 @@ async function geoCheckIn() {
             geoMessage.textContent = `Check-in failed: ${error.message}`;
         } else {
             geoMessage.innerHTML = `✅ Check-in successful at ${new Date(checkInTime).toLocaleTimeString()} near <strong>${location.friendly}</strong>.<br>
-            Distance: ${distanceToTarget.toFixed(1)} m | Accuracy: ${location.acc.toFixed(1)} m`;
+            Distance to target: ${(distanceToTarget || 0).toFixed(1)} m. Accuracy: ${location.acc.toFixed(1)} m.`;
             loadGeoAttendanceHistory(currentUserId);
             loadDashboardMetrics(currentUserId);
         }
 
     } catch (e) {
         console.error('GeoCheckIn error:', e);
-        geoMessage.textContent = `🚫 Critical error: ${e.message}. Ensure GPS is enabled and permissions granted.`;
+        geoMessage.textContent = `🚫 Critical error during check-in: ${e.message}. Ensure GPS is enabled and permissions are granted.`;
     } finally {
         if (button) button.disabled = false;
     }
