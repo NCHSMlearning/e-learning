@@ -3,199 +3,294 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NCHSM Digital Student Dashboard </title>
-        <link rel="icon" type="image/png" href="https://raw.githubusercontent.com/NCHSMlearning/e-learning/main/images/Logo_NCHSM.png" sizes="32x32">
-
+    <title>NCHSM Digital Student Dashboard</title>
+    <link rel="icon" type="image/png" href="https://raw.githubusercontent.com/NCHSMlearning/e-learning/main/images/Logo_NCHSM.png" sizes="32x32">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         /* -------------------------------------- */
-        /* SUPABASE STUDENT PORTAL STYLE (Deep Purple Theme) */
+        /* BASE & TYPOGRAPHY */
         /* -------------------------------------- */
-        body { margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #F1F5F9; }
-        .container { display: flex; min-height: 100vh; }
+        :root {
+            --color-primary: #4C1D95; /* Deep Purple */
+            --color-secondary: #FCD34D; /* Gold Yellow (Accent) */
+            --color-alert: #EF4444; /* Red */
+            --color-warning: #F59E0B; /* Orange */
+            --color-success: #10B981; /* Green */
+            --color-text-dark: #1F2937;
+            --color-text-light: #E5E7EB;
+            --color-background: #F8F8F8;
+            --color-card-bg: #FFFFFF;
+        }
 
+        body {
+            margin: 0;
+            font-family: 'Inter', sans-serif;
+            background-color: var(--color-background);
+            color: var(--color-text-dark);
+        }
+        .container {
+            display: flex;
+            min-height: 100vh;
+        }
 
-        /* Sidebar - Deep Purple Theme (Vertical for Desktop) */
-        .sidebar { 
+        /* -------------------------------------- */
+        /* SIDEBAR (Navigation) */
+        /* -------------------------------------- */
+        .sidebar {
             width: 250px;
-            background-color: #4C1D95;
-            color: #fff; 
-            display: flex; 
-            flex-direction: column; 
-            padding: 20px; 
+            background-color: var(--color-primary);
+            color: var(--color-text-light);
+            display: flex;
+            flex-direction: column;
+            padding: 20px 0;
             transition: transform 0.3s, width 0.3s;
-            position: sticky; 
+            position: sticky;
             top: 0;
             left: 0;
             z-index: 1000;
-            /* CRITICAL FIX: Ensure sidebar can scroll on desktop if content is long */
-            height: 100vh; 
-            box-sizing: border-box; 
-            overflow-y: auto; /* Enable scrolling for the whole sidebar */
+            height: 100vh;
+            box-sizing: border-box;
+            overflow-y: auto;
+            box-shadow: 2px 0 6px rgba(0, 0, 0, 0.1);
         }
-        .sidebar-header { 
-            text-align: center; 
-            margin-bottom: 30px; 
-            /* Fix header from scrolling with nav links */
-            flex-shrink: 0;
-        }
-        .sidebar-header img { width: 60px; margin-bottom: 10px; filter: invert(1); }
-        
-        /* Nav Container */
-        .nav { 
-            list-style: none; 
-            padding: 0; 
-            flex-grow: 1; 
-            /* Let the nav area grow and take available space */
-            overflow-y: visible; 
-            /* No need for separate scrolling here, let the parent .sidebar handle it */
-        }
-        .nav li { margin: 10px 0; }
-        .nav a { color: #E5E7EB; text-decoration: none; padding: 10px; border-radius: 6px; display: block; transition: 0.2s; }
-        .nav a:hover { background-color: #5B21B6; }
-        .nav a.active { 
-            background-color: #FCD34D;
-            color: #1F2937;
-            font-weight: bold;
-        }
-        .logout { 
-            margin-top: auto; 
-            text-align: center; 
-            flex-shrink: 0;
-        }
-        .logout a { 
-            display: inline-block; 
-            margin-top: 20px; 
-            padding: 10px 20px; 
-            background-color: #EF4444; 
-            color: #fff; 
-            text-decoration: none; 
-            border-radius: 6px; 
-        }
-
-
-        /* Main Content */
-        .main { flex: 1; padding: 30px; overflow-y: auto; }
-        header h1 { margin: 0; font-size: 2.2rem; color: #4C1D95; }
-        .subtitle { color: #6B7280; margin-bottom: 25px; }
-
-
-        /* Cards */
-        .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 30px; margin-bottom: 40px; }
-        .card { 
-            background-color: #fff; 
-            padding: 25px; 
-            border-radius: 12px; 
-            cursor: pointer; 
-            box-shadow: 0 4px 12px rgba(0,0,0,0.08); 
-            transition: transform 0.2s, box-shadow 0.2s; 
-            border: 1px solid #E2E8F0;
+        .sidebar-header {
             text-align: center;
-            border-left: 5px solid #4C1D95; 
+            margin-bottom: 30px;
+            padding: 0 20px;
+            flex-shrink: 0;
         }
-        .card:hover { transform: translateY(-7px); box-shadow: 0 10px 30px rgba(0,0,0,0.15); }
-        .card h3 { margin-top: 0; font-size: 1.1em; color: #4C1D95;}
-        .card p.data { font-size: 2em; font-weight: 800; margin: 5px 0 0; color: #F59E0B; } 
+        .sidebar-header img {
+            width: 80px;
+            margin-bottom: 10px;
+            filter: invert(1); /* Invert for visibility on dark background */
+        }
+        .sidebar-header h2 {
+            font-size: 1.2rem;
+            margin: 0;
+            font-weight: 700;
+        }
 
+        /* Nav Container */
+        .nav {
+            list-style: none;
+            padding: 0 20px;
+            flex-grow: 1;
+        }
+        .nav li { margin: 5px 0; }
+        .nav a {
+            color: var(--color-text-light);
+            text-decoration: none;
+            padding: 12px 15px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: 0.2s;
+            font-weight: 500;
+        }
+        .nav a:hover { background-color: #5B21B6; }
+        .nav a.active {
+            background-color: var(--color-secondary);
+            color: var(--color-text-dark);
+            font-weight: 700;
+        }
+        .logout {
+            margin-top: auto;
+            text-align: center;
+            flex-shrink: 0;
+            padding: 20px;
+        }
+        .logout a {
+            display: block;
+            padding: 12px 20px;
+            background-color: var(--color-alert);
+            color: #fff;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: background-color 0.2s;
+        }
+        .logout a:hover { background-color: #D63333; }
 
-      /* Dashboard Welcome Banner (Compact Admin Message) */
-#welcome-banner {
-  background-color: #FFF7ED;
-  color: #92400E;
-  border: 1px solid #FED7AA;
-  padding: 10px 15px;
-  border-radius: 6px;
-  margin-bottom: 20px;
-  font-weight: 500;
-  font-size: 0.95rem; /* smaller text */
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
+        /* -------------------------------------- */
+        /* MAIN CONTENT & HEADER */
+        /* -------------------------------------- */
+        .main {
+            flex: 1;
+            padding: 30px;
+            overflow-y: auto;
+        }
+        
+        /* New Welcome Banner Style (Personalized & Prominent) */
+        .welcome-card {
+            background: linear-gradient(90deg, #4C1D95, #6D28D9); /* Gradient Purple */
+            color: white;
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2);
+        }
+        .welcome-card h2 {
+            margin: 0;
+            font-size: 2.2rem;
+            font-weight: 700;
+        }
+        .welcome-card p {
+            font-size: 1.1rem;
+            font-weight: 300;
+            margin-top: 5px;
+            opacity: 0.9;
+        }
+        
+        /* Announcement Banner (Alert) */
+        #announcement-banner {
+            background-color: #FFF7ED;
+            color: #92400E;
+            border: 1px solid #FED7AA;
+            border-left: 6px solid #F97316; /* Strong Left Border for Alert */
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            font-weight: 500;
+            font-size: 0.95rem;
+            display: flex;
+            align-items: flex-start;
+            gap: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        #announcement-banner strong {
+            font-weight: 700;
+            color: #F97316;
+            font-size: 1rem;
+            display: block;
+            margin-bottom: 5px;
+        }
+        .info-icon {
+            font-size: 1.8rem;
+            color: #F97316;
+            line-height: 1;
+        }
 
-#welcome-banner strong {
-  font-weight: 600;
-  color: #EA580C; /* darker orange */
-  font-size: 0.95rem;
-}
+        /* -------------------------------------- */
+        /* CARDS (Quick Snapshot) */
+        /* -------------------------------------- */
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 25px;
+            margin-bottom: 40px;
+        }
+        .card {
+            background-color: var(--color-card-bg);
+            padding: 25px;
+            border-radius: 12px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            transition: transform 0.2s, box-shadow 0.2s;
+            border: 1px solid #E2E8F0;
+            text-align: left;
+            border-left: 5px solid var(--color-primary);
+        }
+        .card.alert-card { /* Custom style for the Attendance/Alert card */
+            border-left-color: var(--color-alert);
+            background-color: #FEF2F2;
+        }
+        .card:hover { transform: translateY(-4px); box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
+        .card h3 { margin-top: 0; font-size: 1.2em; color: var(--color-primary); font-weight: 600;}
+        .card p.data {
+            font-size: 2.5em;
+            font-weight: 800;
+            margin: 5px 0 10px;
+            color: #064E3B; /* Darker success color */
+        }
+        .card.alert-card p.data {
+            color: var(--color-alert); /* Red data for alerts */
+        }
+        .card small { display: block; margin-top: 2px; color: #6B7280; }
+        
+        /* Dashboard Actions */
+        #dashboard-actions {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        #dashboard-actions .card {
+            border-left-width: 8px;
+            cursor: default;
+            padding: 20px;
+            height: auto;
+        }
+        #action-passport { border-left-color: var(--color-alert); }
+        .card[style*="#F59E0B"] { border-left-color: var(--color-warning) !important; }
 
-.info-icon {
-  font-size: 1.3rem;
-  color: #EA580C;
-}
-
-        /* Tabs, Tables, Forms */
+        /* -------------------------------------- */
+        /* General Components (Tables, Forms, Profile) */
+        /* -------------------------------------- */
+        
         .tab-content { display: none; }
         .tab-content.active { display: block; }
 
-
-        table { width: 100%; border-collapse: collapse; margin-bottom: 25px; background-color: #fff; border-radius: 8px; overflow: hidden; }
-        th, td { padding: 15px; border-bottom: 1px solid #E2E8F0; text-align: left; }
-        th { background-color: #E5E7EB; color: #1F2937; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 25px; background-color: var(--color-card-bg); border-radius: 8px; overflow: hidden; }
+        th, td { padding: 15px; border-bottom: 1px solid #E2E8F0; text-align: left; font-size: 0.95rem; }
+        th { background-color: #E5E7EB; color: var(--color-text-dark); }
         tr:hover { background-color: #F8FAFC; }
-
-
+        
         /* Calendar Specific Styles */
         #calendar-table th.session-type-col { width: 15%; }
         #calendar-table th.date-col { width: 15%; }
-        #calendar-table td.Clinical { background-color: #fce7f3; } /* Light Pink */
-        #calendar-table td.Class { background-color: #e0f2f1; } /* Light Teal */
-        #calendar-table td.Exam { background-color: #fef3c7; } /* Light Yellow */
-
-
-
+        #calendar-table td.Clinical { background-color: #f0f9ff; }
+        #calendar-table td.Class { background-color: #f0fff4; }
+        #calendar-table td.Exam { background-color: #fff7ed; border: 1px dashed var(--color-warning); font-weight: 600; }
+        
         /* Forms */
         form input, form select, form button, form textarea {
             padding: 10px 12px; margin: 5px 5px 10px 0; border-radius: 6px; border: 1px solid #CBD5E1;
             box-sizing: border-box; 
             min-width: 150px;
         }
-        form button { background-color: #4C1D95; color: #fff; cursor: pointer; }
+        form textarea { width: 100%; min-height: 120px; margin: 10px 0; }
+        form button { background-color: var(--color-primary); color: #fff; cursor: pointer; }
         form button:hover { background-color: #5B21B6; }
-
 
         /* Profile Specific Styles */
         #profile-form {
-            background-color: #fff;
+            background-color: var(--color-card-bg);
             padding: 30px;
             border-radius: 12px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-            border-top: 5px solid #4C1D95; 
+            border-top: 5px solid var(--color-primary); 
             max-width: 800px;
             margin: 0 auto;
             display: flex;
             gap: 30px;
         }
+        .profile-media {
+            text-align: center;
+            flex-shrink: 0;
+            width: 180px;
+        }
+        #passport-preview {
+            width: 150px;
+            height: 150px;
+            object-fit: cover;
+            border-radius: 50%;
+            border: 4px solid var(--color-primary);
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            margin-bottom: 10px;
+        }
         .profile-details {
-            /* Use grid for better layout of details */
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 15px;
+            flex-grow: 1;
         }
-        .profile-media {
-            /* Adjusted for better mobile flow */
-        }
-        .form-field {
-            min-width: 100%;
-        }
-        .form-field.full-width {
-            grid-column: 1 / 3;
-        }
-
-
-        .form-field label {
-            display: block;
-            font-weight: 600;
-            margin-bottom: 5px;
-            margin-top: 15px; 
-            color: #4C1D95;
-        }
-        .form-field input[readonly] {
-            background-color: #E5E7EB;
-            color: #4B5563;
-        }
+        .form-field.full-width { grid-column: 1 / 3; }
+        .form-field label { display: block; font-weight: 600; margin-bottom: 5px; margin-top: 5px; color: var(--color-primary); }
+        .form-field input[readonly] { background-color: #E5E7EB; color: #4B5563; }
         .profile-button {
-            background-color: #4C1D95; 
+            background-color: var(--color-primary); 
             color: white;
             padding: 12px 25px;
             border-radius: 6px;
@@ -204,54 +299,43 @@
             cursor: pointer;
         }
 
-
         /* Check-in Controls */
         .check-in-controls {
-            background-color: #fff;
+            background-color: var(--color-card-bg);
             padding: 30px;
             border-radius: 12px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-            border-top: 5px solid #4C1D95;
+            border-top: 5px solid var(--color-primary);
             margin-bottom: 30px;
             display: flex;
             flex-direction: column;
             gap: 15px;
         }
-        .check-in-controls button {
-            background-color: #10B981; 
-            color: white;
-            padding: 10px 20px;
-            border: none;
-            cursor: pointer;
-        }
-
+        .check-in-controls button { background-color: var(--color-success); }
+        .check-in-controls button:hover { background-color: #059669; }
 
         .resource-item {
-            background-color: #fff;
+            background-color: var(--color-card-bg);
             border: 1px solid #E2E8F0;
-            border-left: 4px solid #F59E0B;
+            border-left: 4px solid var(--color-warning);
             padding: 15px;
             margin-bottom: 15px;
             border-radius: 6px;
             display: flex;
-            justify-content: space-between;
-            align-items: center;
+            flex-direction: column;
+            cursor: pointer;
+            transition: background-color 0.1s;
         }
-        .resource-item a {
-            color: #4C1D95;
-            font-weight: 600;
-            text-decoration: none;
-        }
-        .resource-item a:hover {
-            text-decoration: underline;
-        }
+        .resource-item:hover { background-color: #F9FAFB; }
+        .resource-item strong { color: var(--color-primary); font-weight: 700; }
+        .resource-item p { margin: 2px 0 0; font-size: 0.85em; color: #6B7280; }
         
         /* -------------------------------------- */
         /* MOBILE NAV HEADER & TOGGLE */
         /* -------------------------------------- */
         .mobile-header {
-            display: none; /* Hidden by default */
-            background-color: #4C1D95;
+            display: none;
+            background-color: var(--color-primary);
             color: white;
             padding: 10px 15px;
             align-items: center;
@@ -271,38 +355,26 @@
         }
         
         /* -------------------------------------- */
-        /* RESPONSIVE ADJUSTMENTS (Mobile First) */
+        /* RESPONSIVE ADJUSTMENTS */
         /* -------------------------------------- */
         @media (max-width: 768px) {
-            .container { 
-                flex-direction: column; 
-            }
-
-            /* Show Mobile Header */
-            .mobile-header {
-                display: flex;
-            }
+            .container { flex-direction: column; }
+            .mobile-header { display: flex; }
             
-            /* Hide the main sidebar off-screen initially */
-            .sidebar { 
+            /* Sidebar Mobile Overlay */
+            .sidebar {
                 position: fixed;
                 top: 0;
                 left: 0;
-                width: 70%; 
-                height: 100%; /* Important for mobile overlay */
-                transform: translateX(-100%); 
+                width: 70%;
+                height: 100%;
+                transform: translateX(-100%);
                 transition: transform 0.3s ease-in-out;
                 box-shadow: 4px 0 10px rgba(0,0,0,0.3);
-                overflow-y: auto; /* Ensure mobile menu is scrollable */
-                padding-bottom: 20px; /* Padding for the bottom of the scrollable area */
+                overflow-y: auto;
+                padding-bottom: 20px;
             }
-            
-            /* Class added by JS to show the menu */
-            .sidebar.open {
-                transform: translateX(0);
-            }
-
-            /* Full screen overlay to dim the content */
+            .sidebar.open { transform: translateX(0); }
             .overlay {
                 display: none;
                 position: fixed;
@@ -313,115 +385,58 @@
                 background: rgba(0, 0, 0, 0.5);
                 z-index: 999;
             }
-            .overlay.active {
-                display: block;
-            }
-
-            .sidebar-header { 
-                display: flex; 
-                justify-content: flex-start; 
+            .overlay.active { display: block; }
+            
+            .sidebar-header {
+                display: flex;
+                justify-content: flex-start;
                 align-items: center;
                 gap: 10px;
                 margin-bottom: 20px;
-                padding: 10px 0;
+                padding: 10px 20px;
                 border-bottom: 1px solid #5B21B6;
                 flex-shrink: 0;
             }
-            .sidebar-header img { 
-                width: 40px; 
-                margin-bottom: 0; 
-            }
-            .sidebar-header h2 {
-                 font-size: 1.2rem;
-            }
-
-            /* Enforce vertical tabs within the mobile sidebar */
-            .nav { 
-                display: flex; 
-                flex-direction: column; 
-                padding: 0; 
-                margin: 0;
-                flex-grow: 1;
-            }
-            .nav a { 
-                padding: 12px 15px; 
-                border-radius: 0;
-            }
-
-            /* Move logout back to the sidebar on mobile, but at the bottom */
-            .logout { display: block; margin-top: 15px; flex-shrink: 0;}
-            .main { padding: 15px; } /* Reduce main padding */
-
-            .cards { 
-                grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); 
-                gap: 15px; 
-                margin-bottom: 20px; 
-            }
-            .card p.data { font-size: 1.8em; }
-
-
-            /* Profile/Form refinement */
-            #profile-form { 
-                flex-direction: column; 
-                padding: 15px; 
-                gap: 15px;
-            }
-            .profile-details { 
-                grid-template-columns: 1fr; /* Force single column on mobile */
-                gap: 10px; 
-            }
-            .form-field.full-width { 
-                grid-column: 1 / 2; 
-            }
+            .sidebar-header img { width: 40px; margin-bottom: 0; }
+            .sidebar-header h2 { font-size: 1.2rem; }
+            .nav { display: flex; flex-direction: column; padding: 0 10px; }
+            .logout { display: block; margin-top: 15px; flex-shrink: 0; padding: 0 10px; }
+            .main { padding: 15px; }
             
-            /* Check-in controls refinement */
-            .check-in-controls { 
-                padding: 15px; 
-                gap: 10px;
-            }
-            .check-in-controls select, .check-in-controls button {
-                min-width: unset;
-                width: 100%; /* Ensure selects and buttons take full width */
-            }
+            /* Dashboard Card Fixes */
+            .cards { grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
+            .card { padding: 15px; text-align: center; }
+            .card h3 { font-size: 1em; }
+            .card p.data { font-size: 1.6em; }
+            #dashboard-actions { grid-template-columns: 1fr; }
+            
+            /* Profile/Form refinement */
+            #profile-form { flex-direction: column; padding: 15px; gap: 15px; }
+            .profile-details { grid-template-columns: 1fr; gap: 10px; }
+            .profile-media { width: 100%; }
+            .form-field.full-width { grid-column: 1 / 2; }
 
             /* Resource viewer fixes */
-            .tab-content#resources > div {
-                flex-direction: column;
-            }
+            #resources > div { flex-direction: column; }
             #resources-list {
-                width: 100% !important; /* Forces resource list to take full width */
-                max-height: 300px !important; /* Keeps the list from being too long */
+                width: 100% !important;
+                max-height: 300px !important;
                 border-right: none !important;
                 border-bottom: 1px solid #ddd;
                 padding-right: 0 !important;
                 padding-bottom: 10px;
             }
             #resource-viewer {
-                width: 100% !important; /* Forces viewer to take full width */
+                width: 100% !important;
                 min-height: 400px !important;
-            }
-            .resource-item iframe {
-                height: 300px !important; /* Reduce iframe height for mobile */
             }
         }
 
         /* Desktop-only styles (Re-enables vertical nav and full sidebar) */
         @media (min-width: 769px) {
-            .sidebar { 
-                width: 250px; 
-                flex-direction: column; 
-                padding: 20px; 
-                position: sticky; 
-                transform: translateX(0); 
-                /* Sidebar height is 100vh and it handles its own scrolling */
-                height: 100vh; 
-            }
-            .sidebar-header { display: block; text-align: center; } 
-            .sidebar-header h2 { font-size: 1.5rem; }
-            .nav { display: block; overflow-x: visible; }
-            .nav li { margin: 10px 0; }
-            .nav a { white-space: normal; text-align: left; padding: 10px; font-size: 1rem; border-radius: 6px; }
-            .logout { display: block; }
+            .sidebar { transform: translateX(0); }
+            .sidebar-header { display: block; text-align: center; }
+            .nav { display: block; }
             .container { flex-direction: row; }
         }
     </style>
@@ -439,7 +454,7 @@
     <div class="container">
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <img src="https://raw.githubusercontent.com/NCHSMlearning/e-learning/main/images/Logo_NCHSM.png" alt="NCHSM Logo" style="width: 100px; margin-bottom: 10px; filter: none;"> 
+                <img src="https://raw.githubusercontent.com/NCHSMlearning/e-learning/main/images/Logo_NCHSM.png" alt="NCHSM Logo" style="filter: invert(1); width: 80px;">
                 <h2>STUDENT PORTAL</h2>
             </div>
             <ul class="nav">
@@ -457,20 +472,15 @@
 
 
         <main class="main">
-            <header>
-                <h1 id="welcome-header">Hello, Student!</h1>
-                <p class="subtitle">Your academic resources and tools.</p>
-            </header>
-
 
             <section id="dashboard" class="tab-content active">
                 
                 <div id="welcome-section" class="welcome-card">
-                    <h2 id="welcome-header">Hello, Student!</h2>
-                    <p id="student-welcome-message">Loading your welcome message...</p>
+                    <h2 id="welcome-header">Welcome back, Student!</h2>
+                    <p id="student-welcome-message">Access your courses, schedule, and check your attendance status.</p>
                 </div>
 
-                <div id="announcement-banner" class="announcement-card">
+                <div id="announcement-banner">
                     <span class="info-icon">📣</span>
                     <div>
                         <strong>Official Announcement:</strong>
@@ -479,24 +489,27 @@
                 </div>
 
 
-                <h2 style="margin-top: 30px; color: #4C1D95;">Quick Snapshot</h2>
+                <h2 style="margin-top: 20px; color: var(--color-primary); font-weight: 700;">Quick Snapshot</h2>
                 <div class="cards">
-                    <div class="card" onclick="showTab('attendance')">
+                    <div class="card alert-card" onclick="showTab('attendance')">
                         <h3>Attendance Rate</h3>
                         <p class="data" id="dashboard-attendance-rate">--%</p>
                         <small>Verified Check-ins: <strong id="dashboard-verified-count">0</strong> / <strong id="dashboard-total-count">0</strong></small>
-                        <small style="display:block; margin-top: 5px; color:#EF4444;">Pending Review: <strong id="dashboard-pending-count">0</strong></small>
+                        <small style="display:block; margin-top: 5px; color:var(--color-alert);">Pending Review: <strong id="dashboard-pending-count">0</strong></small>
                     </div>
+
                     <div class="card" onclick="showTab('cats')">
                         <h3>Upcoming Exam</h3>
-                        <p style="font-size: 1.2rem; font-weight: 600; color: #4C1D95;" id="dashboard-upcoming-exam">Loading...</p>
+                        <p style="font-size: 1.2rem; font-weight: 700; color: #F97316;" id="dashboard-upcoming-exam">Loading...</p>
                         <small>Next CAT/Exam date</small>
                     </div>
+
                     <div class="card" onclick="showTab('courses')">
                         <h3>Active Courses</h3>
                         <p class="data" id="dashboard-active-courses">0</p>
                         <small>Currently enrolled</small>
                     </div>
+
                     <div class="card" onclick="showTab('resources')">
                         <h3>New Resources</h3>
                         <p class="data" id="dashboard-new-resources">0</p>
@@ -505,24 +518,24 @@
                 </div>
 
 
-                <h2 id="actions-title" style="margin-top: 30px; color: #4C1D95;">Action Required</h2>
+                <h2 id="actions-title" style="margin-top: 30px; color: var(--color-primary); font-weight: 700;">Action Required</h2>
                 <div id="dashboard-actions" style="display: flex; gap: 20px; flex-wrap: wrap;">
-                    <div id="action-passport" class="card" style="flex-basis: 300px; border-left-color: #EF4444; cursor: default; display: none;">
+                    <div id="action-passport" class="card" style="flex-basis: 300px; border-left-color: var(--color-alert); cursor: default; display: none;">
                         <h3>Missing Passport Photo</h3>
                         <p>Your profile is incomplete. Please upload your passport photo immediately.</p>
                         <button class="profile-button" onclick="showTab('profile')">Go to Profile</button>
                     </div>
-                    <div class="card" style="flex-basis: 300px; border-left-color: #F59E0B; cursor: default;">
+                    <div class="card" style="flex-basis: 300px; border-left-color: var(--color-warning); cursor: default;">
                         <h3>Review New Course Material</h3>
                         <p>New study materials have been posted for this block.</p>
-                        <button class="profile-button" onclick="showTab('resources')" style="background-color: #F59E0B;">View Resources</button>
+                        <button class="profile-button" onclick="showTab('resources')" style="background-color: var(--color-warning);">View Resources</button>
                     </div>
                 </div>
             </section>
 
 
             <section id="profile" class="tab-content">
-                <h2 style="color: #4C1D95;">My Profile & Account</h2>
+                <h2 style="color: var(--color-primary);">My Profile & Account</h2>
                 <form id="profile-form">
 
 
@@ -580,7 +593,7 @@
 
 
             <section id="calendar" class="tab-content">
-                <h2 style="color: #4C1D95;">Academic Calendar</h2>
+                <h2 style="color: var(--color-primary);">Academic Calendar</h2>
                 <p class="subtitle">A unified view of your scheduled sessions, clinical rotations, and exams.</p>
 
 
@@ -612,7 +625,7 @@
 
 
          <section id="courses" class="tab-content">
-            <h2 style="color: #4C1D95;">My Courses</h2>
+            <h2 style="color: var(--color-primary);">My Courses</h2>
             <div style="overflow-x: auto;">
                 <table>
                     <thead>
@@ -633,7 +646,7 @@
 
 
          <section id="attendance" class="tab-content">
-                <h2 style="color: #4C1D95;">Daily Attendance Check-in</h2>
+                <h2 style="color: var(--color-primary);">Daily Attendance Check-in</h2>
 
 
                 <div class="check-in-controls">
@@ -661,7 +674,7 @@
                 </div>
 
 
-                <h3 style="color: #4C1D95;">Past Attendance History (Check-in Logs)</h3>
+                <h3 style="color: var(--color-primary);">Past Attendance History (Check-in Logs)</h3>
                 <div style="overflow-x: auto;">
                     <table>
                         <thead><tr><th>Time</th><th>Session Type</th><th>Target</th><th>Friendly Name</th><th>GPS / Acc (m)</th><th>Verified</th></tr></thead>
@@ -673,7 +686,7 @@
                 </section>
 
 <section id="cats" class="tab-content">
-  <h2 style="color: #4C1D95;">CATS / Exams & Grades</h2>
+  <h2 style="color: var(--color-primary);">CATS / Exams & Grades</h2>
 
   <div style="overflow-x: auto;">
     <table>
@@ -700,13 +713,13 @@
 
 
             <section id="resources" class="tab-content">
-                <h2 style="color: #4C1D95;">Learning Resources</h2>
+                <h2 style="color: var(--color-primary);">Learning Resources</h2>
                 <div style="display:flex; gap:20px;">
                     <div id="resources-list" style="width:30%; max-height:600px; overflow-y:auto; border-right:1px solid #ddd; padding-right:10px;">
                         Loading resources...
                     </div>
 
-                    <div id="resource-viewer" style="width:70%; min-height:600px; border:1px solid #ddd; padding:10px;">
+                    <div id="resource-viewer" style="width:70%; min-height:600px; border:1px solid #ddd; padding:10px; border-radius: 8px;">
                         Select a resource to view.
                     </div>
                 </div>
@@ -714,7 +727,7 @@
 
 
             <section id="messages" class="tab-content">
-                <h2 style="color: #4C1D95;">Message Admin / Instructor</h2>
+                <h2 style="color: var(--color-primary);">Message Admin / Instructor</h2>
                 <form id="message-form">
                     <textarea id="student-message-body" placeholder="Write your message to the administration..." required></textarea>
                     <button type="submit">Send Message</button>
@@ -731,6 +744,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.9.179/pdf.min.js"></script>
 
 <script>
+    // Set PDF.js worker source
+    pdfjsLib.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.9.179/pdf.worker.min.js';
+    
     // *************************************************************************
     // *** NEW MOBILE MENU LOGIC ***
     // *************************************************************************
@@ -755,6 +771,15 @@
         sidebar.classList.remove('open');
         overlay.classList.remove('active');
         document.body.style.overflow = 'auto'; // Restore scrolling
+    }
+    
+    // Auto-close menu if a link is clicked on mobile
+    function closeMenu() {
+        if (window.innerWidth <= 768) {
+            sidebar.classList.remove('open');
+            overlay.classList.remove('active');
+            document.body.style.overflow = 'auto';
+        }
     }
 
 
@@ -786,11 +811,11 @@
     let cachedCourses = []; 
     let cachedExams = [];
     let cachedClinicalAreas = [];
-    let cachedResources = []; // Added for new resource logic
+    let cachedResources = [];
 
 
     // ** UI ELEMENT REFERENCES **
-    const welcomeHeader = document.getElementById('welcome-header'); // Must exist in your HTML
+    const welcomeHeader = document.getElementById('welcome-header');
     const sessionTypeSelect = document.getElementById('session-type'); 
     const attendanceTargetSelect = document.getElementById('attendance-target');
     const geoMessage = document.getElementById('geo-message');
@@ -798,13 +823,13 @@
     // ** GLOBAL CONSTANTS **
     const SETTINGS_TABLE = 'app_settings'; 
     const MESSAGE_KEY = 'welcome_message';
-    const FALLBACK_LAT = 0.00; // Define safe fallback coordinates
+    const FALLBACK_LAT = 0.00;
     const FALLBACK_LON = 0.00;
     const FALLBACK_ACCURACY = 9999;
     
     // ** GEO-ATTENDANCE CONSTANTS **
-    const MAX_ALLOWED_ACCURACY = 30; // Max meters allowed for device-reported accuracy
-    const MAX_DISTANCE_RADIUS = 200; // Max meters from the target location allowed for a verified check-in
+    const MAX_ALLOWED_ACCURACY = 30;
+    const MAX_DISTANCE_RADIUS = 200;
 
 
 // *************************************************************************
@@ -813,7 +838,6 @@
 
 /**
  * 🔒 CRITICAL: Enforce redirect to login.html if no active session is found.
- * This function runs immediately upon page load.
  */
 (async function enforceAuth() {
     const { data: { session }, error } = await sb.auth.getSession();
@@ -821,12 +845,10 @@
     // Check for explicit error or no session
     if (error || !session || !session.user) {
         console.warn("No active user session or session error. Redirecting to login.html.");
-        // Mandatory redirect to login
         window.location.href = "login.html"; 
-        return; // Stop further script execution
+        return;
     } else {
         currentUserId = session.user.id;
-        // Proceed with checkAuthAndLoad() only if authenticated
         checkAuthAndLoad();
     }
 })();
@@ -854,10 +876,9 @@ function showTab(tabId) {
     if (tabId === 'profile' && currentUserId) loadProfile(currentUserId);
     if (tabId === 'attendance' && currentUserId) {
         loadGeoAttendanceHistory(currentUserId);
-        updateTargetSelect(); // CRITICAL: Runs on tab switch to populate the target dropdown
+        updateTargetSelect();
     }
     if (tabId === 'dashboard' && currentUserId) {
-        // Core loaders run in checkAuth, just refresh metrics
         loadWelcomeDetails();
         loadDashboardMetrics(currentUserId);
     }
@@ -873,6 +894,7 @@ navLinks.forEach(link => {
     link.addEventListener('click', e => {
         e.preventDefault();
         showTab(link.dataset.tab);
+        closeMenu(); // Close the mobile menu on item click
     });
 });
 
@@ -897,12 +919,11 @@ async function loadWelcomeDetails() {
   const welcomeHeader = document.getElementById('welcome-header');
 
   if (welcomeHeader) {
-    welcomeHeader.textContent = `Hello, ${studentName}!`;
+    welcomeHeader.textContent = `Welcome back, ${studentName}!`;
   }
 
-  // Load both welcome and announcement messages
-  await loadStudentMessage('student_welcome', 'student-welcome-message');  // short personal welcome
-  await loadStudentMessage('welcome_message', 'student-announcement');     // admin announcement
+  await loadStudentMessage('student_welcome', 'student-welcome-message');
+  await loadStudentMessage('welcome_message', 'student-announcement');
 }
 
 /**
@@ -937,14 +958,13 @@ async function loadStudentMessage(key, elementId) {
 
 /**
  * Calculates and updates all dashboard metrics.
- * FIX: Updated to show Verified, Total, and Pending counts.
  */
 async function loadDashboardMetrics(userId) {
     // --- ACTIVE COURSES ---
     document.getElementById('dashboard-active-courses').textContent = cachedCourses.length;
 
     
-    // --- OVERALL ATTENDANCE RATE (FIXED LOGIC) ---
+    // --- OVERALL ATTENDANCE RATE ---
     let attendanceRate = 0;
     try {
         const { data: logs, error: attendanceError } = await sb
@@ -955,26 +975,33 @@ async function loadDashboardMetrics(userId) {
         if (attendanceError) throw attendanceError;
 
         const totalLogs = logs.length;
-        // Count verified logs (is_verified = true)
         const verifiedCount = logs.filter(l => l.is_verified === true).length;
-        // Count logs that are null or false (pending review or explicitly rejected)
         const pendingCount = logs.filter(l => l.is_verified === null || l.is_verified === false).length; 
 
-        // Calculate rate based ONLY on verified / total check-ins
         attendanceRate = totalLogs > 0 ? Math.round((verifiedCount / totalLogs) * 100) : 0;
 
-        // Update the UI elements
         document.getElementById('dashboard-attendance-rate').textContent = attendanceRate + '%';
         document.getElementById('dashboard-verified-count').textContent = verifiedCount;
         document.getElementById('dashboard-total-count').textContent = totalLogs;
-        document.getElementById('dashboard-pending-count').textContent = pendingCount; // NEW METRIC
+        document.getElementById('dashboard-pending-count').textContent = pendingCount;
+        
+        // Add alert class if attendance is low (e.g., under 80%)
+        const attendanceCard = document.querySelector('.card.alert-card');
+        if (attendanceCard) {
+            if (attendanceRate < 80) { // Example threshold
+                attendanceCard.classList.add('alert-card');
+            } else {
+                attendanceCard.classList.remove('alert-card');
+            }
+        }
+
 
     } catch (err) {
         console.error("Failed to load overall attendance metrics:", err);
         document.getElementById('dashboard-attendance-rate').textContent = 'N/A';
         document.getElementById('dashboard-verified-count').textContent = '0';
         document.getElementById('dashboard-total-count').textContent = '0';
-        document.getElementById('dashboard-pending-count').textContent = '0'; // Handle error case
+        document.getElementById('dashboard-pending-count').textContent = '0';
     }
 
 
@@ -982,7 +1009,6 @@ async function loadDashboardMetrics(userId) {
     let nextExamText = 'No Exams Scheduled'; 
 
     if (cachedExams.length > 0) {
-        // Filter cached exams to only include future dates and sort them
         const now = new Date(); 
         const upcomingExams = cachedExams
             .filter(exam => new Date(exam.exam_date) > now)
@@ -1001,7 +1027,7 @@ async function loadDashboardMetrics(userId) {
     document.getElementById('dashboard-upcoming-exam').textContent = nextExamText;
 
 
-    // --- NEW RESOURCES (FIXED LOGIC) ---
+    // --- NEW RESOURCES ---
     const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const newResourcesCount = cachedResources.filter(r => r.created_at >= oneWeekAgo).length;
     document.getElementById('dashboard-new-resources').textContent = newResourcesCount;
@@ -1029,11 +1055,7 @@ async function loadDashboardMetrics(userId) {
 // *************************************************************************
 
 async function checkAuthAndLoad() {
-    // This function is now only called IF enforceAuth() has confirmed a valid session.
-    
-    // We already have the currentUserId from the session check.
     if (!currentUserId) {
-         // Should not happen, but safe to redirect again
          window.location.href = "login.html"; 
          return;
     }
@@ -1044,7 +1066,7 @@ async function checkAuthAndLoad() {
     await loadClassTargets(); 
     await loadCourses(); 
     await loadExams(); 
-    await loadResources(); // Load resources for the dashboard metric
+    await loadResources();
 
     // ** THEN, load UI elements and metrics **
     await loadWelcomeDetails();
@@ -1078,8 +1100,7 @@ async function loadProfile(userId) {
     if (error || !profile) {
         console.error('Error loading consolidated profile:', error);
         if (profileStatus) profileStatus.textContent = 'Profile data missing or restricted. Contact Admin.';
-        // IMPORTANT: No mock data here. If profile fails to load, data fields will show N/A.
-        currentUserProfile = {}; // Initialize as empty object to prevent crashes
+        currentUserProfile = {};
     } else {
         currentUserProfile = profile;
         if (profileStatus) profileStatus.textContent = '';
@@ -1095,7 +1116,7 @@ async function loadProfile(userId) {
     if (document.getElementById('profile-intake-year')) document.getElementById('profile-intake-year').value = currentUserProfile.intake_year || 'N/A';
 
 
-    let photoUrl = 'https://via.placeholder.com/150x150?text=NO+PHOTO';
+    let photoUrl = 'https://dummyimage.com/150x150/cccccc/000000.png&text=NO+PHOTO';
     if (currentUserProfile.passport_url) {
         const publicUrlResponse = sb.storage.from('passports').getPublicUrl(currentUserProfile.passport_url);
         if (publicUrlResponse.data) {
@@ -1365,7 +1386,6 @@ async function loadGeoAttendanceHistory(userId) {
                      '⏳ Pending Review';
 
                  
-            // Updated content to show GPS and Accuracy together
             const gpsAndAccuracy = `${log.latitude.toFixed(4)}, ${log.longitude.toFixed(4)} / ${log.accuracy_m ? log.accuracy_m.toFixed(1) : 'N/A'}m`;
             
             const row = `
@@ -1435,7 +1455,6 @@ function updateTargetSelect() {
             attendanceTargetSelect.appendChild(option);
         });
         
-        // Ensure the default option is selected, forcing user to make a choice
         attendanceTargetSelect.selectedIndex = 0;
     }
 
@@ -1485,7 +1504,6 @@ async function geoCheckIn() {
         navigator.geolocation.getCurrentPosition(
             pos => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude, acc: pos.coords.accuracy, friendly: null }),
             () => resolve({ lat: FALLBACK_LAT, lon: FALLBACK_LON, acc: FALLBACK_ACCURACY, friendly: 'Fallback Location' }),
-            // Increased timeout for better accuracy lock, MaximumAge = 0 forces a fresh reading
             { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 } 
         );
     });
@@ -1508,14 +1526,14 @@ async function geoCheckIn() {
         }
 
           // 3. Location Accuracy Check (NEW VALIDATION)
-let isVerified = false; // default
-let distanceToTarget = null; // ensure defined
+        let isVerified = false;
+        let distanceToTarget = null;
 
-if (location.acc > MAX_ALLOWED_ACCURACY) {
+        if (location.acc > MAX_ALLOWED_ACCURACY) {
             geoMessage.textContent = `⚠️ Location accuracy (${location.acc.toFixed(1)} m) is too low (Max ${MAX_ALLOWED_ACCURACY}m allowed). Check-in recorded as pending review.`;
             isVerified = null;
         } else {
-    // 4. Reverse Geocoding (UX step)
+            // 4. Reverse Geocoding (UX step)
             if (!location.friendly) {
                 geoMessage.textContent = '🌐 Location acquired. Verifying friendly name...';
                 const res = await fetch(`${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${location.lat}&lon=${location.lon}&format=json`);
@@ -1546,7 +1564,7 @@ if (location.acc > MAX_ALLOWED_ACCURACY) {
                 return R * c;
             };
 
-            const distanceToTarget = getDistanceMeters(location.lat, location.lon, closestTarget.latitude, closestTarget.longitude);
+            distanceToTarget = getDistanceMeters(location.lat, location.lon, closestTarget.latitude, closestTarget.longitude);
 
             if (distanceToTarget <= MAX_DISTANCE_RADIUS) {
                 isVerified = true;
@@ -1574,7 +1592,7 @@ if (location.acc > MAX_ALLOWED_ACCURACY) {
             p_block: studentProfile.block,
             p_intake_year: studentProfile.intake_year,
             p_device_id: deviceId,
-            p_is_verified: isVerified // Logs the result of the new validation
+            p_is_verified: isVerified
         });
 
         if (error) {
@@ -1621,7 +1639,6 @@ async function loadCourses() {
     }
 
     try {
-        // Flexible filter for the block field
         const blockFilter = `block.eq.${block},block.is.null,block.eq.General`;
 
         const { data: courses, error } = await sb
@@ -1667,7 +1684,7 @@ async function loadCourses() {
 // Utility to safely escape HTML
 function escapeHtml(str) {
     if (!str) return '';
-    return str
+    return String(str)
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
@@ -1678,7 +1695,6 @@ function escapeHtml(str) {
 
 /**
  * Student Dashboard: loadExams()
- * Displays student's exams with scores and exam link (if available)
  */
 async function loadExams() {
   const tableBody = document.getElementById('exams-table');
@@ -1745,7 +1761,7 @@ async function loadExams() {
       const totalScore = exam.exam_grades?.[0]?.total_score ?? '-';
 
       const actionBtn = exam.exam_link
-        ? `<a href="${exam.exam_link}" target="_blank" class="btn btn-sm btn-primary">Start Exam</a>`
+        ? `<a href="${exam.exam_link}" target="_blank" class="profile-button" style="background-color: var(--color-success); padding: 8px 12px; font-size: 0.9em; margin-top: 0;">Start Exam</a>`
         : `<span style="color:gray;">No Link</span>`;
 
       tableBody.innerHTML += `
@@ -1774,22 +1790,7 @@ async function loadExams() {
 }
 
 /**
- * Escapes HTML to prevent XSS.
- */
-function escapeHtml(text) {
-    const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
-    return text.replace(/[&<>"']/g, m => map[m]);
-}
-
-/**
- * Detect mobile
- */
-function isMobile() {
-    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-}
-
-/**
- * viewResource() renders PDFs via PDF.js and Office files in responsive iframe inside dashboard.
+ * viewResource() renders files in responsive iframe/canvas.
  */
 window.viewResource = function(resourceId) {
     const resourceViewer = document.getElementById('resource-viewer');
@@ -1803,24 +1804,23 @@ window.viewResource = function(resourceId) {
     const fileUrl = resource.file_url;
     const ext = (resource.file_path || '').split('.').pop().toLowerCase();
 
-    // Render header
     resourceViewer.innerHTML = `
-        <h3 style="color: #4C1D95; margin-bottom: 5px;">${escapeHtml(resource.title)}</h3>
-        <p style="font-size: 0.9em; color: #6B7280;">
+        <h3 style="color: var(--color-primary); margin-bottom: 5px;">${escapeHtml(resource.title)}</h3>
+        <p style="font-size: 0.9em; color: #6B7280; margin-bottom: 15px;">
             Uploaded by: ${escapeHtml(resource.uploaded_by_name || 'Admin')} on ${new Date(resource.created_at).toLocaleDateString()}
         </p>
     `;
 
-    // PDF
+    // PDF viewer
     if (ext === 'pdf') {
         resourceViewer.innerHTML += `
             <div id="pdf-container" style="width:100%;">
-                <canvas id="pdf-canvas" style="width:100%; height:auto;"></canvas>
+                <canvas id="pdf-canvas" style="width:100%; height:auto; border: 1px solid #ddd;"></canvas>
             </div>
-            <div id="pdf-controls" style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-                <button id="prev-page" style="padding:6px 10px; font-size:1em;">Prev</button>
-                <button id="next-page" style="padding:6px 10px; font-size:1em;">Next</button>
-                <span>Page: <span id="page-num"></span> / <span id="page-count"></span></span>
+            <div id="pdf-controls" style="margin-top:15px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content: center;">
+                <button id="prev-page" class="profile-button" style="padding:8px 15px; font-size:0.9em; margin: 0;">Prev</button>
+                <button id="next-page" class="profile-button" style="padding:8px 15px; font-size:0.9em; margin: 0;">Next</button>
+                <span style="font-weight: 600;">Page: <span id="page-num"></span> / <span id="page-count"></span></span>
             </div>
         `;
 
@@ -1870,7 +1870,7 @@ window.viewResource = function(resourceId) {
             <iframe 
                 src="https://view.officeapps.live.com/op/embed.aspx?src=${encoded}" 
                 width="100%" height="60vh" 
-                style="border:none; min-height:400px;">
+                style="border:none; min-height:500px; border-radius: 6px;">
             </iframe>`;
     } 
     // Unsupported files
@@ -1901,7 +1901,6 @@ async function loadResources() {
             return;
         }
 
-        // ✅ Filter strictly by program, block, and intake_year (mapped to intake in resources)
         const { data: resources, error } = await sb
             .from('resources')
             .select('id, title, file_path, file_url, program_type, block, intake, uploaded_by_name, created_at')
@@ -1920,7 +1919,6 @@ async function loadResources() {
             return;
         }
 
-        // Render mobile-friendly cards
         cachedResources.forEach(res => {
             const displayDate = new Date(res.created_at).toLocaleDateString();
             const itemDiv = document.createElement('div');
@@ -1933,8 +1931,11 @@ async function loadResources() {
             resourceListContainer.appendChild(itemDiv);
         });
 
-        // Auto view first resource
-        viewResource(cachedResources[0].id);
+        if (cachedResources.length > 0) {
+            viewResource(cachedResources[0].id);
+        } else {
+            document.getElementById('resource-viewer').innerHTML = 'Select a resource to view.';
+        }
 
     } catch (err) {
         console.error("Error loading resources:", err);
@@ -1952,13 +1953,10 @@ async function loadResources() {
 // *** 7. ACADEMIC CALENDAR LOGIC ***
 // *************************************************************************
 async function fetchAllScheduleData() {
-    // Ensure profile data is loaded before reading it
     if (!currentUserProfile || !currentUserProfile.program && !currentUserProfile.department || !currentUserProfile.intake_year) {
         await loadProfile(currentUserId); 
     }
 
-
-    // FIX: Use the combined program/department value
     const program = currentUserProfile?.program || currentUserProfile?.department;
     const block = currentUserProfile?.block;
     const intakeYear = currentUserProfile?.intake_year;
@@ -1967,9 +1965,8 @@ async function fetchAllScheduleData() {
     if (!program || !block || !intakeYear) return [];
 
 
-    // Note: sessionPromise and examsPromise are currently empty/placeholder in the HTML's logic.
     const sessionsPromise = Promise.resolve([]); 
-    const examsPromise = Promise.resolve(cachedExams.map(e => ({ // Use cached exams for calendar
+    const examsPromise = Promise.resolve(cachedExams.map(e => ({
         date: e.exam_date,
         title: e.exam_name,
         type: 'Exam',
@@ -2011,7 +2008,6 @@ async function loadAcademicCalendar() {
         const filterType = document.getElementById('calendar-filter').value;
 
 
-        // Filtering logic
         const filteredEvents = allEvents
             .filter(e => filterType === 'all' || e.type === filterType)
             .sort((a, b) => new Date(a.date) - new Date(b.date)); 
@@ -2031,7 +2027,7 @@ async function loadAcademicCalendar() {
             const row = `
                 <tr>
                     <td class="date-col">${dateStr}</td>
-                    <td>${event.title} (${event.details})</td>
+                    <td>${escapeHtml(event.title)} (${escapeHtml(event.details)})</td>
                     <td class="session-type-col ${event.type}">${event.type}</td>
                 </tr>
             `;
@@ -2054,7 +2050,6 @@ async function loadAcademicCalendar() {
  * Load all messages and announcements for the student.
  */
 async function loadStudentMessagesAndAnnouncements() {
-    // Ensure profile data is loaded before reading it
     if (!currentUserProfile || (!currentUserProfile.program && !currentUserProfile.department)) {
         await loadProfile(currentUserId);
     }
@@ -2086,9 +2081,10 @@ async function loadStudentMessagesAndAnnouncements() {
 
         // Combine messages, with personal messages first
         const allMessages = [
-            ...(personalMessages || []),
-            ...(notifications || [])
-        ];
+            ...(personalMessages || []).map(m => ({ ...m, type: 'Personal' })),
+            ...(notifications || []).map(n => ({ ...n, type: 'Announcement' }))
+        ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
 
         messageContainer.innerHTML = '';
         if (allMessages.length === 0) {
@@ -2102,15 +2098,17 @@ async function loadStudentMessagesAndAnnouncements() {
             const body = msg.body || msg.message || msg.message_content || '';
             const isRead = msg.is_read ? 'read' : 'unread';
             const createdAt = msg.created_at ? new Date(msg.created_at).toLocaleDateString() : '';
+            const borderColor = msg.type === 'Personal' ? '#4C1D95' : '#F97316';
+            const statusColor = msg.is_read ? '#10B981' : '#F59E0B';
 
             messageContainer.innerHTML += `
-                <div class="message-item ${isRead}" style="border-left: 4px solid ${msg.is_read ? '#10B981' : '#F59E0B'}; padding: 15px; margin-bottom: 10px; background-color: white; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                <div class="message-item ${isRead}" style="border-left: 4px solid ${borderColor}; padding: 15px; margin-bottom: 10px; background-color: white; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
                     <div class="message-header" style="display: flex; justify-content: space-between; font-weight: bold; color: #4C1D95;">
-                        <span class="message-title">${title}</span>
+                        <span class="message-title">${escapeHtml(title)}</span>
                         <span class="message-date" style="font-weight: normal; color: #6B7280;">${createdAt}</span>
                     </div>
-                    <div class="message-body" style="margin-top: 5px; color: #374151;">${body.substring(0, 300)}</div>
-                    <span class="message-status" style="font-size: 0.8em; color: ${msg.is_read ? '#10B981' : '#F59E0B'}; margin-top: 5px; display: inline-block;">Status: ${isRead.toUpperCase()}</span>
+                    <div class="message-body" style="margin-top: 5px; color: #374151;">${escapeHtml(body.substring(0, 300))}${body.length > 300 ? '...' : ''}</div>
+                    <span class="message-status" style="font-size: 0.8em; color: ${statusColor}; margin-top: 5px; display: inline-block;">Type: ${msg.type} | Status: ${isRead.toUpperCase()}</span>
                 </div>
             `;
         });
@@ -2120,15 +2118,6 @@ async function loadStudentMessagesAndAnnouncements() {
         messageContainer.innerHTML = '<p style="color:#EF4444;">Error loading messages and announcements.</p>';
     }
 }
-
-
-// *************************************************************************
-// *** 9. INITIALIZATION ***
-// *************************************************************************
-
-// NOTE: The initial call to checkAuthAndLoad() is now handled within the enforceAuth() function,
-// which runs immediately upon script loading. No additional call is needed here.
-
 </script>
 </body>
 </html>
