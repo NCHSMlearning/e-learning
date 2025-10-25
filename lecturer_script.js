@@ -1,8 +1,8 @@
 // =================================================================
-// === NCHSM LECTURER DASHBOARD SCRIPT - FINAL INTEGRATED VERSION ===
+// === NCHSM LECTURER DASHBOARD SCRIPT - FINAL INTEGRATED & CORRECTED VERSION ===
 // =================================================================
 
-// === 1. CONFIGURATION, CLIENT SETUP, & GLOBAL VARIABLES (CORRECTION APPLIED HERE) ===
+// === 1. CONFIGURATION, CLIENT SETUP, & GLOBAL VARIABLES ===
 
 if (window.location.pathname.endsWith('.html')) {
     const cleanPath = window.location.pathname.replace(/\.html$/, '');
@@ -10,43 +10,30 @@ if (window.location.pathname.endsWith('.html')) {
 }
 // --- ⚠️ IMPORTANT: SUPABASE CONFIGURATION ---
 const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co'; 
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Ppk';
 
 // --- Global Supabase Client ---
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// 🔒 REDUNDANT BLOCK REMOVED/COMMENTED OUT: 
-// The initial session check logic is handled cleanly by initSession() called later.
-/*
-  (async () => {
-    const { data: { session } } = await sb.auth.getSession();
-    if (!session) {
-      window.location.href = '/login';
-    } else {
-      currentUserId = session.user.id;
-    }
-  })();
-*/
-
 // --- Table and Bucket Constants ---
 const USER_PROFILE_TABLE = 'consolidated_user_profiles_table';
 const COURSES_TABLE = 'courses';
-const EXAMS_TABLE = 'cats_exams';  // ✅ Corrected table name
+const EXAMS_TABLE = 'cats_exams';  
 const SESSIONS_TABLE = 'scheduled_sessions';
 const ATTENDANCE_TABLE = 'geo_attendance_logs';
-const MESSAGES_TABLE = 'messages'; // ✅ 'announcements' doesn’t exist
+const MESSAGES_TABLE = 'messages'; 
 const RESOURCES_TABLE = 'resources';
 // --- Storage Buckets ---
-const RESOURCES_BUCKET = 'resources';  // 👈 use your actual Supabase storage bucket name
+const RESOURCES_BUCKET = 'resources'; 
 
 
 
 // --- Global Variables & Caches ---
 let currentUserProfile = null;
-let currentUserId = null; // Defined here for clarity, though it was set in the old redundant block
+let currentUserId = null; 
 let attendanceMap = null; 
 let allCourses = []; 
-let allStudents = []; 
+let allStudents = []; // 🔑 Contains students filtered by lecturerTargetProgram
 let lecturerTargetProgram = null; // e.g., 'KRCHN' or 'TVET'
 
 // --- Academic Structure Constants (Used for filtering) ---
@@ -227,7 +214,7 @@ async function fetchDataForLecturer(
 
 
 // =================================================================
-// === 3. CORE NAVIGATION, AUTH & INITIALIZATION (CORRECTION APPLIED HERE) ===
+// === 3. CORE NAVIGATION, AUTH & INITIALIZATION ===
 // =================================================================
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -244,7 +231,7 @@ async function initSession() {
         if (sessionError || !session) {
             error = sessionError || { message: "No active session found." };
         } else {
-            currentUserId = session.user.id; // Ensure currentUserId is set here if session is valid
+            currentUserId = session.user.id; 
             const { data: userProfile, error: profileError } = await sb.from(USER_PROFILE_TABLE)
                 .select('*')
                 .eq('user_id', session.user.id)
@@ -272,10 +259,10 @@ async function initSession() {
         loadSectionData('dashboard'); 
         setupEventListeners();
     } else {
-        // 🚨 FIX: Redirect to /login instead of reloading, which prevents the infinite error pop-up
+        // Redirect to /login on failed authentication
         console.error("Initialization Failed, Redirecting to Login:", error);
         alert("Authentication Failed: No active session found.\n\nPlease log in again.");
-        window.location.href = '/login'; // ✅ CLEAN REDIRECTION
+        window.location.href = '/login'; 
     }
 }
 
@@ -298,11 +285,13 @@ async function fetchGlobalDataCaches() {
     // CRITICAL: Filter students by program using the new function
     const { data: students } = await fetchDataForLecturer(
         USER_PROFILE_TABLE, 
-        'user_id, full_name, email, student_program, intake_year, block_term, status', 
+        // 🔑 CORRECTION APPLIED: Using 'program' for consistency
+        'user_id, full_name, email, program, intake_year, block_term, status', 
         { role: 'student' },
         'full_name', 
         true
     );
+    // allStudents cache now only contains students matching the lecturer's target program.
     allStudents = students || [];
 }
 
@@ -364,6 +353,10 @@ function setupEventListeners() {
     $('attendance-search')?.addEventListener('keyup', () => filterTable('attendance-search', 'attendance-table', [0, 1, 2]));
     $('lecturer-checkin-btn')?.addEventListener('click', lecturerCheckIn); 
 
+    // Resources Edit
+    $('edit-resource-form')?.addEventListener('submit', saveResourceEdits);
+    $('closeEditResourceModal')?.addEventListener('click', closeEditResourceModal);
+
     // Search Filters
     $('student-search')?.addEventListener('keyup', () => filterTable('student-search', 'lecturer-students-table', [0, 1]));
     $('exam-search')?.addEventListener('keyup', () => filterTable('exam-search', 'exams-table', [0, 1, 4]));
@@ -393,8 +386,8 @@ async function logout() {
         console.error('Logout error:', error);
         showFeedback('Logout failed. Please try again.', 'error');
     } else {
-        // 🚨 FIX: Redirect to /login instead of reloading, which prevents the error pop-up
-        window.location.href = '/login'; // ✅ CLEAN REDIRECTION
+        // Redirect to /login on logout
+        window.location.href = '/login'; 
     }
 }
 
@@ -499,18 +492,14 @@ async function loadLecturerStudents() {
 
     tbody.innerHTML = '<tr><td colspan="7">Loading assigned students...</td></tr>';
     
-    // Filter only students in this lecturer's assigned program
-    const filteredStudents = allStudents.filter(
-        s => s.program === lecturerTargetProgram
-    );
-
-    const studentsHtml = filteredStudents.map(profile => `
+    // 🔑 OPTIMIZATION APPLIED: Using allStudents directly as it's already filtered in fetchGlobalDataCaches.
+    const studentsHtml = allStudents.map(profile => `
         <tr>
             <td>${profile.full_name || 'N/A'}</td>
             <td>${profile.email || 'N/A'}</td>
             <td>${profile.program || 'N/A'}</td>
             <td>${profile.intake_year || 'N/A'}</td>
-            <td>${profile.block || 'N/A'}</td>
+            <td>${profile.block_term || 'N/A'}</td>
             <td>
                 <span style="color:${profile.status === 'Active' ? '#10B981' : '#F59E0B'}">
                     ${profile.status || 'Active'}
@@ -583,7 +572,7 @@ async function handleAddSession(e) {
             session_topic: formData.topic,
             session_date: formData.date,
             session_time: formData.time,
-            program: formData.program, // Filtered by program
+            target_program: formData.program, // Matches 'target_program' in SESSIONS_TABLE
             block_term: formData.block_term,
             course_id: formData.course_id,
             lecturer_id: currentUserProfile.user_id,
@@ -634,7 +623,7 @@ async function loadLecturerSessions() {
                 <td>${s.session_topic}</td>
                 <td>${dateTime}</td>
                 <td>${courseName}</td>
-                <td>${s.program}/${s.block_term}</td>
+                <td>${s.target_program}/${s.block_term}</td>
                 <td><a href="#" onclick="navigator.clipboard.writeText('Session URL for ${s.id}').then(() => showFeedback('Attendance Link Copied!', 'info'))">Copy Link</a></td>
                 <td><button class="btn-action" style="background-color:#F59E0B;" onclick="showFeedback('Editing session ${s.id}...', 'info')">Edit</button></td>
             </tr>
@@ -759,28 +748,30 @@ async function loadTodaysAttendanceRecords() {
     
     const today = new Date().toISOString().split('T')[0];
     
-    // Fetch all attendance logs for today. We filter them locally using the cached student profiles.
-const { data: logs, error } = await sb
-  .from(ATTENDANCE_TABLE)
-  .select(`*, user:user_id(full_name, student_program)`)   // Select 'student_program' from the joined profile
-  .gte('check_in_time', today)
-  .order('check_in_time', { ascending: false });
+    // Fetch all attendance logs for today. 
+    const { data: logs, error } = await sb
+      .from(ATTENDANCE_TABLE)
+      // 🔑 CORRECTION APPLIED: Joining and selecting 'program' column
+      .select(`*, user:user_id(full_name, program)`)   
+      .gte('check_in_time', today)
+      .order('check_in_time', { ascending: false });
 
-if (error) {
-  tbody.innerHTML = `<tr><td colspan="7">Error loading logs: ${error.message}</td></tr>`;
-  return;
-}
+    if (error) {
+      tbody.innerHTML = `<tr><td colspan="7">Error loading logs: ${error.message}</td></tr>`;
+      return;
+    }
 
-// Filter logs to only show records for students in the lecturer's program or the lecturer's own check-ins
-const filteredLogs = logs.filter(l =>
-  l.user_role === 'lecturer' || // Keep lecturer's own log
-  (l.user_role === 'student' && l.user?.student_program === lecturerTargetProgram) // Keep student logs only if they match the program
-);
+    // Filter logs to only show records for students in the lecturer's program or the lecturer's own check-ins
+    const filteredLogs = logs.filter(l =>
+      l.user_role === 'lecturer' || 
+      // 🔑 CORRECTION APPLIED: Filtering by 'program' column
+      (l.user_role === 'student' && l.user?.program === lecturerTargetProgram) 
+    );
 
-if (!filteredLogs || filteredLogs.length === 0) {
-  tbody.innerHTML = '<tr><td colspan="7">No relevant attendance records found for today.</td></tr>';
-  return;
-}
+    if (!filteredLogs || filteredLogs.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7">No relevant attendance records found for today.</td></tr>';
+      return;
+    }
 
     tbody.innerHTML = '';
     filteredLogs.forEach(l => {
@@ -809,9 +800,10 @@ if (!filteredLogs || filteredLogs.length === 0) {
         `;
         tbody.innerHTML += rowHtml;
 
-        if (l.latitude && l.longitude && locationText.includes('Lat:') && locationText.includes('Lng:')) {
-            reverseGeocodeAndDisplay(l.latitude, l.longitude, geoId);
-        }
+        // NOTE: Commented out placeholder for missing reverseGeocodeAndDisplay function
+        // if (l.latitude && l.longitude && locationText.includes('Lat:') && locationText.includes('Lng:')) {
+        //     reverseGeocodeAndDisplay(l.latitude, l.longitude, geoId);
+        // }
     });
 }
 
@@ -1062,6 +1054,7 @@ async function loadLecturerResources() {
   const tbody = $('resources-list');
   tbody.innerHTML = '<tr><td colspan="6">Loading shared resources...</td></tr>';
 
+  // Filtered by program_type via fetchDataForLecturer
   const { data: resources, error } = await fetchDataForLecturer(
     RESOURCES_TABLE,
     '*',
@@ -1159,14 +1152,6 @@ async function deleteResource(id) {
     showFeedback('Delete failed: ' + err.message, 'error');
   }
 }
-
-// === Initialize ===
-$('upload-resource-form')?.addEventListener('submit', handleUploadResource);
-$('resource-search')?.addEventListener('keyup', () =>
-  filterTable('resource-search', 'resources-list', [0, 1, 2])
-);
-$('edit-resource-form')?.addEventListener('submit', saveResourceEdits);
-$('closeEditResourceModal')?.addEventListener('click', closeEditResourceModal);
 
 
 // =================================================================
