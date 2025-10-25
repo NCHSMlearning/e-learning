@@ -1316,8 +1316,8 @@ async function loadClinicalTargets() {
         // 2️⃣ Load from clinical_names (non-geo, textual areas)
         let queryNames = sb
             .from('clinical_names')
-            // ✅ FIXED: Proper alias syntax (no quotes or concatenation)
-            .select(`id, clinical_area_name AS name, program, intake_year, block_term`)
+            // ⚠️ no alias in SQL select
+            .select('id, clinical_area_name, program, intake_year, block_term')
             .eq('program', program)
             .eq('intake_year', intakeYear);
 
@@ -1331,19 +1331,28 @@ async function loadClinicalTargets() {
         const { data: nameData, error: nameError } = await queryNames;
         if (nameError) throw nameError;
 
-        // 3️⃣ Merge and clean up duplicates
-        const merged = [...(areaData || []), ...(nameData || [])]
+        // ✅ 3️⃣ Normalize and merge
+        const cleanedNames = (nameData || []).map(n => ({
+            id: n.id,
+            name: n.clinical_area_name, // alias applied in JS
+            latitude: null,
+            longitude: null,
+            block: n.block_term || null
+        }));
+
+        const cleanedAreas = (areaData || []).map(a => ({
+            id: a.id,
+            name: a.name,
+            latitude: a.latitude,
+            longitude: a.longitude,
+            block: a.block || null
+        }));
+
+        const merged = [...cleanedAreas, ...cleanedNames]
             .filter((v, i, a) => a.findIndex(t => t.name === v.name) === i)
-            .map(a => ({
-                id: a.id,
-                name: a.name,
-                latitude: a.latitude || null,
-                longitude: a.longitude || null,
-                block: a.block || a.block_term || null
-            }));
+            .sort((a, b) => a.name.localeCompare(b.name));
 
-        cachedClinicalAreas = merged.sort((a, b) => a.name.localeCompare(b.name));
-
+        cachedClinicalAreas = merged;
         console.log("✅ Loaded clinical areas:", cachedClinicalAreas);
 
     } catch (error) {
@@ -1351,6 +1360,7 @@ async function loadClinicalTargets() {
         cachedClinicalAreas = [];
     }
 }
+
 
 
 // Loads courses for the 'Class' attendance check-in dropdown.
