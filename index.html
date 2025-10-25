@@ -1278,13 +1278,17 @@ if (uploadButton) {
 
 // Loads both clinical area locations and named rotations for the student's cohort
 async function loadClinicalTargets() {
-    if (!currentUserProfile || (!currentUserProfile.program && !currentUserProfile.department) || !currentUserProfile.intake_year) {
-        await loadProfile(currentUserId); 
+    if (
+        !currentUserProfile ||
+        (!currentUserProfile.program && !currentUserProfile.department) ||
+        !currentUserProfile.intake_year
+    ) {
+        await loadProfile(currentUserId);
     }
 
     const program = currentUserProfile?.program || currentUserProfile?.department;
     const intakeYear = currentUserProfile?.intake_year;
-    const block = currentUserProfile?.block;
+    const blockTerm = currentUserProfile?.block || currentUserProfile?.term; // supports both KRCHN & TIVET
 
     if (!program || !intakeYear) {
         cachedClinicalAreas = [];
@@ -1295,37 +1299,35 @@ async function loadClinicalTargets() {
         // 1️⃣ Load from clinical_areas (geo-based)
         let queryAreas = sb
             .from('clinical_areas')
-            .select('id, name, latitude, longitude, block')
+            .select('id, name, latitude, longitude, block, program, intake_year')
             .eq('program', program)
             .eq('intake_year', intakeYear);
 
-        if (block) {
-            const blockFilter = `block.eq.${block},block.is.null`;
+        if (blockTerm) {
+            const blockFilter = `block.eq.${blockTerm},block.is.null`;
             queryAreas = queryAreas.or(blockFilter);
         } else {
             queryAreas = queryAreas.is('block', null);
         }
 
         const { data: areaData, error: areaError } = await queryAreas;
-
         if (areaError) throw areaError;
 
         // 2️⃣ Load from clinical_names (non-geo, textual areas)
         let queryNames = sb
             .from('clinical_names')
-            .select('id, clinical_area_name as name, program, intake_year, block')
+            .select('id, clinical_area_name as name, program, intake_year, block_term')
             .eq('program', program)
             .eq('intake_year', intakeYear);
 
-        if (block) {
-            const blockFilter = `block.eq.${block},block.is.null`;
+        if (blockTerm) {
+            const blockFilter = `block_term.eq.${blockTerm},block_term.is.null`;
             queryNames = queryNames.or(blockFilter);
         } else {
-            queryNames = queryNames.is('block', null);
+            queryNames = queryNames.is('block_term', null);
         }
 
         const { data: nameData, error: nameError } = await queryNames;
-
         if (nameError) throw nameError;
 
         // 3️⃣ Merge and clean up duplicates
@@ -1336,16 +1338,19 @@ async function loadClinicalTargets() {
                 name: a.name,
                 latitude: a.latitude || null,
                 longitude: a.longitude || null,
-                block: a.block || null
+                block: a.block || a.block_term || null
             }));
 
         cachedClinicalAreas = merged.sort((a, b) => a.name.localeCompare(b.name));
 
+        console.log("✅ Loaded clinical areas:", cachedClinicalAreas);
+
     } catch (error) {
-        console.error("Error loading clinical areas:", error);
+        console.error("❌ Error loading clinical areas:", error);
         cachedClinicalAreas = [];
     }
 }
+
 
 // Loads courses for the 'Class' attendance check-in dropdown.
 async function loadClassTargets() {
