@@ -1342,8 +1342,7 @@ async function deleteSession(sessionId, sessionTitle) {
     }
 }
 
-// Placeholder function for Clinical Name Update
-function saveClinicalName() {
+async function saveClinicalName() {
     const program = $('clinical_program').value;
     const intake = $('clinical_intake').value;
     const block = $('clinical_block_term').value;
@@ -1353,10 +1352,38 @@ function saveClinicalName() {
         showFeedback('Please select Program, Intake, Block/Term and provide a name.', 'error');
         return;
     }
-    
-    // In a real system, this would write to a lookup table, e.g., 'clinical_names'
-    showFeedback(`Clinical Area Name saved: "${name}" for ${program} ${intake} Block/Term ${block}. (Placeholder only)`, 'success');
+
+    // Construct the data object
+    const record = {
+        program: program,
+        intake_year: intake,
+        block_term: block,
+        clinical_area_name: name,
+        created_at: new Date().toISOString(),
+    };
+
+    try {
+        // Insert into Supabase table (create this table if not exists)
+        const { data, error } = await sb
+            .from('clinical_names')
+            .insert([record])
+            .select('id');
+
+        if (error) throw error;
+
+        showFeedback(`✅ Clinical Area "${name}" saved for ${program} ${intake} ${block}.`, 'success');
+        await logAudit('CLINICAL_NAME_ADD', `Added clinical name: ${name}`, data?.[0]?.id, 'SUCCESS');
+
+        // Optional: clear input after save
+        $('clinical_name_to_edit').value = '';
+
+    } catch (error) {
+        console.error('Error saving clinical name:', error.message);
+        await logAudit('CLINICAL_NAME_ADD', `Failed to add clinical name: ${name}. ${error.message}`, null, 'FAILURE');
+        showFeedback(`❌ Failed to save clinical area: ${error.message}`, 'error');
+    }
 }
+
 
 /*******************************************************
  * 7. Attendance Tab (Super Admin)
