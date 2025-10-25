@@ -1276,44 +1276,70 @@ if (uploadButton) {
 // *** 5. ATTENDANCE LOGIC (GeoCheckIn) ***
 // *************************************************************************
 
-// Loads clinical areas for the student's cohort.
+// Loads both clinical area locations and named rotations for the student's cohort
 async function loadClinicalTargets() {
     if (!currentUserProfile || (!currentUserProfile.program && !currentUserProfile.department) || !currentUserProfile.intake_year) {
         await loadProfile(currentUserId); 
     }
 
     const program = currentUserProfile?.program || currentUserProfile?.department;
-    if (!program || !currentUserProfile.intake_year) {
+    const intakeYear = currentUserProfile?.intake_year;
+    const block = currentUserProfile?.block;
+
+    if (!program || !intakeYear) {
         cachedClinicalAreas = [];
         return;
     }
 
-    const block = currentUserProfile.block;
-    const intakeYear = currentUserProfile.intake_year;
-
     try {
-        let query = sb
+        // 1️⃣ Load from clinical_areas (geo-based)
+        let queryAreas = sb
             .from('clinical_areas')
-            .select('id, name, latitude, longitude')
+            .select('id, name, latitude, longitude, block')
             .eq('program', program)
             .eq('intake_year', intakeYear);
 
         if (block) {
             const blockFilter = `block.eq.${block},block.is.null`;
-            query = query.or(blockFilter);
+            queryAreas = queryAreas.or(blockFilter);
         } else {
-            query = query.is('block', null);
+            queryAreas = queryAreas.is('block', null);
         }
 
-        const { data, error } = await query.order('name');
-        if (error) throw error;
+        const { data: areaData, error: areaError } = await queryAreas;
 
-        cachedClinicalAreas = data.map(area => ({
-            id: area.id,
-            name: area.name,
-            latitude: area.latitude,
-            longitude: area.longitude
-        }));
+        if (areaError) throw areaError;
+
+        // 2️⃣ Load from clinical_names (non-geo, textual areas)
+        let queryNames = sb
+            .from('clinical_names')
+            .select('id, clinical_area_name as name, program, intake_year, block')
+            .eq('program', program)
+            .eq('intake_year', intakeYear);
+
+        if (block) {
+            const blockFilter = `block.eq.${block},block.is.null`;
+            queryNames = queryNames.or(blockFilter);
+        } else {
+            queryNames = queryNames.is('block', null);
+        }
+
+        const { data: nameData, error: nameError } = await queryNames;
+
+        if (nameError) throw nameError;
+
+        // 3️⃣ Merge and clean up duplicates
+        const merged = [...(areaData || []), ...(nameData || [])]
+            .filter((v, i, a) => a.findIndex(t => t.name === v.name) === i) // unique by name
+            .map(a => ({
+                id: a.id,
+                name: a.name,
+                latitude: a.latitude || null,
+                longitude: a.longitude || null,
+                block: a.block || null
+            }));
+
+        cachedClinicalAreas = merged.sort((a, b) => a.name.localeCompare(b.name));
 
     } catch (error) {
         console.error("Error loading clinical areas:", error);
