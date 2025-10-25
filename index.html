@@ -1831,20 +1831,21 @@ window.viewResource = function(resourceId) {
     resourceViewer.innerHTML = `
         <h3 style="color: var(--color-primary); margin-bottom: 5px;">${escapeHtml(resource.title)}</h3>
         <p style="font-size: 0.9em; color: #6B7280; margin-bottom: 15px;">
-            Uploaded by: ${escapeHtml(resource.uploaded_by_name || 'Admin')} on ${new Date(resource.created_at).toLocaleDateString()}
+            Uploaded by: ${escapeHtml(resource.uploaded_by_name || 'Admin')} 
+            on ${new Date(resource.created_at).toLocaleDateString()}
         </p>
     `;
 
-    // PDF viewer
+    // -------------------- PDF VIEWER --------------------
     if (ext === 'pdf') {
         resourceViewer.innerHTML += `
-            <div id="pdf-container" style="width:100%;">
-                <canvas id="pdf-canvas" style="width:100%; height:auto; border: 1px solid #ddd;"></canvas>
+            <div id="pdf-container" style="width:100%; max-height:80vh; overflow:auto;">
+                <canvas id="pdf-canvas" style="width:100%; height:auto; border: 1px solid #ddd; border-radius:6px;"></canvas>
             </div>
-            <div id="pdf-controls" style="margin-top:15px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content: center;">
-                <button id="prev-page" class="profile-button" style="padding:8px 15px; font-size:0.9em; margin: 0;">Prev</button>
-                <button id="next-page" class="profile-button" style="padding:8px 15px; font-size:0.9em; margin: 0;">Next</button>
-                <span style="font-weight: 600;">Page: <span id="page-num"></span> / <span id="page-count"></span></span>
+            <div id="pdf-controls" style="margin-top:15px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:center;">
+                <button id="prev-page" class="profile-button" style="padding:8px 15px; font-size:0.9em;">Prev</button>
+                <button id="next-page" class="profile-button" style="padding:8px 15px; font-size:0.9em;">Next</button>
+                <span style="font-weight:600;">Page: <span id="page-num"></span> / <span id="page-count"></span></span>
             </div>
         `;
 
@@ -1853,55 +1854,80 @@ window.viewResource = function(resourceId) {
         let pdfDoc = null;
         let pageNum = 1;
 
-        pdfjsLib.getDocument(fileUrl).promise.then(pdf => {
-            pdfDoc = pdf;
-            document.getElementById('page-count').textContent = pdf.numPages;
-            renderPage(pageNum);
-        }).catch(err => {
-            resourceViewer.innerHTML += `<p style="color:#EF4444;">Failed to load PDF: ${err.message}</p>`;
-        });
+        // ✅ Fix PDF.js worker warning
+        pdfjsLib.GlobalWorkerOptions.workerSrc =
+            'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
+        // Load the PDF file
+        pdfjsLib.getDocument(fileUrl).promise
+            .then(pdf => {
+                pdfDoc = pdf;
+                document.getElementById('page-count').textContent = pdf.numPages;
+                renderPage(pageNum);
+            })
+            .catch(err => {
+                resourceViewer.innerHTML += `<p style="color:#EF4444;">Failed to load PDF: ${err.message}</p>`;
+            });
+
+        // ✅ High-quality, responsive rendering
         function renderPage(num) {
             pdfDoc.getPage(num).then(page => {
                 const containerWidth = document.getElementById('pdf-container').clientWidth;
-                const viewport = page.getViewport({ scale: 1 });
-                const scale = containerWidth / viewport.width;
-                const scaledViewport = page.getViewport({ scale });
-                canvas.width = scaledViewport.width;
-                canvas.height = scaledViewport.height;
-                page.render({ canvasContext: ctx, viewport: scaledViewport }).promise.then(() => {
-                    document.getElementById('page-num').textContent = pageNum;
+                const baseViewport = page.getViewport({ scale: 1 });
+
+                // Use device pixel ratio for sharper rendering
+                const pixelRatio = window.devicePixelRatio || 1;
+                const scale = (containerWidth / baseViewport.width) * pixelRatio;
+                const viewport = page.getViewport({ scale });
+
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+                canvas.style.width = `${viewport.width / pixelRatio}px`;
+                canvas.style.height = `${viewport.height / pixelRatio}px`;
+
+                const renderContext = {
+                    canvasContext: ctx,
+                    viewport
+                };
+
+                page.render(renderContext).promise.then(() => {
+                    document.getElementById('page-num').textContent = num;
                 });
             });
         }
 
+        // Navigation buttons
         document.getElementById('prev-page').onclick = () => {
             if (pageNum <= 1) return;
             pageNum--;
             renderPage(pageNum);
         };
+
         document.getElementById('next-page').onclick = () => {
             if (pageNum >= pdfDoc.numPages) return;
             pageNum++;
             renderPage(pageNum);
         };
+    }
 
-    } 
-    // Office files
-    else if (['doc','docx','ppt','pptx','xls','xlsx'].includes(ext)) {
+    // -------------------- OFFICE FILES --------------------
+    else if (['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'].includes(ext)) {
         const encoded = encodeURIComponent(fileUrl);
         resourceViewer.innerHTML += `
             <iframe 
                 src="https://view.officeapps.live.com/op/embed.aspx?src=${encoded}" 
-                width="100%" height="60vh" 
-                style="border:none; min-height:500px; border-radius: 6px;">
+                width="100%" height="70vh" 
+                style="border:none; min-height:500px; border-radius:6px;">
             </iframe>`;
-    } 
-    // Unsupported files
+    }
+
+    // -------------------- UNSUPPORTED FILES --------------------
     else {
-        resourceViewer.innerHTML += `<p>This file type (<strong>.${ext}</strong>) cannot be previewed directly.</p>`;
+        resourceViewer.innerHTML += `
+            <p>This file type (<strong>.${ext}</strong>) cannot be previewed directly.</p>`;
     }
 };
+
 
 
 /**
