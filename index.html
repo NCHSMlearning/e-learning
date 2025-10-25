@@ -274,7 +274,7 @@
         #passport-preview {
             width: 150px;
             height: 150px;
-            object-fit: cover;
+            object-fit: cover; /* Ensures image fills the area and is cropped */
             border-radius: 50%;
             border: 4px solid var(--color-primary);
             box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
@@ -638,7 +638,7 @@
                     </thead>
                     <tbody id="courses-table">
                         <tr><td colspan="4">Loading courses...</td></tr>
-                    </tbody>
+                    </tbody
                 </table>
             </div>
             </section>
@@ -1120,7 +1120,8 @@ async function loadProfile(userId) {
     if (currentUserProfile.passport_url) {
         const publicUrlResponse = sb.storage.from('passports').getPublicUrl(currentUserProfile.passport_url);
         if (publicUrlResponse.data) {
-            photoUrl = publicUrlResponse.data.publicUrl;
+            // Add cache busting to ensure fresh image if same path is used
+            photoUrl = publicUrlResponse.data.publicUrl + `?t=${new Date().getTime()}`;
         }
     }
     if (document.getElementById('passport-preview')) document.getElementById('passport-preview').src = photoUrl;
@@ -1155,6 +1156,7 @@ function toggleProfileEdit(enable) {
 
 
     if (uploadLabel) {
+        // Show upload label if editing is enabled OR if no passport photo exists
         if (enable || !(currentUserProfile && currentUserProfile.passport_url)) {
             uploadLabel.style.display = 'block';
         } else {
@@ -1200,13 +1202,53 @@ if (profileForm) {
 }
 
 
+// *************************************************************************
+// *** NEW PASSPORT PHOTO PROCESSING LOGIC (Resize & Crop) ***
+// *************************************************************************
+
 if (passportFileInput) {
-    passportFileInput.addEventListener('change', () => {
-        const file = passportFileInput.files[0];
+    passportFileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
         if (file) {
-            if (passportPreview) passportPreview.src = URL.createObjectURL(file);
-            if (uploadButton) uploadButton.style.display = 'block';
-            if (uploadLabel) uploadLabel.style.display = 'none';
+            if (file.size > 5 * 1024 * 1024) { // Check file size (e.g., max 5MB)
+                profileStatus.textContent = 'File size exceeds 5MB limit.';
+                passportFileInput.value = ''; // Clear the input
+                return;
+            }
+
+            // Client-side image processing for passport photo
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    const size = 150; // Target size for passport photo
+                    canvas.width = size;
+                    canvas.height = size;
+                    const ctx = canvas.getContext('2d');
+                    
+                    // Simple center-crop logic
+                    const minDim = Math.min(img.width, img.height);
+                    const sx = (img.width - minDim) / 2;
+                    const sy = (img.height - minDim) / 2;
+
+                    // Draw the image onto the canvas, cropping to the smallest dimension and scaling to 150x150
+                    ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, size, size);
+
+                    // Convert canvas back to a Blob (File) for upload
+                    canvas.toBlob(blob => {
+                        const newFile = new File([blob], file.name, { type: 'image/jpeg' });
+                        passportFileInput.processedFile = newFile; // Store the processed file on the input element
+
+                        if (passportPreview) passportPreview.src = event.target.result; // Use original data URL for preview for simplicity
+                        if (uploadButton) uploadButton.style.display = 'block';
+                        if (uploadLabel) uploadLabel.style.display = 'none';
+                        profileStatus.textContent = 'Photo ready for upload. Click "Save Photo" to confirm.';
+                    }, 'image/jpeg', 0.9); // 0.9 quality
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
         }
     });
 }
@@ -1214,25 +1256,21 @@ if (passportFileInput) {
 
 if (uploadButton) {
     uploadButton.addEventListener('click', async () => {
-        const file = passportFileInput.files[0];
+        const file = passportFileInput.processedFile; // Use the processed file
         if (!file) {
             if (profileStatus) profileStatus.textContent = 'Please select a file first.';
             return;
         }
 
-
         if (profileStatus) profileStatus.textContent = 'Uploading photo...';
         if (uploadButton) uploadButton.disabled = true;
 
-
-        const fileExt = file.name.split('.').pop();
-        const filePath = `${currentUserId}.${fileExt}`;
-
+        const fileExt = 'jpeg'; // Force JPEG format for consistency after canvas processing
+        const filePath = `${currentUserId}_passport.${fileExt}`; // Unique path for passport
 
         const { error: uploadError } = await sb.storage
             .from('passports')
             .upload(filePath, file, { cacheControl: '3600', upsert: true });
-
 
         if (uploadError) {
             if (profileStatus) profileStatus.textContent = `Upload failed: ${uploadError.message}`;
@@ -1240,26 +1278,24 @@ if (uploadButton) {
             return;
         }
 
-
         const { error: updateError } = await sb
             .from('consolidated_user_profiles_table')
             .update({ passport_url: filePath, updated_at: new Date().toISOString() })
             .eq('user_id', currentUserId);
 
-
         if (updateError) {
             if (profileStatus) profileStatus.textContent = `Database update failed: ${updateError.message}`;
         } else {
-            if (profileStatus) profileStatus.textContent = 'Photo uploaded and saved successfully!';
+            if (profileStatus) profileStatus.textContent = 'Photo uploaded and saved successfully! Reloading profile...';
             if (passportFileInput) passportFileInput.value = '';
             if (uploadButton) uploadButton.style.display = 'none';
             loadProfile(currentUserId);
         }
 
-
         if (uploadButton) uploadButton.disabled = false;
     });
 }
+
 
 // *************************************************************************
 // *** 5. ATTENDANCE LOGIC (GeoCheckIn) ***
@@ -1382,7 +1418,7 @@ async function loadGeoAttendanceHistory(userId) {
             const timeStr = new Date(log.check_in_time).toLocaleString();
             const verifiedText =
                   log.is_verified === true ? '✅ Verified' :
-                  log.is_verified === false ? '⏳ Pending Review' :
+                  log.is_verified === false ? '❌ Rejected' :
                      '⏳ Pending Review';
 
                  
@@ -1533,13 +1569,35 @@ async function geoCheckIn() {
             geoMessage.textContent = `⚠️ Location accuracy (${location.acc.toFixed(1)} m) is too low (Max ${MAX_ALLOWED_ACCURACY}m allowed). Check-in recorded as pending review.`;
             isVerified = null;
         } else {
-            // 4. Reverse Geocoding (UX step)
+            
+            // 4. Reverse Geocoding (UX step) - Robust Name Check
             if (!location.friendly) {
                 geoMessage.textContent = '🌐 Location acquired. Verifying friendly name...';
-                const res = await fetch(`${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${location.lat}&lon=${location.lon}&format=json`);
-                const geoData = res.ok ? await res.json() : null;
-                location.friendly = geoData?.display_name || `Lat:${location.lat.toFixed(4)}, Lon:${location.lon.toFixed(4)}`;
+                const reverseGeoUrl = `${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${location.lat}&lon=${location.lon}&format=json`;
+                const res = await fetch(reverseGeoUrl);
+                
+                let geoData = null;
+                if (res.ok) {
+                    try {
+                        geoData = await res.json();
+                    } catch (e) {
+                        console.error("Failed to parse LocationIQ response:", e);
+                    }
+                }
+                
+                // Prioritize display_name, fallback to a more precise address component, finally use coordinates
+                location.friendly = geoData?.display_name || 
+                                    geoData?.address?.road || 
+                                    geoData?.address?.suburb || 
+                                    geoData?.address?.city || 
+                                    `Lat:${location.lat.toFixed(4)}, Lon:${location.lon.toFixed(4)}`;
+                
+                // Final check to prevent "N/A" or "NaN" being logged (though your code logged coords as a last resort)
+                if (!location.friendly || location.friendly.includes('NaN')) {
+                     location.friendly = `Lat:${location.lat.toFixed(4)}, Lon:${location.lon.toFixed(4)}`;
+                }
             }
+
 
             // 5. Find Target Coordinates & Distance Check
             const allTargetLocations = sessionType === 'Clinical'
