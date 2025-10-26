@@ -442,8 +442,8 @@ async function logout() {
 function loadLecturerProfile() {
     if (!currentUserProfile) return;
     
-    const avatarUrl = currentUserProfile.avatar_url || 'default_passport.png';
-    $('profile-img').src = avatarUrl;
+  const avatarUrl = currentUserProfile.avatar_url || 'images/default_passport.png';
+$('profile-img').src = avatarUrl;
     
     // ⬇️ CORRECTION: Updated IDs to match the new HTML structure ⬇️
     $('profile_name_display').textContent = currentUserProfile.full_name || 'N/A';
