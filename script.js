@@ -1865,6 +1865,60 @@ async function openEditExamModal(examId) {
   }
 }
 
+// Save edited exam
+async function saveEditedExam(e, examId) {
+  e.preventDefault();
+
+  const form = e.target;
+  const submitButton = form.querySelector('button[type="submit"]');
+  const originalText = submitButton.textContent;
+  setButtonLoading(submitButton, true, originalText);
+
+  // Collect updated values
+  const updatedExam = {
+    exam_name: $('edit_exam_title').value.trim(),
+    exam_type: $('edit_exam_type').value,
+    exam_date: $('edit_exam_date').value,
+    exam_start_time: $('edit_exam_start_time').value || null,
+    duration_minutes: parseInt($('edit_exam_duration').value),
+    online_link: $('edit_exam_link').value.trim() || null,
+    status: $('edit_exam_status').value
+  };
+
+  // Basic validation
+  if (!updatedExam.exam_name || !updatedExam.exam_date || isNaN(updatedExam.duration_minutes)) {
+    showFeedback('Title, date, and duration are required.', 'error');
+    setButtonLoading(submitButton, false, originalText);
+    return;
+  }
+
+  try {
+    // Update in Supabase
+    const { data, error } = await sb
+      .from('exams')
+      .update(updatedExam)
+      .eq('id', examId)
+      .select('id');
+
+    if (error) throw error;
+
+    await logAudit('EXAM_EDIT', `Updated exam: ${updatedExam.exam_name}`, examId, 'SUCCESS');
+    showFeedback('✅ Exam updated successfully!', 'success');
+
+    // Reload updated data
+    await loadExams();
+    renderFullCalendar();
+
+    // Close modal after short delay
+    setTimeout(() => closeModal(), 800);
+  } catch (error) {
+    await logAudit('EXAM_EDIT', `Failed to update exam ${examId}. ${error.message}`, examId, 'FAILURE');
+    showFeedback(`Failed to update exam: ${error.message}`, 'error');
+  } finally {
+    setButtonLoading(submitButton, false, originalText);
+  }
+}
+
 
 
 // Grade Modal — simplified version
