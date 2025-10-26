@@ -11,7 +11,7 @@ body {
     font-family: 'Poppins', sans-serif; 
     background: #F8F9FA; 
     margin: 0; 
-    padding: 10px; /* Reduced padding for mobile */
+    padding: 10px; 
 }
 /* Disable all forms of selection and context menu for lockdown */
 body, .exam-main, .question, .options, .options li, label { user-select: none; }
@@ -20,8 +20,8 @@ h1 { text-align: center; color: #073450; margin-bottom: 20px; font-size: 1.8rem;
 /* --- Main Layout: Grid for Sidebar + Content (Mobile First) --- */
 .page-wrapper {
     display: grid;
-    grid-template-columns: 1fr; /* Default: Single column stack for mobile */
-    gap: 20px; /* Reduced gap for mobile */
+    grid-template-columns: 1fr; 
+    gap: 20px; 
     max-width: 1200px;
     margin: 10px auto;
 }
@@ -114,7 +114,7 @@ h1 { text-align: center; color: #073450; margin-bottom: 20px; font-size: 1.8rem;
 .options li { margin: 10px 0; }
 .options label { padding: 10px; border-radius: 6px;}
 
-/* --- Navigation Buttons (Responsive) --- */
+/* --- Navigation Buttons (Streamlined) --- */
 #nav-buttons {
     margin-top: 20px;
     display: flex;
@@ -127,12 +127,15 @@ h1 { text-align: center; color: #073450; margin-bottom: 20px; font-size: 1.8rem;
     display: flex;
     justify-content: space-between;
     width: 100%;
+    justify-content: space-around; 
 }
-.left-nav button { flex-grow: 1; margin: 0 5px; }
+.left-nav button { flex-grow: 1; margin: 0 10px; } 
+
 button {
     padding: 10px 20px; 
     font-size: 0.9rem;
     border-radius: 6px;
+    transition: all 0.2s ease; 
 }
 @media (min-width: 576px) {
     #nav-buttons {
@@ -156,6 +159,62 @@ button#submit-exam-btn:disabled { background: #FCA5A5; cursor: not-allowed; box-
 }
 #error { color: #EF4444; font-weight: 600; text-align: center; margin-bottom: 15px; }
 #final-msg { text-align: center; font-size: 1.3rem; color: #064E3B; margin-top: 30px; }
+
+
+/* =============================== */
+/* --- SUBMISSION MODAL STYLES --- */
+/* =============================== */
+.modal-overlay {
+    display: none; /* Hidden by default */
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    z-index: 1000; /* Ensure it's above everything */
+    align-items: center;
+    justify-content: center;
+}
+.modal-content {
+    background: #fff;
+    padding: 30px;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    width: 90%;
+    max-width: 400px;
+    text-align: center;
+}
+.modal-content h3 {
+    color: #DC2626;
+    margin-top: 0;
+    font-weight: 700;
+}
+.modal-content p {
+    color: #475569;
+    font-size: 1rem;
+    margin-bottom: 25px;
+    font-weight: 500;
+}
+.modal-buttons button {
+    margin: 0 10px;
+    padding: 10px 20px;
+    font-weight: 600;
+    width: 120px; /* Uniform width */
+}
+#confirm-submit-btn {
+    background: #38A169;
+}
+#confirm-submit-btn:hover {
+    background: #2F855A;
+}
+#cancel-submit-btn {
+    background: #E5E7EB;
+    color: #475569;
+}
+#cancel-submit-btn:hover {
+    background: #D1D5DB;
+}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -196,6 +255,20 @@ button#submit-exam-btn:disabled { background: #FCA5A5; cursor: not-allowed; box-
     </div>
 </div>
 
+<div id="submission-modal" class="modal-overlay">
+    <div class="modal-content">
+        <h3>Final Submission Confirmation</h3>
+        <p>
+            You are about to submit your exam. Please confirm: 
+            **Any unanswered questions will be marked as incorrect (0 marks).**
+        </p>
+        <div class="modal-buttons">
+            <button id="cancel-submit-btn">Cancel</button>
+            <button id="confirm-submit-btn">Confirm & Submit</button>
+        </div>
+    </div>
+</div>
+
 <script>
 // --- CONFIGURATION ---
 const SUPABASE_URL='https://lwhtjozfsmbyihenfunw.supabase.co';
@@ -206,17 +279,23 @@ const sb=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 
 const params=new URLSearchParams(window.location.search);
 const EXAM_ID=params.get('exam_id');
-// CRITICAL: Get the unique student ID
 let studentId=localStorage.getItem('currentUserId'); 
 let questions=[], currentIndex=0, duration=0, timerInterval;
 let answers={}; 
 let hasAnsweredAtLeastOne = false; 
 
+// References to the modal elements
+const submissionModal = document.getElementById('submission-modal');
+const confirmSubmitBtn = document.getElementById('confirm-submit-btn');
+const cancelSubmitBtn = document.getElementById('cancel-submit-btn');
+const finalSubmitBtn = document.getElementById('submit-exam-btn');
+
+
 if(!studentId){ 
     window.location.href='exam_login.html'; 
 }
 
-// --- NAVIGATION FUNCTIONS ---
+// --- NAVIGATION FUNCTIONS (Unchanged) ---
 function nextQuestion(){
     if(currentIndex < questions.length - 1){
         renderQuestion(currentIndex + 1);
@@ -228,7 +307,7 @@ function prevQuestion(){
     }
 }
 
-// --- CORE FUNCTIONS ---
+// --- CORE FUNCTIONS (Unchanged) ---
 async function initExam(){
     try{
         const { data: examData } = await sb.from('exams_with_courses').select('*').eq('id',EXAM_ID).maybeSingle();
@@ -259,7 +338,6 @@ async function initExam(){
 async function loadExistingAnswers() {
     try {
         const { data, error } = await sb.from('exam_grades')
-            // CRITICAL: Loads answers specific to the student ID and exam ID
             .select('question_id, selected_answer')
             .eq('student_id', studentId)
             .eq('exam_id', EXAM_ID);
@@ -274,7 +352,7 @@ async function loadExistingAnswers() {
                 }
             });
             if (hasAnsweredAtLeastOne) {
-                document.getElementById('submit-exam-btn').disabled = false;
+                finalSubmitBtn.disabled = false;
             }
         }
     } catch (err) {
@@ -320,14 +398,14 @@ function renderQuestion(index = currentIndex){
             saveAnswer(r.value);
             if (!hasAnsweredAtLeastOne) {
                 hasAnsweredAtLeastOne = true;
-                document.getElementById('submit-exam-btn').disabled = false;
+                finalSubmitBtn.disabled = false;
             }
             updateStatusTableUI(); 
         });
     });
 }
 
-// --- STATUS TABLE FUNCTIONS ---
+// --- STATUS TABLE FUNCTIONS (Unchanged) ---
 function renderQuestionStatusTable() {
     const tableEl = document.getElementById('question-status-table');
     tableEl.innerHTML = '';
@@ -391,7 +469,6 @@ async function saveAnswer(selectedAnswerValue){
     try{
         await sb.from('exam_grades').upsert(
             [{
-                // STUDENT ID IS USED HERE
                 student_id: studentId, 
                 exam_id: EXAM_ID, 
                 question_id: q.id, 
@@ -407,20 +484,19 @@ async function saveAnswer(selectedAnswerValue){
     }
 }
 
-async function submitExam(){
-    const confirmation = confirm("Are you sure you want to submit the exam? This will record all unanswered questions as incorrect.");
-    if (!confirmation) return;
-
+// NEW FUNCTION: Handles the actual submission after confirmation
+async function executeSubmission(){
+    // Disable all buttons to prevent double-clicks
     document.querySelectorAll('button').forEach(btn => btn.disabled = true);
+    submissionModal.style.display = 'none';
     document.getElementById('error').innerText = 'Submitting final answers...';
 
-    // Process all unanswered questions and submit 0 marks
+    // Logic to record all skipped/unanswered questions with 0 marks 
     const skippedEntries = [];
     questions.forEach(q => {
         const questionId = q.id;
         if (!answers.hasOwnProperty(questionId) || answers[questionId] === null) {
             skippedEntries.push({
-                // STUDENT ID IS USED HERE
                 student_id: studentId, 
                 exam_id: EXAM_ID, 
                 question_id: questionId, 
@@ -451,6 +527,11 @@ async function submitExam(){
     }, 1500); 
 }
 
+// MODIFIED: This function now only SHOWS the modal
+function submitExam(){
+    submissionModal.style.display = 'flex';
+}
+
 function showFinalScreen(){
     clearInterval(timerInterval);
     window.removeEventListener('beforeunload', beforeUnloadHandler); 
@@ -464,7 +545,7 @@ function showFinalScreen(){
 }
 
 
-// --- TIMER AND LOCKDOWN ---
+// --- TIMER AND LOCKDOWN (Unchanged) ---
 function startTimer(seconds){
     const timerEl=document.getElementById('timer');
     function updateTimer(){
@@ -472,7 +553,8 @@ function startTimer(seconds){
         const timeString = `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
         timerEl.innerText=`Time Remaining: ${timeString}`;
         if(seconds-- <=0) {
-            submitExam(); 
+            // Timer expiry triggers submission without showing the modal
+            executeSubmission(); 
             return;
         }
     }
@@ -490,7 +572,7 @@ function lockDown(){
     
     document.addEventListener('visibilitychange', () => {
         if (document.hidden) {
-            submitExam(); 
+            executeSubmission(); 
             alert('Warning: The exam was automatically submitted due to unauthorized page context change (leaving the tab/window).'); 
         }
     });
@@ -502,9 +584,14 @@ function beforeUnloadHandler(e){
 }
 
 // --- EVENT LISTENERS ---
-document.getElementById('next-btn').addEventListener('click', nextQuestion);
 document.getElementById('prev-btn').addEventListener('click', prevQuestion);
-document.getElementById('submit-exam-btn').addEventListener('click', submitExam);
+document.getElementById('next-btn').addEventListener('click', nextQuestion);
+finalSubmitBtn.addEventListener('click', submitExam); // Shows the modal
+confirmSubmitBtn.addEventListener('click', executeSubmission); // Executes submission after confirmation
+cancelSubmitBtn.addEventListener('click', () => { // Hides the modal
+    submissionModal.style.display = 'none';
+});
+
 window.addEventListener('DOMContentLoaded', initExam);
 </script>
 </body>
