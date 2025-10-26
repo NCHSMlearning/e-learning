@@ -6,13 +6,19 @@
 <title>Exam - NCHSM</title>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-body {
+body{
     font-family:'Poppins',sans-serif;
-    background:#F8F9FA; margin:0; padding:20px;
-    user-select:none; /* disable highlight */
+    background:#F8F9FA;
+    margin:0;
+    padding:20px;
+    user-select:none;
 }
-.container {
-    max-width:700px; margin:20px auto; background:#fff; padding:25px; border-radius:12px;
+.container{
+    max-width:700px;
+    margin:20px auto;
+    background:#fff;
+    padding:25px;
+    border-radius:12px;
     box-shadow:0 5px 20px rgba(0,0,0,0.05);
 }
 h1{text-align:center; color:#073450; user-select:none;}
@@ -24,13 +30,21 @@ h1{text-align:center; color:#073450; user-select:none;}
 .options{ list-style:none; padding:0;}
 .options li{ margin:8px 0;}
 button{
-    padding:12px 25px; background:#38A169; color:#fff; border:none; border-radius:8px; cursor:pointer; font-weight:600;
+    padding:12px 25px;
+    background:#38A169;
+    color:#fff;
+    border:none;
+    border-radius:8px;
+    cursor:pointer;
+    font-weight:600;
     transition: all 0.2s ease;
+    margin:5px;
 }
 button:hover{ background:#2F855A; }
 #score{ margin-top:20px; font-weight:600; font-size:1.2rem; color:#064E3B; text-align:center; }
 #error{ color:#EF4444; font-weight:600; text-align:center; margin-bottom:15px; }
 #final-msg{text-align:center; font-size:1.3rem; color:#064E3B; margin-top:30px;}
+#saved-msg{ text-align:center; color:#064E3B; font-weight:600; margin:10px 0; display:none;}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -44,8 +58,12 @@ button:hover{ background:#2F855A; }
     </div>
     <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
     <div id="error"></div>
+    <div id="saved-msg">Answer Saved!</div>
     <div id="exam-container">Loading question...</div>
-    <button id="next-btn">Next</button>
+    <div style="text-align:center;">
+        <button id="prev-btn">Previous</button>
+        <button id="next-btn">Next</button>
+    </div>
     <div id="score"></div>
     <div id="final-msg"></div>
 </div>
@@ -73,19 +91,10 @@ async function initExam(){
         questions=qData;
 
         document.getElementById('total').innerText=questions.length;
-
-        requestFullscreen(); // Fullscreen mode
         renderQuestion();
         startTimer(duration*60);
         lockDown();
     }catch(err){ console.error(err); document.getElementById('error').innerText='Error loading exam.'; }
-}
-
-function requestFullscreen(){
-    const docEl=document.documentElement;
-    if(docEl.requestFullscreen) docEl.requestFullscreen();
-    else if(docEl.webkitRequestFullscreen) docEl.webkitRequestFullscreen();
-    else if(docEl.msRequestFullscreen) docEl.msRequestFullscreen();
 }
 
 function renderQuestion(){
@@ -100,7 +109,6 @@ function renderQuestion(){
         ul.appendChild(li);
     });
     container.appendChild(ul);
-
     document.getElementById('current').innerText=currentIndex+1;
     document.getElementById('progress-fill').style.width=((currentIndex)/questions.length*100)+'%';
 }
@@ -110,14 +118,20 @@ async function saveAnswer(){
     const selected=document.querySelector(`input[name="q${q.id}"]:checked`);
     const answer=selected?selected.value:null;
     const marks=answer===q.correct_answer?(q.marks||1):0;
-
     try{
         const { error } = await sb.from('exam_grades').upsert(
             [{student_id:studentId, exam_id:EXAM_ID, question_id:q.id, marks, graded_at:new Date()}],
             {onConflict:['student_id','exam_id','question_id']}
         );
         if(error) console.error('Error saving answer',error);
+        else showSavedMsg();
     }catch(err){ console.error('Error saving answer',err);}
+}
+
+function showSavedMsg(){
+    const msg=document.getElementById('saved-msg');
+    msg.style.display='block';
+    setTimeout(()=>{ msg.style.display='none'; }, 1000);
 }
 
 async function nextQuestion(){
@@ -126,13 +140,24 @@ async function nextQuestion(){
         currentIndex++;
         renderQuestion();
     }else{
-        submitExam();
+        if(confirm("You are on the last question. Are you sure you want to submit the exam?")){
+            submitExam();
+        }
+    }
+}
+
+async function prevQuestion(){
+    if(currentIndex>0){
+        await saveAnswer();
+        currentIndex--;
+        renderQuestion();
     }
 }
 
 async function submitExam(){
     clearInterval(timerInterval);
     document.getElementById('next-btn').disabled=true;
+    document.getElementById('prev-btn').disabled=true;
     document.getElementById('final-msg').innerText='✅ Exam submitted! Please wait for results.';
     document.getElementById('progress-fill').style.width='100%';
     window.removeEventListener('beforeunload',beforeUnloadHandler);
@@ -156,20 +181,15 @@ function lockDown(){
     document.addEventListener('paste', e=>e.preventDefault());
     document.addEventListener('selectstart', e=>e.preventDefault());
     window.addEventListener('beforeunload',beforeUnloadHandler);
-    document.addEventListener('visibilitychange',()=>{
-        if(document.hidden){
-            submitExam();
-            alert('Exam submitted because you left the page!');
-        }
-    });
+    document.addEventListener('visibilitychange',()=>{ if(document.hidden){ submitExam(); alert('Exam submitted because you left the page!'); } });
 }
-
 function beforeUnloadHandler(e){
     e.preventDefault();
     e.returnValue='Exam submitted because you left the page!';
 }
 
 document.getElementById('next-btn').addEventListener('click',nextQuestion);
+document.getElementById('prev-btn').addEventListener('click',prevQuestion);
 window.addEventListener('DOMContentLoaded',initExam);
 </script>
 </body>
