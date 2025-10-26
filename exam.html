@@ -3,42 +3,78 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Exam Portal - NCHSM</title>
+<title>Exam - NCHSM</title>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 body {
     font-family: 'Poppins', sans-serif;
     background: #F8F9FA;
-    margin:0;
-    padding:0;
-    overflow:hidden; /* Prevent scrolling */
+    margin: 0;
+    padding: 0;
+    user-select: none; /* prevent selection */
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
 }
-.container{
-    max-width: 900px;
-    margin:20px auto;
-    background:#fff;
-    padding:25px;
-    border-radius:12px;
-    box-shadow:0 5px 20px rgba(0,0,0,0.05);
+.container {
+    max-width: 800px;
+    margin: 20px auto;
+    background: #fff;
+    padding: 25px;
+    border-radius: 12px;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.05);
 }
-h1{text-align:center;color:#073450;}
-.question{margin-bottom:20px;}
-.options{list-style:none;padding:0;}
-.options li{margin:8px 0;}
-button{
-    padding:12px 25px;
-    background:#38A169;
-    color:#fff;
-    border:none;
-    border-radius:8px;
-    cursor:pointer;
-    font-weight:600;
+h1 {
+    text-align: center;
+    color: #073450;
 }
-button:hover{background:#2F855A;}
-#score{margin-top:20px;font-weight:600;font-size:1.2rem;color:#064E3B;text-align:center;}
-#error{color:#EF4444;font-weight:600;text-align:center;margin-bottom:15px;}
-#timer{text-align:center;font-weight:600;font-size:1.2rem;margin-bottom:15px;color:#073450;}
-#savedMsg{color:#064E3B;font-weight:600;text-align:center;margin-bottom:15px;}
+#timer {
+    text-align: center;
+    font-weight: 600;
+    font-size: 1.2rem;
+    margin-bottom: 15px;
+    color: #073450;
+}
+.question {
+    margin-bottom: 20px;
+}
+.options {
+    list-style: none;
+    padding: 0;
+}
+.options li {
+    margin: 10px 0;
+}
+button {
+    padding: 12px 25px;
+    background: #38A169;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    margin-top: 20px;
+}
+button:hover {
+    background: #2F855A;
+}
+button:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+}
+#score {
+    margin-top: 20px;
+    font-weight: 600;
+    font-size: 1.2rem;
+    color: #064E3B;
+    text-align: center;
+}
+#error {
+    color: #EF4444;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 15px;
+}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -48,9 +84,8 @@ button:hover{background:#2F855A;}
     <h1>Exam</h1>
     <div id="timer">Loading timer...</div>
     <div id="error"></div>
-    <div id="savedMsg"></div>
-    <div id="exam-container">Loading questions...</div>
-    <button id="next-btn">Next</button>
+    <div id="exam-container">Loading question...</div>
+    <button id="next-btn" disabled>Next</button>
     <div id="score"></div>
 </div>
 
@@ -61,87 +96,48 @@ const sb=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 
 const params=new URLSearchParams(window.location.search);
 const EXAM_ID=params.get('exam_id');
-let student=JSON.parse(localStorage.getItem('currentUserProfile'));
-let questions=[],duration=0,timerInterval;
-let currentPage=0;
-const pageSize=3;
-if(!student){ window.location.href='exam_login.html'; }
+let studentProfile=JSON.parse(localStorage.getItem('currentUserProfile'));
+let questions=[],currentIndex=0,duration=0,timerInterval;
+
+// redirect if not logged in
+if(!studentProfile){ window.location.href='exam_login.html'; }
 
 async function initExam(){
     try{
+        // fetch exam details
         const { data: examData, error: examError } = await sb.from('exams_with_courses').select('*').eq('id',EXAM_ID).maybeSingle();
         if(examError || !examData){ document.getElementById('error').innerText='Exam not found'; return; }
         duration = examData.duration_minutes || 30;
 
+        // fetch questions
         const { data: qData, error: qError } = await sb.from('questions').select('*').eq('exam_id',EXAM_ID);
-        if(qError || !qData || qData.length===0){ document.getElementById('exam-container').innerText='No questions found'; return; }
-        questions=qData;
+        if(qError || !qData || qData.length===0){ document.getElementById('error').innerText='No questions found'; return; }
+        questions = qData;
 
         startTimer(duration*60);
-        renderPage();
+        renderQuestion(currentIndex);
         lockDown();
-
     }catch(err){ console.error(err); document.getElementById('error').innerText='Error loading exam.'; }
 }
 
-function renderPage(){
+function renderQuestion(index){
     const container=document.getElementById('exam-container');
-    container.innerHTML='';
-    document.getElementById('savedMsg').innerText='';
-    const start=currentPage*pageSize;
-    const end=Math.min(start+pageSize,questions.length);
-    for(let idx=start;idx<end;idx++){
-        const q=questions[idx];
-        const div=document.createElement('div');
-        div.className='question';
-        div.innerHTML=`<p><strong>Q${idx+1}:</strong> ${q.question}</p>`;
-        const ul=document.createElement('ul'); ul.className='options';
-        const opts=Array.isArray(q.options)?q.options:JSON.parse(q.options);
-        opts.forEach(opt=>{
-            const li=document.createElement('li');
-            li.innerHTML=`<label><input type="radio" name="q${q.id}" value="${opt}"> ${opt}</label>`;
-            ul.appendChild(li);
-        });
-        div.appendChild(ul);
-        container.appendChild(div);
-    }
-    if((currentPage+1)*pageSize >= questions.length){
-        document.getElementById('next-btn').innerText='Submit Exam';
-    } else{
-        document.getElementById('next-btn').innerText='Next';
-    }
-}
+    const question = questions[index];
+    container.innerHTML = `<div class="question"><p><strong>Q${index+1}:</strong> ${question.question}</p></div>`;
+    const ul = document.createElement('ul'); ul.className='options';
+    const opts = Array.isArray(question.options)? question.options : JSON.parse(question.options);
+    opts.forEach(opt=>{
+        const li = document.createElement('li');
+        li.innerHTML = `<label><input type="radio" name="q${question.id}" value="${opt}"> ${opt}</label>`;
+        ul.appendChild(li);
+    });
+    container.appendChild(ul);
 
-async function saveAnswers(){
-    const start=currentPage*pageSize;
-    const end=Math.min(start+pageSize,questions.length);
-    let answers=[];
-    for(let idx=start;idx<end;idx++){
-        const q=questions[idx];
-        const selected=document.querySelector(`input[name="q${q.id}"]:checked`);
-        answers.push({question_id:q.id,answer:selected?selected.value:null});
-    }
-    try{
-        for(const a of answers){
-            const existing=await sb.from('exam_grades').select('*').eq('student_id',student.user_id).eq('exam_id',EXAM_ID).maybeSingle();
-            if(existing.data){
-                await sb.from('exam_grades').update({marks:a.answer===questions.find(q=>q.id===a.question_id).correct_answer?1:0}).eq('student_id',student.user_id).eq('exam_id',EXAM_ID);
-            } else{
-                await sb.from('exam_grades').insert([{student_id:student.user_id, exam_id:EXAM_ID, marks:a.answer===questions.find(q=>q.id===a.question_id).correct_answer?1:0, graded_at:new Date()}]);
-            }
-        }
-        document.getElementById('savedMsg').innerText='Answer Saved!';
-    }catch(err){ console.error(err); document.getElementById('error').innerText='Error saving answers.'; }
-}
-
-async function nextPage(){
-    await saveAnswers();
-    if((currentPage+1)*pageSize >= questions.length){
-        submitExam();
-    } else{
-        currentPage++;
-        renderPage();
-    }
+    // enable next button only after selecting
+    const radios = container.querySelectorAll('input[type="radio"]');
+    const nextBtn = document.getElementById('next-btn');
+    nextBtn.disabled = true;
+    radios.forEach(r => r.addEventListener('change',()=> nextBtn.disabled=false));
 }
 
 function startTimer(seconds){
@@ -155,35 +151,66 @@ function startTimer(seconds){
     timerInterval=setInterval(updateTimer,1000);
 }
 
-async function submitExam(){
-    clearInterval(timerInterval);
-    let totalScore=0;
-    const { data: saved, error } = await sb.from('exam_grades').select('*').eq('student_id',student.user_id).eq('exam_id',EXAM_ID);
-    if(saved && saved.length>0){
-        saved.forEach(s=>totalScore+=s.marks||0);
-    }
-    document.getElementById('score').innerText=`Your Score: ${totalScore} / ${questions.length}`;
-    document.getElementById('next-btn').disabled=true;
+async function saveAnswer(question){
+    const selected=document.querySelector(`input[name="q${question.id}"]:checked`);
+    const answer = selected? selected.value : null;
+    return {question_id: question.id, answer};
 }
 
+async function submitExam(){
+    clearInterval(timerInterval);
+    let score=0;
+    for(const q of questions){
+        const ansData = await saveAnswer(q);
+        if(ansData.answer===q.correct_answer) score+=q.marks||1;
+    }
+
+    document.getElementById('score').innerText=`Your Score: ${score} / ${questions.length}`;
+
+    try{
+        const { error } = await sb.from('exam_grades').insert([{
+            student_id: studentProfile.user_id,
+            exam_id: EXAM_ID,
+            marks: score,
+            graded_at: new Date()
+        }]);
+        if(error){ console.error('Error saving results:', error); document.getElementById('error').innerText='Error saving results.'; }
+    }catch(err){ console.error(err); document.getElementById('error').innerText='Error saving results.'; }
+}
+
+// Lockdown features
 function lockDown(){
-    // Full screen
-    document.documentElement.requestFullscreen?.();
-    // Disable context menu
+    // fullscreen request
+    document.documentElement.requestFullscreen().catch(()=>{});
+
+    // disable right click
     document.addEventListener('contextmenu', e=>e.preventDefault());
-    // Disable copy/paste
+    // disable copy/paste
     document.addEventListener('copy', e=>e.preventDefault());
     document.addEventListener('cut', e=>e.preventDefault());
     document.addEventListener('paste', e=>e.preventDefault());
-    // Warn before leaving page
-    window.addEventListener('beforeunload', e=>{ e.preventDefault(); e.returnValue=''; submitExam(); });
-    // Detect tab change
-    document.addEventListener('visibilitychange', ()=>{
-        if(document.hidden) submitExam();
-    });
+
+    // warn on leaving page
+    window.addEventListener('beforeunload', e=>{ e.preventDefault(); e.returnValue=''; });
+
+    // blur/focus detection
+    window.addEventListener('blur', ()=>{ submitExam(); alert('Exam submitted because you left the page!'); });
 }
 
-document.getElementById('next-btn').addEventListener('click', nextPage);
+// next question
+document.getElementById('next-btn').addEventListener('click', async ()=>{
+    const question = questions[currentIndex];
+    await saveAnswer(question); // save answer
+    if(currentIndex < questions.length-1){
+        currentIndex++;
+        renderQuestion(currentIndex);
+    } else {
+        submitExam();
+        alert('Exam completed!');
+        document.getElementById('next-btn').disabled=true;
+    }
+});
+
 window.addEventListener('DOMContentLoaded', initExam);
 </script>
 </body>
