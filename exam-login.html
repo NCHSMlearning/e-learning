@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Exam Portal Login - NCHSM</title>
+<link rel="icon" href="https://raw.githubusercontent.com/NCHSMlearning/e-learning/main/images/Logo_NCHSM.png">
+<style>
+body { font-family: 'Inter', sans-serif; background:#F8F8F8; display:flex; justify-content:center; align-items:center; height:100vh; margin:0;}
+.container { background:#fff; padding:40px; border-radius:12px; box-shadow:0 5px 20px rgba(0,0,0,0.1); width:100%; max-width:400px;}
+input { width:100%; padding:12px; margin-bottom:15px; border-radius:8px; border:1px solid #CBD5E1; box-sizing:border-box;}
+button { width:100%; padding:12px; background:#4C1D95; color:#fff; border:none; border-radius:8px; font-weight:600; cursor:pointer;}
+button:hover { background:#6D28D9; }
+#error { color:#EF4444; font-weight:600; margin-bottom:15px; text-align:center;}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+<div class="container">
+    <h2 style="text-align:center; color:#4C1D95;">Login to Your Exam Portal</h2>
+    <div id="error"></div>
+    <input type="email" id="email" placeholder="Email" required>
+    <input type="password" id="password" placeholder="Password" required>
+    <button id="loginBtn">Login</button>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+document.getElementById('loginBtn').addEventListener('click', async () => {
+    const email = document.getElementById('email').value.trim();
+    const password = document.getElementById('password').value;
+    const errorDiv = document.getElementById('error');
+    errorDiv.innerText = '';
+
+    if(!email || !password) {
+        errorDiv.innerText = 'Please enter email and password.';
+        return;
+    }
+
+    try {
+        // Sign in
+        const { data: authData, error: authError } = await sb.auth.signInWithPassword({ email, password });
+        if(authError || !authData.user) {
+            errorDiv.innerText = authError?.message || 'Login failed. Check your credentials.';
+            return;
+        }
+
+        // Fetch profile
+        const { data: profile, error: profileError } = await sb
+            .from('consolidated_user_profiles_table')
+            .select('*')
+            .eq('user_id', authData.user.id)
+            .maybeSingle();
+
+        if(profileError || !profile) {
+            errorDiv.innerText = 'Profile not found. Contact admin.';
+            return;
+        }
+
+        if((profile.status||'').toLowerCase() !== 'approved') {
+            errorDiv.innerText = 'Your account is pending approval.';
+            return;
+        }
+
+        // Save profile locally
+        localStorage.setItem('currentUserProfile', JSON.stringify(profile));
+
+        // Redirect to exam page
+        window.location.href = 'exam.html';
+
+    } catch(err) {
+        console.error(err);
+        errorDiv.innerText = 'Unexpected error. Try again later.';
+    }
+});
+</script>
+</body>
+</html>
