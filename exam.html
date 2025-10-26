@@ -6,14 +6,8 @@
 <title>Exam - NCHSM</title>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-body {
-    font-family:'Poppins',sans-serif; 
-    background:#F8F9FA; margin:0; padding:20px; 
-    user-select:none; /* disable highlight */
-}
-.container {
-    max-width:700px; margin:20px auto; background:#fff; padding:25px; border-radius:12px; box-shadow:0 5px 20px rgba(0,0,0,0.05);
-}
+body{ font-family:'Poppins',sans-serif; background:#F8F9FA; margin:0; padding:20px; user-select:none;}
+.container{ max-width:700px; margin:20px auto; background:#fff; padding:25px; border-radius:12px; box-shadow:0 5px 20px rgba(0,0,0,0.05);}
 h1{text-align:center; color:#073450; user-select:none;}
 #timer{ text-align:center; font-weight:600; font-size:1.2rem; margin-bottom:15px; color:#073450;}
 #progress{ margin-bottom:15px;}
@@ -24,18 +18,18 @@ h1{text-align:center; color:#073450; user-select:none;}
 .options li{ margin:8px 0;}
 button{
     padding:12px 25px; background:#38A169; color:#fff; border:none; border-radius:8px; cursor:pointer; font-weight:600;
-    transition: all 0.2s ease;
+    transition: all 0.2s ease; margin-right:10px;
 }
-button:disabled{ background:#94D3A2; cursor:not-allowed; }
+button:disabled{ background:#94D3A2; cursor:not-allowed;}
 button:hover:enabled{ background:#2F855A; }
 #score{ margin-top:20px; font-weight:600; font-size:1.2rem; color:#064E3B; text-align:center; }
 #error{ color:#EF4444; font-weight:600; text-align:center; margin-bottom:15px; }
-#answer-saved{ color:#064E3B; font-weight:500; margin-bottom:15px; text-align:center; display:none;}
+#final-msg{text-align:center; font-size:1.3rem; color:#064E3B; margin-top:30px;}
+#answer-saved{ color:#064E3B; font-weight:600; margin-bottom:10px; display:none;}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
-
 <div class="container">
     <h1>Exam</h1>
     <div id="timer">Loading timer...</div>
@@ -44,12 +38,14 @@ button:hover:enabled{ background:#2F855A; }
     </div>
     <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
     <div id="error"></div>
-    <div id="answer-saved">Answer Saved!</div>
+    <div id="answer-saved">Answer saved!</div>
     <div id="exam-container">Loading question...</div>
-    <div style="display:flex; justify-content:space-between; margin-top:20px;">
+    <div id="nav-buttons" style="margin-top:15px;">
         <button id="prev-btn" disabled>Previous</button>
         <button id="next-btn" disabled>Next</button>
     </div>
+    <div id="score"></div>
+    <div id="final-msg"></div>
 </div>
 
 <script>
@@ -61,6 +57,7 @@ const params=new URLSearchParams(window.location.search);
 const EXAM_ID=params.get('exam_id');
 let studentId=localStorage.getItem('currentUserId');
 let questions=[],currentIndex=0,duration=0,timerInterval;
+let answers={}; // Store selected answers locally
 
 if(!studentId){ window.location.href='exam_login.html'; }
 
@@ -94,68 +91,74 @@ function renderQuestion(){
     });
     container.appendChild(ul);
 
+    // Restore previous answer if exists
+    if(answers[q.id]){
+        const input=document.querySelector(`input[name="q${q.id}"][value="${answers[q.id]}"]`);
+        if(input) input.checked=true;
+        document.getElementById('next-btn').disabled=false;
+    } else {
+        document.getElementById('next-btn').disabled=true;
+    }
+
+    // Update progress
     document.getElementById('current').innerText=currentIndex+1;
     document.getElementById('progress-fill').style.width=((currentIndex)/questions.length*100)+'%';
 
-    // enable Next only if an option is selected
-    const nextBtn = document.getElementById('next-btn');
-    nextBtn.disabled = true;
-
-    ul.querySelectorAll('input').forEach(input=>{
-        input.addEventListener('change', ()=>{
-            nextBtn.disabled = false;
-            showAnswerSaved();
+    // Enable next button when answer selected
+    const radios=document.querySelectorAll(`input[name="q${q.id}"]`);
+    radios.forEach(r=>{
+        r.addEventListener('change', ()=>{ 
+            document.getElementById('next-btn').disabled=false;
+            saveAnswer();
         });
     });
 
-    // enable/disable prev button
-    document.getElementById('prev-btn').disabled = currentIndex === 0;
-}
-
-function showAnswerSaved(){
-    const msg=document.getElementById('answer-saved');
-    msg.style.display='block';
-    setTimeout(()=>{ msg.style.display='none'; }, 1000);
+    // Update prev button
+    document.getElementById('prev-btn').disabled=currentIndex===0;
 }
 
 async function saveAnswer(){
     const q=questions[currentIndex];
     const selected=document.querySelector(`input[name="q${q.id}"]:checked`);
     const answer=selected?selected.value:null;
-    const marks=answer===q.correct_answer?(q.marks||1):0;
+    if(answer===null) return;
 
+    answers[q.id]=answer;
+    document.getElementById('answer-saved').style.display='block';
+    setTimeout(()=>{ document.getElementById('answer-saved').style.display='none'; },1000);
+
+    const marks=answer===q.correct_answer?(q.marks||1):0;
     try{
-        const { error } = await sb.from('exam_grades').upsert(
+        await sb.from('exam_grades').upsert(
             [{student_id:studentId, exam_id:EXAM_ID, question_id:q.id, marks, graded_at:new Date()}],
             {onConflict:['student_id','exam_id','question_id']}
         );
-        if(error) console.error('Error saving answer',error);
     }catch(err){ console.error('Error saving answer',err);}
 }
 
 async function nextQuestion(){
-    await saveAnswer();
-    if(currentIndex < questions.length - 1){
+    if(currentIndex<questions.length-1){
         currentIndex++;
         renderQuestion();
     } else {
-        // Last question: submit and redirect
-        await submitExam();
-        window.location.href = 'submit_exam.html';
+        showFinalScreen();
     }
 }
 
 function prevQuestion(){
-    if(currentIndex > 0){
+    if(currentIndex>0){
         currentIndex--;
         renderQuestion();
     }
 }
 
-async function submitExam(){
+function showFinalScreen(){
     clearInterval(timerInterval);
-    // Could add final exam submission logic here
-    console.log('Exam submitted for student', studentId);
+    const container=document.getElementById('exam-container');
+    container.innerHTML='';
+    document.getElementById('nav-buttons').style.display='none';
+    document.getElementById('progress-fill').style.width='100%';
+    document.getElementById('final-msg').innerText='✅ Exam submitted! Please wait for results.';
 }
 
 function startTimer(seconds){
@@ -163,7 +166,7 @@ function startTimer(seconds){
     function updateTimer(){
         const m=Math.floor(seconds/60), s=seconds%60;
         timerEl.innerText=`Time Remaining: ${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
-        if(seconds-- <=0) nextQuestion();
+        if(seconds-- <=0) showFinalScreen();
     }
     updateTimer();
     timerInterval=setInterval(updateTimer,1000);
@@ -175,9 +178,9 @@ function lockDown(){
     document.addEventListener('cut', e=>e.preventDefault());
     document.addEventListener('paste', e=>e.preventDefault());
     document.addEventListener('selectstart', e=>e.preventDefault());
-    window.addEventListener('beforeunload', beforeUnloadHandler);
-    document.addEventListener('visibilitychange', ()=>{
-        if(document.hidden){ submitExam(); alert('Exam submitted because you left the page!'); }
+    window.addEventListener('beforeunload',beforeUnloadHandler);
+    document.addEventListener('visibilitychange',()=>{
+        if(document.hidden){ showFinalScreen(); alert('Exam submitted because you left the page!'); }
     });
 }
 
@@ -186,9 +189,9 @@ function beforeUnloadHandler(e){
     e.returnValue='Exam submitted because you left the page!';
 }
 
-document.getElementById('next-btn').addEventListener('click', nextQuestion);
-document.getElementById('prev-btn').addEventListener('click', prevQuestion);
-window.addEventListener('DOMContentLoaded', initExam);
+document.getElementById('next-btn').addEventListener('click',nextQuestion);
+document.getElementById('prev-btn').addEventListener('click',prevQuestion);
+window.addEventListener('DOMContentLoaded',initExam);
 </script>
 </body>
 </html>
