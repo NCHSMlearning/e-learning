@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NCHSM Digital Student Exam</title>
+<title>Mental Health & Psychiatry CAT I - Exam Portal</title>
 <link rel="icon" type="image/png" href="https://raw.githubusercontent.com/NCHSMlearning/e-learning/main/images/Logo_NCHSM.png" sizes="32x32">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
 <style>
 body { font-family: 'Inter', sans-serif; background: #F8F8F8; margin:0; padding:0;}
 .container { max-width: 900px; margin: 50px auto; padding: 20px; background:#fff; border-radius:12px; box-shadow:0 4px 12px rgba(0,0,0,0.1);}
@@ -21,6 +21,7 @@ button:hover { background:#6D28D9; }
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
+
 <div class="container">
     <h1>MENTAL HEALTH AND PSYCHIATRY CAT I</h1>
     <div id="error"></div>
@@ -34,17 +35,19 @@ const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk'; // Replace with your actual anon key
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const EXAM_ID = 27; // Replace with the exam you want
+const EXAM_ID = 27; // Exam ID to load
 let studentProfile = null;
 let questions = [];
 
 // -------------------- Initialize Exam --------------------
 async function initExam() {
     try {
-        // 1️⃣ Check current session
+        // 1️⃣ Get current session
         const { data: { session } } = await sb.auth.getSession();
         if (!session) {
-            window.location.href = 'login.html';
+            document.getElementById('error').innerText = 'You are not logged in. Please log in via the main portal to access this exam.';
+            document.getElementById('exam-container').innerHTML = '';
+            document.getElementById('submit-btn').disabled = true;
             return;
         }
 
@@ -57,22 +60,25 @@ async function initExam() {
 
         if (profileError || !profile) {
             document.getElementById('error').innerText = 'Profile not found. Contact admin.';
+            document.getElementById('submit-btn').disabled = true;
             return;
         }
 
         if (profile.status.toLowerCase() !== 'approved') {
             document.getElementById('error').innerText = 'Your account is pending approval.';
+            document.getElementById('submit-btn').disabled = true;
             return;
         }
 
         studentProfile = profile;
 
-        // 3️⃣ Load questions
+        // 3️⃣ Load exam questions
         await loadQuestions();
 
     } catch (err) {
         console.error('Initialization error:', err);
         document.getElementById('error').innerText = 'Error initializing exam.';
+        document.getElementById('submit-btn').disabled = true;
     }
 }
 
@@ -88,6 +94,7 @@ async function loadQuestions() {
 
         if (!data || data.length === 0) {
             document.getElementById('exam-container').innerHTML = 'No questions found for this exam.';
+            document.getElementById('submit-btn').disabled = true;
             return;
         }
 
@@ -97,6 +104,7 @@ async function loadQuestions() {
     } catch (err) {
         console.error('Error fetching questions:', err);
         document.getElementById('exam-container').innerHTML = 'Error loading questions.';
+        document.getElementById('submit-btn').disabled = true;
     }
 }
 
