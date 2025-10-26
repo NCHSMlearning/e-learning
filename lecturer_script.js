@@ -26,8 +26,6 @@ const RESOURCES_TABLE = 'resources';
 // --- Storage Buckets ---
 const RESOURCES_BUCKET = 'resources'; 
 
-
-
 // --- Global Variables & Caches ---
 let currentUserProfile = null;
 let currentUserId = null; 
@@ -50,12 +48,21 @@ let allIntakes = [
     { id: '2028', name: '2028' }
 ]; 
 
+// --- Program Field Mapping (Centralized for fetchDataForLecturer) ---
+const PROGRAM_FIELD_MAP = {
+    [USER_PROFILE_TABLE]: 'program',
+    'student_lecturer_view': 'program',
+    [EXAMS_TABLE]: 'target_program',
+    [SESSIONS_TABLE]: 'target_program',
+    [RESOURCES_TABLE]: 'program_type'
+    // ATTENDANCE_TABLE is handled via joins/OR in specific functions
+};
 
 // =================================================================
 // === 2. CORE UTILITY FUNCTIONS (WITH PROGRAM-FILTERED FETCH) ===
 // =================================================================
 
-function $(id){ return document.getElementById(id); }
+const $ = (id) => document.getElementById(id);
 
 function populateSelect(selectElement, data, valueKey, textKey, defaultText) {
     if (!selectElement) return;
@@ -134,9 +141,9 @@ function showFeedback(message, type) {
 async function fetchData(tableName, selectQuery = '*', filters = {}, order = 'created_at', ascending = false) {
     let query = sb.from(tableName).select(selectQuery);
 
-    for (const key in filters) {
-        if (filters[key] !== undefined && filters[key] !== null && filters[key] !== '') {
-            query = query.eq(key, filters[key]);
+    for (const [key, value] of Object.entries(filters)) {
+        if (value !== undefined && value !== null && value !== '') {
+            query = query.eq(key, value);
         }
     }
     
@@ -164,32 +171,12 @@ async function fetchDataForLecturer(
 ) {
     let query = sb.from(tableName).select(selectQuery);
 
-    const isProgramTable = [
-        USER_PROFILE_TABLE,       // Students / Profiles
-        'student_lecturer_view',  // View for lecturer-student mapping
-        EXAMS_TABLE,              // Exams/CATs
-        SESSIONS_TABLE,           // Sessions
-        RESOURCES_TABLE,          // Shared Resources
-        ATTENDANCE_TABLE          // Attendance
-    ].includes(tableName);
+    const programFieldName = PROGRAM_FIELD_MAP[tableName];
 
-    // Apply program filter if table supports it
-    if (isProgramTable && lecturerTargetProgram) {
-        let programFieldName = '';
-
-        // Determine which column holds the program for each table
-        if (tableName === USER_PROFILE_TABLE || tableName === 'student_lecturer_view') {
-            programFieldName = 'program'; // ✅ Correct for your students table
-        } else if (tableName === EXAMS_TABLE || tableName === SESSIONS_TABLE) {
-            programFieldName = 'target_program'; // ✅ Matches exams_cats & sessions
-        } else if (tableName === RESOURCES_TABLE) {
-            programFieldName = 'program_type'; // ✅ Matches your resources table
-        } else if (tableName === ATTENDANCE_TABLE) {
-            programFieldName = null; // handled elsewhere
-        }
-
-        // Apply filter unless already provided
-        if (programFieldName && !filters[programFieldName]) {
+    // Apply program filter if table supports it and lecturerTargetProgram is set
+    if (programFieldName && lecturerTargetProgram) {
+        // Apply filter unless already provided in the filters object
+        if (!filters[programFieldName]) {
             query = query.eq(programFieldName, lecturerTargetProgram);
         }
     }
@@ -214,7 +201,7 @@ async function fetchDataForLecturer(
 
 
 // =================================================================
-// === 3. CORE NAVIGATION, AUTH & INITIALIZATION ===
+// === 3. CORE NAVIGATION, AUTH & INITIALIZATION (FIXED AUTH FLOW) ===
 // =================================================================
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -222,6 +209,9 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 async function initSession() {
+    // 🔑 FIX 1: Hide the body instantly to prevent content flicker on auth failure
+    document.body.style.display = 'none'; 
+    
     let profile = null;
     let error = null;
 
@@ -258,13 +248,35 @@ async function initSession() {
         await fetchGlobalDataCaches(); 
         loadSectionData('dashboard'); 
         setupEventListeners();
+        
+        // 🔑 FIX 2: Only show the content if authentication was successful
+        document.body.style.display = 'block'; 
+
     } else {
-        // Redirect to /login on failed authentication
-        console.error("Initialization Failed, Redirecting to Login:", error);
-        alert("Authentication Failed: No active session found.\n\nPlease log in again.");
-        window.location.href = '/login'; 
+        // 🔑 FIX 3: Centralized, graceful failure handling and redirection
+        showAuthFailure(error);
     }
 }
+
+/**
+ * Handles authentication failure, shows error, and redirects.
+ * @param {object} error - The error object from Supabase or custom error.
+ */
+function showAuthFailure(error) {
+    console.error("Initialization Failed, Redirecting to Login:", error);
+    
+    const errorMessage = error?.message || "No active session found.";
+    
+    // Use alert to show the specific error (matching the screenshot)
+    alert(`Authentication Failed: ${errorMessage}\n\nPlease log in again.`);
+    
+    // Clear any potentially stale data (good practice)
+    localStorage.clear(); 
+
+    // Redirect to /login
+    window.location.assign('/login'); 
+}
+
 
 function getProgramFilterFromDepartment(department) {
     if (['Nursing', 'Maternal Health'].includes(department)) {
@@ -387,7 +399,7 @@ async function logout() {
         showFeedback('Logout failed. Please try again.', 'error');
     } else {
         // Redirect to /login on logout
-        window.location.href = '/login'; 
+        window.location.assign('/login'); 
     }
 }
 
@@ -461,13 +473,19 @@ async function handlePhotoUpload(file) {
 }
 
 // =================================================================
-// === 5. STUDENT, COURSE & DASHBOARD LOADERS ===
+// === 5. STUDENT, COURSE & DASHBOARD LOADERS (FIXED UI TEXT) ===
 // =================================================================
 
 async function loadLecturerDashboardData() {
     $('total_courses_count').textContent = allCourses.length || '0'; 
     $('total_students_count').textContent = allStudents.length || '0';
     
+    // 🔑 FIX: Dynamically update the dashboard filter info text
+    const filterInfoEl = $('dashboard-filter-info');
+    if (filterInfoEl && lecturerTargetProgram) { 
+        filterInfoEl.textContent = `This dashboard is filtered to your assigned program: ${lecturerTargetProgram}. All sections below pertain only to your assignment.`;
+    }
+
     const today = new Date().toISOString().split('T')[0];
     
     // Fetch today's sessions for this lecturer
@@ -632,7 +650,7 @@ async function loadLecturerSessions() {
 }
 
 // =================================================================
-// === 7. ATTENDANCE & MAP LOGIC ===
+// === 7. ATTENDANCE & MAP LOGIC (FIXED EFFICIENT QUERY) ===
 // =================================================================
 
 function loadAttendanceSelects() {
@@ -748,11 +766,13 @@ async function loadTodaysAttendanceRecords() {
     
     const today = new Date().toISOString().split('T')[0];
     
-    // Fetch all attendance logs for today. 
+    // 🔑 FIX: Use Supabase's .or() filter to efficiently fetch only relevant logs
     const { data: logs, error } = await sb
       .from(ATTENDANCE_TABLE)
-      // 🔑 CORRECTION APPLIED: Joining and selecting 'program' column
+      // Select attendance logs, and join to get the user's name and program
       .select(`*, user:user_id(full_name, program)`)   
+      // CRITICAL: Filter logs to lecturer's own or students in their target program
+      .or(`user_role.eq.lecturer,user.program.eq.${lecturerTargetProgram}`)
       .gte('check_in_time', today)
       .order('check_in_time', { ascending: false });
 
@@ -761,21 +781,15 @@ async function loadTodaysAttendanceRecords() {
       return;
     }
 
-    // Filter logs to only show records for students in the lecturer's program or the lecturer's own check-ins
-    const filteredLogs = logs.filter(l =>
-      l.user_role === 'lecturer' || 
-      // 🔑 CORRECTION APPLIED: Filtering by 'program' column
-      (l.user_role === 'student' && l.user?.program === lecturerTargetProgram) 
-    );
-
-    if (!filteredLogs || filteredLogs.length === 0) {
+    if (!logs || logs.length === 0) {
       tbody.innerHTML = '<tr><td colspan="7">No relevant attendance records found for today.</td></tr>';
       return;
     }
 
     tbody.innerHTML = '';
-    filteredLogs.forEach(l => {
-        const userName = l.user?.full_name || (l.user_role === 'lecturer' ? currentUserProfile.full_name : 'N/A');
+    logs.forEach(l => {
+        // Only use currentUserProfile.full_name if the log is THIS lecturer's check-in
+        const userName = l.user?.full_name || (l.user_role === 'lecturer' && l.user_id === currentUserProfile.user_id ? currentUserProfile.full_name : 'N/A');
         const target = allCourses.find(c => c.course_id === l.course_id)?.course_name || l.course_id || 'General';
         const dateTime = new Date(l.check_in_time).toLocaleTimeString();
         const locationText = l.location_details || 'N/A';
@@ -799,11 +813,6 @@ async function loadTodaysAttendanceRecords() {
             </tr>
         `;
         tbody.innerHTML += rowHtml;
-
-        // NOTE: Commented out placeholder for missing reverseGeocodeAndDisplay function
-        // if (l.latitude && l.longitude && locationText.includes('Lat:') && locationText.includes('Lng:')) {
-        //     reverseGeocodeAndDisplay(l.latitude, l.longitude, geoId);
-        // }
     });
 }
 
@@ -1155,7 +1164,7 @@ async function deleteResource(id) {
 
 
 // =================================================================
-// === 10. MESSAGING IMPLEMENTATION ===
+// === 10. MESSAGING IMPLEMENTATION (FIXED TARGET CHECK) ===
 // =================================================================
 
 function populateMessageFormSelects() {
@@ -1196,7 +1205,8 @@ async function handleSendMessage(e) {
         return;
     }
     
-    const isStudentTarget = formData.target.length === 36; // Assuming Supabase UUID length for user_id
+    // 🔑 FIX: Robust check if the target is an individual student from the cache
+    const isStudentTarget = allStudents.some(s => s.user_id === formData.target);
     const targetGroupName = isStudentTarget ? null : formData.target;
     const targetUserId = isStudentTarget ? formData.target : null;
 
