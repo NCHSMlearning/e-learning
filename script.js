@@ -1796,10 +1796,76 @@ async function deleteExam(examId, examName) {
   }
 }
 
-// Edit Placeholder
-function openEditExamModal(examId) {
-  showFeedback('Edit functionality for exams is still under development.', 'info');
+// Edit Exam (Full Functionality)
+async function openEditExamModal(examId) {
+  try {
+    // Fetch the selected exam
+    const { data: exam, error } = await sb
+      .from('exams')
+      .select('*, course:course_id(course_name)')
+      .eq('id', examId)
+      .single();
+
+    if (error || !exam) {
+      showFeedback(`Error loading exam details: ${error?.message || 'Not found.'}`, 'error');
+      return;
+    }
+
+    // Build modal with prefilled exam info
+    const modalHtml = `
+      <div class="modal-content">
+        <h3>Edit Exam / CAT</h3>
+        <form id="editExamForm" onsubmit="return saveEditedExam(event, '${examId}')">
+          <label>Program:</label>
+          <input type="text" id="edit_exam_program" value="${escapeHtml(exam.target_program)}" readonly>
+
+          <label>Course:</label>
+          <input type="text" id="edit_exam_course" value="${escapeHtml(exam.course?.course_name || '')}" readonly>
+
+          <label>Exam Title:</label>
+          <input type="text" id="edit_exam_title" value="${escapeHtml(exam.exam_name)}" required>
+
+          <label>Exam Type:</label>
+          <select id="edit_exam_type" required>
+            <option value="CAT" ${exam.exam_type === 'CAT' ? 'selected' : ''}>CAT</option>
+            <option value="Exam" ${exam.exam_type === 'Exam' ? 'selected' : ''}>Exam</option>
+            <option value="Practical" ${exam.exam_type === 'Practical' ? 'selected' : ''}>Practical</option>
+          </select>
+
+          <label>Date:</label>
+          <input type="date" id="edit_exam_date" value="${exam.exam_date || ''}" required>
+
+          <label>Start Time:</label>
+          <input type="time" id="edit_exam_start_time" value="${exam.exam_start_time || ''}">
+
+          <label>Duration (minutes):</label>
+          <input type="number" id="edit_exam_duration" value="${exam.duration_minutes || 0}" min="1" required>
+
+          <label>Online Link (optional):</label>
+          <input type="url" id="edit_exam_link" value="${escapeHtml(exam.online_link || '')}">
+
+          <label>Status:</label>
+          <select id="edit_exam_status">
+            <option value="Upcoming" ${exam.status === 'Upcoming' ? 'selected' : ''}>Upcoming</option>
+            <option value="Ongoing" ${exam.status === 'Ongoing' ? 'selected' : ''}>Ongoing</option>
+            <option value="Completed" ${exam.status === 'Completed' ? 'selected' : ''}>Completed</option>
+          </select>
+
+          <div style="margin-top:15px; display:flex; gap:10px;">
+            <button type="submit" class="btn-action">Save Changes</button>
+            <button type="button" class="btn btn-delete" onclick="closeModal()">Cancel</button>
+          </div>
+        </form>
+      </div>
+    `;
+
+    showModal(modalHtml);
+  } catch (err) {
+    showFeedback(`Unexpected error loading exam: ${err.message}`, 'error');
+  }
 }
+
+
 
 // Grade Modal — simplified version
 async function openGradeModal(examId, examName) {
