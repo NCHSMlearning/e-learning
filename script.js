@@ -1796,10 +1796,9 @@ async function deleteExam(examId, examName) {
   }
 }
 
-// Edit Exam (Full Functionality)
+// Open Exam Edit Modal (Admin Editable)
 async function openEditExamModal(examId) {
   try {
-    // Fetch the selected exam
     const { data: exam, error } = await sb
       .from('exams')
       .select('*, course:course_id(course_name)')
@@ -1811,113 +1810,100 @@ async function openEditExamModal(examId) {
       return;
     }
 
-    // Build modal with prefilled exam info
-    const modalHtml = `
-      <div class="modal-content">
-        <h3>Edit Exam / CAT</h3>
-        <form id="editExamForm" onsubmit="return saveEditedExam(event, '${examId}')">
-          <label>Program:</label>
-          <input type="text" id="edit_exam_program" value="${escapeHtml(exam.target_program)}" readonly>
+    // Prefill modal inputs
+    $('edit_exam_id').value = exam.id;
+    $('edit_exam_title').value = exam.exam_name || '';
+    $('edit_exam_date').value = exam.exam_date || '';
+    $('edit_exam_status').value = exam.status || 'Upcoming';
 
-          <label>Course:</label>
-          <input type="text" id="edit_exam_course" value="${escapeHtml(exam.course?.course_name || '')}" readonly>
+    // Add optional editable fields dynamically if not in HTML
+    let form = document.getElementById('edit-exam-form');
 
-          <label>Exam Title:</label>
-          <input type="text" id="edit_exam_title" value="${escapeHtml(exam.exam_name)}" required>
+    if (!document.getElementById('edit_exam_type')) {
+      form.insertAdjacentHTML('beforeend', `
+        <label>Type</label>
+        <select id="edit_exam_type">
+          <option value="CAT" ${exam.exam_type === 'CAT' ? 'selected' : ''}>CAT</option>
+          <option value="Exam" ${exam.exam_type === 'Exam' ? 'selected' : ''}>Exam</option>
+          <option value="Practical" ${exam.exam_type === 'Practical' ? 'selected' : ''}>Practical</option>
+        </select>
+      `);
+    }
 
-          <label>Exam Type:</label>
-          <select id="edit_exam_type" required>
-            <option value="CAT" ${exam.exam_type === 'CAT' ? 'selected' : ''}>CAT</option>
-            <option value="Exam" ${exam.exam_type === 'Exam' ? 'selected' : ''}>Exam</option>
-            <option value="Practical" ${exam.exam_type === 'Practical' ? 'selected' : ''}>Practical</option>
-          </select>
+    if (!document.getElementById('edit_exam_duration')) {
+      form.insertAdjacentHTML('beforeend', `
+        <label>Duration (minutes)</label>
+        <input type="number" id="edit_exam_duration" min="1" value="${exam.duration_minutes || 60}">
+      `);
+    }
 
-          <label>Date:</label>
-          <input type="date" id="edit_exam_date" value="${exam.exam_date || ''}" required>
+    if (!document.getElementById('edit_exam_link')) {
+      form.insertAdjacentHTML('beforeend', `
+        <label>Online Link (optional)</label>
+        <input type="url" id="edit_exam_link" value="${exam.online_link || ''}">
+      `);
+    }
 
-          <label>Start Time:</label>
-          <input type="time" id="edit_exam_start_time" value="${exam.exam_start_time || ''}">
+    // Open modal
+    document.getElementById('examEditModal').style.display = 'block';
 
-          <label>Duration (minutes):</label>
-          <input type="number" id="edit_exam_duration" value="${exam.duration_minutes || 0}" min="1" required>
-
-          <label>Online Link (optional):</label>
-          <input type="url" id="edit_exam_link" value="${escapeHtml(exam.online_link || '')}">
-
-          <label>Status:</label>
-          <select id="edit_exam_status">
-            <option value="Upcoming" ${exam.status === 'Upcoming' ? 'selected' : ''}>Upcoming</option>
-            <option value="Ongoing" ${exam.status === 'Ongoing' ? 'selected' : ''}>Ongoing</option>
-            <option value="Completed" ${exam.status === 'Completed' ? 'selected' : ''}>Completed</option>
-          </select>
-
-          <div style="margin-top:15px; display:flex; gap:10px;">
-            <button type="submit" class="btn-action">Save Changes</button>
-            <button type="button" class="btn btn-delete" onclick="closeModal()">Cancel</button>
-          </div>
-        </form>
-      </div>
-    `;
-
-    showModal(modalHtml);
   } catch (err) {
-    showFeedback(`Unexpected error loading exam: ${err.message}`, 'error');
+    showFeedback(`Unexpected error: ${err.message}`, 'error');
   }
 }
 
-// Save edited exam
-async function saveEditedExam(e, examId) {
+// Save Edited Exam
+async function saveEditedExam(e) {
   e.preventDefault();
 
-  const form = e.target;
-  const submitButton = form.querySelector('button[type="submit"]');
-  const originalText = submitButton.textContent;
-  setButtonLoading(submitButton, true, originalText);
+  const examId = $('edit_exam_id').value.trim();
+  const title = $('edit_exam_title').value.trim();
+  const date = $('edit_exam_date').value;
+  const duration = parseInt($('edit_exam_duration')?.value || 0);
+  const status = $('edit_exam_status').value;
+  const type = $('edit_exam_type')?.value || null;
+  const link = $('edit_exam_link')?.value.trim() || null;
 
-  // Collect updated values
-  const updatedExam = {
-    exam_name: $('edit_exam_title').value.trim(),
-    exam_type: $('edit_exam_type').value,
-    exam_date: $('edit_exam_date').value,
-    exam_start_time: $('edit_exam_start_time').value || null,
-    duration_minutes: parseInt($('edit_exam_duration').value),
-    online_link: $('edit_exam_link').value.trim() || null,
-    status: $('edit_exam_status').value
-  };
-
-  // Basic validation
-  if (!updatedExam.exam_name || !updatedExam.exam_date || isNaN(updatedExam.duration_minutes)) {
-    showFeedback('Title, date, and duration are required.', 'error');
-    setButtonLoading(submitButton, false, originalText);
+  if (!title || !date || !duration) {
+    showFeedback('❌ Title, Date, and Duration are required.', 'error');
     return;
   }
 
   try {
-    // Update in Supabase
-    const { data, error } = await sb
+    const { error } = await sb
       .from('exams')
-      .update(updatedExam)
-      .eq('id', examId)
-      .select('id');
+      .update({
+        exam_name: title,
+        exam_date: date,
+        exam_type: type,
+        duration_minutes: duration,
+        online_link: link,
+        status: status,
+      })
+      .eq('id', examId);
 
     if (error) throw error;
 
-    await logAudit('EXAM_EDIT', `Updated exam: ${updatedExam.exam_name}`, examId, 'SUCCESS');
     showFeedback('✅ Exam updated successfully!', 'success');
 
-    // Reload updated data
+    // Refresh data + close modal
     await loadExams();
-    renderFullCalendar();
+    try { renderFullCalendar(); } catch (e) {}
 
-    // Close modal after short delay
-    setTimeout(() => closeModal(), 800);
-  } catch (error) {
-    await logAudit('EXAM_EDIT', `Failed to update exam ${examId}. ${error.message}`, examId, 'FAILURE');
-    showFeedback(`Failed to update exam: ${error.message}`, 'error');
-  } finally {
-    setButtonLoading(submitButton, false, originalText);
+    document.getElementById('examEditModal').style.display = 'none';
+  } catch (err) {
+    showFeedback(`Failed to update exam: ${err.message}`, 'error');
   }
 }
+
+// Close modal on X click
+document.querySelector('#examEditModal .close').addEventListener('click', () => {
+  document.getElementById('examEditModal').style.display = 'none';
+});
+
+// Hook up form submit
+document.getElementById('edit-exam-form').addEventListener('submit', saveEditedExam);
+
 
 // Grade Modal — simplified version
 async function openGradeModal(examId, examName) {
