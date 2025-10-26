@@ -59,7 +59,7 @@ const PROGRAM_FIELD_MAP = {
 };
 
 // =================================================================
-// === 2. CORE UTILITY FUNCTIONS (WITH PROGRAM-FILTERED FETCH) ===
+// === 2. CORE UTILITY FUNCTIONS (FINAL VERSION) ===
 // =================================================================
 
 const $ = (id) => document.getElementById(id);
@@ -191,11 +191,12 @@ async function fetchDataForLecturer(
     const { data, error } = await query;
     if (error) {
         console.error(`Error loading ${tableName} (Program Filter Applied: ${lecturerTargetProgram}):`, error);
-        return { data, error: null }; // Return null data but log error
+        // 🛠️ IMPROVEMENT: Return the error here so the calling function can decide how to handle it.
+        // For example, if it's an RLS error, the calling function might log out the user.
+        return { data: null, error }; 
     }
     return { data, error: null };
 }
-
 
 // =================================================================
 // === 3. CORE NAVIGATION, AUTH & INITIALIZATION (FINAL VERSION) ===
