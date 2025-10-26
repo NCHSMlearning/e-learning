@@ -1275,85 +1275,69 @@ if (uploadButton) {
 // *************************************************************************
 // *** 5. ATTENDANCE LOGIC (GeoCheckIn) ***
 // *************************************************************************
-/**
- * Loads clinical areas for the student's cohort.
- * It first checks geo-based table (clinical_areas), then fallback to text-based (clinical_names)
- */
+
+// Loads both clinical area locations and named rotations for the student's cohort
 async function loadClinicalTargets() {
+    if (
+        !currentUserProfile ||
+        (!currentUserProfile.program && !currentUserProfile.department) ||
+        !currentUserProfile.intake_year
+    ) {
+        await loadProfile(currentUserId);
+    }
+
+    const program = currentUserProfile?.program || currentUserProfile?.department;
+    const intakeYear = currentUserProfile?.intake_year;
+    const blockTerm = currentUserProfile?.block || null;
+
+    console.log("📘 Loading clinical targets for:", { program, intakeYear, blockTerm });
+
+    if (!program || !intakeYear) {
+        cachedClinicalAreas = [];
+        return;
+    }
+
     try {
-        // Ensure currentUserProfile is loaded
-        if (!currentUserProfile) await loadProfile(currentUserId);
-
-        const program = currentUserProfile?.program || currentUserProfile?.department;
-        const intakeYear = currentUserProfile?.intake_year;
-        const blockTerm = currentUserProfile?.block || currentUserProfile?.term || currentUserProfile?.block_term || null;
-
-        if (!program || !intakeYear) {
-            console.warn("⚠️ Missing profile info — program/intake_year not found");
-            return;
-        }
-
-        console.log("📘 Loading clinical targets for:", { program, intakeYear, blockTerm });
-
-        // ---------------------------------------------------------------------
-        // 1️⃣ Try load from GEO-based table (clinical_areas)
-        // ---------------------------------------------------------------------
+        // 1️⃣ Load from clinical_areas (geo-based)
         let { data: areaData, error: areaError } = await sb
             .from('clinical_areas')
             .select('id, name, latitude, longitude, block, program, intake_year')
-            .eq('program', program)
-            .eq('intake_year', intakeYear)
-            .eq('block', blockTerm);
+            .ilike('program', program)
+            .ilike('intake_year', intakeYear)
+            .or(blockTerm ? `block.ilike.${blockTerm},block.is.null` : 'block.is.null');
 
         if (areaError) throw areaError;
 
-        // ---------------------------------------------------------------------
-        // 2️⃣ If no geo areas found, fallback to TEXT-based (clinical_names)
-        // ---------------------------------------------------------------------
-        let nameData = [];
-        if (!areaData || areaData.length === 0) {
-            let { data, error } = await sb
-                .from('clinical_names')
-                .select('id, clinical_area_name, program, intake_year, block_term')
-                .eq('program', program)
-                .eq('intake_year', intakeYear)
-                .eq('block_term', blockTerm);
+        // 2️⃣ Load from clinical_names (non-geo, textual areas)
+        let { data: nameData, error: nameError } = await sb
+            .from('clinical_names')
+            .select('id, clinical_area_name, program, intake_year, block_term')
+            .ilike('program', program)
+            .ilike('intake_year', intakeYear)
+            .or(blockTerm ? `block_term.ilike.${blockTerm},block_term.is.null` : 'block_term.is.null');
 
-            if (error) throw error;
+        if (nameError) throw nameError;
 
-            nameData = (data || []).map(n => ({
-                id: n.id,
-                name: n.clinical_area_name
-            }));
-        }
+        // 🧠 Rename clinical_area_name → name for UI compatibility
+        nameData = (nameData || []).map(n => ({
+            id: n.id,
+            name: n.clinical_area_name,
+            latitude: null,
+            longitude: null,
+            block: n.block_term || null,
+        }));
 
-        // ---------------------------------------------------------------------
-        // 3️⃣ Merge and cache results
-        // ---------------------------------------------------------------------
-        const combinedAreas = [
-            ...(areaData || []).map(a => ({ id: a.id, name: a.name, lat: a.latitude, lon: a.longitude })),
-            ...nameData
-        ];
+        // 3️⃣ Merge + Deduplicate + Sort
+        const merged = [...(areaData || []), ...(nameData || [])]
+            .filter((v, i, a) => a.findIndex(t => t.name === v.name) === i)
+            .sort((a, b) => a.name.localeCompare(b.name));
 
-        cachedClinicalAreas = combinedAreas;
+        cachedClinicalAreas = merged;
+
         console.log("✅ Loaded clinical areas:", cachedClinicalAreas);
-
-        // ---------------------------------------------------------------------
-        // 4️⃣ Update dropdown UI
-        // ---------------------------------------------------------------------
-        const areaSelect = document.getElementById('clinical_area');
-        if (areaSelect) {
-            areaSelect.innerHTML = `<option value="">Select Clinical Area</option>`;
-            combinedAreas.forEach(a => {
-                const opt = document.createElement('option');
-                opt.value = a.id;
-                opt.textContent = a.name;
-                areaSelect.appendChild(opt);
-            });
-        }
-
-    } catch (err) {
-        console.error("❌ Error loading clinical areas:", err);
+    } catch (error) {
+        console.error("❌ Error loading clinical areas:", error);
+        cachedClinicalAreas = [];
     }
 }
 
