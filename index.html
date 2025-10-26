@@ -1741,134 +1741,100 @@ function escapeHtml(str) {
 
 /**
  * Student Dashboard: loadExams()
- * * FIXES:
- * 1. Updates the Supabase select statement to fetch granular marks data.
- * 2. Adds the crucial filter for the current student ID to the join.
- * 3. Calculates the total score and percentage dynamically in JavaScript.
- * 4. Renders the 'View Results' button if a score is available.
- */
+ /**
+ * Student Dashboard: loadExams()
+ */
 async function loadExams() {
-    const tableBody = document.getElementById('exams-table');
-    if (!tableBody) return;
+  const tableBody = document.getElementById('exams-table');
+  if (!tableBody) return;
 
-    tableBody.innerHTML = '<tr><td colspan="8">Loading your exams and grades...</td></tr>';
+  tableBody.innerHTML = '<tr><td colspan="8">Loading your exams and grades...</td></tr>';
 
-    if (!currentUserProfile) await loadProfile(currentUserId);
-    const program = currentUserProfile?.program || currentUserProfile?.department;
-    const block = currentUserProfile?.block;
-    const intakeYear = currentUserProfile?.intake_year;
+  if (!currentUserProfile) await loadProfile(currentUserId);
+  const program = currentUserProfile?.program || currentUserProfile?.department;
+  const block = currentUserProfile?.block;
+  const intakeYear = currentUserProfile?.intake_year;
 
-    // Ensure all required variables are present
-    if (!program || !intakeYear || !currentUserId) {
-        tableBody.innerHTML = `<tr><td colspan="8">Missing user info. Cannot load exams.</td></tr>`;
-        cachedExams = [];
-        return;
-    }
+  if (!program || !intakeYear) {
+    tableBody.innerHTML = `<tr><td colspan="8">Missing program or intake year info. Cannot load exams.</td></tr>`;
+    cachedExams = [];
+    return;
+  }
 
-    try {
-        const { data: exams, error } = await sb
-            .from('exams_with_courses')
-            .select(`
-                id,
-                exam_name,
-                exam_date,
-                status,
-                block_term,
-                program_type,
-                exam_link,
-                exam_grades!left(
-                    marks, 
-                    questions:question_id (marks) 
-                )
-            `)
-            .or(`program_type.eq.${program},program_type.eq.General`)
-            .or(`block_term.eq.${block},block_term.is.null,block_term.eq.General`)
-            .eq('intake_year', intakeYear)
-            // 🚨 FIX 2: Filter the joined grades by the current user's ID
-            .eq('exam_grades.student_id', currentUserId) 
-            .order('exam_date', { ascending: true });
+  try {
+    const { data: exams, error } = await sb
+      .from('exams_with_courses')
+      .select(`
+        id,
+        exam_name,
+        exam_date,
+        status,
+        block_term,
+        program_type,
+        exam_link,
+        exam_grades!left(student_id, cat_score, exam_score, total_score)
+      `)
+      .or(`program_type.eq.${program},program_type.eq.General`)
+      .or(`block_term.eq.${block},block_term.is.null,block_term.eq.General`)
+      .eq('intake_year', intakeYear)
+      .order('exam_date', { ascending: true });
 
-        if (error) throw error;
+    if (error) throw error;
 
-        cachedExams = exams || [];
-        tableBody.innerHTML = '';
+    cachedExams = exams || [];
+    tableBody.innerHTML = '';
 
-        if (cachedExams.length === 0) {
-            tableBody.innerHTML = `
-                <tr>
-                    <td colspan="8">No exams or CATs scheduled.</td>
-                </tr>`;
-            return;
-        }
+    if (cachedExams.length === 0) {
+      tableBody.innerHTML = `
+        <tr>
+          <td colspan="8">
+            No exams or CATs scheduled.
+          </td>
+        </tr>`;
+      return;
+    }
 
-        cachedExams.forEach(exam => {
-            const dateStr = exam.exam_date
-                ? new Date(exam.exam_date).toLocaleDateString('en-US', {
-                    weekday: 'short',
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric'
-                })
-                : 'N/A';
-            
-            // 🚨 FIX 3: Calculate the score on the fly using granular marks
-            let earnedScore = 0;
-            let possibleScore = 0;
-            let isGraded = false;
+    cachedExams.forEach(exam => {
+      const dateStr = exam.exam_date
+        ? new Date(exam.exam_date).toLocaleDateString('en-US', {
+            weekday: 'short',
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+          })
+        : 'N/A';
 
-            if (exam.exam_grades && exam.exam_grades.length > 0) {
-                isGraded = true;
-                exam.exam_grades.forEach(grade => {
-                    const qMarks = grade.questions?.marks || 0;
-                    earnedScore += grade.marks || 0;
-                    possibleScore += qMarks; 
-                });
-            }
+      const catScore = exam.exam_grades?.[0]?.cat_score ?? '-';
+      const examScore = exam.exam_grades?.[0]?.exam_score ?? '-';
+      const totalScore = exam.exam_grades?.[0]?.total_score ?? '-';
 
-            // Format the score for the Total column (e.g., 25 / 50 (50%))
-            const finalScoreDisplay = isGraded && possibleScore > 0 
-                ? `${earnedScore} / ${possibleScore} (${((earnedScore / possibleScore) * 100).toFixed(0)}%)`
-                : '-';
+      const actionBtn = exam.exam_link
+        ? `<a href="${exam.exam_link}" target="_blank" class="profile-button" style="background-color: var(--color-success); padding: 8px 12px; font-size: 0.9em; margin-top: 0;">Start Exam</a>`
+        : `<span style="color:gray;">No Link</span>`;
 
-            // Use '-' for CAT/Exam scores since we don't have that breakdown yet
-            const catScore = '-'; 
-            const examScore = '-'; 
-            const totalScore = finalScoreDisplay; 
+      tableBody.innerHTML += `
+        <tr>
+          <td>${escapeHtml(exam.exam_name || 'N/A')}</td>
+          <td>${escapeHtml(exam.block_term || 'N/A')}</td>
+          <td>${dateStr}</td>
+          <td>${escapeHtml(exam.status || 'Scheduled')}</td>
+          <td>${catScore}</td>
+          <td>${examScore}</td>
+          <td>${totalScore}</td>
+          <td>${actionBtn}</td>
+        </tr>
+      `;
+    });
 
-            // 🚨 FIX 4: Update action button for "View Results" or "Start Exam"
-            const actionBtn = isGraded
-                ? `<button onclick="showDetailedResults('${exam.id}')" 
-                    class="profile-button view-results-btn" 
-                    style="background-color: var(--color-info); padding: 8px 12px; font-size: 0.9em; margin-top: 0;">
-                    View Results
-                   </button>`
-                : exam.exam_link
-                    ? `<a href="${exam.exam_link}" target="_blank" class="profile-button start-exam-btn" style="background-color: var(--color-success); padding: 8px 12px; font-size: 0.9em; margin-top: 0;">Start Exam</a>`
-                    : `<span style="color:gray;">No Link</span>`;
+  } catch (error) {
+    console.error('❌ Failed to load exams:', error);
+    tableBody.innerHTML = `<tr><td colspan="8" style="color:#EF4444;">Error loading exams: ${error.message}</td></tr>`;
+    cachedExams = [];
+  }
 
-            tableBody.innerHTML += `
-                <tr>
-                    <td>${escapeHtml(exam.exam_name || 'N/A')}</td>
-                    <td>${escapeHtml(exam.block_term || 'N/A')}</td>
-                    <td>${dateStr}</td>
-                    <td>${escapeHtml(exam.status || 'Scheduled')}</td>
-                    <td>${catScore}</td>
-                    <td>${examScore}</td>
-                    <td>${totalScore}</td> 
-                    <td>${actionBtn}</td>
-                </tr>
-            `;
-        });
-
-    } catch (error) {
-        console.error('❌ Failed to load exams:', error);
-        tableBody.innerHTML = `<tr><td colspan="8" style="color:#EF4444;">Error loading exams: ${error.message}</td></tr>`;
-        cachedExams = [];
-    }
-
-    if (typeof loadDashboardMetrics === 'function') {
-        loadDashboardMetrics(currentUserId);
-    }
+  if (typeof loadDashboardMetrics === 'function') {
+    loadDashboardMetrics(currentUserId);
+  }
 }
 
 /**
