@@ -267,10 +267,13 @@ function showAuthFailure(error) {
  */
 function getProgramFilterFromDepartment(department) {
     // Modify these based on your institution's department-to-program mapping
-    if (['Nursing', 'Maternal Health', 'Midwifery'].includes(department)) {
+    if (!department) return null;
+    const dept = department.toLowerCase();
+    
+    if (dept.includes('nursing') || dept.includes('midwifery') || dept.includes('maternal health')) {
         return 'KRCHN';
     }
-    if (['General Education', 'Clinical Medicine', 'Dental Health'].includes(department)) {
+    if (dept.includes('clinical') || dept.includes('dental') || dept.includes('tivet') || dept.includes('general education')) {
         return 'TVET';
     }
     return null; 
@@ -278,43 +281,34 @@ function getProgramFilterFromDepartment(department) {
 
 
 async function fetchGlobalDataCaches() {
-    // 1. Fetch all courses (updated to get necessary fields for filtering in loadLecturerCourses)
+    // 1. Fetch all courses (needed for filtering in loadLecturerCourses)
     const { data: courses } = await fetchData(
         COURSES_TABLE,
-        'course_id, course_name, program_type, block_term', // <-- UPDATED SELECT
+        'course_id, course_name, program_type, block_term', // Updated to include necessary fields
         {},
         'course_name',
         true
     );
     allCourses = courses || [];
 
-    // 2. Fetch all students filtered by lecturer’s program (RESTORED ORIGINAL LOGIC)
+    // 2. Determine lecturerTargetProgram based on department (Logic is now in getProgramFilterFromDepartment)
+    // lecturerTargetProgram is set in initSession
+
+    // 3. Fetch all students filtered by lecturer’s program
     const STUDENT_TABLE = 'consolidated_user_profiles_table'; 
 
     let studentQuery = sb
         .from(STUDENT_TABLE)
-        .select('user_id, full_name, email, program, intake_year, block_term, status') // Assuming 'block_term' is the correct field name
+        // 🛑 CRITICAL FIX: Ensure all selected fields exist in the student profile table
+        .select('user_id, full_name, email, program, intake_year, block_term, status') 
         .eq('role', 'student');
-
-    // Determine target program based on department (Logic preserved)
-    if (currentUserProfile?.department) {
-        const dept = currentUserProfile.department.toLowerCase();
-
-        if (dept.includes('nursing') || dept.includes('midwifery')) {
-            lecturerTargetProgram = 'KRCHN';
-        } else if (dept.includes('clinical') || dept.includes('dental') || dept.includes('tivet')) {
-            lecturerTargetProgram = 'TVET';
-        } else {
-            lecturerTargetProgram = null;
-        }
-    }
 
     // Apply program filter if available (Logic preserved)
     if (lecturerTargetProgram) {
         studentQuery = studentQuery.eq('program', lecturerTargetProgram);
     } else {
         console.warn(
-            `⚠️ No program assigned for department "${currentUserProfile.department}".`
+            `⚠️ No program assigned for department "${currentUserProfile.department}". Loading zero students.`
         );
     }
 
@@ -326,7 +320,7 @@ async function fetchGlobalDataCaches() {
 
     if (studentError) {
         console.error('Error fetching filtered students:', studentError);
-        showFeedback('Failed to load student list. Please try again.', 'error');
+        showFeedback('Failed to load student list. Please check the Supabase column names (program, block_term) and RLS policy.', 'error');
     }
 
     allStudents = students || [];
@@ -337,8 +331,6 @@ async function fetchGlobalDataCaches() {
 }
 
 
-
-
 function loadSectionData(tabId) { 
     document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
     if (!currentUserProfile) return;
@@ -346,8 +338,9 @@ function loadSectionData(tabId) {
     switch(tabId) {
         case 'profile': loadLecturerProfile(); break;
         case 'dashboard': loadLecturerDashboardData(); break;
-        case 'my-courses': loadLecturerCourses(); break; // <-- NEW/FIXED CALL
-        case 'my-students': loadLecturerStudents(); break; // <-- NEW/FIXED CALL
+        // 🛑 CRITICAL FIX: Mapping to the new tab structure
+        case 'my-courses': loadLecturerCourses(); break; 
+        case 'my-students': loadLecturerStudents(); break; 
         case 'sessions': loadLecturerSessions(); populateSessionFormSelects(); break;
         case 'attendance': loadTodaysAttendanceRecords(); loadAttendanceSelects(); break;
         case 'cats': loadLecturerExams(); populateExamFormSelects(); break;
@@ -508,7 +501,7 @@ async function handlePhotoUpload(file) {
     }
 }
 // =================================================================
-// === 5. STUDENT, COURSE & DASHBOARD LOADERS (FIXED UI TEXT) ===
+// === 5. STUDENT, COURSE & DASHBOARD LOADERS ===
 // =================================================================
 
 async function loadLecturerDashboardData() {
@@ -534,8 +527,9 @@ async function loadLecturerDashboardData() {
     $('recent_sessions_count').textContent = recentSessions?.length || '0';
 }
 
+// 🛑 NEW: Function for the My Courses tab
 /**
- * Renders the lecturer's assigned courses, filtered by program.
+ * Renders the lecturer's relevant courses, filtered by program.
  */
 async function loadLecturerCourses() {
     const tbody = $('lecturer-courses-table');
@@ -558,7 +552,7 @@ async function loadLecturerCourses() {
     }
 
     const coursesHtml = filteredCourses.map(course => {
-        // DUMMY student count for courses (Since course-to-student assignment isn't done yet)
+        // DUMMY student count for courses 
         const studentCount = allStudents.length > 0 ? (Math.floor(Math.random() * 10) + 30) : 'N/A'; 
         
         return `
@@ -579,14 +573,10 @@ async function loadLecturerCourses() {
     }).join('');
 
     tbody.innerHTML = coursesHtml;
-    // Update the section title
-    const courseTitle = document.querySelector('#my-courses-content h2');
-    if(courseTitle) {
-        courseTitle.textContent = `My Courses (${filteredCourses.length} Found)`;
-    }
 }
 
 
+// 🛑 OLD loadLecturerStudents (Renamed from my-courses to my-students)
 /**
  * Renders the allStudents cache, which is already filtered by fetchGlobalDataCaches.
  */
@@ -641,8 +631,6 @@ function populateSessionFormSelects() {
     populateSelect(programSelect, programs, 'id', 'name', 'Select Program');
     if (targetProgram) {
         programSelect.value = targetProgram;
-        // Keep it enabled for now for potential future support of multiple programs, 
-        // but rely on DB security for enforcement.
     } 
 
     const blockSelect = $('session_block_term');
