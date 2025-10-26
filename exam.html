@@ -5,8 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NCHSM Digital Student Exam</title>
 <link rel="icon" type="image/png" href="https://raw.githubusercontent.com/NCHSMlearning/e-learning/main/images/Logo_NCHSM.png" sizes="32x32">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
 <style>
 body { font-family: 'Inter', sans-serif; background: #F8F8F8; margin:0; padding:0;}
 .container { max-width: 900px; margin: 50px auto; padding: 20px; background:#fff; border-radius:12px; box-shadow:0 4px 12px rgba(0,0,0,0.1);}
@@ -17,125 +16,153 @@ h1 { text-align:center; color:#4C1D95;}
 button { padding: 12px 25px; background:#4C1D95; color:#fff; border:none; border-radius:8px; cursor:pointer; font-weight:600; }
 button:hover { background:#6D28D9; }
 #score { margin-top:20px; font-size:1.2rem; font-weight:600; color:#064E3B; }
+#error { color:#EF4444; font-weight:600; margin-bottom:15px; text-align:center;}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
-
 <div class="container">
     <h1>MENTAL HEALTH AND PSYCHIATRY CAT I</h1>
+    <div id="error"></div>
     <div id="exam-container">Loading questions...</div>
     <button id="submit-btn">Submit Exam</button>
     <div id="score"></div>
 </div>
 
 <script>
-  // ---------------- SUPABASE CONFIG ----------------
-  const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
-  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFkbW9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
-  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk'; // Replace with your actual anon key
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-  const EXAM_ID = 27;
-  let questions = [];
-  let student_id = null;
+const EXAM_ID = 27; // Replace with the exam you want
+let studentProfile = null;
+let questions = [];
 
-  // ---------------- CHECK LOGIN ----------------
-  async function checkLogin() {
-    const { data: { session } } = await sb.auth.getSession();
-    if (!session) {
-      // User not logged in, redirect to login.html
-      window.location.href = 'login.html';
-      return false;
-    }
-    student_id = session.user.id;
-    return true;
-  }
-
-  // ---------------- LOAD QUESTIONS ----------------
-  async function loadExam() {
-    const loggedIn = await checkLogin();
-    if (!loggedIn) return;
-
+// -------------------- Initialize Exam --------------------
+async function initExam() {
     try {
-      const { data, error } = await sb
-        .from('questions')
-        .select('*')
-        .eq('exam_id', EXAM_ID);
+        // 1️⃣ Check current session
+        const { data: { session } } = await sb.auth.getSession();
+        if (!session) {
+            window.location.href = 'login.html';
+            return;
+        }
 
-      if (error) throw error;
+        // 2️⃣ Fetch student profile from consolidated table
+        const { data: profile, error: profileError } = await sb
+            .from('consolidated_user_profiles_table')
+            .select('*')
+            .eq('user_id', session.user.id)
+            .maybeSingle();
 
-      if (!data || data.length === 0) {
-        document.getElementById('exam-container').innerHTML = '<p>No questions found for this exam.</p>';
-        return;
-      }
+        if (profileError || !profile) {
+            document.getElementById('error').innerText = 'Profile not found. Contact admin.';
+            return;
+        }
 
-      questions = data;
-      renderQuestions();
+        if (profile.status.toLowerCase() !== 'approved') {
+            document.getElementById('error').innerText = 'Your account is pending approval.';
+            return;
+        }
+
+        studentProfile = profile;
+
+        // 3️⃣ Load questions
+        await loadQuestions();
 
     } catch (err) {
-      console.error('Error fetching questions:', err);
-      document.getElementById('exam-container').innerHTML = '<p>Error loading questions. Check console.</p>';
+        console.error('Initialization error:', err);
+        document.getElementById('error').innerText = 'Error initializing exam.';
     }
-  }
+}
 
-  // ---------------- RENDER QUESTIONS ----------------
-  function renderQuestions() {
+// -------------------- Load Questions --------------------
+async function loadQuestions() {
+    try {
+        const { data, error } = await sb
+            .from('questions')
+            .select('*')
+            .eq('exam_id', EXAM_ID);
+
+        if (error) throw error;
+
+        if (!data || data.length === 0) {
+            document.getElementById('exam-container').innerHTML = 'No questions found for this exam.';
+            return;
+        }
+
+        questions = data;
+        renderQuestions();
+
+    } catch (err) {
+        console.error('Error fetching questions:', err);
+        document.getElementById('exam-container').innerHTML = 'Error loading questions.';
+    }
+}
+
+// -------------------- Render Questions --------------------
+function renderQuestions() {
     const container = document.getElementById('exam-container');
     container.innerHTML = '';
     questions.forEach((q, idx) => {
-      const div = document.createElement('div');
-      div.className = 'question';
-      div.innerHTML = `<p><strong>Q${idx+1}:</strong> ${q.question}</p>`;
-
-      const ul = document.createElement('ul');
-      ul.className = 'options';
-      const opts = Array.isArray(q.options) ? q.options : JSON.parse(q.options);
-      opts.forEach(opt => {
-        const li = document.createElement('li');
-        li.innerHTML = `<label><input type="radio" name="q${q.id}" value="${opt}"> ${opt}</label>`;
-        ul.appendChild(li);
-      });
-      div.appendChild(ul);
-      container.appendChild(div);
+        const div = document.createElement('div');
+        div.className = 'question';
+        div.innerHTML = `<p><strong>Q${idx+1}:</strong> ${q.question}</p>`;
+        const ul = document.createElement('ul');
+        ul.className = 'options';
+        const opts = Array.isArray(q.options) ? q.options : JSON.parse(q.options);
+        opts.forEach(opt => {
+            const li = document.createElement('li');
+            li.innerHTML = `<label><input type="radio" name="q${q.id}" value="${opt}"> ${opt}</label>`;
+            ul.appendChild(li);
+        });
+        div.appendChild(ul);
+        container.appendChild(div);
     });
-  }
+}
 
-  // ---------------- SUBMIT EXAM ----------------
-  document.getElementById('submit-btn').addEventListener('click', async () => {
+// -------------------- Submit Exam --------------------
+document.getElementById('submit-btn').addEventListener('click', async () => {
     if (questions.length === 0) return;
 
     const answers = {};
     questions.forEach(q => {
-      const selected = document.querySelector(`input[name="q${q.id}"]:checked`);
-      answers[q.id] = selected ? selected.value : null;
+        const selected = document.querySelector(`input[name="q${q.id}"]:checked`);
+        answers[q.id] = selected ? selected.value : null;
     });
 
     let score = 0;
     questions.forEach(q => {
-      if (answers[q.id] === q.correct_answer) score += q.marks || 1;
+        if (answers[q.id] === q.correct_answer) score += q.marks || 1;
     });
 
     document.getElementById('score').textContent = `Your Score: ${score} / ${questions.length}`;
 
+    // Save result
     try {
-      const { error } = await sb
-        .from('results')
-        .insert([{
-          student_id,
-          exam_id: EXAM_ID,
-          answers,
-          score,
-          submitted_at: new Date()
+        const { data: { session } } = await sb.auth.getSession();
+        const student_id = session.user.id;
+
+        const { error } = await sb.from('results').insert([{
+            student_id,
+            exam_id: EXAM_ID,
+            answers,
+            score,
+            submitted_at: new Date()
         }]);
 
-      if (error) throw error;
-      console.log('Result saved successfully');
+        if (error) {
+            console.error('Error saving result:', error);
+        } else {
+            console.log('Result saved successfully');
+        }
     } catch (err) {
-      console.error('Error saving result:', err);
+        console.error('Error saving result:', err);
     }
-  });
+});
 
-  window.addEventListener('DOMContentLoaded', loadExam);
+// -------------------- Start --------------------
+window.addEventListener('DOMContentLoaded', initExam);
 </script>
-
 </body>
 </html>
