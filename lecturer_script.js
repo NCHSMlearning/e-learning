@@ -37,7 +37,7 @@ let lecturerTargetProgram = null;
 
 // --- Academic Structure Constants (Used for filtering) ---
 const ACADEMIC_STRUCTURE = {
-    'KRCHN': ['Block A', 'Block B'],
+    'KRCHN': ['Block A', 'Block B', 'Block C', 'Block D', 'Block E', 'Block F'],
     'TVET': ['Term 1', 'Term 2', 'Term 3']
 };
 
@@ -72,7 +72,7 @@ function populateSelect(selectElement, data, valueKey, textKey, defaultText) {
         const option = document.createElement('option');
         option.value = item[valueKey];
         option.textContent = text;
-        option.title = text; // Added title for better UX on long names
+        option.title = text; 
         selectElement.appendChild(option);
     });
 }
@@ -86,7 +86,7 @@ function filterTable(inputId, tableId, columnsToSearch = [0]) {
 
     for (let i = 0; i < trs.length; i++) {
         let rowMatches = false;
-        if (trs[i].getElementsByTagName('td').length <= 1) { 
+        if (trs[i].getElementsByTagName('td').length === 0) { 
             trs[i].style.display = "";
             continue;
         }
@@ -159,7 +159,6 @@ async function fetchData(tableName, selectQuery = '*', filters = {}, order = 'cr
 
 /**
  * CRITICAL: Program-Filtered Data Fetching Utility for Lecturers.
- * Used for fetching sessions, exams, resources, etc., based on the lecturer's program.
  */
 async function fetchDataForLecturer(
     tableName,
@@ -174,7 +173,6 @@ async function fetchDataForLecturer(
 
     // Apply program filter if table supports it and lecturerTargetProgram is set
     if (programFieldName && lecturerTargetProgram) {
-        // Apply filter unless already provided in the filters object
         if (!filters[programFieldName]) {
             query = query.eq(programFieldName, lecturerTargetProgram);
         }
@@ -207,7 +205,6 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 async function initSession() {
-    // Hide the body instantly to prevent content flicker on auth failure
     document.body.style.display = 'none'; 
     
     let profile = null;
@@ -241,35 +238,27 @@ async function initSession() {
     
     if (profile) {
         currentUserProfile = profile;
-        // CRITICAL: Sets the program filter variable (e.g., 'KRCHN')
         lecturerTargetProgram = getProgramFilterFromDepartment(currentUserProfile.department); 
 
         document.querySelector('header h1').textContent = `Welcome, ${currentUserProfile.full_name || 'Lecturer'}!`;
         
-        // Load all data caches based on the new program filter
         await fetchGlobalDataCaches(); 
         
         loadSectionData('dashboard'); 
         setupEventListeners();
         
-        // Only show the content if authentication was successful
         document.body.style.display = 'block'; 
 
     } else {
-        // Centralized, graceful failure handling and redirection
         showAuthFailure(error);
     }
 }
 
 function showAuthFailure(error) {
     console.error("Initialization Failed, Redirecting to Login:", error);
-    
     const errorMessage = error?.message || "No active session found.";
-    
     alert(`Authentication Failed: ${errorMessage}\n\nPlease log in again.`);
-    
     localStorage.clear(); 
-
     window.location.assign('/login'); 
 }
 
@@ -277,10 +266,11 @@ function showAuthFailure(error) {
  * Maps the lecturer's department to the student's program code.
  */
 function getProgramFilterFromDepartment(department) {
-    if (['Nursing', 'Maternal Health'].includes(department)) {
+    // Modify these based on your institution's department-to-program mapping
+    if (['Nursing', 'Maternal Health', 'Midwifery'].includes(department)) {
         return 'KRCHN';
     }
-    if (['General Education', 'Clinical Medicine'].includes(department)) {
+    if (['General Education', 'Clinical Medicine', 'Dental Health'].includes(department)) {
         return 'TVET';
     }
     return null; 
@@ -292,12 +282,11 @@ async function fetchGlobalDataCaches() {
     const { data: courses } = await fetchData(COURSES_TABLE, 'course_id, course_name', {}, 'course_name', true);
     allCourses = courses || [];
 
-    // 2. RE-ESTABLISHED SECURE STUDENT FETCH (Server-side filtering for RLS)
+    // 2. Fetch all students filtered by the lecturer's target program
     let studentQuery = sb.from(USER_PROFILE_TABLE)
         .select('user_id, full_name, email, program, intake_year, block_term, status')
         .eq('role', 'student');
 
-    // CRITICAL: Apply the program filter to the student's 'program' column at the DB level.
     if (lecturerTargetProgram) {
         studentQuery = studentQuery.eq('program', lecturerTargetProgram);
     }
@@ -308,7 +297,6 @@ async function fetchGlobalDataCaches() {
         console.error("Error fetching filtered students:", studentError);
     }
     
-    // allStudents cache now contains only students matching the lecturer's target program (if RLS allows).
     allStudents = students || [];
 }
 
@@ -326,6 +314,7 @@ function loadSectionData(tabId) {
         case 'cats': loadLecturerExams(); populateExamFormSelects(); break;
         case 'resources': loadLecturerResources(); populateResourceFormSelects(); break;
         case 'messages': loadLecturerMessages(); populateMessageFormSelects(); break;
+        case 'calendar': $('calendar-view').innerHTML = '<p>Academic Calendar placeholder loaded.</p>'; break;
     }
     
     document.querySelectorAll('.tab-content').forEach(section => {
@@ -371,7 +360,7 @@ function setupEventListeners() {
     $('attendance-search')?.addEventListener('keyup', () => filterTable('attendance-search', 'attendance-table', [0, 1, 2]));
     $('lecturer-checkin-btn')?.addEventListener('click', lecturerCheckIn); 
 
-    // Resources Edit
+    // Resources Edit Modal (must add logic for showing/populating)
     $('edit-resource-form')?.addEventListener('submit', saveResourceEdits);
     $('closeEditResourceModal')?.addEventListener('click', closeEditResourceModal);
 
@@ -404,7 +393,6 @@ async function logout() {
         console.error('Logout error:', error);
         showFeedback('Logout failed. Please try again.', 'error');
     } else {
-        // Redirect to /login on logout
         window.location.assign('/login'); 
     }
 }
@@ -485,10 +473,10 @@ async function loadLecturerDashboardData() {
     $('total_courses_count').textContent = allCourses.length || '0'; 
     $('total_students_count').textContent = allStudents.length || '0';
     
-    // FIX: Dynamically update the dashboard filter info text
-    const filterInfoEl = $('dashboard-filter-info');
+    // FIX: Dynamically update the dashboard filter info text (using the banner)
+    const filterInfoEl = document.querySelector('#welcome-banner span:last-child');
     if (filterInfoEl && lecturerTargetProgram) { 
-        filterInfoEl.textContent = `This dashboard is filtered to your assigned program: ${lecturerTargetProgram}. All sections below pertain only to your assignment.`;
+        filterInfoEl.textContent = `This dashboard is filtered to your assigned program: ${lecturerTargetProgram}. All student/grade data shown is relevant to your assignment.`;
     }
 
     const today = new Date().toISOString().split('T')[0];
@@ -516,7 +504,6 @@ async function loadLecturerStudents() {
         return;
     }
     
-    // The allStudents cache is already filtered by fetchGlobalDataCaches via the DB query.
     if (allStudents.length === 0) {
         tbody.innerHTML = `<tr><td colspan="7">No **${lecturerTargetProgram}** students found in the database matching your department.</td></tr>`;
         return;
@@ -558,10 +545,9 @@ function populateSessionFormSelects() {
     populateSelect(programSelect, programs, 'id', 'name', 'Select Program');
     if (targetProgram) {
         programSelect.value = targetProgram;
-        programSelect.disabled = true;
-    } else {
-        programSelect.disabled = false;
-    }
+        // Keep it enabled for now for potential future support of multiple programs, 
+        // but rely on DB security for enforcement.
+    } 
 
     const blockSelect = $('session_block_term');
     if (targetProgram && ACADEMIC_STRUCTURE[targetProgram]) {
@@ -599,7 +585,7 @@ async function handleAddSession(e) {
             session_topic: formData.topic,
             session_date: formData.date,
             session_time: formData.time,
-            target_program: formData.program, // Matches 'target_program' in SESSIONS_TABLE
+            target_program: formData.program, 
             block_term: formData.block_term,
             course_id: formData.course_id,
             lecturer_id: currentUserProfile.user_id,
@@ -623,7 +609,7 @@ async function loadLecturerSessions() {
     const tbody = $('sessions-table');
     tbody.innerHTML = '<tr><td colspan="6">Loading your scheduled sessions...</td></tr>';
     
-    // CRITICAL: Filtered by lecturer_id AND program via fetchDataForLecturer
+    // Filtered by lecturer_id AND program via fetchDataForLecturer
     const { data: sessions, error } = await fetchDataForLecturer(
         SESSIONS_TABLE, 
         '*', 
@@ -645,13 +631,15 @@ async function loadLecturerSessions() {
     tbody.innerHTML = sessions.map(s => {
         const courseName = allCourses.find(c => c.course_id === s.course_id)?.course_name || s.course_id;
         const dateTime = `${new Date(s.session_date).toLocaleDateString()} @ ${s.session_time}`;
+        const attendanceLink = `${SUPABASE_URL}/attendance?session_id=${s.id}`; // Example link structure
+
         return `
             <tr>
                 <td>${s.session_topic}</td>
                 <td>${dateTime}</td>
                 <td>${courseName}</td>
                 <td>${s.target_program}/${s.block_term}</td>
-                <td><a href="#" onclick="navigator.clipboard.writeText('Session URL for ${s.id}').then(() => showFeedback('Attendance Link Copied!', 'info'))">Copy Link</a></td>
+                <td><a href="#" onclick="navigator.clipboard.writeText('${attendanceLink}').then(() => showFeedback('Attendance Link Copied!', 'info'))">Copy Link</a></td>
                 <td><button class="btn-action" style="background-color:#F59E0B;" onclick="showFeedback('Editing session ${s.id}...', 'info')">Edit</button></td>
             </tr>
         `;
@@ -663,7 +651,6 @@ async function loadLecturerSessions() {
 // =================================================================
 
 function loadAttendanceSelects() {
-    // Uses allStudents cache which is already program-filtered
     populateSelect($('att_student_id'), allStudents, 'user_id', 'full_name', 'Select Student');
     populateSelect($('att_course_id'), allCourses, 'course_id', 'course_name', 'Select Course (Optional)');
 }
@@ -775,14 +762,10 @@ async function loadTodaysAttendanceRecords() {
     
     const today = new Date().toISOString().split('T')[0];
     
-    // FIX: Using Supabase's .or() filter to efficiently fetch only relevant logs.
-    // It filters for logs where the user_role is 'lecturer' OR the user's program matches the lecturerTargetProgram.
+    // Use the optimized query to fetch logs for this lecturer or their students
     const { data: logs, error } = await sb
       .from(ATTENDANCE_TABLE)
-      // Select attendance logs, and join to get the user's name and program
       .select(`*, user:user_id(full_name, program)`)   
-      // CRITICAL: Filter logs to lecturer's own or students in their target program
-      // NOTE: This assumes RLS is configured to allow the lecturer to see logs where user.program matches lecturerTargetProgram
       .or(`user_role.eq.lecturer,user.program.eq.${lecturerTargetProgram}`) 
       .gte('check_in_time', today)
       .order('check_in_time', { ascending: false });
@@ -799,8 +782,10 @@ async function loadTodaysAttendanceRecords() {
 
     tbody.innerHTML = '';
     logs.forEach(l => {
-        // Only use currentUserProfile.full_name if the log is THIS lecturer's check-in
-        const userName = l.user?.full_name || (l.user_role === 'lecturer' && l.user_id === currentUserProfile.user_id ? currentUserProfile.full_name : 'N/A');
+        // Fallback for user name if the join fails (e.g., student was deleted)
+        const student = allStudents.find(s => s.user_id === l.user_id);
+        const userName = l.user?.full_name || student?.full_name || (l.user_role === 'lecturer' ? currentUserProfile.full_name : 'N/A');
+        
         const target = allCourses.find(c => c.course_id === l.course_id)?.course_name || l.course_id || 'General';
         const dateTime = new Date(l.check_in_time).toLocaleTimeString();
         const locationText = l.location_details || 'N/A';
@@ -830,7 +815,15 @@ async function loadTodaysAttendanceRecords() {
 function viewCheckInMap(lat, lng, name, locationElementId) {
     const mapModal = $('mapModal');
     mapModal.style.display = 'block';
-
+    
+    // Check if Leaflet map container exists
+    const mapContainer = $('mapbox-map');
+    if (!mapContainer) {
+        showFeedback("Error: Map container not found.", "error");
+        return;
+    }
+    
+    // Prevent map from re-initializing if it already exists
     if (attendanceMap) {
         attendanceMap.remove();
     }
@@ -838,7 +831,7 @@ function viewCheckInMap(lat, lng, name, locationElementId) {
     const locationText = $(locationElementId)?.textContent || 'N/A';
     $('map-details').textContent = `Location for ${name}: ${locationText}`;
     
-    // NOTE: This assumes you have the Leaflet.js library (L.map) included in your HTML
+    // Initialize the map (Uses L.map from Leaflet)
     attendanceMap = L.map('mapbox-map').setView([lat, lng], 16);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -848,72 +841,326 @@ function viewCheckInMap(lat, lng, name, locationElementId) {
     L.marker([lat, lng]).addTo(attendanceMap)
         .bindPopup(`<b>${name}'s Check-in Location</b><br>${locationText}`).openPopup();
         
+    // Fix map display issue inside modal
     setTimeout(() => {
         attendanceMap.invalidateSize();
     }, 300); 
 }
 
 // =================================================================
-// === 8. EXAMS, RESOURCES, MESSAGING (PLACEHOLDER FUNCTIONS) ===
+// === 8. EXAMS, RESOURCES, MESSAGING (PLACEHOLDER FUNCTIONS - START IMPLEMENTED) ===
 // =================================================================
 
-// NOTE: Implementations for these sections need to be added using the fetchDataForLecturer utility.
-// These are included to complete the flow outlined in loadSectionData.
+function populateExamFormSelects() {
+    const targetProgram = lecturerTargetProgram;
+    const programs = targetProgram ? [{ id: targetProgram, name: targetProgram }] : [];
+    
+    populateSelect($('exam_program'), programs, 'id', 'name', 'Select Program');
+    if (targetProgram) {
+        $('exam_program').value = targetProgram;
+    }
+
+    const blockSelect = $('exam_block_term');
+    if (targetProgram && ACADEMIC_STRUCTURE[targetProgram]) {
+        const blocks = ACADEMIC_STRUCTURE[targetProgram].map(name => ({ id: name, name: name }));
+        populateSelect(blockSelect, blocks, 'id', 'name', `Select ${targetProgram} Block/Term`);
+    } else {
+        blockSelect.innerHTML = '<option value="">-- Select Program First --</option>';
+    }
+
+    populateSelect($('exam_intake'), allIntakes, 'id', 'name', 'Select Intake Year');
+    populateSelect($('exam_course_id'), allCourses, 'course_id', 'course_name', 'Select Course');
+}
+
+async function handleAddExam(e) {
+    e.preventDefault();
+    const button = e.submitter;
+    setButtonLoading(button, true, 'Create Exam Record');
+    
+    const formData = {
+        name: $('exam_name').value,
+        date: $('exam_date').value,
+        type: $('exam_type').value,
+        program: $('exam_program').value,
+        block_term: $('exam_block_term').value,
+        course_id: $('exam_course_id').value,
+        intake: $('exam_intake').value 
+    };
+
+    if (Object.values(formData).some(v => !v)) {
+        showFeedback('Please fill in all exam details.', 'error');
+        setButtonLoading(button, false);
+        return;
+    }
+    
+    try {
+        const { error } = await sb.from(EXAMS_TABLE).insert({
+            exam_name: formData.name,
+            exam_date: formData.date,
+            exam_type: formData.type,
+            target_program: formData.program, // Matches DB column
+            block_term: formData.block_term,
+            course_id: formData.course_id,
+            intake_year: formData.intake,
+            lecturer_id: currentUserProfile.user_id,
+            lecturer_name: currentUserProfile.full_name
+        });
+
+        if (error) throw error;
+
+        showFeedback(`✅ Exam "${formData.name}" created successfully!`, 'success');
+        e.target.reset();
+        loadLecturerExams(); 
+    } catch (error) {
+        console.error('Exam creation failed:', error);
+        showFeedback(`Exam creation failed: ${error.message}`, 'error');
+    } finally {
+        setButtonLoading(button, false);
+    }
+}
 
 async function loadLecturerExams() {
-    const { data: exams } = await fetchDataForLecturer(EXAMS_TABLE, '*', { lecturer_id: currentUserProfile.user_id }, 'exam_date', false);
     const tbody = $('exams-table');
-    if (tbody) {
-        tbody.innerHTML = exams?.length ? exams.map(e => `
+    tbody.innerHTML = '<tr><td colspan="6">Loading exams...</td></tr>';
+    
+    // Filtered by lecturer_id AND program via fetchDataForLecturer
+    const { data: exams, error } = await fetchDataForLecturer(EXAMS_TABLE, '*', { lecturer_id: currentUserProfile.user_id }, 'exam_date', false);
+
+    if (error) {
+        tbody.innerHTML = `<tr><td colspan="6">Error: ${error.message}</td></tr>`;
+        return;
+    }
+
+    if (!exams || exams.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6">No exams found for your program.</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = exams.map(e => {
+        const courseName = allCourses.find(c => c.course_id === e.course_id)?.course_name || e.course_id;
+        const examDate = new Date(e.exam_date).toLocaleDateString();
+        return `
             <tr>
                 <td>${e.exam_name}</td>
-                <td>${allCourses.find(c => c.course_id === e.course_id)?.course_name || e.course_id}</td>
+                <td>${courseName}</td>
+                <td>${examDate}</td>
+                <td>${e.exam_type}</td>
                 <td>${e.target_program}/${e.block_term}</td>
-                <td>${new Date(e.exam_date).toLocaleDateString()}</td>
-                <td>${e.total_marks}</td>
-                <td><button class="btn-action" onclick="showFeedback('Upload results for ${e.id}', 'info')">Upload Results</button></td>
+                <td><button class="btn-action" style="background-color:#F59E0B;" onclick="showFeedback('Upload results for ${e.id}', 'info')">Upload Grades</button></td>
             </tr>
-        `).join('') : '<tr><td colspan="6">No exams found for your program.</td></tr>';
+        `;
+    }).join('');
+}
+
+
+function populateResourceFormSelects() {
+    const targetProgram = lecturerTargetProgram;
+    const programs = targetProgram ? [{ id: targetProgram, name: targetProgram }] : [];
+    
+    populateSelect($('resource_program'), programs, 'id', 'name', 'Select Program');
+    if (targetProgram) {
+        $('resource_program').value = targetProgram;
+    }
+
+    const blockSelect = $('resource_block');
+    if (targetProgram && ACADEMIC_STRUCTURE[targetProgram]) {
+        const blocks = ACADEMIC_STRUCTURE[targetProgram].map(name => ({ id: name, name: name }));
+        populateSelect(blockSelect, blocks, 'id', 'name', `Select ${targetProgram} Block/Term`);
+    } else {
+        blockSelect.innerHTML = '<option value="">-- Select Program First --</option>';
+    }
+
+    populateSelect($('resource_intake'), allCourses, 'course_id', 'course_name', 'Select Course');
+}
+
+async function handleUploadResource(e) {
+    e.preventDefault();
+    const button = e.submitter;
+    setButtonLoading(button, true, 'Upload Resource');
+    
+    const fileInput = $('resource_file');
+    const file = fileInput.files[0];
+    
+    const formData = {
+        title: $('resource_title').value,
+        program: $('resource_program').value,
+        course_id: $('resource_intake').value, // Misnamed ID in HTML, treated as course_id
+        block_term: $('resource_block').value,
+    };
+
+    if (!file || Object.values(formData).some(v => !v)) {
+        showFeedback('Please fill in all details and select a file.', 'error');
+        setButtonLoading(button, false);
+        return;
+    }
+    
+    const filePath = `resources/${formData.program}/${formData.course_id}/${Date.now()}_${file.name}`;
+    
+    showFeedback(`Uploading ${file.name}...`, 'info');
+
+    try {
+        const { error: uploadError } = await sb.storage
+            .from(RESOURCES_BUCKET)
+            .upload(filePath, file);
+
+        if (uploadError) throw uploadError;
+        
+        const { data: urlData } = sb.storage.from(RESOURCES_BUCKET).getPublicUrl(filePath);
+        const publicUrl = urlData.publicUrl;
+
+        const { error: insertError } = await sb.from(RESOURCES_TABLE).insert({
+            title: formData.title,
+            program_type: formData.program, // Matches DB column
+            course_id: formData.course_id,
+            block_term: formData.block_term,
+            file_url: publicUrl,
+            lecturer_id: currentUserProfile.user_id,
+            lecturer_name: currentUserProfile.full_name
+        });
+            
+        if (insertError) throw insertError;
+        
+        showFeedback('✅ Resource uploaded successfully!', 'success');
+        e.target.reset();
+        loadLecturerResources(); 
+        
+    } catch (error) {
+        console.error('Resource Upload Error:', error);
+        showFeedback(`Resource upload failed: ${error.message}`, 'error');
+    } finally {
+        setButtonLoading(button, false);
     }
 }
-function populateExamFormSelects() { /* Implementation required */ }
-function handleAddExam(e) { /* Implementation required */ }
 
 async function loadLecturerResources() {
-    const { data: resources } = await fetchDataForLecturer(RESOURCES_TABLE, '*', null, 'uploaded_at', false);
-    const list = $('resources-list');
-    if (list) {
-        list.innerHTML = resources?.length ? resources.map(r => `
-            <li class="resource-item">
-                <span>${r.title} (${r.program_type})</span>
-                <div>
-                    <a href="${r.file_url}" target="_blank" class="btn-action view">View</a>
-                    <button class="btn-action edit" onclick="showFeedback('Editing ${r.id}', 'info')">Edit</button>
-                </div>
-            </li>
-        `).join('') : '<li>No resources found for your program.</li>';
+    const tbody = $('resources-list');
+    tbody.innerHTML = '<tr><td colspan="5">Loading resources...</td></tr>';
+    
+    // Filtered by program via fetchDataForLecturer
+    const { data: resources, error } = await fetchDataForLecturer(RESOURCES_TABLE, '*', null, 'uploaded_at', false);
+    
+    if (error) {
+        tbody.innerHTML = `<tr><td colspan="5">Error: ${error.message}</td></tr>`;
+        return;
+    }
+
+    if (!resources || resources.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5">No resources found for your program.</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = resources.map(r => {
+        const courseName = allCourses.find(c => c.course_id === r.course_id)?.course_name || r.course_id;
+        const uploadDate = new Date(r.uploaded_at).toLocaleDateString();
+        return `
+            <tr>
+                <td>${r.title}</td>
+                <td>${courseName}</td>
+                <td>${r.program_type}/${r.block_term}</td>
+                <td>${uploadDate}</td>
+                <td>
+                    <a href="${r.file_url}" target="_blank" class="btn-action view" style="background-color:#10B981;">View</a>
+                    <button class="btn-action edit" onclick="showFeedback('Editing resource ${r.id}', 'info')" style="background-color:#F59E0B;">Edit</button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function saveResourceEdits() { 
+    showFeedback('Resource edits saved (placeholder).', 'info');
+    closeEditResourceModal(); 
+}
+function closeEditResourceModal() { 
+    $('editResourceModal').style.display = 'none'; 
+}
+
+
+function populateMessageFormSelects() {
+    // Populate message targets
+    const targetSelect = $('msg_target');
+    const targetOptions = [
+        { id: 'all-students', name: `All ${lecturerTargetProgram} Students` },
+        { id: 'custom-user', name: 'Specific Student/User (Enter ID/Email)' },
+    ];
+    populateSelect(targetSelect, targetOptions, 'id', 'name', 'Select Message Target');
+}
+
+async function handleSendMessage(e) { 
+    e.preventDefault();
+    const button = e.submitter;
+    setButtonLoading(button, true, 'Send Message');
+    
+    const formData = {
+        target: $('msg_target').value,
+        subject: $('msg_subject').value,
+        body: $('msg_body').value
+    };
+
+    if (Object.values(formData).some(v => !v)) {
+        showFeedback('Please fill in all message details.', 'error');
+        setButtonLoading(button, false);
+        return;
+    }
+    
+    try {
+        // Simple insert for now (more complex logic is needed for "all-students" targeting)
+        const { error } = await sb.from(MESSAGES_TABLE).insert({
+            sender_id: currentUserProfile.user_id,
+            sender_name: currentUserProfile.full_name,
+            subject: formData.subject,
+            body: formData.body,
+            receiver_id: 'SYSTEM', // Placeholder: Would be a specific user ID or a group tag
+            target_program: lecturerTargetProgram,
+            target_group: formData.target, // Storing the selected group for history
+        });
+
+        if (error) throw error;
+
+        showFeedback(`✅ Message sent successfully!`, 'success');
+        e.target.reset();
+        loadLecturerMessages(); 
+    } catch (error) {
+        console.error('Message sending failed:', error);
+        showFeedback(`Message sending failed: ${error.message}`, 'error');
+    } finally {
+        setButtonLoading(button, false);
     }
 }
-function populateResourceFormSelects() { /* Implementation required */ }
-function handleUploadResource(e) { /* Implementation required */ }
-function saveResourceEdits() { /* Implementation required */ }
-function closeEditResourceModal() { $('editResourceModal').style.display = 'none'; }
-
 
 async function loadLecturerMessages() {
-    const { data: messages } = await fetchData(MESSAGES_TABLE, '*', { receiver_id: currentUserProfile.user_id }, 'sent_at', false);
     const tbody = $('messages-table');
-    if (tbody) {
-        tbody.innerHTML = messages?.length ? messages.map(m => `
-            <tr>
-                <td>${m.sender_name}</td>
-                <td>${m.subject}</td>
-                <td>${new Date(m.sent_at).toLocaleString()}</td>
-                <td><button class="btn-action" onclick="showFeedback('Viewing message ${m.id}', 'info')">View</button></td>
-            </tr>
-        `).join('') : '<tr><td colspan="4">No messages found.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5">Loading messages...</td></tr>';
+    
+    // Fetch messages sent by this lecturer (sent_messages table would be better, but using current structure)
+    // Here we'll show messages sent *by* the lecturer for history, or received by them.
+    const { data: sentMessages, error } = await fetchData(MESSAGES_TABLE, '*', { sender_id: currentUserProfile.user_id }, 'sent_at', false);
+
+    if (error) {
+        tbody.innerHTML = `<tr><td colspan="5">Error: ${error.message}</td></tr>`;
+        return;
     }
+
+    if (!sentMessages || sentMessages.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5">No messages sent by you found.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = sentMessages.map(m => {
+        const target = m.target_group === 'all-students' ? `All ${m.target_program} Students` : m.receiver_id;
+        return `
+            <tr>
+                <td>${new Date(m.sent_at).toLocaleString()}</td>
+                <td>${m.subject}</td>
+                <td>${target}</td>
+                <td><span class="status status-success">Sent</span></td>
+                <td><button class="btn-action" style="background-color:#4C1D95;" onclick="showFeedback('Viewing message ${m.id}', 'info')">View</button></td>
+            </tr>
+        `;
+    }).join('');
 }
-function populateMessageFormSelects() { /* Implementation required */ }
-function handleSendMessage(e) { /* Implementation required */ }
-function showSendMessageModal(userId, fullName) { /* Implementation required */ }
+
+function showSendMessageModal(userId, fullName) { 
+    showFeedback(`Direct message feature for ${fullName} (${userId}) needs implementation.`, 'info');
+    // Implementation would involve setting the 'msg_target' select to the specific user.
+}
