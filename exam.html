@@ -1,117 +1,130 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NCHSM Digital Student Exam</title>
-    <link rel="icon" type="image/png" href="https://raw.githubusercontent.com/NCHSMlearning/e-learning/main/images/Logo_NCHSM.png" sizes="32x32">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <style>
-        body { font-family: 'Inter', sans-serif; background: #F8F8F8; margin:0; padding:0;}
-        .container { max-width: 900px; margin: 50px auto; padding: 20px; background:#fff; border-radius:12px; box-shadow:0 4px 12px rgba(0,0,0,0.1);}
-        h1 { text-align:center; color:#4C1D95;}
-        .question { margin-bottom: 25px; }
-        .options { list-style:none; padding:0; }
-        .options li { margin: 8px 0; }
-        button { padding: 12px 25px; background:#4C1D95; color:#fff; border:none; border-radius:8px; cursor:pointer; font-weight:600; }
-        button:hover { background:#6D28D9; }
-        #score { margin-top:20px; font-size:1.2rem; font-weight:600; color:#064E3B; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NCHSM Digital Student Exam</title>
+<link rel="icon" type="image/png" href="https://raw.githubusercontent.com/NCHSMlearning/e-learning/main/images/Logo_NCHSM.png" sizes="32x32">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+body { font-family: 'Inter', sans-serif; background: #F8F8F8; margin:0; padding:0;}
+.container { max-width: 900px; margin: 50px auto; padding: 20px; background:#fff; border-radius:12px; box-shadow:0 4px 12px rgba(0,0,0,0.1);}
+h1 { text-align:center; color:#4C1D95;}
+.question { margin-bottom: 25px; }
+.options { list-style:none; padding:0; }
+.options li { margin: 8px 0; }
+button { padding: 12px 25px; background:#4C1D95; color:#fff; border:none; border-radius:8px; cursor:pointer; font-weight:600; }
+button:hover { background:#6D28D9; }
+#score { margin-top:20px; font-size:1.2rem; font-weight:600; color:#064E3B; }
+</style>
 </head>
 <body>
 
 <div class="container">
     <h1>MENTAL HEALTH AND PSYCHIATRY CAT I</h1>
-    <div id="exam-container"></div>
+    <div id="exam-container">Loading questions...</div>
     <button id="submit-btn">Submit Exam</button>
     <div id="score"></div>
 </div>
 
 <script>
-    // ---------------- SUPABASE CONFIG ----------------
-    const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFkbW9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
-    const supabase = Supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  // ---------------- SUPABASE CONFIG ----------------
+  const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFkbW9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
+  const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    const EXAM_ID = 27; // Mental Health and Psychiatry CAT I
-    let questions = [];
+  // ---------------- EXAM CONFIG ----------------
+  const EXAM_ID = 27; // integer exam_id from your JSON
+  let questions = [];
 
-    async function loadExam() {
-        // Check user login
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
-            const { error } = await supabase.auth.signInWithOAuth({ provider: 'google' });
-            if(error) alert('Login required: ' + error.message);
-            return;
-        }
+  // ---------------- LOAD EXAM QUESTIONS ----------------
+  async function loadExam() {
+    try {
+      const { data, error } = await supabase
+        .from('questions')
+        .select('*')
+        .eq('exam_id', EXAM_ID);
 
-        // Fetch questions
-        const { data, error } = await supabase
-            .from('questions')
-            .select('*')
-            .eq('exam_id', EXAM_ID);
+      if (error) throw error;
 
-        if(error) { console.error(error); return; }
-        questions = data;
-        renderQuestions();
+      if (!data || data.length === 0) {
+        document.getElementById('exam-container').innerHTML = '<p>No questions found for this exam.</p>';
+        return;
+      }
+
+      questions = data;
+      renderQuestions();
+
+    } catch (err) {
+      console.error('Error fetching questions:', err);
+      document.getElementById('exam-container').innerHTML = '<p>Error loading questions. Check console.</p>';
     }
+  }
 
-    function renderQuestions() {
-        const container = document.getElementById('exam-container');
-        container.innerHTML = '';
-        questions.forEach((q, idx) => {
-            const div = document.createElement('div');
-            div.className = 'question';
-            div.innerHTML = `<p><strong>Q${idx+1}:</strong> ${q.question}</p>`;
-            const ul = document.createElement('ul');
-            ul.className = 'options';
-            const opts = JSON.parse(q.options);
-            opts.forEach(opt => {
-                const li = document.createElement('li');
-                li.innerHTML = `<label><input type="radio" name="q${q.id}" value="${opt}"> ${opt}</label>`;
-                ul.appendChild(li);
-            });
-            div.appendChild(ul);
-            container.appendChild(div);
-        });
-    }
+  // ---------------- RENDER QUESTIONS ----------------
+  function renderQuestions() {
+    const container = document.getElementById('exam-container');
+    container.innerHTML = '';
+    questions.forEach((q, idx) => {
+      const div = document.createElement('div');
+      div.className = 'question';
+      div.innerHTML = `<p><strong>Q${idx+1}:</strong> ${q.question}</p>`;
 
-    document.getElementById('submit-btn').addEventListener('click', async () => {
-        const answers = {};
-        questions.forEach(q => {
-            const selected = document.querySelector(`input[name="q${q.id}"]:checked`);
-            answers[q.id] = selected ? selected.value : null;
-        });
+      const ul = document.createElement('ul');
+      ul.className = 'options';
+      const opts = Array.isArray(q.options) ? q.options : JSON.parse(q.options);
+      opts.forEach((opt, optIdx) => {
+        const li = document.createElement('li');
+        li.innerHTML = `<label><input type="radio" name="q${q.id}" value="${opt}"> ${opt}</label>`;
+        ul.appendChild(li);
+      });
+      div.appendChild(ul);
+      container.appendChild(div);
+    });
+  }
 
-        let score = 0;
-        questions.forEach(q => {
-            if(answers[q.id] === q.correct_answer) score += q.marks;
-        });
+  // ---------------- SUBMIT EXAM ----------------
+  document.getElementById('submit-btn').addEventListener('click', async () => {
+    if (questions.length === 0) return;
 
-        document.getElementById('score').textContent = `Your Score: ${score} / ${questions.length}`;
-
-        // Save result to Supabase
-        const { data: { session } } = await supabase.auth.getSession();
-        const student_id = session.user.id;
-
-        const { error } = await supabase
-            .from('results')
-            .insert([
-                {
-                    student_id: student_id,
-                    exam_id: EXAM_ID,
-                    answers: answers,
-                    score: score,
-                    submitted_at: new Date()
-                }
-            ]);
-
-        if(error) console.error('Error saving result:', error);
-        else console.log('Result saved successfully');
+    const answers = {};
+    questions.forEach(q => {
+      const selected = document.querySelector(`input[name="q${q.id}"]:checked`);
+      answers[q.id] = selected ? selected.value : null;
     });
 
-    loadExam();
+    let score = 0;
+    questions.forEach(q => {
+      if (answers[q.id] === q.correct_answer) score += q.marks || 1; // default mark = 1
+    });
+
+    document.getElementById('score').textContent = `Your Score: ${score} / ${questions.length}`;
+
+    // Save result to Supabase (requires logged-in user)
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return alert('Please login to save your results.');
+      const student_id = session.user.id;
+
+      const { error } = await supabase
+        .from('results')
+        .insert([{
+          student_id,
+          exam_id: EXAM_ID,
+          answers,
+          score,
+          submitted_at: new Date()
+        }]);
+
+      if (error) throw error;
+      console.log('Result saved successfully');
+    } catch (err) {
+      console.error('Error saving result:', err);
+    }
+  });
+
+  window.addEventListener('DOMContentLoaded', loadExam);
 </script>
 
 </body>
