@@ -6,17 +6,45 @@
 <title>Exam - NCHSM</title>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-body{ font-family:'Poppins',sans-serif; background:#F8F9FA; margin:0; padding:20px; }
-.container{ max-width:900px; margin:20px auto; background:#fff; padding:25px; border-radius:12px; box-shadow:0 5px 20px rgba(0,0,0,0.05);}
-h1{ text-align:center; color:#073450; }
-.question{ margin-bottom:20px; }
-.options{ list-style:none; padding:0; }
-.options li{ margin:8px 0; }
-button{ padding:12px 25px; background:#38A169; color:#fff; border:none; border-radius:8px; cursor:pointer; font-weight:600; }
-button:hover{ background:#2F855A; }
-#score{ margin-top:20px; font-weight:600; font-size:1.2rem; color:#064E3B; text-align:center; }
-#error{ color:#EF4444; font-weight:600; text-align:center; margin-bottom:15px; }
-#timer{ text-align:center; font-weight:600; font-size:1.2rem; margin-bottom:15px; color:#073450;}
+body {
+    font-family: 'Poppins', sans-serif;
+    background: #F8F9FA;
+    margin: 0;
+    padding: 20px;
+}
+.container {
+    max-width: 900px;
+    margin: 20px auto;
+    background: #fff;
+    padding: 25px;
+    border-radius: 12px;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.05);
+}
+h1 { text-align: center; color: #073450; }
+#timer { text-align: center; font-weight: 600; font-size: 1.2rem; margin-bottom: 15px; color: #073450;}
+.question { margin-bottom: 20px; }
+.options { list-style: none; padding: 0; }
+.options li { margin: 8px 0; }
+button {
+    padding: 12px 25px;
+    background: #38A169;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+}
+button:hover { background: #2F855A; }
+#score { margin-top: 20px; font-weight: 600; font-size: 1.2rem; color: #064E3B; text-align: center; }
+#error { color: #EF4444; font-weight: 600; text-align: center; margin-bottom: 15px; }
+
+/* --- Prevent Highlighting --- */
+#exam-container, #exam-container * {
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    -moz-user-select: none !important;
+    -ms-user-select: none !important;
+}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -33,24 +61,24 @@ button:hover{ background:#2F855A; }
 
 <script>
 const SUPABASE_URL='https://lwhtjozfsmbyihenfunw.supabase.co';
-const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
+const SUPABASE_ANON_KEY='YOUR_ANON_KEY_HERE';
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 
 const params=new URLSearchParams(window.location.search);
 const EXAM_ID=params.get('exam_id');
-let studentId=localStorage.getItem('currentUserId');
+let studentProfile=JSON.parse(localStorage.getItem('currentUserProfile'));
 let questions=[],duration=0,timerInterval;
 
-if(!studentId){ window.location.href='exam_login.html'; }
+if(!studentProfile){
+    window.location.href='exam_login.html';
+}
 
 async function initExam(){
     try{
-        // fetch exam details
         const { data: examData, error: examError } = await sb.from('exams_with_courses').select('*').eq('id',EXAM_ID).maybeSingle();
         if(examError || !examData){ document.getElementById('error').innerText='Exam not found'; return; }
         duration = examData.duration_minutes || 30;
 
-        // fetch questions
         const { data: qData, error: qError } = await sb.from('questions').select('*').eq('exam_id',EXAM_ID);
         if(qError || !qData || qData.length===0){ document.getElementById('exam-container').innerText='No questions found'; return; }
         questions=qData;
@@ -102,24 +130,30 @@ async function submitExam(){
     document.getElementById('score').innerText=`Your Score: ${score} / ${questions.length}`;
 
     try{
-        const { error } = await sb.from('exam_grades').insert([{ student_id:studentId, exam_id:EXAM_ID, marks:score, graded_at:new Date() }]);
+        const { error } = await sb.from('exam_grades').insert([{
+            student_id:studentProfile.id,
+            exam_id:EXAM_ID,
+            marks:score,
+            graded_at:new Date()
+        }]);
         if(error){ console.error('Error saving results:', error); document.getElementById('error').innerText='Error saving results.'; }
-        else{ console.log('Result saved successfully'); }
     }catch(err){ console.error(err); document.getElementById('error').innerText='Error saving results.'; }
 }
 
-// --- Exam Lockdown ---
+// --- Lockdown ---
 function lockDown(){
-    // disable right click
     document.addEventListener('contextmenu', e => e.preventDefault());
-    // disable copy/paste
     document.addEventListener('copy', e => e.preventDefault());
     document.addEventListener('cut', e => e.preventDefault());
     document.addEventListener('paste', e => e.preventDefault());
-    // warn before leaving page
-    window.addEventListener('beforeunload', e=>{
-        e.preventDefault(); e.returnValue='';
+    window.addEventListener('beforeunload', e => { e.preventDefault(); e.returnValue=''; });
+    document.addEventListener('visibilitychange', ()=>{
+        if(document.hidden){ alert('You switched tabs!'); }
     });
+
+    const examContainer = document.getElementById('exam-container');
+    examContainer.addEventListener('selectstart', e => e.preventDefault());
+    examContainer.addEventListener('mousedown', e => e.preventDefault());
 }
 
 document.getElementById('submit-btn').addEventListener('click', submitExam);
