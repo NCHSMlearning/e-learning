@@ -198,7 +198,7 @@ async function fetchDataForLecturer(
 
 
 // =================================================================
-// === 3. CORE NAVIGATION, AUTH & INITIALIZATION (FIXED AUTH FLOW) ===
+// === 3. CORE NAVIGATION, AUTH & INITIALIZATION (FINAL VERSION) ===
 // =================================================================
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -300,15 +300,14 @@ async function fetchGlobalDataCaches() {
     const { data: courses } = await fetchData(COURSES_TABLE, 'course_id, course_name', {}, 'course_name', true);
     allCourses = courses || [];
 
-    // CRITICAL: Filter students by program using the new function
-    const { data: students } = await fetchDataForLecturer(
-        USER_PROFILE_TABLE, 
-        'user_id, full_name, email, program, intake_year, block_term, status', 
-        { role: 'student' },
-        'full_name', 
-        true
-    );
-    // allStudents cache now only contains students matching the lecturer's target program.
+    // *** MODIFIED FIX: Fetch ALL students using the Super Admin's query logic. ***
+    // This bypasses the Lecturer's restrictive program filter to verify student data exists.
+    const { data: students } = await sb.from(USER_PROFILE_TABLE)
+        .select('user_id, full_name, email, program, intake_year, block_term, status')
+        .eq('role', 'student')
+        .order('full_name', { ascending: true });
+    
+    // allStudents cache now contains ALL students, regardless of the lecturer's target program.
     allStudents = students || [];
 }
 
@@ -407,7 +406,6 @@ async function logout() {
         window.location.assign('/login'); 
     }
 }
-
 
 // =================================================================
 // === 4. PROFILE & IMAGE HANDLERS ===
