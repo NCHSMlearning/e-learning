@@ -1,1 +1,226 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nakuru County | Online Exam Portal</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body {
+      font-family: "Segoe UI", sans-serif;
+      background: #f7f9fb;
+      margin: 0;
+      padding: 0;
+    }
+
+    header {
+      background: #0066cc;
+      color: white;
+      text-align: center;
+      padding: 15px 10px;
+      border-bottom: 5px solid #00aaff;
+    }
+    header img {
+      height: 60px;
+      margin: 0 10px;
+      vertical-align: middle;
+    }
+    header h1 {
+      margin: 5px 0 0 0;
+      font-size: 22px;
+    }
+    header p {
+      margin: 0;
+      font-size: 14px;
+      color: #e3f2fd;
+    }
+
+    .exam-container {
+      max-width: 850px;
+      margin: 30px auto;
+      background: #fff;
+      border-radius: 12px;
+      padding: 25px;
+      box-shadow: 0 3px 12px rgba(0,0,0,0.1);
+    }
+
+    h2 {
+      text-align: center;
+      color: #333;
+      margin-bottom: 20px;
+    }
+
+    .question {
+      margin-bottom: 20px;
+      padding: 15px;
+      border-radius: 8px;
+      border: 1px solid #e0e0e0;
+      background: #fafafa;
+    }
+
+    .question p {
+      margin: 0 0 10px 0;
+      font-weight: 600;
+      color: #444;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 15px;
+    }
+
+    input[type="radio"] {
+      margin-right: 8px;
+    }
+
+    button {
+      background: #0066cc;
+      color: white;
+      border: none;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 16px;
+    }
+
+    button:hover {
+      background: #004c99;
+      cursor: pointer;
+    }
+
+    .result-box {
+      text-align: center;
+      margin-top: 30px;
+      font-size: 20px;
+      font-weight: bold;
+      color: #2e7d32;
+    }
+
+    .footer-note {
+      text-align: center;
+      margin-top: 50px;
+      font-size: 13px;
+      color: #888;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <header>
+    <div>
+      <img src="images/NakuruCountyLogo.png" alt="Nakuru County">
+      <img src="images/MoH_Kenya.png" alt="Ministry of Health">
+      <img src="images/UNICEF.png" alt="UNICEF">
+      <img src="images/UNOPS.png" alt="UNOPS">
+    </div>
+    <h1>Nakuru County Health Department</h1>
+    <p>MCV-TCV Campaign | Online Exam Portal</p>
+  </header>
+
+  <!-- MAIN EXAM BODY -->
+  <div class="exam-container">
+    <h2 id="exam-title">Loading Exam...</h2>
+    <form id="exam-form"></form>
+    <div id="submit-section" style="text-align:center; margin-top:20px;">
+      <button type="submit" id="submit-btn">Submit Exam</button>
+    </div>
+    <div id="result-box" class="result-box"></div>
+  </div>
+
+  <p class="footer-note">Powered by Nakuru County · Ministry of Health · UNOPS · UNICEF</p>
+
+  <script>
+    // === YOUR SUPABASE CONFIGURATION ===
+    const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // === EXAM LOGIC ===
+    const urlParams = new URLSearchParams(window.location.search);
+    const examId = urlParams.get("exam_id");
+
+    const examForm = document.getElementById("exam-form");
+    const examTitle = document.getElementById("exam-title");
+    const resultBox = document.getElementById("result-box");
+
+    async function loadExam() {
+      // Load exam details
+      const { data: examData, error: examError } = await sb
+        .from("exams")
+        .select("*")
+        .eq("id", examId)
+        .single();
+
+      if (examError || !examData) {
+        examTitle.textContent = "Exam not found.";
+        return;
+      }
+
+      examTitle.textContent = examData.title;
+
+      // Load questions
+      const { data: questions, error } = await sb
+        .from("questions")
+        .select("*")
+        .eq("exam_id", examId);
+
+      if (error || !questions || questions.length === 0) {
+        examForm.innerHTML = "<p>No questions found for this exam.</p>";
+        return;
+      }
+
+      // Render questions
+      questions.forEach((q, index) => {
+        const div = document.createElement("div");
+        div.className = "question";
+        div.innerHTML = `
+          <p>Q${index + 1}. ${q.question}</p>
+          ${q.options.map(opt => `
+            <label><input type="radio" name="q${index}" value="${opt}"> ${opt}</label>
+          `).join("")}
+        `;
+        examForm.appendChild(div);
+      });
+
+      // Submit logic
+      examForm.onsubmit = async (e) => {
+        e.preventDefault();
+
+        let totalScore = 0;
+        let studentAnswers = [];
+
+        questions.forEach((q, index) => {
+          const selected = examForm[`q${index}`]?.value || "";
+          const correct = q.correct_answer;
+          studentAnswers.push({ question: q.question, selected, correct });
+
+          if (selected === correct) totalScore += q.marks || 1;
+        });
+
+        // Insert results
+        const { error: insertError } = await sb
+          .from("student_responses")
+          .insert({
+            student_id: crypto.randomUUID(),
+            exam_id: examId,
+            answers: studentAnswers,
+            score: totalScore
+          });
+
+        if (insertError) {
+          alert("Error saving your results: " + insertError.message);
+          return;
+        }
+
+        examForm.style.display = "none";
+        document.getElementById("submit-section").style.display = "none";
+        resultBox.textContent = `✅ You scored ${totalScore} marks out of ${examData.total_marks || questions.length}`;
+      };
+    }
+
+    loadExam();
+  </script>
+</body>
+</html>
