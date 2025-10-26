@@ -10,7 +10,8 @@ if (window.location.pathname.endsWith('.html')) {
 }
 // --- ⚠️ IMPORTANT: SUPABASE CONFIGURATION ---
 const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co'; 
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Ppk';
+// *** CRITICAL: REPLACE THIS PLACEHOLDER WITH YOUR LIVE ANON KEY ***
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk'; 
 
 // --- Global Supabase Client ---
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -31,8 +32,8 @@ let currentUserProfile = null;
 let currentUserId = null; 
 let attendanceMap = null; 
 let allCourses = []; 
-let allStudents = []; // 🔑 Contains students filtered by lecturerTargetProgram
-let lecturerTargetProgram = null; // e.g., 'KRCHN' or 'TVET'
+let allStudents = []; 
+let lecturerTargetProgram = null; 
 
 // --- Academic Structure Constants (Used for filtering) ---
 const ACADEMIC_STRUCTURE = {
@@ -55,7 +56,6 @@ const PROGRAM_FIELD_MAP = {
     [EXAMS_TABLE]: 'target_program',
     [SESSIONS_TABLE]: 'target_program',
     [RESOURCES_TABLE]: 'program_type'
-    // ATTENDANCE_TABLE is handled via joins/OR in specific functions
 };
 
 // =================================================================
@@ -137,7 +137,6 @@ function showFeedback(message, type) {
     }
 }
 
-// NOTE: This remains the generic fetch for non-program-specific tables (like messages/courses)
 async function fetchData(tableName, selectQuery = '*', filters = {}, order = 'created_at', ascending = false) {
     let query = sb.from(tableName).select(selectQuery);
 
@@ -159,8 +158,6 @@ async function fetchData(tableName, selectQuery = '*', filters = {}, order = 'cr
 
 /**
  * CRITICAL: Program-Filtered Data Fetching Utility for Lecturers.
- * Applies the lecturer's 'lecturerTargetProgram' (KRCHN/TVET) filter 
- * to relevant tables (Students, Exams, Sessions, Resources).
  */
 async function fetchDataForLecturer(
     tableName,
@@ -194,7 +191,7 @@ async function fetchDataForLecturer(
     const { data, error } = await query;
     if (error) {
         console.error(`Error loading ${tableName} (Program Filter Applied: ${lecturerTargetProgram}):`, error);
-        return { data: null, error };
+        return { data, error: null }; // Return null data but log error
     }
     return { data, error: null };
 }
@@ -214,22 +211,30 @@ async function initSession() {
     
     let profile = null;
     let error = null;
+    let session = null;
 
     try {
-        const { data: { session }, error: sessionError } = await sb.auth.getSession();
+        // 1. Get the current session (checks local storage/cookies)
+        const { data: { session: currentSession }, error: sessionError } = await sb.auth.getSession();
         
-        if (sessionError || !session) {
+        if (sessionError || !currentSession) {
+            // No active session found
             error = sessionError || { message: "No active session found." };
         } else {
+            session = currentSession;
             currentUserId = session.user.id; 
+            
+            // 2. Fetch User Profile
             const { data: userProfile, error: profileError } = await sb.from(USER_PROFILE_TABLE)
                 .select('*')
                 .eq('user_id', session.user.id)
                 .single();
             
             if (profileError) {
+                // Catches the 401/RLS/Database failure
                 error = profileError;
             } else if (userProfile.role !== 'lecturer') {
+                // If the user is authenticated but not a lecturer (e.g., a student)
                 error = { message: `Access Denied. User role is '${userProfile.role}', expected 'lecturer'.` };
             } else {
                 profile = userProfile;
@@ -237,6 +242,7 @@ async function initSession() {
         }
 
     } catch (e) {
+        // Catches unexpected JavaScript errors during fetch/auth process
         error = e;
     }
     
@@ -297,7 +303,6 @@ async function fetchGlobalDataCaches() {
     // CRITICAL: Filter students by program using the new function
     const { data: students } = await fetchDataForLecturer(
         USER_PROFILE_TABLE, 
-        // 🔑 CORRECTION APPLIED: Using 'program' for consistency
         'user_id, full_name, email, program, intake_year, block_term, status', 
         { role: 'student' },
         'full_name', 
@@ -510,7 +515,6 @@ async function loadLecturerStudents() {
 
     tbody.innerHTML = '<tr><td colspan="7">Loading assigned students...</td></tr>';
     
-    // 🔑 OPTIMIZATION APPLIED: Using allStudents directly as it's already filtered in fetchGlobalDataCaches.
     const studentsHtml = allStudents.map(profile => `
         <tr>
             <td>${profile.full_name || 'N/A'}</td>
@@ -650,7 +654,7 @@ async function loadLecturerSessions() {
 }
 
 // =================================================================
-// === 7. ATTENDANCE & MAP LOGIC (FIXED EFFICIENT QUERY) ===
+// === 7. ATTENDANCE & MAP LOGIC ===
 // =================================================================
 
 function loadAttendanceSelects() {
@@ -968,7 +972,6 @@ async function loadLecturerExams() {
 }
 
 
-
 // =================================================================
 // === 9. RESOURCES IMPLEMENTATION (Upload, Edit, Delete) ===
 // =================================================================
@@ -1164,7 +1167,7 @@ async function deleteResource(id) {
 
 
 // =================================================================
-// === 10. MESSAGING IMPLEMENTATION (FIXED TARGET CHECK) ===
+// === 10. MESSAGING IMPLEMENTATION ===
 // =================================================================
 
 function populateMessageFormSelects() {
