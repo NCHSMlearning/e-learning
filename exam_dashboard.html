@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Exam Dashboard - NCHSM</title>
+<link rel="icon" href="https://raw.githubusercontent.com/NCHSMlearning/e-learning/main/images/Logo_NCHSM.png">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body { font-family: 'Poppins', sans-serif; background:#F8F9FA; margin:0; padding:20px; }
+header { text-align:center; margin-bottom:30px; }
+h1 { color:#073450; }
+.exam-list { max-width:800px; margin:0 auto; }
+.exam-card { background:#fff; padding:20px; border-radius:12px; margin-bottom:15px; box-shadow:0 5px 20px rgba(0,0,0,0.05); display:flex; justify-content:space-between; align-items:center; }
+.exam-card button { padding:10px 20px; border:none; border-radius:8px; background:#38A169; color:#fff; font-weight:600; cursor:pointer; }
+.exam-card button:hover{ background:#2F855A; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+<header>
+    <img src="https://raw.githubusercontent.com/NCHSMlearning/e-learning/main/images/Logo_NCHSM.png" width="80" alt="Logo">
+    <h1>Exam Dashboard</h1>
+</header>
+
+<div class="exam-list" id="examList">Loading exams...</div>
+
+<script>
+const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+async function loadExams(){
+    const userId = localStorage.getItem('currentUserId');
+    if(!userId){ window.location.href='exam_login.html'; return; }
+
+    try{
+        const { data: exams, error } = await sb.from('exams_with_courses').select('*').order('exam_date', {ascending:true});
+        if(error){ console.error(error); document.getElementById('examList').innerText='Failed to load exams.'; return; }
+
+        const container = document.getElementById('examList');
+        container.innerHTML = '';
+        exams.forEach(exam => {
+            const div = document.createElement('div');
+            div.className='exam-card';
+            div.innerHTML = `<span>${exam.exam_name} - ${exam.course_name} (${exam.exam_date})</span>
+            <button onclick="startExam('${exam.id}')">Start Exam</button>`;
+            container.appendChild(div);
+        });
+    } catch(err){ console.error(err); document.getElementById('examList').innerText='Error loading exams.'; }
+}
+
+function startExam(examId){
+    window.location.href = `exam.html?exam_id=${examId}`;
+}
+
+window.addEventListener('DOMContentLoaded', loadExams);
+</script>
+</body>
+</html>
