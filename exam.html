@@ -259,8 +259,7 @@ button#submit-exam-btn:disabled { background: #FCA5A5; cursor: not-allowed; box-
     <div class="modal-content">
         <h3>Final Submission Confirmation</h3>
         <p>
-            You are about to submit your exam. Please confirm: 
-            **Any unanswered questions will be marked as incorrect (0 marks).**
+            You are about to submit your exam. Please confirm.
         </p>
         <div class="modal-buttons">
             <button id="cancel-submit-btn">Cancel</button>
@@ -270,6 +269,8 @@ button#submit-exam-btn:disabled { background: #FCA5A5; cursor: not-allowed; box-
 </div>
 
 <script>
+// IMPORTANT: Ensure your Supabase exam_grades table has a composite unique constraint/primary key on (student_id, exam_id, question_id) for upsert to work correctly.
+
 // --- CONFIGURATION ---
 const SUPABASE_URL='https://lwhtjozfsmbyihenfunw.supabase.co';
 const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
@@ -295,7 +296,7 @@ if(!studentId){
     window.location.href='exam_login.html'; 
 }
 
-// --- NAVIGATION FUNCTIONS (Unchanged) ---
+// --- NAVIGATION FUNCTIONS ---
 function nextQuestion(){
     if(currentIndex < questions.length - 1){
         renderQuestion(currentIndex + 1);
@@ -307,7 +308,7 @@ function prevQuestion(){
     }
 }
 
-// --- CORE FUNCTIONS (Unchanged) ---
+// --- CORE FUNCTIONS ---
 async function initExam(){
     try{
         const { data: examData } = await sb.from('exams_with_courses').select('*').eq('id',EXAM_ID).maybeSingle();
@@ -346,7 +347,8 @@ async function loadExistingAnswers() {
         
         if (data && data.length > 0) {
             data.forEach(item => {
-                if (item.selected_answer !== null) {
+                // Only load if an answer was actually selected (not null/skipped)
+                if (item.selected_answer !== null) { 
                     answers[item.question_id] = item.selected_answer;
                     hasAnsweredAtLeastOne = true;
                 }
@@ -373,6 +375,7 @@ function renderQuestion(index = currentIndex){
     container.appendChild(questionText);
 
     const ul=document.createElement('ul'); ul.className='options';
+    // Ensure options are parsed if they are stored as JSON string
     const opts=Array.isArray(q.options)?q.options:JSON.parse(q.options); 
     
     opts.forEach(opt=>{
@@ -405,7 +408,7 @@ function renderQuestion(index = currentIndex){
     });
 }
 
-// --- STATUS TABLE FUNCTIONS (Unchanged) ---
+// --- STATUS TABLE FUNCTIONS ---
 function renderQuestionStatusTable() {
     const tableEl = document.getElementById('question-status-table');
     tableEl.innerHTML = '';
@@ -484,6 +487,32 @@ async function saveAnswer(selectedAnswerValue){
     }
 }
 
+// MODIFIED: This function now calculates skipped count and updates/shows the modal
+function submitExam(){
+    let skippedCount = 0;
+    
+    // Count skipped questions
+    questions.forEach(q => {
+        // If question ID is missing from answers OR the value is null (was skipped/unanswered)
+        if (!answers.hasOwnProperty(q.id) || answers[q.id] === null) {
+            skippedCount++;
+        }
+    });
+
+    const modalMessageEl = submissionModal.querySelector('.modal-content p');
+    let message = `You are about to submit your exam. Please confirm.`;
+
+    if (skippedCount > 0) {
+        // Display a strong warning about the skipped questions
+        message += ` **Warning:** You have **${skippedCount}** unanswered question(s). These will be marked as incorrect (0 marks).`;
+    } else {
+        message += ` All questions have been answered.`;
+    }
+    
+    modalMessageEl.innerHTML = message;
+    submissionModal.style.display = 'flex';
+}
+
 // NEW FUNCTION: Handles the actual submission after confirmation
 async function executeSubmission(){
     // Disable all buttons to prevent double-clicks
@@ -491,7 +520,7 @@ async function executeSubmission(){
     submissionModal.style.display = 'none';
     document.getElementById('error').innerText = 'Submitting final answers...';
 
-    // Logic to record all skipped/unanswered questions with 0 marks 
+    // Logic to record all skipped/unanswered questions with 0 marks (CRITICAL)
     const skippedEntries = [];
     questions.forEach(q => {
         const questionId = q.id;
@@ -508,10 +537,11 @@ async function executeSubmission(){
     });
 
     if (skippedEntries.length > 0) {
+        // Upsert the zero-mark entries for skipped questions
         const { error } = await sb.from('exam_grades').upsert(skippedEntries, {onConflict:['student_id','exam_id','question_id']});
         if (error) {
             console.error('Error saving skipped answers:', error);
-            document.getElementById('error').innerText = 'Final submission failed for skipped questions. Contact support.';
+            document.getElementById('error').innerText = 'CRITICAL ERROR: Submission failed to finalize skipped questions in the database. (Check Supabase constraint!)';
             return;
         }
     }
@@ -527,10 +557,6 @@ async function executeSubmission(){
     }, 1500); 
 }
 
-// MODIFIED: This function now only SHOWS the modal
-function submitExam(){
-    submissionModal.style.display = 'flex';
-}
 
 function showFinalScreen(){
     clearInterval(timerInterval);
@@ -545,7 +571,7 @@ function showFinalScreen(){
 }
 
 
-// --- TIMER AND LOCKDOWN (Unchanged) ---
+// --- TIMER AND LOCKDOWN ---
 function startTimer(seconds){
     const timerEl=document.getElementById('timer');
     function updateTimer(){
@@ -553,7 +579,7 @@ function startTimer(seconds){
         const timeString = `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
         timerEl.innerText=`Time Remaining: ${timeString}`;
         if(seconds-- <=0) {
-            // Timer expiry triggers submission without showing the modal
+            // Timer expiry triggers submission automatically
             executeSubmission(); 
             return;
         }
@@ -572,6 +598,7 @@ function lockDown(){
     
     document.addEventListener('visibilitychange', () => {
         if (document.hidden) {
+            // Automatic submission if student leaves the page/tab
             executeSubmission(); 
             alert('Warning: The exam was automatically submitted due to unauthorized page context change (leaving the tab/window).'); 
         }
@@ -586,7 +613,7 @@ function beforeUnloadHandler(e){
 // --- EVENT LISTENERS ---
 document.getElementById('prev-btn').addEventListener('click', prevQuestion);
 document.getElementById('next-btn').addEventListener('click', nextQuestion);
-finalSubmitBtn.addEventListener('click', submitExam); // Shows the modal
+finalSubmitBtn.addEventListener('click', submitExam); // Shows the modal with the warning
 confirmSubmitBtn.addEventListener('click', executeSubmission); // Executes submission after confirmation
 cancelSubmitBtn.addEventListener('click', () => { // Hides the modal
     submissionModal.style.display = 'none';
