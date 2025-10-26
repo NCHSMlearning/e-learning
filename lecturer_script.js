@@ -440,36 +440,24 @@ async function logout() {
 // =================================================================
 
 function loadLecturerProfile() {
-    if (!currentUserProfile) return;
-    
-    const avatarUrl = currentUserProfile.avatar_url || 'images/default_passport.png';
-    $('profile-img').src = avatarUrl;
-    
-    // 1. Set main display elements (h3 and p are still textContent)
-    $('profile_name_display').textContent = currentUserProfile.full_name || 'N/A';
-    $('profile_role_display').textContent = currentUserProfile.role || 'N/A';
-    
-    // 2. Set the detail INPUT fields (must use .value property)
-    // NOTE: This assumes you have implemented the HTML change from <span> to <input>
-    
-    // LOCKED FIELDS (Employee ID and Program Focus)
-    $('profile_id').value = currentUserProfile.employee_id || 'N/A';
-    $('profile_program_focus').value = lecturerTargetProgram || 'N/A (No Program Assigned)';
-    
-    // EDITABLE FIELDS
-    $('profile_email').value = currentUserProfile.email || 'N/A';
-    $('profile_phone').value = currentUserProfile.phone || 'N/A';
-    $('profile_dept').value = currentUserProfile.department || 'N/A';
-
-    // Special handling for date input (must be 'YYYY-MM-DD' format)
-    if (currentUserProfile.join_date) {
-        // Convert to ISO string and take only the date part
-        const joinDate = new Date(currentUserProfile.join_date).toISOString().split('T')[0];
-        $('profile_join_date').value = joinDate;
-    } else {
-        $('profile_join_date').value = ''; // Set to empty string if no date
+    if (!currentUserProfile) return;
+    
+  const avatarUrl = currentUserProfile.avatar_url || 'images/default_passport.png';
+$('profile-img').src = avatarUrl;
+    
+    // ⬇️ CORRECTION: Updated IDs to match the new HTML structure ⬇️
+    $('profile_name_display').textContent = currentUserProfile.full_name || 'N/A';
+    $('profile_role_display').textContent = currentUserProfile.role || 'N/A';
+    // ⬆️ CORRECTION ENDS ⬆️
+    
+    // These IDs are correct and remain the same in the new HTML <span> tags:
+    $('profile_id').textContent = currentUserProfile.employee_id || 'N/A';
+    $('profile_email').textContent = currentUserProfile.email || 'N/A';
+    $('profile_phone').textContent = currentUserProfile.phone || 'N/A';
+    $('profile_dept').textContent = currentUserProfile.department || 'N/A';
+    $('profile_join_date').textContent = new Date(currentUserProfile.join_date).toLocaleDateString() || 'N/A';
+    $('profile_program_focus').textContent = lecturerTargetProgram || 'N/A (No Program Assigned)';
     }
-}
 
 function handleProfilePhotoChange(event) {
     const file = event.target.files[0];
