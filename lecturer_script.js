@@ -445,8 +445,12 @@ function loadLecturerProfile() {
     const avatarUrl = currentUserProfile.avatar_url || 'default_passport.png';
     $('profile-img').src = avatarUrl;
     
-    $('profile_name').textContent = currentUserProfile.full_name || 'N/A';
-    $('profile_role').textContent = currentUserProfile.role || 'N/A';
+    // ⬇️ CORRECTION: Updated IDs to match the new HTML structure ⬇️
+    $('profile_name_display').textContent = currentUserProfile.full_name || 'N/A';
+    $('profile_role_display').textContent = currentUserProfile.role || 'N/A';
+    // ⬆️ CORRECTION ENDS ⬆️
+    
+    // These IDs are correct and remain the same in the new HTML <span> tags:
     $('profile_id').textContent = currentUserProfile.employee_id || 'N/A';
     $('profile_email').textContent = currentUserProfile.email || 'N/A';
     $('profile_phone').textContent = currentUserProfile.phone || 'N/A';
@@ -502,7 +506,6 @@ async function handlePhotoUpload(file) {
         loadLecturerProfile(); 
     }
 }
-
 // =================================================================
 // === 5. STUDENT, COURSE & DASHBOARD LOADERS (FIXED UI TEXT) ===
 // =================================================================
