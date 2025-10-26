@@ -33,11 +33,11 @@ button:hover { background:#6D28D9; }
   const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFkbW9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
 
-  // ✅ Use a different variable name to avoid "before initialization" error
+  // ✅ Initialize Supabase client correctly
   const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   // ---------------- EXAM CONFIG ----------------
-  const EXAM_ID = 27; // integer exam_id from your JSON
+  const EXAM_ID = 27; // integer exam_id
   let questions = [];
 
   // ---------------- LOAD EXAM QUESTIONS ----------------
@@ -76,7 +76,7 @@ button:hover { background:#6D28D9; }
       const ul = document.createElement('ul');
       ul.className = 'options';
       const opts = Array.isArray(q.options) ? q.options : JSON.parse(q.options);
-      opts.forEach((opt, optIdx) => {
+      opts.forEach(opt => {
         const li = document.createElement('li');
         li.innerHTML = `<label><input type="radio" name="q${q.id}" value="${opt}"> ${opt}</label>`;
         ul.appendChild(li);
@@ -98,12 +98,11 @@ button:hover { background:#6D28D9; }
 
     let score = 0;
     questions.forEach(q => {
-      if (answers[q.id] === q.correct_answer) score += q.marks || 1; // default mark = 1
+      if (answers[q.id] === q.correct_answer) score += q.marks || 1;
     });
 
     document.getElementById('score').textContent = `Your Score: ${score} / ${questions.length}`;
 
-    // Save result to Supabase (requires logged-in user)
     try {
       const { data: { session } } = await supabaseClient.auth.getSession();
       if (!session) return alert('Please login to save your results.');
