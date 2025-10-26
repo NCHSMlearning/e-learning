@@ -1275,10 +1275,7 @@ if (uploadButton) {
 // *************************************************************************
 // *** 5. ATTENDANCE LOGIC (GeoCheckIn) ***
 // *************************************************************************
-
-// Loads both clinical area locations and named rotations for the student's cohort
-// Loads both clinical area locations and named rotations for the student's cohort
-// Loads both clinical area locations and named rotations for the student's cohort
+// Loads both geo-based and textual clinical rotations
 async function loadClinicalTargets() {
     if (
         !currentUserProfile ||
@@ -1297,29 +1294,29 @@ async function loadClinicalTargets() {
         return;
     }
 
-   try {
-    // 1️⃣ Load from clinical_areas (geo-based)
-    let { data: areaData, error: areaError } = await sb
-        .from('clinical_areas')
-        .select('id, name, latitude, longitude, block, program, intake_year')
-        .eq('program', program)
-        .eq('intake_year', parseInt(intakeYear)) // ✅ Convert to integer for match
-        .or(blockTerm ? `block.eq.${blockTerm},block.is.null` : 'block.is.null');
+    try {
+        // 1️⃣ Load from clinical_areas (geo-based)
+        const { data: areaData, error: areaError } = await sb
+            .from('clinical_areas')
+            .select('id, name, latitude, longitude, block, program, intake_year')
+            .eq('program', program)
+            .eq('intake_year', intakeYear)
+            .or(blockTerm ? `block.eq.${blockTerm},block.is.null` : 'block.is.null');
 
         if (areaError) throw areaError;
 
-        // 2️⃣ Load from clinical_names (non-geo, textual areas)
-        let { data: nameData, error: nameError } = await sb
+        // 2️⃣ Load from clinical_names (non-geo)
+        const { data: nameData, error: nameError } = await sb
             .from('clinical_names')
             .select('id, clinical_area_name, program, intake_year, block_term')
             .eq('program', program)
-            .eq('intake_year', parseInt(intakeYear))  // ✅ Convert to integer for match
+            .eq('intake_year', intakeYear)
             .or(blockTerm ? `block_term.eq.${blockTerm},block_term.is.null` : 'block_term.is.null');
 
         if (nameError) throw nameError;
 
-        // 🧠 Rename clinical_area_name to name manually (no alias bug)
-        nameData = (nameData || []).map(n => ({
+        // 🧠 Normalize naming
+        const nameList = (nameData || []).map(n => ({
             id: n.id,
             name: n.clinical_area_name,
             latitude: null,
@@ -1327,15 +1324,14 @@ async function loadClinicalTargets() {
             block: n.block_term || null,
         }));
 
-        // 3️⃣ Merge + Deduplicate
-        const merged = [...(areaData || []), ...(nameData || [])]
-            .filter((v, i, a) => a.findIndex(t => t.name === v.name) === i)
+        // 🧩 Combine both sets (even if one is empty)
+        const merged = [...(areaData || []), ...nameList]
+            .filter(a => a.name) // remove undefined names
+            .filter((v, i, arr) => arr.findIndex(t => t.name === v.name) === i) // deduplicate
             .sort((a, b) => a.name.localeCompare(b.name));
 
         cachedClinicalAreas = merged;
-
         console.log("✅ Loaded clinical areas:", cachedClinicalAreas);
-
     } catch (error) {
         console.error("❌ Error loading clinical areas:", error);
         cachedClinicalAreas = [];
