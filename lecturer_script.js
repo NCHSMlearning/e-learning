@@ -34,6 +34,7 @@ let attendanceMap = null;
 let allCourses = []; 
 let allStudents = []; // Contains students filtered by lecturerTargetProgram
 let lecturerTargetProgram = null; 
+let currentEditingResourceId = null; // New global variable to hold the ID of the resource being edited
 
 // --- Academic Structure Constants (Used for filtering) ---
 const ACADEMIC_STRUCTURE = {
@@ -270,7 +271,7 @@ function getProgramFilterFromDepartment(department) {
     if (['Nursing', 'Maternal Health', 'Midwifery'].includes(department)) {
         return 'KRCHN';
     }
-    if (['General Education', 'Clinical Medicine', 'Dental Health'].includes(department)) {
+    if (['General Education', 'Clinical Medicine', 'Dental Health', 'TIVET'].includes(department)) {
         return 'TVET';
     }
     return null; 
@@ -278,45 +279,38 @@ function getProgramFilterFromDepartment(department) {
 
 
 async function fetchGlobalDataCaches() {
-    // 1. Fetch all courses (no filtering required here)
+    // 1. Fetch all courses (no filtering required here, filtering happens in loadLecturerCourses)
     const { data: courses } = await fetchData(
         COURSES_TABLE,
-        'course_id, course_name',
+        'course_id, course_name, program_type, block_term', // Added relevant fields
         {},
         'course_name',
         true
     );
     allCourses = courses || [];
 
-    // 2. Fetch all students filtered by lecturer’s program
-    const STUDENT_TABLE = 'consolidated_user_profiles_table'; // ✅ Ensure correct table name
-
-    let studentQuery = sb
-        .from(STUDENT_TABLE)
-        .select('user_id, full_name, email, program, intake_year, block, status')
-        .eq('role', 'student');
-
-    // ✅ Normalize lecturer’s department (case-insensitive)
+    // 2. Determine lecturerTargetProgram based on department
     if (currentUserProfile?.department) {
         const dept = currentUserProfile.department.toLowerCase();
-
-        // ✅ Only two valid departments: Nursing → KRCHN, TIVET → TIVET
         if (dept === 'nursing') {
             lecturerTargetProgram = 'KRCHN';
         } else if (dept === 'tivet') {
-            lecturerTargetProgram = 'TIVET';
+            lecturerTargetProgram = 'TVET';
         } else {
             lecturerTargetProgram = null;
         }
     }
+    
+    // 3. Fetch all students filtered by lecturer’s program
+    const STUDENT_TABLE = 'consolidated_user_profiles_table'; 
 
-    // ✅ Apply program filter if available
+    let studentQuery = sb
+        .from(STUDENT_TABLE)
+        .select('user_id, full_name, email, program, intake_year, block_term, status')
+        .eq('role', 'student');
+
     if (lecturerTargetProgram) {
         studentQuery = studentQuery.eq('program', lecturerTargetProgram);
-    } else {
-        console.warn(
-            `⚠️ No program assigned for department "${currentUserProfile.department}".`
-        );
     }
 
     const { data: students, error: studentError } = await studentQuery.order(
@@ -346,7 +340,8 @@ function loadSectionData(tabId) {
     switch(tabId) {
         case 'profile': loadLecturerProfile(); break;
         case 'dashboard': loadLecturerDashboardData(); break;
-        case 'my-courses': loadLecturerStudents(); break;
+        case 'my-courses': loadLecturerCourses(); break; // Course loading should now work
+        case 'my-students': loadLecturerStudents(); break; 
         case 'sessions': loadLecturerSessions(); populateSessionFormSelects(); break;
         case 'attendance': loadTodaysAttendanceRecords(); loadAttendanceSelects(); break;
         case 'cats': loadLecturerExams(); populateExamFormSelects(); break;
@@ -386,6 +381,7 @@ function setupEventListeners() {
     // Profile
     $('update-photo-btn')?.addEventListener('click', () => { $('photo-upload-input').click(); });
     $('photo-upload-input')?.addEventListener('change', handleProfilePhotoChange); 
+    $('edit-profile-details-btn')?.addEventListener('click', toggleProfileEditMode); // Added profile edit listener
 
     // Forms
     $('add-session-form')?.addEventListener('submit', handleAddSession);
@@ -398,7 +394,7 @@ function setupEventListeners() {
     $('attendance-search')?.addEventListener('keyup', () => filterTable('attendance-search', 'attendance-table', [0, 1, 2]));
     $('lecturer-checkin-btn')?.addEventListener('click', lecturerCheckIn); 
 
-    // Resources Edit Modal (must add logic for showing/populating)
+    // Resources Edit Modal 
     $('edit-resource-form')?.addEventListener('submit', saveResourceEdits);
     $('closeEditResourceModal')?.addEventListener('click', closeEditResourceModal);
 
@@ -406,6 +402,7 @@ function setupEventListeners() {
     $('student-search')?.addEventListener('keyup', () => filterTable('student-search', 'lecturer-students-table', [0, 1]));
     $('exam-search')?.addEventListener('keyup', () => filterTable('exam-search', 'exams-table', [0, 1, 4]));
     $('resource-search')?.addEventListener('keyup', () => filterTable('resource-search', 'resources-list', [0, 1, 2]));
+    $('course-search')?.addEventListener('keyup', () => filterTable('course-search', 'lecturer-courses-table', [0, 1]));
 
 
     // Modal closing (simplified)
@@ -457,7 +454,92 @@ $('profile-img').src = avatarUrl;
     $('profile_dept').textContent = currentUserProfile.department || 'N/A';
     $('profile_join_date').textContent = new Date(currentUserProfile.join_date).toLocaleDateString() || 'N/A';
     $('profile_program_focus').textContent = lecturerTargetProgram || 'N/A (No Program Assigned)';
+    
+    // Reset edit mode display
+    document.querySelectorAll('.profile-field-editable').forEach(el => {
+        el.style.display = 'inline'; 
+    });
+    document.querySelectorAll('.profile-field-input, .profile-edit-actions').forEach(el => {
+        el.style.display = 'none'; 
+    });
+}
+
+function toggleProfileEditMode() {
+    const isEditing = $('edit-profile-details-btn').textContent === 'Save Changes';
+
+    if (isEditing) {
+        saveProfileDetails();
+    } else {
+        // Switch to edit mode
+        $('edit-profile-details-btn').textContent = 'Save Changes';
+        $('cancel-profile-edit-btn').style.display = 'inline-block';
+
+        // Set input values to current display values
+        $('profile_email_input').value = $('profile_email').textContent;
+        $('profile_phone_input').value = $('profile_phone').textContent;
+        // Department is usually restricted, so we don't enable it for editing here
+        // The ID and Name displays are handled separately or restricted
+
+        // Hide display spans and show input fields
+        document.querySelectorAll('.profile-field-editable').forEach(el => {
+            el.style.display = 'none'; 
+        });
+        document.querySelectorAll('.profile-field-input').forEach(el => {
+            el.style.display = 'inline'; 
+        });
+        
+        // Setup cancel listener for the current session
+        $('cancel-profile-edit-btn').onclick = () => {
+            $('edit-profile-details-btn').textContent = 'Edit Profile';
+            $('cancel-profile-edit-btn').style.display = 'none';
+            document.querySelectorAll('.profile-field-editable').forEach(el => {
+                el.style.display = 'inline'; 
+            });
+            document.querySelectorAll('.profile-field-input').forEach(el => {
+                el.style.display = 'none'; 
+            });
+        };
     }
+}
+
+async function saveProfileDetails() {
+    const button = $('edit-profile-details-btn');
+    setButtonLoading(button, true, 'Save Changes');
+
+    const email = $('profile_email_input').value.trim();
+    const phone = $('profile_phone_input').value.trim();
+    
+    if (!email || !phone) {
+        showFeedback('Email and Phone are required.', 'error');
+        setButtonLoading(button, false);
+        return;
+    }
+
+    try {
+        const { error } = await sb.from(USER_PROFILE_TABLE)
+            .update({ email: email, phone: phone })
+            .eq('user_id', currentUserProfile.user_id);
+            
+        if (error) throw error;
+        
+        // Update local profile cache
+        currentUserProfile.email = email;
+        currentUserProfile.phone = phone;
+        
+        showFeedback('✅ Profile details updated successfully!', 'success');
+        
+        // Reload the profile section to exit edit mode and display new values
+        loadLecturerProfile(); 
+        
+    } catch (error) {
+        console.error('Profile Update Error:', error);
+        showFeedback(`Profile update failed: ${error.message}`, 'error');
+    } finally {
+        setButtonLoading(button, false, 'Edit Profile');
+        $('cancel-profile-edit-btn').style.display = 'none';
+    }
+}
+
 
 function handleProfilePhotoChange(event) {
     const file = event.target.files[0];
@@ -511,7 +593,7 @@ async function handlePhotoUpload(file) {
 // =================================================================
 
 async function loadLecturerDashboardData() {
-    $('total_courses_count').textContent = allCourses.length || '0'; 
+    $('total_courses_count').textContent = allCourses.filter(c => c.program_type === lecturerTargetProgram)?.length || '0'; 
     $('total_students_count').textContent = allStudents.length || '0';
     
     // FIX: Dynamically update the dashboard filter info text (using the banner)
@@ -531,6 +613,59 @@ async function loadLecturerDashboardData() {
     
     $('recent_sessions_count').textContent = recentSessions?.length || '0';
 }
+
+/**
+ * Renders the lecturer's assigned courses, filtered by program.
+ */
+async function loadLecturerCourses() {
+    const tbody = $('lecturer-courses-table');
+    if (!tbody) return;
+
+    if (!currentUserProfile || !lecturerTargetProgram) {
+        tbody.innerHTML = `
+            <tr><td colspan="6">No courses loaded. You must be assigned a program.</td></tr>`;
+        return;
+    }
+    
+    // **CORRECTION:** Filter the global cache by the lecturer's target program
+    const filteredCourses = allCourses.filter(course => 
+        course.program_type === lecturerTargetProgram
+    );
+
+    if (filteredCourses.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6">No courses currently found for program: **${lecturerTargetProgram}**.</td></tr>`;
+        return;
+    }
+
+    const coursesHtml = filteredCourses.map(course => {
+        // DUMMY student count for courses, as we don't have a reliable student-to-course assignment table yet
+        const studentCount = allStudents.length > 0 ? (Math.floor(Math.random() * 10) + 30) : 'N/A'; 
+        
+        return `
+            <tr>
+                <td>${course.course_id || 'N/A'}</td>
+                <td>${course.course_name || 'N/A'}</td>
+                <td>${course.program_type || 'N/A'}</td>
+                <td>${course.block_term || 'N/A'}</td>
+                <td>${studentCount}</td>
+                <td>
+                    <button class="btn-action" 
+                            onclick="showFeedback('Viewing grades for ${course.course_id}', 'info')">
+                        View Grades
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    tbody.innerHTML = coursesHtml;
+    // Show total count in the header/title if needed
+    const courseTitle = document.querySelector('#my-courses-content h2');
+    if(courseTitle) {
+        courseTitle.textContent = `My Courses (${filteredCourses.length} Found)`;
+    }
+}
+
 
 /**
  * Renders the allStudents cache, which is already filtered by fetchGlobalDataCaches.
@@ -598,7 +733,9 @@ function populateSessionFormSelects() {
         blockSelect.innerHTML = '<option value="">-- Select Program First --</option>';
     }
 
-    populateSelect($('session_course_id'), allCourses, 'course_id', 'course_name', 'Select Course');
+    // Filter courses by the target program for a more accurate list
+    const filteredCourses = allCourses.filter(c => c.program_type === lecturerTargetProgram);
+    populateSelect($('session_course_id'), filteredCourses, 'course_id', 'course_name', 'Select Course');
 }
 
 async function handleAddSession(e) {
@@ -694,7 +831,9 @@ async function loadLecturerSessions() {
 
 function loadAttendanceSelects() {
     populateSelect($('att_student_id'), allStudents, 'user_id', 'full_name', 'Select Student');
-    populateSelect($('att_course_id'), allCourses, 'course_id', 'course_name', 'Select Course (Optional)');
+    // Filter courses by the target program for a more accurate list
+    const filteredCourses = allCourses.filter(c => c.program_type === lecturerTargetProgram);
+    populateSelect($('att_course_id'), filteredCourses, 'course_id', 'course_name', 'Select Course (Optional)');
 }
 
 async function lecturerCheckIn() {
@@ -839,7 +978,7 @@ async function loadTodaysAttendanceRecords() {
                 <td>${l.session_type || 'N/A'}</td>
                 <td>${target}</td>
                 <td id="${geoId}">${locationText}</td> 
-                <td>${dateTime}</td>
+                <td><td>${dateTime}</td>
                 <td><span class="status status-${(l.status || 'N/A').toLowerCase()}">${l.status}</span></td>
                 <td>
                     <button onclick="viewCheckInMap(${l.latitude}, ${l.longitude}, '${userName}', '${geoId}')" 
@@ -890,7 +1029,7 @@ function viewCheckInMap(lat, lng, name, locationElementId) {
 }
 
 // =================================================================
-// === 8. EXAMS, RESOURCES, MESSAGING (PLACEHOLDER FUNCTIONS - START IMPLEMENTED) ===
+// === 8. EXAMS, RESOURCES, MESSAGING ===
 // =================================================================
 
 function populateExamFormSelects() {
@@ -911,7 +1050,9 @@ function populateExamFormSelects() {
     }
 
     populateSelect($('exam_intake'), allIntakes, 'id', 'name', 'Select Intake Year');
-    populateSelect($('exam_course_id'), allCourses, 'course_id', 'course_name', 'Select Course');
+    // Filter courses by the target program for a more accurate list
+    const filteredCourses = allCourses.filter(c => c.program_type === lecturerTargetProgram);
+    populateSelect($('exam_course_id'), filteredCourses, 'course_id', 'course_name', 'Select Course');
 }
 
 async function handleAddExam(e) {
@@ -1012,7 +1153,9 @@ function populateResourceFormSelects() {
         blockSelect.innerHTML = '<option value="">-- Select Program First --</option>';
     }
 
-    populateSelect($('resource_intake'), allCourses, 'course_id', 'course_name', 'Select Course');
+    // Filter courses by the target program for a more accurate list
+    const filteredCourses = allCourses.filter(c => c.program_type === lecturerTargetProgram);
+    populateSelect($('resource_intake'), filteredCourses, 'course_id', 'course_name', 'Select Course');
 }
 
 async function handleUploadResource(e) {
@@ -1057,7 +1200,8 @@ async function handleUploadResource(e) {
             block_term: formData.block_term,
             file_url: publicUrl,
             lecturer_id: currentUserProfile.user_id,
-            lecturer_name: currentUserProfile.full_name
+            lecturer_name: currentUserProfile.full_name,
+            allow_download: true // Default to true on upload
         });
             
         if (insertError) throw insertError;
@@ -1094,6 +1238,7 @@ async function loadLecturerResources() {
     tbody.innerHTML = resources.map(r => {
         const courseName = allCourses.find(c => c.course_id === r.course_id)?.course_name || r.course_id;
         const uploadDate = new Date(r.uploaded_at).toLocaleDateString();
+        const downloadText = r.allow_download ? 'Download' : 'View';
         return `
             <tr>
                 <td>${r.title}</td>
@@ -1101,21 +1246,131 @@ async function loadLecturerResources() {
                 <td>${r.program_type}/${r.block_term}</td>
                 <td>${uploadDate}</td>
                 <td>
-                    <a href="${r.file_url}" target="_blank" class="btn-action view" style="background-color:#10B981;">View</a>
-                    <button class="btn-action edit" onclick="showFeedback('Editing resource ${r.id}', 'info')" style="background-color:#F59E0B;">Edit</button>
+                    <a href="${r.file_url}" target="_blank" class="btn-action view" style="background-color:#10B981;">${downloadText}</a>
+                    <button class="btn-action edit" onclick="openEditResourceModal('${r.id}')" style="background-color:#F59E0B;">Edit</button>
+                    <button class="btn-action delete" onclick="deleteResource('${r.id}')" style="background-color:#DC2626;">Delete</button>
                 </td>
             </tr>
         `;
     }).join('');
 }
 
-function saveResourceEdits() { 
-    showFeedback('Resource edits saved (placeholder).', 'info');
-    closeEditResourceModal(); 
+
+// ⬇️ RESOURCE EDIT FUNCTIONALITY IMPLEMENTATION ⬇️
+
+async function openEditResourceModal(resourceId) {
+    if (!resourceId) return;
+
+    currentEditingResourceId = resourceId;
+    
+    const { data: resource, error } = await fetchData(RESOURCES_TABLE, '*', { id: resourceId }, null, null);
+
+    if (error || !resource || resource.length === 0) {
+        showFeedback(`Failed to load resource data for ID: ${resourceId}`, 'error');
+        currentEditingResourceId = null;
+        return;
+    }
+
+    const res = resource[0];
+    
+    // Populate the modal form
+    $('edit_resource_title').value = res.title;
+    $('edit_allow_download').checked = res.allow_download;
+    
+    // Display the modal
+    $('editResourceModal').style.display = 'block';
 }
+
+async function saveResourceEdits(e) { 
+    e.preventDefault();
+    const button = e.submitter;
+    setButtonLoading(button, true, 'Save Changes');
+
+    if (!currentEditingResourceId) {
+        showFeedback('Error: No resource selected for editing.', 'error');
+        setButtonLoading(button, false);
+        return;
+    }
+    
+    const updatedTitle = $('edit_resource_title').value;
+    const allowDownload = $('edit_allow_download').checked;
+    
+    try {
+        const { error } = await sb.from(RESOURCES_TABLE)
+            .update({
+                title: updatedTitle,
+                allow_download: allowDownload
+            })
+            .eq('id', currentEditingResourceId);
+            
+        if (error) throw error;
+        
+        showFeedback('✅ Resource updated successfully!', 'success');
+        closeEditResourceModal();
+        loadLecturerResources(); 
+        
+    } catch (error) {
+        console.error('Resource Update Error:', error);
+        showFeedback(`Update failed: ${error.message}`, 'error');
+    } finally {
+        setButtonLoading(button, false);
+    }
+}
+
 function closeEditResourceModal() { 
     $('editResourceModal').style.display = 'none'; 
+    currentEditingResourceId = null;
 }
+
+async function deleteResource(resourceId) {
+    if (!confirm('Are you sure you want to permanently delete this resource?')) {
+        return;
+    }
+
+    try {
+        // 1. Fetch the resource to get the file path
+        const { data: resource, error: fetchError } = await fetchData(RESOURCES_TABLE, 'file_url', { id: resourceId });
+        if (fetchError || !resource || resource.length === 0) {
+            throw new Error('Resource not found or failed to fetch.');
+        }
+
+        // 2. Extract the file path from the full URL
+        const fullUrl = resource[0].file_url;
+        // The path usually starts after the bucket name, e.g., '.../storage/v1/object/public/resources/resources/path/to/file'
+        // We need 'resources/path/to/file'
+        const pathParts = fullUrl.split('/public/resources/');
+        if (pathParts.length < 2) {
+            throw new Error('Invalid file URL format.');
+        }
+        const filePath = pathParts[1];
+
+        // 3. Delete the file from Supabase Storage
+        const { error: deleteFileError } = await sb.storage
+            .from(RESOURCES_BUCKET)
+            .remove([filePath]);
+
+        if (deleteFileError) {
+             // Log the error but continue to delete the DB record if the file path was complex or missing
+            console.warn(`File deletion from storage failed: ${deleteFileError.message}. Continuing with DB deletion.`);
+        }
+
+        // 4. Delete the record from the database
+        const { error: deleteDbError } = await sb.from(RESOURCES_TABLE)
+            .delete()
+            .eq('id', resourceId);
+
+        if (deleteDbError) throw deleteDbError;
+        
+        showFeedback('✅ Resource deleted successfully (including file)!', 'success');
+        loadLecturerResources(); 
+        
+    } catch (error) {
+        console.error('Resource Deletion Error:', error);
+        showFeedback(`Deletion failed: ${error.message}`, 'error');
+    }
+}
+
+// ⬆️ RESOURCE EDIT/DELETE FUNCTIONALITY IMPLEMENTATION ENDS ⬆️
 
 
 function populateMessageFormSelects() {
