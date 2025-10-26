@@ -279,26 +279,61 @@ function getProgramFilterFromDepartment(department) {
 
 async function fetchGlobalDataCaches() {
     // 1. Fetch all courses (no filtering required here)
-    const { data: courses } = await fetchData(COURSES_TABLE, 'course_id, course_name', {}, 'course_name', true);
+    const { data: courses } = await fetchData(
+        COURSES_TABLE,
+        'course_id, course_name',
+        {},
+        'course_name',
+        true
+    );
     allCourses = courses || [];
 
-    // 2. Fetch all students filtered by the lecturer's target program
-    let studentQuery = sb.from(USER_PROFILE_TABLE)
-        .select('user_id, full_name, email, program, intake_year, block_term, status')
+    // 2. Fetch all students filtered by lecturer’s program
+    const STUDENT_TABLE = 'consolidated_user_profiles_table'; // ✅ Ensure correct table name
+
+    let studentQuery = sb
+        .from(STUDENT_TABLE)
+        .select('user_id, full_name, email, program, intake_year, block, status')
         .eq('role', 'student');
 
+    // ✅ Normalize lecturer’s department (case-insensitive)
+    if (currentUserProfile?.department) {
+        const dept = currentUserProfile.department.toLowerCase();
+        if (['nursing', 'maternal health', 'midwifery'].includes(dept)) {
+            lecturerTargetProgram = 'KRCHN';
+        } else if (['general education', 'clinical medicine', 'dental health'].includes(dept)) {
+            lecturerTargetProgram = 'TVET';
+        } else {
+            lecturerTargetProgram = null;
+        }
+    }
+
+    // ✅ Apply program filter if available
     if (lecturerTargetProgram) {
         studentQuery = studentQuery.eq('program', lecturerTargetProgram);
+    } else {
+        console.warn(
+            `⚠️ No program assigned for department "${currentUserProfile.department}".`
+        );
     }
-    
-    const { data: students, error: studentError } = await studentQuery.order('full_name', { ascending: true });
-    
+
+    const { data: students, error: studentError } = await studentQuery.order(
+        'full_name',
+        { ascending: true }
+    );
+
     if (studentError) {
-        console.error("Error fetching filtered students:", studentError);
+        console.error('Error fetching filtered students:', studentError);
+        showFeedback('Failed to load student list. Please try again.', 'error');
     }
-    
+
     allStudents = students || [];
+
+    console.log(
+        `✅ Loaded ${allStudents.length} student(s) for program: ${lecturerTargetProgram || 'None'}`
+    );
 }
+
 
 
 function loadSectionData(tabId) { 
