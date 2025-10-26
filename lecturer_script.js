@@ -299,10 +299,12 @@ async function fetchGlobalDataCaches() {
     // ✅ Normalize lecturer’s department (case-insensitive)
     if (currentUserProfile?.department) {
         const dept = currentUserProfile.department.toLowerCase();
-        if (['nursing', 'maternal health', 'midwifery'].includes(dept)) {
+
+        // ✅ Only two valid departments: Nursing → KRCHN, TIVET → TIVET
+        if (dept === 'nursing') {
             lecturerTargetProgram = 'KRCHN';
-        } else if (['general education', 'clinical medicine', 'dental health'].includes(dept)) {
-            lecturerTargetProgram = 'TVET';
+        } else if (dept === 'tivet') {
+            lecturerTargetProgram = 'TIVET';
         } else {
             lecturerTargetProgram = null;
         }
@@ -333,6 +335,7 @@ async function fetchGlobalDataCaches() {
         `✅ Loaded ${allStudents.length} student(s) for program: ${lecturerTargetProgram || 'None'}`
     );
 }
+
 
 
 
