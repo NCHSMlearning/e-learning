@@ -1795,8 +1795,7 @@ async function deleteExam(examId, examName) {
     renderFullCalendar();
   }
 }
-
-// Edit Exam (Full Functionality)
+// Edit Exam (Full Admin Editable)
 async function openEditExamModal(examId) {
   try {
     // Fetch the selected exam
@@ -1811,16 +1810,33 @@ async function openEditExamModal(examId) {
       return;
     }
 
-    // Build modal with prefilled exam info
+    // Fetch list of courses for dropdowns
+    const { data: courses } = await sb
+      .from('courses')
+      .select('id, course_name, target_program')
+      .order('course_name', { ascending: true });
+
+    // Get unique programs from the courses table
+    const programs = [...new Set(courses.map(c => c.target_program))];
+
+    // Build modal form
     const modalHtml = `
       <div class="modal-content">
         <h3>Edit Exam / CAT</h3>
         <form id="editExamForm" onsubmit="return saveEditedExam(event, '${examId}')">
+
           <label>Program:</label>
-          <input type="text" id="edit_exam_program" value="${escapeHtml(exam.target_program)}" readonly>
+          <select id="edit_exam_program" required onchange="updateEditCourseOptions()">
+            ${programs.map(p => `<option value="${p}" ${p === exam.target_program ? 'selected' : ''}>${p}</option>`).join('')}
+          </select>
 
           <label>Course:</label>
-          <input type="text" id="edit_exam_course" value="${escapeHtml(exam.course?.course_name || '')}" readonly>
+          <select id="edit_exam_course" required>
+            ${courses
+              .filter(c => c.target_program === exam.target_program)
+              .map(c => `<option value="${c.id}" ${c.id === exam.course_id ? 'selected' : ''}>${c.course_name}</option>`)
+              .join('')}
+          </select>
 
           <label>Exam Title:</label>
           <input type="text" id="edit_exam_title" value="${escapeHtml(exam.exam_name)}" required>
@@ -1844,6 +1860,12 @@ async function openEditExamModal(examId) {
           <label>Online Link (optional):</label>
           <input type="url" id="edit_exam_link" value="${escapeHtml(exam.online_link || '')}">
 
+          <label>Intake Year:</label>
+          <input type="text" id="edit_exam_intake" value="${escapeHtml(exam.intake_year || '')}" required>
+
+          <label>Block / Term:</label>
+          <input type="text" id="edit_exam_block_term" value="${escapeHtml(exam.block_term || '')}" required>
+
           <label>Status:</label>
           <select id="edit_exam_status">
             <option value="Upcoming" ${exam.status === 'Upcoming' ? 'selected' : ''}>Upcoming</option>
@@ -1857,6 +1879,19 @@ async function openEditExamModal(examId) {
           </div>
         </form>
       </div>
+
+      <script>
+        // Dynamically update courses based on selected program
+        function updateEditCourseOptions() {
+          const program = document.getElementById('edit_exam_program').value;
+          const allCourses = ${JSON.stringify(courses)};
+          const courseSelect = document.getElementById('edit_exam_course');
+          courseSelect.innerHTML = allCourses
+            .filter(c => c.target_program === program)
+            .map(c => '<option value="' + c.id + '">' + c.course_name + '</option>')
+            .join('');
+        }
+      </script>
     `;
 
     showModal(modalHtml);
@@ -1865,7 +1900,8 @@ async function openEditExamModal(examId) {
   }
 }
 
-// Save edited exam
+
+// Save edited exam (Admin Full Update)
 async function saveEditedExam(e, examId) {
   e.preventDefault();
 
@@ -1874,26 +1910,28 @@ async function saveEditedExam(e, examId) {
   const originalText = submitButton.textContent;
   setButtonLoading(submitButton, true, originalText);
 
-  // Collect updated values
   const updatedExam = {
+    target_program: $('edit_exam_program').value,
+    course_id: $('edit_exam_course').value,
     exam_name: $('edit_exam_title').value.trim(),
     exam_type: $('edit_exam_type').value,
     exam_date: $('edit_exam_date').value,
     exam_start_time: $('edit_exam_start_time').value || null,
     duration_minutes: parseInt($('edit_exam_duration').value),
     online_link: $('edit_exam_link').value.trim() || null,
+    intake_year: $('edit_exam_intake').value.trim(),
+    block_term: $('edit_exam_block_term').value.trim(),
     status: $('edit_exam_status').value
   };
 
   // Basic validation
-  if (!updatedExam.exam_name || !updatedExam.exam_date || isNaN(updatedExam.duration_minutes)) {
-    showFeedback('Title, date, and duration are required.', 'error');
+  if (!updatedExam.exam_name || !updatedExam.exam_date || !updatedExam.course_id || isNaN(updatedExam.duration_minutes)) {
+    showFeedback('All key fields (Title, Date, Course, Duration) are required.', 'error');
     setButtonLoading(submitButton, false, originalText);
     return;
   }
 
   try {
-    // Update in Supabase
     const { data, error } = await sb
       .from('exams')
       .update(updatedExam)
@@ -1902,14 +1940,12 @@ async function saveEditedExam(e, examId) {
 
     if (error) throw error;
 
-    await logAudit('EXAM_EDIT', `Updated exam: ${updatedExam.exam_name}`, examId, 'SUCCESS');
+    await logAudit('EXAM_EDIT', `Admin updated exam: ${updatedExam.exam_name}`, examId, 'SUCCESS');
     showFeedback('✅ Exam updated successfully!', 'success');
 
-    // Reload updated data
     await loadExams();
     renderFullCalendar();
 
-    // Close modal after short delay
     setTimeout(() => closeModal(), 800);
   } catch (error) {
     await logAudit('EXAM_EDIT', `Failed to update exam ${examId}. ${error.message}`, examId, 'FAILURE');
