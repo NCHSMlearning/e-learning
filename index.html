@@ -1278,9 +1278,14 @@ if (uploadButton) {
 
 // Loads both clinical area locations and named rotations for the student's cohort
 // Loads both clinical area locations and named rotations for the student's cohort
+// Loads both clinical area locations and named rotations for the student's cohort
 async function loadClinicalTargets() {
-    if (!currentUserProfile || (!currentUserProfile.program && !currentUserProfile.department) || !currentUserProfile.intake_year) {
-        await loadProfile(currentUserId); 
+    if (
+        !currentUserProfile ||
+        (!currentUserProfile.program && !currentUserProfile.department) ||
+        !currentUserProfile.intake_year
+    ) {
+        await loadProfile(currentUserId);
     }
 
     const program = currentUserProfile?.program || currentUserProfile?.department;
@@ -1303,40 +1308,31 @@ async function loadClinicalTargets() {
 
         if (areaError) throw areaError;
 
-        // 2️⃣ Load from clinical_names (non-geo, textual)
+        // 2️⃣ Load from clinical_names (non-geo, textual areas)
         let { data: nameData, error: nameError } = await sb
             .from('clinical_names')
-            .select('id, clinical_area_name as name, program, intake_year, block_term')
+            .select('id, clinical_area_name, program, intake_year, block_term')
             .eq('program', program)
             .eq('intake_year', intakeYear)
             .or(blockTerm ? `block_term.eq.${blockTerm},block_term.is.null` : 'block_term.is.null');
 
         if (nameError) throw nameError;
 
-        // 3️⃣ Merge + Deduplicate + Fallback
-        let merged = [...(areaData || []), ...(nameData || [])];
+        // 🧠 Rename clinical_area_name to name manually (no alias bug)
+        nameData = (nameData || []).map(n => ({
+            id: n.id,
+            name: n.clinical_area_name,
+            latitude: null,
+            longitude: null,
+            block: n.block_term || null,
+        }));
 
-        // If no results and blockTerm was set, retry without blockTerm (fallback)
-        if (merged.length === 0 && blockTerm) {
-            const { data: fallbackNames } = await sb
-                .from('clinical_names')
-                .select('id, clinical_area_name as name, program, intake_year, block_term')
-                .eq('program', program)
-                .eq('intake_year', intakeYear);
-            merged = fallbackNames || [];
-        }
-
-        // Clean duplicates
-        cachedClinicalAreas = merged
+        // 3️⃣ Merge + Deduplicate
+        const merged = [...(areaData || []), ...(nameData || [])]
             .filter((v, i, a) => a.findIndex(t => t.name === v.name) === i)
-            .map(a => ({
-                id: a.id,
-                name: a.name,
-                latitude: a.latitude || null,
-                longitude: a.longitude || null,
-                block: a.block || a.block_term || null
-            }))
             .sort((a, b) => a.name.localeCompare(b.name));
+
+        cachedClinicalAreas = merged;
 
         console.log("✅ Loaded clinical areas:", cachedClinicalAreas);
 
@@ -1345,7 +1341,6 @@ async function loadClinicalTargets() {
         cachedClinicalAreas = [];
     }
 }
-
 
 
 
