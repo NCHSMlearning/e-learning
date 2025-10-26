@@ -59,7 +59,7 @@ const PROGRAM_FIELD_MAP = {
 };
 
 // =================================================================
-// === 2. CORE UTILITY FUNCTIONS (FINAL & FIXED VERSION) ===
+// === 2. CORE UTILITY FUNCTIONS (FINAL VERSION) ===
 // =================================================================
 
 const $ = (id) => document.getElementById(id);
@@ -72,7 +72,7 @@ function populateSelect(selectElement, data, valueKey, textKey, defaultText) {
         const option = document.createElement('option');
         option.value = item[valueKey];
         option.textContent = text;
-        option.title = text;
+        option.title = text; 
         selectElement.appendChild(option);
     });
 }
@@ -83,19 +83,21 @@ function filterTable(inputId, tableId, columnsToSearch = [0]) {
     if (!tbody) return;
 
     const trs = tbody.getElementsByTagName('tr');
+
     for (let i = 0; i < trs.length; i++) {
         let rowMatches = false;
-        if (trs[i].getElementsByTagName('td').length === 0) {
+        if (trs[i].getElementsByTagName('td').length === 0) { 
             trs[i].style.display = "";
             continue;
         }
+
         for (const colIndex of columnsToSearch) {
             const td = trs[i].getElementsByTagName('td')[colIndex];
             if (td) {
                 const txtValue = td.textContent || td.innerText;
                 if (txtValue.toUpperCase().indexOf(filter) > -1) {
                     rowMatches = true;
-                    break;
+                    break; 
                 }
             }
         }
@@ -117,7 +119,7 @@ function setButtonLoading(button, isLoading, originalText = 'Submit') {
 }
 
 function showFeedback(message, type) {
-    const feedbackEl = $('feedback-message');
+    const feedbackEl = $('feedback-message'); 
     if (!feedbackEl) {
         console.warn(`Feedback element not found. Message: [${type.toUpperCase()}] ${message}`);
         alert(message);
@@ -125,7 +127,7 @@ function showFeedback(message, type) {
     }
 
     feedbackEl.textContent = message;
-    feedbackEl.className = '';
+    feedbackEl.className = ''; 
     feedbackEl.classList.add(`feedback-${type}`);
     feedbackEl.style.display = 'block';
 
@@ -138,12 +140,15 @@ function showFeedback(message, type) {
 
 async function fetchData(tableName, selectQuery = '*', filters = {}, order = 'created_at', ascending = false) {
     let query = sb.from(tableName).select(selectQuery);
+
     for (const [key, value] of Object.entries(filters)) {
         if (value !== undefined && value !== null && value !== '') {
             query = query.eq(key, value);
         }
     }
+    
     query = query.order(order, { ascending });
+
     const { data, error } = await query;
     if (error) {
         console.error(`Error loading ${tableName}:`, error);
@@ -153,56 +158,71 @@ async function fetchData(tableName, selectQuery = '*', filters = {}, order = 'cr
 }
 
 /**
- * Fetch data for lecturers filtered by assigned program.
+ * CRITICAL: Program-Filtered Data Fetching Utility for Lecturers.
  */
-async function fetchDataForLecturer(tableName, selectQuery = '*', filters = {}, order = 'created_at', ascending = false) {
+async function fetchDataForLecturer(
+    tableName,
+    selectQuery = '*',
+    filters = {},
+    order = 'created_at',
+    ascending = false
+) {
     let query = sb.from(tableName).select(selectQuery);
-    const programFieldName = PROGRAM_FIELD_MAP?.[tableName];
 
+    const programFieldName = PROGRAM_FIELD_MAP[tableName];
+
+    // Apply program filter if table supports it and lecturerTargetProgram is set
     if (programFieldName && lecturerTargetProgram) {
         if (!filters[programFieldName]) {
             query = query.eq(programFieldName, lecturerTargetProgram);
         }
     }
 
+    // Apply additional filters
     for (const key in filters) {
         if (filters[key] !== undefined && filters[key] !== null && filters[key] !== '') {
             query = query.eq(key, filters[key]);
         }
     }
 
+    // Apply sorting
     query = query.order(order, { ascending });
+
     const { data, error } = await query;
     if (error) {
-        console.error(`Error loading ${tableName} (Filtered by ${lecturerTargetProgram}):`, error);
-        return { data: null, error };
+        console.error(`Error loading ${tableName} (Program Filter Applied: ${lecturerTargetProgram}):`, error);
+        return { data: null, error }; 
     }
     return { data, error: null };
 }
 
 // =================================================================
-// === 3. CORE NAVIGATION, AUTH & INITIALIZATION (FIXED) ===
+// === 3. CORE NAVIGATION, AUTH & INITIALIZATION (FINAL VERSION) ===
 // =================================================================
 
-document.addEventListener('DOMContentLoaded', () => initSession());
+document.addEventListener('DOMContentLoaded', () => {
+    initSession(); 
+});
 
 async function initSession() {
-    document.body.style.display = 'none';
+    document.body.style.display = 'none'; 
+    
     let profile = null;
     let error = null;
 
     try {
         const { data: { session: currentSession }, error: sessionError } = await sb.auth.getSession();
+        
         if (sessionError || !currentSession) {
             error = sessionError || { message: "No active session found." };
         } else {
-            currentUserId = currentSession.user.id;
-            const { data: userProfile, error: profileError } = await sb
-                .from(USER_PROFILE_TABLE)
+            currentUserId = currentSession.user.id; 
+            
+            const { data: userProfile, error: profileError } = await sb.from(USER_PROFILE_TABLE)
                 .select('*')
                 .eq('user_id', currentUserId)
                 .single();
-
+            
             if (profileError) {
                 error = profileError;
             } else if (userProfile.role !== 'lecturer') {
@@ -211,130 +231,323 @@ async function initSession() {
                 profile = userProfile;
             }
         }
+
     } catch (e) {
         error = e;
     }
-
+    
     if (profile) {
         currentUserProfile = profile;
-        lecturerTargetProgram = getProgramFilterFromDepartment(profile.department);
+        lecturerTargetProgram = getProgramFilterFromDepartment(currentUserProfile.department); 
 
-        document.querySelector('header h1').textContent = `Welcome, ${profile.full_name || 'Lecturer'}!`;
-
-        await fetchGlobalDataCaches();
-        loadSectionData('dashboard');
+        document.querySelector('header h1').textContent = `Welcome, ${currentUserProfile.full_name || 'Lecturer'}!`;
+        
+        await fetchGlobalDataCaches(); 
+        
+        loadSectionData('dashboard'); 
         setupEventListeners();
-        document.body.style.display = 'block';
+        
+        document.body.style.display = 'block'; 
+
     } else {
         showAuthFailure(error);
     }
 }
 
 function showAuthFailure(error) {
-    console.error("Initialization failed, redirecting to login:", error);
-    const msg = error?.message || "No active session found.";
-    alert(`Authentication Failed: ${msg}\nPlease log in again.`);
-    localStorage.clear();
-    window.location.assign('/login');
+    console.error("Initialization Failed, Redirecting to Login:", error);
+    const errorMessage = error?.message || "No active session found.";
+    alert(`Authentication Failed: ${errorMessage}\n\nPlease log in again.`);
+    localStorage.clear(); 
+    window.location.assign('/login'); 
 }
 
+/**
+ * Maps the lecturer's department to the student's program code.
+ */
 function getProgramFilterFromDepartment(department) {
-    if (!department) return null;
-    const dept = department.toLowerCase();
-    if (['nursing', 'maternal health', 'midwifery'].includes(dept)) return 'KRCHN';
-    if (['general education', 'clinical medicine', 'dental health'].includes(dept)) return 'TVET';
-    return null;
+    // Modify these based on your institution's department-to-program mapping
+    if (['Nursing', 'Maternal Health', 'Midwifery'].includes(department)) {
+        return 'KRCHN';
+    }
+    if (['General Education', 'Clinical Medicine', 'Dental Health'].includes(department)) {
+        return 'TVET';
+    }
+    return null; 
 }
 
-// =================================================================
-// === 4. GLOBAL DATA CACHE FIX (FULLY FIXED VERSION) ===
-// =================================================================
 
 async function fetchGlobalDataCaches() {
+    // 1. Fetch all courses (no filtering required here)
     const { data: courses } = await fetchData(COURSES_TABLE, 'course_id, course_name', {}, 'course_name', true);
     allCourses = courses || [];
 
-    const STUDENT_TABLE = 'consolidated_user_profiles_table';
-    let studentQuery = sb
-        .from(STUDENT_TABLE)
-        .select('user_id, full_name, email, program, intake_year, block, status')
+    // 2. Fetch all students filtered by the lecturer's target program
+    let studentQuery = sb.from(USER_PROFILE_TABLE)
+        .select('user_id, full_name, email, program, intake_year, block_term, status')
         .eq('role', 'student');
 
     if (lecturerTargetProgram) {
         studentQuery = studentQuery.eq('program', lecturerTargetProgram);
     }
-
+    
     const { data: students, error: studentError } = await studentQuery.order('full_name', { ascending: true });
+    
     if (studentError) {
-        console.error("Error fetching students:", studentError);
-        showFeedback('Failed to load students. Try again.', 'error');
+        console.error("Error fetching filtered students:", studentError);
+    }
+    
+    allStudents = students || [];
+}
+
+
+function loadSectionData(tabId) { 
+    document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
+    if (!currentUserProfile) return;
+    
+    switch(tabId) {
+        case 'profile': loadLecturerProfile(); break;
+        case 'dashboard': loadLecturerDashboardData(); break;
+        case 'my-courses': loadLecturerStudents(); break;
+        case 'sessions': loadLecturerSessions(); populateSessionFormSelects(); break;
+        case 'attendance': loadTodaysAttendanceRecords(); loadAttendanceSelects(); break;
+        case 'cats': loadLecturerExams(); populateExamFormSelects(); break;
+        case 'resources': loadLecturerResources(); populateResourceFormSelects(); break;
+        case 'messages': loadLecturerMessages(); populateMessageFormSelects(); break;
+        case 'calendar': $('calendar-view').innerHTML = '<p>Academic Calendar placeholder loaded.</p>'; break;
+    }
+    
+    document.querySelectorAll('.tab-content').forEach(section => {
+        section.classList.remove('active');
+    });
+    
+    const targetSection = $(tabId + '-content');
+    if (targetSection) {
+        targetSection.classList.add('active');
     }
 
-    allStudents = students || [];
-    console.log(`✅ Loaded ${allStudents.length} students for program ${lecturerTargetProgram}`);
+    document.querySelectorAll('.nav a').forEach(link => {
+        link.classList.remove('active');
+    });
+    const activeLink = document.querySelector(`.nav a[data-tab="${tabId}"]`);
+    if (activeLink) {
+        activeLink.classList.add('active');
+    }
+    
+    const sidebar = document.querySelector('.sidebar');
+    if (sidebar.classList.contains('active')) {
+        toggleSidebar();
+    }
+}
+
+function setupEventListeners() {
+    // General UI
+    $('menu-toggle')?.addEventListener('click', toggleSidebar);
+    $('logout-btn')?.addEventListener('click', logout);
+    
+    // Profile
+    $('update-photo-btn')?.addEventListener('click', () => { $('photo-upload-input').click(); });
+    $('photo-upload-input')?.addEventListener('change', handleProfilePhotoChange); 
+
+    // Forms
+    $('add-session-form')?.addEventListener('submit', handleAddSession);
+    $('add-exam-form')?.addEventListener('submit', handleAddExam);
+    $('upload-resource-form')?.addEventListener('submit', handleUploadResource);
+    $('send-message-form')?.addEventListener('submit', handleSendMessage);
+    
+    // Attendance
+    $('manual-attendance-form')?.addEventListener('submit', handleManualAttendance);
+    $('attendance-search')?.addEventListener('keyup', () => filterTable('attendance-search', 'attendance-table', [0, 1, 2]));
+    $('lecturer-checkin-btn')?.addEventListener('click', lecturerCheckIn); 
+
+    // Resources Edit Modal (must add logic for showing/populating)
+    $('edit-resource-form')?.addEventListener('submit', saveResourceEdits);
+    $('closeEditResourceModal')?.addEventListener('click', closeEditResourceModal);
+
+    // Search Filters
+    $('student-search')?.addEventListener('keyup', () => filterTable('student-search', 'lecturer-students-table', [0, 1]));
+    $('exam-search')?.addEventListener('keyup', () => filterTable('exam-search', 'exams-table', [0, 1, 4]));
+    $('resource-search')?.addEventListener('keyup', () => filterTable('resource-search', 'resources-list', [0, 1, 2]));
+
+
+    // Modal closing (simplified)
+    document.querySelectorAll('.modal .close').forEach(btn => {
+        btn.addEventListener('click', (e) => e.target.closest('.modal').style.display = 'none');
+    });
+    window.addEventListener('click', (event) => {
+        if (event.target.classList.contains('modal')) { event.target.style.display = 'none'; }
+    });
+}
+
+function toggleSidebar() {
+    const sidebar = document.querySelector('.sidebar');
+    const body = document.body;
+    sidebar.classList.toggle('active');
+    body.classList.toggle('no-scroll');
+}
+
+async function logout() {
+    const { error } = await sb.auth.signOut();
+    
+    if (error) {
+        console.error('Logout error:', error);
+        showFeedback('Logout failed. Please try again.', 'error');
+    } else {
+        window.location.assign('/login'); 
+    }
 }
 
 // =================================================================
-// === 5. DASHBOARD & STUDENTS VIEW (FIXED) ===
+// === 4. PROFILE & IMAGE HANDLERS ===
+// =================================================================
+
+function loadLecturerProfile() {
+    if (!currentUserProfile) return;
+    
+    const avatarUrl = currentUserProfile.avatar_url || 'default_passport.png';
+    $('profile-img').src = avatarUrl;
+    
+    $('profile_name').textContent = currentUserProfile.full_name || 'N/A';
+    $('profile_role').textContent = currentUserProfile.role || 'N/A';
+    $('profile_id').textContent = currentUserProfile.employee_id || 'N/A';
+    $('profile_email').textContent = currentUserProfile.email || 'N/A';
+    $('profile_phone').textContent = currentUserProfile.phone || 'N/A';
+    $('profile_dept').textContent = currentUserProfile.department || 'N/A';
+    $('profile_join_date').textContent = new Date(currentUserProfile.join_date).toLocaleDateString() || 'N/A';
+    $('profile_program_focus').textContent = lecturerTargetProgram || 'N/A (No Program Assigned)';
+}
+
+function handleProfilePhotoChange(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => { $('profile-img').src = e.target.result; };
+    reader.readAsDataURL(file);
+
+    handlePhotoUpload(file);
+}
+
+async function handlePhotoUpload(file) {
+    const userId = currentUserProfile.user_id;
+    if (!userId) { showFeedback('Error: User ID not found.', 'error'); return; }
+
+    const fileExtension = file.name.split('.').pop();
+    const filePath = `avatars/${userId}.${fileExtension}`; 
+    
+    showFeedback(`Uploading photo: ${file.name}...`, 'info');
+
+    try {
+        const { error: uploadError } = await sb.storage
+            .from(RESOURCES_BUCKET)
+            .upload(filePath, file, { cacheControl: '3600', upsert: true });
+
+        if (uploadError) throw uploadError;
+        
+        const { data: urlData } = sb.storage.from(RESOURCES_BUCKET).getPublicUrl(filePath);
+        const publicUrl = urlData.publicUrl;
+
+        const { error: updateError } = await sb.from(USER_PROFILE_TABLE)
+            .update({ avatar_url: publicUrl })
+            .eq('user_id', userId);
+            
+        if (updateError) throw updateError;
+        
+        currentUserProfile.avatar_url = publicUrl;
+        $('profile-img').src = publicUrl; 
+        
+        showFeedback('✅ Profile photo updated successfully!', 'success');
+        
+    } catch (error) {
+        console.error('Photo Upload Error:', error);
+        showFeedback(`Photo upload failed: ${error.message}`, 'error');
+        loadLecturerProfile(); 
+    }
+}
+
+// =================================================================
+// === 5. STUDENT, COURSE & DASHBOARD LOADERS (FIXED UI TEXT) ===
 // =================================================================
 
 async function loadLecturerDashboardData() {
-    $('total_courses_count').textContent = allCourses.length || '0';
+    $('total_courses_count').textContent = allCourses.length || '0'; 
     $('total_students_count').textContent = allStudents.length || '0';
-
-    const filterInfo = document.querySelector('#welcome-banner span:last-child');
-    if (filterInfo && lecturerTargetProgram) {
-        filterInfo.textContent = `This dashboard shows data for ${lecturerTargetProgram} program.`;
+    
+    // FIX: Dynamically update the dashboard filter info text (using the banner)
+    const filterInfoEl = document.querySelector('#welcome-banner span:last-child');
+    if (filterInfoEl && lecturerTargetProgram) { 
+        filterInfoEl.textContent = `This dashboard is filtered to your assigned program: ${lecturerTargetProgram}. All student/grade data shown is relevant to your assignment.`;
     }
 
     const today = new Date().toISOString().split('T')[0];
+    
+    // Fetch today's sessions for this lecturer
     const { data: recentSessions } = await fetchDataForLecturer(
         SESSIONS_TABLE,
         'id',
         { lecturer_id: currentUserProfile.user_id, session_date: today }
     );
-
+    
     $('recent_sessions_count').textContent = recentSessions?.length || '0';
 }
 
+/**
+ * Renders the allStudents cache, which is already filtered by fetchGlobalDataCaches.
+ */
 async function loadLecturerStudents() {
     const tbody = $('lecturer-students-table');
     if (!tbody) return;
 
-    if (!lecturerTargetProgram) {
-        tbody.innerHTML = `<tr><td colspan="7">No student program assigned to your department.</td></tr>`;
+    if (!currentUserProfile || !lecturerTargetProgram) {
+        tbody.innerHTML = `
+            <tr><td colspan="7">No student program is assigned to your department.</td></tr>`;
+        return;
+    }
+    
+    if (allStudents.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7">No **${lecturerTargetProgram}** students found in the database matching your department.</td></tr>`;
         return;
     }
 
-    if (!allStudents.length) {
-        tbody.innerHTML = `<tr><td colspan="7">No ${lecturerTargetProgram} students found for your department.</td></tr>`;
-        return;
-    }
-
-    tbody.innerHTML = allStudents.map(profile => `
+    const studentsHtml = allStudents.map(profile => `
         <tr>
             <td>${profile.full_name || 'N/A'}</td>
             <td>${profile.email || 'N/A'}</td>
             <td>${profile.program || 'N/A'}</td>
             <td>${profile.intake_year || 'N/A'}</td>
-            <td>${profile.block || 'N/A'}</td>
-            <td><span class="status">${profile.status || 'Active'}</span></td>
-            <td><button class="btn-action" onclick="showSendMessageModal('${profile.user_id}', '${profile.full_name}')">Message</button></td>
+            <td>${profile.block_term || 'N/A'}</td>
+            <td>
+                <span class="status status-${(profile.status || 'Active').toLowerCase()}">
+                    ${profile.status || 'Active'}
+                </span>
+            </td>
+            <td>
+                <button class="btn-action" 
+                        onclick="showSendMessageModal('${profile.user_id}', '${profile.full_name}')">
+                    Message
+                </button>
+            </td>
         </tr>
     `).join('');
+
+    tbody.innerHTML = studentsHtml;
 }
 
 // =================================================================
-// === 6. SESSIONS IMPLEMENTATION (CLEAN & FIXED) ===
+// === 6. SESSIONS IMPLEMENTATION ===
 // =================================================================
 
 function populateSessionFormSelects() {
     const targetProgram = lecturerTargetProgram;
-    const programSelect = $('session_program');
-
     const programs = targetProgram ? [{ id: targetProgram, name: targetProgram }] : [];
+    
+    const programSelect = $('session_program');
     populateSelect(programSelect, programs, 'id', 'name', 'Select Program');
-    if (targetProgram) programSelect.value = targetProgram;
+    if (targetProgram) {
+        programSelect.value = targetProgram;
+        // Keep it enabled for now for potential future support of multiple programs, 
+        // but rely on DB security for enforcement.
+    } 
 
     const blockSelect = $('session_block_term');
     if (targetProgram && ACADEMIC_STRUCTURE[targetProgram]) {
@@ -350,8 +563,8 @@ function populateSessionFormSelects() {
 async function handleAddSession(e) {
     e.preventDefault();
     const button = e.submitter;
-    setButtonLoading(button, true, 'Schedule Session');
-
+    setButtonLoading(button, true, 'Schedule Session & Notify Students');
+    
     const formData = {
         topic: $('session_topic').value,
         date: $('session_date').value,
@@ -372,16 +585,18 @@ async function handleAddSession(e) {
             session_topic: formData.topic,
             session_date: formData.date,
             session_time: formData.time,
-            target_program: formData.program,
+            target_program: formData.program, 
             block_term: formData.block_term,
             course_id: formData.course_id,
             lecturer_id: currentUserProfile.user_id,
             lecturer_name: currentUserProfile.full_name
         });
+
         if (error) throw error;
+
         showFeedback(`✅ Session "${formData.topic}" scheduled successfully!`, 'success');
         e.target.reset();
-        loadLecturerSessions();
+        loadLecturerSessions(); 
     } catch (error) {
         console.error('Session scheduling failed:', error);
         showFeedback(`Scheduling failed: ${error.message}`, 'error');
@@ -390,39 +605,42 @@ async function handleAddSession(e) {
     }
 }
 
-async function loadLecturerSessions() {
+async function loadLecturerSessions() { 
     const tbody = $('sessions-table');
-    tbody.innerHTML = '<tr><td colspan="6">Loading your sessions...</td></tr>';
-
+    tbody.innerHTML = '<tr><td colspan="6">Loading your scheduled sessions...</td></tr>';
+    
+    // Filtered by lecturer_id AND program via fetchDataForLecturer
     const { data: sessions, error } = await fetchDataForLecturer(
-        SESSIONS_TABLE,
-        '*',
-        { lecturer_id: currentUserProfile.user_id },
-        'session_date',
+        SESSIONS_TABLE, 
+        '*', 
+        { lecturer_id: currentUserProfile.user_id }, 
+        'session_date', 
         true
     );
-
+    
     if (error) {
         tbody.innerHTML = `<tr><td colspan="6">Error: ${error.message}</td></tr>`;
         return;
     }
 
-    if (!sessions.length) {
-        tbody.innerHTML = '<tr><td colspan="6">No sessions found.</td></tr>';
+    if (sessions.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6">No scheduled sessions found.</td></tr>';
         return;
     }
-
+    
     tbody.innerHTML = sessions.map(s => {
         const courseName = allCourses.find(c => c.course_id === s.course_id)?.course_name || s.course_id;
         const dateTime = `${new Date(s.session_date).toLocaleDateString()} @ ${s.session_time}`;
+        const attendanceLink = `${SUPABASE_URL}/attendance?session_id=${s.id}`; // Example link structure
+
         return `
             <tr>
                 <td>${s.session_topic}</td>
                 <td>${dateTime}</td>
                 <td>${courseName}</td>
                 <td>${s.target_program}/${s.block_term}</td>
-                <td><a href="#" onclick="navigator.clipboard.writeText('${s.id}').then(()=>showFeedback('Copied link!', 'info'))">Copy Link</a></td>
-                <td><button class="btn-action" style="background-color:#F59E0B;">Edit</button></td>
+                <td><a href="#" onclick="navigator.clipboard.writeText('${attendanceLink}').then(() => showFeedback('Attendance Link Copied!', 'info'))">Copy Link</a></td>
+                <td><button class="btn-action" style="background-color:#F59E0B;" onclick="showFeedback('Editing session ${s.id}...', 'info')">Edit</button></td>
             </tr>
         `;
     }).join('');
