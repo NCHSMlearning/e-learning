@@ -1277,18 +1277,15 @@ if (uploadButton) {
 // *************************************************************************
 
 // Loads both clinical area locations and named rotations for the student's cohort
+// Loads both clinical area locations and named rotations for the student's cohort
 async function loadClinicalTargets() {
-    if (
-        !currentUserProfile ||
-        (!currentUserProfile.program && !currentUserProfile.department) ||
-        !currentUserProfile.intake_year
-    ) {
-        await loadProfile(currentUserId);
+    if (!currentUserProfile || (!currentUserProfile.program && !currentUserProfile.department) || !currentUserProfile.intake_year) {
+        await loadProfile(currentUserId); 
     }
 
     const program = currentUserProfile?.program || currentUserProfile?.department;
     const intakeYear = currentUserProfile?.intake_year;
-    const blockTerm = currentUserProfile?.block || currentUserProfile?.term; // supports both KRCHN & TIVET
+    const blockTerm = currentUserProfile?.block || null;
 
     if (!program || !intakeYear) {
         cachedClinicalAreas = [];
@@ -1297,62 +1294,50 @@ async function loadClinicalTargets() {
 
     try {
         // 1️⃣ Load from clinical_areas (geo-based)
-        let queryAreas = sb
+        let { data: areaData, error: areaError } = await sb
             .from('clinical_areas')
             .select('id, name, latitude, longitude, block, program, intake_year')
             .eq('program', program)
-            .eq('intake_year', intakeYear);
+            .eq('intake_year', intakeYear)
+            .or(blockTerm ? `block.eq.${blockTerm},block.is.null` : 'block.is.null');
 
-        if (blockTerm) {
-            const blockFilter = `block.eq.${blockTerm},block.is.null`;
-            queryAreas = queryAreas.or(blockFilter);
-        } else {
-            queryAreas = queryAreas.is('block', null);
-        }
-
-        const { data: areaData, error: areaError } = await queryAreas;
         if (areaError) throw areaError;
 
-        // 2️⃣ Load from clinical_names (non-geo, textual areas)
-        let queryNames = sb
+        // 2️⃣ Load from clinical_names (non-geo, textual)
+        let { data: nameData, error: nameError } = await sb
             .from('clinical_names')
-            // ⚠️ no alias in SQL select
-            .select('id, clinical_area_name, program, intake_year, block_term')
+            .select('id, clinical_area_name as name, program, intake_year, block_term')
             .eq('program', program)
-            .eq('intake_year', intakeYear);
+            .eq('intake_year', intakeYear)
+            .or(blockTerm ? `block_term.eq.${blockTerm},block_term.is.null` : 'block_term.is.null');
 
-        if (blockTerm) {
-            const blockFilter = `block_term.eq.${blockTerm},block_term.is.null`;
-            queryNames = queryNames.or(blockFilter);
-        } else {
-            queryNames = queryNames.is('block_term', null);
-        }
-
-        const { data: nameData, error: nameError } = await queryNames;
         if (nameError) throw nameError;
 
-        // ✅ 3️⃣ Normalize and merge
-        const cleanedNames = (nameData || []).map(n => ({
-            id: n.id,
-            name: n.clinical_area_name, // alias applied in JS
-            latitude: null,
-            longitude: null,
-            block: n.block_term || null
-        }));
+        // 3️⃣ Merge + Deduplicate + Fallback
+        let merged = [...(areaData || []), ...(nameData || [])];
 
-        const cleanedAreas = (areaData || []).map(a => ({
-            id: a.id,
-            name: a.name,
-            latitude: a.latitude,
-            longitude: a.longitude,
-            block: a.block || null
-        }));
+        // If no results and blockTerm was set, retry without blockTerm (fallback)
+        if (merged.length === 0 && blockTerm) {
+            const { data: fallbackNames } = await sb
+                .from('clinical_names')
+                .select('id, clinical_area_name as name, program, intake_year, block_term')
+                .eq('program', program)
+                .eq('intake_year', intakeYear);
+            merged = fallbackNames || [];
+        }
 
-        const merged = [...cleanedAreas, ...cleanedNames]
+        // Clean duplicates
+        cachedClinicalAreas = merged
             .filter((v, i, a) => a.findIndex(t => t.name === v.name) === i)
+            .map(a => ({
+                id: a.id,
+                name: a.name,
+                latitude: a.latitude || null,
+                longitude: a.longitude || null,
+                block: a.block || a.block_term || null
+            }))
             .sort((a, b) => a.name.localeCompare(b.name));
 
-        cachedClinicalAreas = merged;
         console.log("✅ Loaded clinical areas:", cachedClinicalAreas);
 
     } catch (error) {
@@ -1360,6 +1345,7 @@ async function loadClinicalTargets() {
         cachedClinicalAreas = [];
     }
 }
+
 
 
 
