@@ -580,44 +580,82 @@ async function loadLecturerCourses() {
 /**
  * Renders the allStudents cache, which is already filtered by fetchGlobalDataCaches.
  */
+
 async function loadLecturerStudents() {
-    const tbody = $('lecturer-students-table');
-    if (!tbody) return;
 
-    if (!currentUserProfile || !lecturerTargetProgram) {
-        tbody.innerHTML = `
-            <tr><td colspan="7">No student program is assigned to your department.</td></tr>`;
-        return;
-    }
-    
-    if (allStudents.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7">No **${lecturerTargetProgram}** students found in the database matching your department.</td></tr>`;
-        return;
-    }
+const tbody = $('lecturer-students-table');
 
-    const studentsHtml = allStudents.map(profile => `
-        <tr>
-            <td>${profile.full_name || 'N/A'}</td>
-            <td>${profile.email || 'N/A'}</td>
-            <td>${profile.program || 'N/A'}</td>
-            <td>${profile.intake_year || 'N/A'}</td>
-            <td>${profile.block_term || 'N/A'}</td>
-            <td>
-                <span class="status status-${(profile.status || 'Active').toLowerCase()}">
-                    ${profile.status || 'Active'}
-                </span>
-            </td>
-            <td>
-                <button class="btn-action" 
-                        onclick="showSendMessageModal('${profile.user_id}', '${profile.full_name}')">
-                    Message
-                </button>
-            </td>
-        </tr>
-    `).join('');
+if (!tbody) return;
 
-    tbody.innerHTML = studentsHtml;
+
+
+if (!currentUserProfile || !lecturerTargetProgram) {
+
+tbody.innerHTML = `
+
+<tr><td colspan="7">No student program is assigned to your department.</td></tr>`;
+
+return;
+
 }
+
+
+if (allStudents.length === 0) {
+
+tbody.innerHTML = `<tr><td colspan="7">No **${lecturerTargetProgram}** students found in the database matching your department.</td></tr>`;
+
+return;
+
+}
+
+
+
+const studentsHtml = allStudents.map(profile => `
+
+<tr>
+
+<td>${profile.full_name || 'N/A'}</td>
+
+<td>${profile.email || 'N/A'}</td>
+
+<td>${profile.program || 'N/A'}</td>
+
+<td>${profile.intake_year || 'N/A'}</td>
+
+<td>${profile.block_term || 'N/A'}</td>
+
+<td>
+
+<span class="status status-${(profile.status || 'Active').toLowerCase()}">
+
+${profile.status || 'Active'}
+
+</span>
+
+</td>
+
+<td>
+
+<button class="btn-action"
+
+onclick="showSendMessageModal('${profile.user_id}', '${profile.full_name}')">
+
+Message
+
+</button>
+
+</td>
+
+</tr>
+
+`).join('');
+
+
+
+tbody.innerHTML = studentsHtml;
+
+}
+
 
 // =================================================================
 // === 6. SESSIONS IMPLEMENTATION ===
