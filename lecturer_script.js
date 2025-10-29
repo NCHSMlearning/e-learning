@@ -582,78 +582,61 @@ async function loadLecturerCourses() {
  */
 
 async function loadLecturerStudents() {
+    const tbody = document.getElementById('lecturer-students-table');
+    if (!tbody) return;
 
-const tbody = $('lecturer-students-table');
+    try {
+        if (!currentUserProfile || !lecturerTargetProgram) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="7" style="text-align:center;">
+                        No student program is assigned to your department.
+                    </td>
+                </tr>`;
+            return;
+        }
 
-if (!tbody) return;
+        if (!allStudents || allStudents.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="7" style="text-align:center;">
+                        No ${lecturerTargetProgram} students found in the database matching your department.
+                    </td>
+                </tr>`;
+            return;
+        }
 
+        const studentsHtml = allStudents.map(profile => `
+            <tr>
+                <td>${profile.full_name || 'N/A'}</td>
+                <td>${profile.email || 'N/A'}</td>
+                <td>${profile.program || 'N/A'}</td>
+                <td>${profile.intake_year || 'N/A'}</td>
+                <td>${profile.block || 'N/A'}</td>
+                <td>
+                    <span class="status status-${(profile.status || 'Active').toLowerCase()}">
+                        ${profile.status || 'Active'}
+                    </span>
+                </td>
+                <td>
+                    <button class="btn-action" 
+                            onclick="showSendMessageModal('${profile.user_id}', '${profile.full_name?.replace(/'/g, "\\'") || ''}')">
+                        Message
+                    </button>
+                </td>
+            </tr>
+        `).join('');
 
-
-if (!currentUserProfile || !lecturerTargetProgram) {
-
-tbody.innerHTML = `
-
-<tr><td colspan="7">No student program is assigned to your department.</td></tr>`;
-
-return;
-
-}
-
-
-if (allStudents.length === 0) {
-
-tbody.innerHTML = `<tr><td colspan="7">No **${lecturerTargetProgram}** students found in the database matching your department.</td></tr>`;
-
-return;
-
-}
-
-
-
-const studentsHtml = allStudents.map(profile => `
-
-<tr>
-
-<td>${profile.full_name || 'N/A'}</td>
-
-<td>${profile.email || 'N/A'}</td>
-
-<td>${profile.program || 'N/A'}</td>
-
-<td>${profile.intake_year || 'N/A'}</td>
-
-<td>${profile.block_term || 'N/A'}</td>
-
-<td>
-
-<span class="status status-${(profile.status || 'Active').toLowerCase()}">
-
-${profile.status || 'Active'}
-
-</span>
-
-</td>
-
-<td>
-
-<button class="btn-action"
-
-onclick="showSendMessageModal('${profile.user_id}', '${profile.full_name}')">
-
-Message
-
-</button>
-
-</td>
-
-</tr>
-
-`).join('');
-
-
-
-tbody.innerHTML = studentsHtml;
-
+        tbody.innerHTML = studentsHtml;
+    } catch (err) {
+        console.error('Failed to load student list:', err);
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="7" style="text-align:center;">
+                    Failed to load student list. Please check the Supabase column names (program, block) and RLS policy.
+                </td>
+            </tr>`;
+    }
 }
 
 
