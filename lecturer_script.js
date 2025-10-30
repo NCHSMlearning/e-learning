@@ -282,14 +282,20 @@ function getProgramFilterFromDepartment(department) {
 
 async function fetchGlobalDataCaches() {
     // 1. Fetch all courses (needed for filtering in loadLecturerCourses)
-    const { data: courses } = await fetchData(
+    const { data: courses, error } = await fetchData(
         COURSES_TABLE,
-        'course_id, course_name, program_type, block', // ✅ fixed: block_term → block
-        {},
+        'id, course_name, target_program, block, intake_year, status, unit_code',
+        {}, // no filters — load all
         'course_name',
         true
     );
+
+    if (error) {
+        console.error('Error fetching courses:', error);
+    }
+
     allCourses = courses || [];
+}
 
     // 2. Determine lecturerTargetProgram based on department
     // (already handled in initSession)
@@ -549,36 +555,43 @@ async function loadLecturerCourses() {
     const tbody = $('lecturer-courses-table');
     if (!tbody) return;
 
+    // Ensure profile and program data exist
     if (!currentUserProfile || !lecturerTargetProgram) {
         tbody.innerHTML = `
             <tr><td colspan="6">No courses loaded. Your department is not assigned a program.</td></tr>`;
         return;
     }
-    
-    // Filter the global cache by the lecturer's target program (KRCHN or TVET)
+
+    // ✅ Filter the global cache by the lecturer's actual target program (KRCHN, TVET, etc.)
     const filteredCourses = allCourses.filter(course => 
-        course.program_type === lecturerTargetProgram
+        course.target_program === lecturerTargetProgram &&
+        course.status === 'Active'
     );
 
+    // 🧩 Handle empty result
     if (filteredCourses.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6">No courses currently found for program: **${lecturerTargetProgram}**.</td></tr>`;
+        tbody.innerHTML = `
+            <tr><td colspan="6" class="text-center text-gray-500">
+                No courses currently found for program: <b>${lecturerTargetProgram}</b>.
+            </td></tr>`;
         return;
     }
 
+    // ✅ Render matched courses
     const coursesHtml = filteredCourses.map(course => {
-        // DUMMY student count for courses 
-        const studentCount = allStudents.length > 0 ? (Math.floor(Math.random() * 10) + 30) : 'N/A'; 
-        
+        // Dummy student count (you can replace with actual logic later)
+        const studentCount = allStudents.length > 0 ? (Math.floor(Math.random() * 10) + 30) : 'N/A';
+
         return `
             <tr>
-                <td>${course.course_id || 'N/A'}</td>
+                <td>${course.unit_code || 'N/A'}</td>
                 <td>${course.course_name || 'N/A'}</td>
-                <td>${course.program_type || 'N/A'}</td>
-                <td>${course.block_term || 'N/A'}</td>
+                <td>${course.target_program || 'N/A'}</td>
+                <td>${course.block || 'N/A'}</td>
                 <td>${studentCount}</td>
                 <td>
                     <button class="btn-action" 
-                            onclick="showFeedback('Viewing grades for ${course.course_id}', 'info')">
+                        onclick="showFeedback('Viewing grades for ${course.course_name}', 'info')">
                         View Grades
                     </button>
                 </td>
