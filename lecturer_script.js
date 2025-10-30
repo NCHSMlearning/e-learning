@@ -421,13 +421,25 @@ function toggleSidebar() {
 }
 
 async function logout() {
-    const { error } = await sb.auth.signOut();
-    
-    if (error) {
-        console.error('Logout error:', error);
-        showFeedback('Logout failed. Please try again.', 'error');
-    } else {
-        window.location.assign('/login'); 
+    try {
+        const { error } = await sb.auth.signOut();
+
+        // Ignore harmless "Auth session missing" errors
+        if (error && error.name !== 'AuthSessionMissingError') {
+            console.error('Logout error:', error);
+            showFeedback('Logout failed. Please try again.', 'error');
+            return;
+        }
+
+        // Clear any cached data for safety
+        localStorage.clear();
+        sessionStorage.clear();
+
+        // Redirect to login page
+        window.location.assign('/login');
+    } catch (err) {
+        console.error('Unexpected logout error:', err);
+        window.location.assign('/login');
     }
 }
 
