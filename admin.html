@@ -1,1021 +1,803 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NCHSM Admin Dashboard</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" /> <style>
-    body { margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #F8FAFC; }
-    .container { display: flex; min-height: 100vh; }
-
-    /* Sidebar */
-    .sidebar { width: 220px; background-color: #1E293B; color: #fff; display: flex; flex-direction: column; padding: 20px; }
-    .sidebar-header { text-align: center; margin-bottom: 30px; }
-    .sidebar-header img { width: 60px; margin-bottom: 10px; }
-    .nav { list-style: none; padding: 0; flex-grow: 1; }
-    .nav li { margin: 10px 0; }
-    .nav a { color: #fff; text-decoration: none; padding: 10px; border-radius: 6px; display: block; transition: 0.2s; }
-    .nav a:hover, .nav a.active { background-color: #3B82F6; }
-    .logout { margin-top: auto; text-align: center; }
-    .logout a { display: inline-block; margin-top: 20px; padding: 10px 20px; background-color: #EF4444; color: #fff; text-decoration: none; border-radius: 6px; }
-
-    /* Main Content */
-    .main { flex: 1; padding: 20px 30px; overflow-y: auto; }
-    header h1 { margin: 0; font-size: 2rem; }
-    .subtitle { color: #475569; margin-bottom: 20px; }
-
-    /* Cards */
-    .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 20px; margin-bottom: 30px; }
-    .card { background-color: #fff; padding: 20px; border-radius: 12px; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.05); transition: transform 0.2s, box-shadow 0.2s; }
-    .card:hover { transform: translateY(-5px); box-shadow: 0 6px 20px rgba(0,0,0,0.1); }
-    .card h3 { margin-top: 0; }
-    .card p.data { font-size: 1.5em; font-weight: bold; color: #3B82F6; margin-top: 5px; } /* Added style for data */
-
-    /* Tabs */
-    .tab-content { display: none; }
-    .tab-content.active { display: block; }
-
-    /* Tables */
-    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; background-color: #fff; border-radius: 8px; overflow: hidden; }
-    th, td { padding: 12px; border-bottom: 1px solid #E2E8F0; text-align: left; }
-    th { background-color: #E2E8F0; }
-    tr:hover { background-color: #F1F5F9; }
-
-    /* Forms */
-    form.inline-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; margin-bottom: 20px; }
-    form input, form select, form button, form textarea {
-      padding: 10px 12px; margin: 5px 5px 10px 0; border-radius: 6px; border: 1px solid #CBD5E1;
-      box-sizing: border-box; 
-      flex-grow: 1;
-      min-width: 150px;
-    }
-    form button { background-color: #3B82F6; color: #fff; cursor: pointer; }
-    form button:hover { background-color: #2563EB; }
-    form button.btn-alt { background-color: #10B981; }
-
-    /* Utility & Buttons */
-    .flex-wrap { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 15px;}
-    .btn { padding: 8px 12px; border-radius: 6px; cursor: pointer; border: none; font-size: 0.9em; }
-    .btn-action { background-color: #3B82F6; color: white; }
-    .btn-map { background-color: #7C3AED; color: white; } /* Violet for map */
-    .btn-delete { background-color: #EF4444; color: white; } /* Red for delete */
-    .btn-attendance { background-color: #0D9488; color: white; } /* Teal for self-mark */
-    .message-status { font-size: 0.8em; color: gray; }
-
-    /* Modal for Map (NEW) */
-    .modal {
-        display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%;
-        overflow: auto; background-color: rgba(0,0,0,0.6); justify-content: center; align-items: center;
-    }
-    .modal-content {
-        background-color: #fefefe; padding: 30px; border-radius: 12px; max-width: 800px; width: 90%;
-    }
-    .close { color: #aaa; float: right; font-size: 32px; font-weight: bold; line-height: 1; }
-    .close:hover, .close:focus { color: #000; text-decoration: none; cursor: pointer; }
-    #attendanceMap { height: 400px; width: 100%; margin-top: 15px; border-radius: 8px; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NCHSM Admin Dashboard</title>
+     <!-- Favicon -->
+    <link rel="icon" type="image/png" href="https://raw.githubusercontent.com/NCHSMlearning/e-learning/main/images/Logo_NCHSM.png" sizes="32x32">
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/main.min.css">
+    <!-- Assuming style.css is linked in the original code for aesthetics -->
+    <link rel="stylesheet" href="style.css"> 
 </head>
 <body>
-  <div class="container">
-    <aside class="sidebar">
-      <div class="sidebar-header">
-        <img src="images/Logo_NCHSM.png" alt="Logo" onerror="this.style.display='none'">
-        <h2>NCHSM Admin</h2>
-      </div>
-      <ul class="nav" id="mainNav">
-        <li><a href="#" data-tab="dashboard" class="active">Dashboard</a></li>
-        <li><a href="#" data-tab="students">Students</a></li>
-        <li><a href="#" data-tab="courses">Courses</a></li>
-        <li><a href="#" data-tab="attendance">Attendance</a></li>
-        <li><a href="#" data-tab="cats">CATS/Exams</a></li>
-        <li><a href="#" data-tab="messages">Inbox</a></li>
-        <li><a href="#" data-tab="calendar">Calendar</a></li>
-        <li><a href="#" data-tab="resources">Resources</a></li>
-      </ul>
-      <div class="logout"><a href="#" onclick="logout()">Logout</a></div>
-    </aside>
+    <div class="container">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <img src="images/Logo_NCHSM.png" alt="Logo" onerror="this.style.display='none'">
+                <h2>Admin</h2>
+            </div>
+            <ul class="nav" id="mainNav">
+                <!-- Removed 'Security & Settings' and 'Backup & Restore' -->
+                <li><a href="#" data-tab="dashboard" class="active">Dashboard</a></li>
+                <li><a href="#" data-tab="users">Manage Users</a></li> 
+                <li><a href="#" data-tab="pending">Pending Approvals</a></li> 
+                <li><a href="#" data-tab="enroll">Enroll Accounts & Promotion</a></li> 
+                <li><a href="#" data-tab="courses">Courses</a></li>
+                <li><a href="#" data-tab="sessions">Manage Sessions</a></li> 
+                <li><a href="#" data-tab="attendance">Attendance & Check-in</a></li> 
+                <li><a href="#" data-tab="cats">CATS/Exams</a></li>
+                <li><a href="#" data-tab="resources">Resources</a></li>
+                <li><a href="#" data-tab="messages">Inbox</a></li>
+                <li><a href="#" data-tab="calendar">System Calendar</a></li> 
+                <li><a href="#" data-tab="welcome-editor">Edit Welcome Message</a></li> 
+                <li><a href="#" data-tab="audit">Audit & Logs</a></li> 
+            </ul>
+            <div class="logout"><a href="#" onclick="logout()">Logout</a></div>
+        </aside>
 
-    <main class="main">
-      <header>
-        <h1>Welcome, Admin!</h1>
-        <p class="subtitle">Manage all aspects of NCHSM</p>
-      </header>
+        <main class="main">
+            <header>
+                <!-- Title updated from Super Admin to Admin -->
+                <h1>Welcome, Admin!</h1>
+                <p class="subtitle">Operational oversight and content management</p>
+            </header>
 
-      <section id="dashboard" class="tab-content active">
-        <div class="cards">
-          <div class="card" onclick="showTab('students')"><h3>Total Students</h3><p class="data" id="totalStudents">0</p></div>
-          <div class="card" onclick="showTab('courses')"><h3>Total Courses</h3><p class="data" id="totalCourses">0</p></div>
-          <div class="card" onclick="showTab('attendance')"><h3>Today's Check-ins</h3><p class="data" id="todayCheckins">0</p></div>
-          <div class="card" onclick="showTab('cats')"><h3>Upcoming Exams</h3><p class="data" id="upcomingExams">0</p></div>
-        </div>
-      </section>
+            <section id="dashboard" class="tab-content active">
+                <div id="student-welcome-message">
+                    <p>Loading NCHSM Welcome Message...</p>
+                </div>
+                <div class="cards">
+                    <div class="card" onclick="showTab('users')"><h3>Total Users</h3><p class="data" id="totalUsers">0</p></div>
+                    <div class="card" onclick="showTab('pending')"><h3>Pending Approvals</h3><p class="data" id="pendingApprovals">0</p></div>
+                    <div class="card" onclick="showTab('enroll')"><h3>Total Students</h3><p class="data" id="totalStudents">0</p></div>
+                    <div class="card" onclick="showTab('data-health')"><h3>Data Integrity Score</h3><p class="data" id="dataIntegrityScore">--%</p></div>
+                    
+                    <div class="card checkin-metric" onclick="showTab('attendance')">
+                        <h3 style="color: #4C1D95;">Daily Check-in Rate</h3>
+                        <p class="data" id="dailyCheckInRate">0%</p>
+                        <p class="minor-data" id="dailyCheckInCount">0/0 Today</p>
+                    </div>
+                    <div class="card checkin-metric" onclick="showTab('attendance')">
+                        <h3 style="color: #4C1D95;">Overall Check-in % (Records)</h3>
+                        <p class="data" id="overallCheckInRate">0</p>
+                        <p class="minor-data" id="overallCheckInCount">Total Check-in Records</p>
+                    </div>
+                </div>
+            </section>
 
-      <section id="students" class="tab-content">
-        <h2>Students</h2>
-        <p>Use the form below to **enroll new students**. Note: This registers them in Auth and creates their profile.</p>
-        <form id="add-student-form" class="inline-form">
-          <input type="text" id="student-name" placeholder="Full Name" required>
-          <input type="email" id="student-email" placeholder="Email" required>
-          <input type="text" id="student-phone" placeholder="Phone" required>
-          <input type="password" id="student-password" placeholder="Password" required>
-          <button type="submit">Enroll Student</button>
-        </form>
-        <table>
-          <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Status</th><th>Actions</th></tr></thead>
-          <tbody id="students-table"><tr><td colspan="6">Loading students...</td></tr></tbody>
-        </table>
-      </section>
+            <section id="users" class="tab-content">
+                <h2>System Users</h2>
+                <p>Manage user accounts (Student, Lecturer, etc.) and assign roles. Admin access may be restricted to non-Super Admin accounts.</p>
+                <div class="toolbar">
+                    <input type="text" id="user-search" placeholder="Search by Name or Email..." onkeyup="filterTable('user-search', 'users-table', [1, 2, 4])">
+                    <button onclick="exportTableToCSV('users-table', 'System_Users_Export.csv')" class="btn-action export-btn">Export Users (CSV)</button>
+                </div>
+                <table>
+                    <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Role</th><th>Program</th><th>Status</th><th>Actions</th></tr></thead>
+                    <tbody id="users-table">
+                        <tr><td colspan="7">Loading users...</td></tr>
+                    </tbody>
+                </table>
+            </section>
 
-      <section id="courses" class="tab-content">
-        <h2>Courses</h2>
-        <form id="add-course-form" class="inline-form">
-          <input type="text" id="course-name" placeholder="Course Name" required>
-          <input type="text" id="course-description" placeholder="Description (Optional)">
-          <button type="submit">Add Course</button>
-        </form>
-        <table>
-          <thead><tr><th>Course Name</th><th>Description</th><th>Actions</th></tr></thead>
-          <tbody id="courses-table"><tr><td colspan="3">Loading courses...</td></tr></tbody>
-        </table>
-      </section>
+            <section id="pending" class="tab-content">
+                <h2>Pending Approvals</h2>
+                <p>Accounts listed below require approval before they can log in.</p>
+                <table>
+                    <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Program</th><th>Registered</th><th>Actions</th></tr></thead>
+                    <tbody id="pending-table"><tr><td colspan="6">Loading pending users...</td></tr></tbody>
+                </table>
+            </section>
+            
+            <section id="enroll" class="tab-content"> 
+                <h2>Enroll Accounts</h2>
+                <p>Use the form below to **enroll new Student, Admin, or Lecturer accounts**.</p>
+                <form id="add-account-form" class="inline-form">
+                    <input type="text" id="account-name" placeholder="Full Name" required>
+                    <input type="email" id="account-email" placeholder="Email" required>
+                    <input type="password" id="account-password" placeholder="Password" required autocomplete="new-password"> 
+                    <select id="account-role" required>
+                        <option value="student">Student</option>
+                        <option value="admin">Admin</option>
+                        <option value="lecturer">Lecturer</option> 
+                    </select>
+                    <input type="text" id="account-phone" placeholder="Phone" required>
+                    <select id="account-program" required>
+                        <option value="">-- Select Program --</option>
+                        <option value="KRCHN">KRCHN Students</option>
+                        <option value="TVET">TVET Students</option>
+                    </select>
+                    <select id="account-intake" required>
+                        <option value="">-- Select Intake Year --</option>
+                        <option value="2024">March 2024</option>
+                        <option value="2025">March 2025</option>
+                        <option value="2026">March 2026</option>
+                        <option value="2027">March 2027</option>
+                        <option value="2028">March 2028</option>
+                    </select>
+                    <select id="account-block-term" required>
+                        <option value="">-- Select Block/Term --</option>
+                    </select>
+                    <button type="submit">Enroll Account</button>
+                </form>
+                
+                <hr>
+                
+                <h3>Mass Student Block/Term Promotion (End of Term) 🚀</h3>
+                <p>Advance all students from one Block/Term to the next.</p>
+                <form id="mass-promotion-form" class="inline-form">
+                    <select id="promote_intake" required>
+                        <option value="">-- Select Intake Year --</option>
+                        <option value="2024">March 2024</option>
+                        <option value="2025">March 2025</option>
+                    </select>
+                    <select id="promote_from_block" required>
+                        <option value="">-- Promote Students FROM --</option>
+                        </select>
+                    <select id="promote_to_block" required>
+                        <option value="">-- Promote Students TO --</option>
+                        </select>
+                    <button type="submit" class="btn-danger">Execute Mass Promotion</button>
+                </form>
+                <p class="warning-text" id="promotion-warning" style="color: red; margin-top: 5px;">
+                    **WARNING:** This action is irreversible and affects all active students in the 'FROM' group.
+                </p>
 
-      <section id="attendance" class="tab-content">
-        <h2>Attendance Management</h2>
-        
-        <p>Use this to perform **manual check-ins** for students or mark your own location.</p>
-        
-        <div class="flex-wrap">
-            <button class="btn btn-attendance" onclick="markMyAttendance()">🧭 Mark My Attendance (Geo Log)</button>
-        </div>
+                <hr>
 
-        <h3>Manual Attendance Entry (For Admin Use)</h3>
-        <form id="manual-attendance-form" class="inline-form">
-            <select id="att_student_id" required><option value="">-- Select Student --</option></select>
-            <select id="att_session_type"><option value="classroom">Classroom</option><option value="clinical">Clinical</option></select>
-            <select id="att_course_id"><option value="">-- Select Course (Optional) --</option></select>
-            <input id="att_location" placeholder="Location" />
-            <input id="att_date" type="date" required />
-            <input id="att_time" type="time" />
-            <button type="submit" class="btn-alt">Manual Mark</button>
-        </form>
+                <h3>Enrolled Students (For quick reference)</h3>
+                <div class="toolbar">
+                    <button onclick="exportTableToCSV('students-table', 'Enrolled_Students_Export.csv')" class="btn-action export-btn">Export Student List (CSV)</button>
+                </div>
+                <input type="text" id="student-search" placeholder="Search Students..." onkeyup="filterTable('student-search', 'students-table', [1, 3, 5])">
+                <table>
+                    <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Program</th><th>Intake</th><th>Block/Term</th><th>Phone</th><th>Status</th><th>Actions</th></tr></thead>
+                    <tbody id="students-table">
+                        <tr><td colspan="9">Loading students...</td></tr>
+                    </tbody>
+                </table>
+            </section>
 
-        <div id="attendance-records">
-          <h3>All Attendance Records (Geo-Logs and Manual)</h3>
-          <table>
-            <thead>
-              <tr><th>Student</th><th>Type</th><th>Location/Time</th><th>Date</th><th>Geo Data</th><th>Actions</th></tr>
-            </thead>
-            <tbody id="attendance-table"><tr><td colspan="6">Loading records...</td></tr></tbody>
-          </table>
-        </div>
-      </section>
+            <section id="courses" class="tab-content">
+                <h2>Courses</h2>
+                <form id="add-course-form" class="inline-form">
+                    <input type="text" id="course-name" placeholder="Course Name" required>
+                    <input type="text" id="course-unit-code" placeholder="Unit Code (e.g., NURS101)" required> 
+                    <input type="text" id="course-description" placeholder="Description (Optional)">
+                    
+                    <select id="course-program" required> 
+                        <option value="">-- Select Program Type --</option>
+                        <option value="KRCHN">KRCHN</option>
+                        <option value="TVET">TVET</option>
+                    </select>
+                    <select id="course-intake">
+                        <option value="">-- Select Intake Year --</option>
+                        <option value="2024">March 2024</option>
+                        <option value="2025">March 2025</option>
+                        <option value="2026">March 2026</option>
+                        <option value="2027">March 2027</option>
+                        <option value="2028">March 2028</option>
+                    </select>
+                    <select id="course-block">
+                        <option value="">-- Select Block/Term --</option>
+                    </select>
+                    <button type="submit">Add Course</button>
+                </form>
+                <div class="toolbar">
+                    <input type="text" id="course-search" placeholder="Search Courses..." onkeyup="filterTable('course-search', 'courses-table', [0, 1, 3])">
+                    <button onclick="exportTableToCSV('courses-table', 'Course_Catalog_Export.csv')" class="btn-action export-btn">Export Courses (CSV)</button>
+                </div>
+                <table>
+                    <thead><tr><th>Course Name</th><th>Unit Code</th><th>Program</th><th>Intake</th><th>Block/Term</th><th>Actions</th></tr></thead> 
+                    <tbody id="courses-table"><tr><td colspan="6">Loading courses...</td></tr></tbody>
+                </table>
+            </section>
+            
+           <section id="sessions" class="tab-content">
+              <h2>Manage Sessions (Class, Clinical, Events)</h2>
+              <p>Add and manage scheduled sessions. These will be automatically linked to the <strong>System Calendar</strong>.</p>
 
-    <section id="cats" class="tab-content">
-  <h2>CATS / Exams</h2>
-  <p>View your scheduled assessments and grades.</p>
+              <h3>Add New Session</h3>
+              <form id="add-session-form" class="inline-form" onsubmit="handleScheduleSession(event)">
+                <select id="new_session_type" required>
+                  <option value="">-- Select Session Type --</option>
+                  <option value="class">Class Session</option>
+                  <option value="clinical">Clinical Rotation</option>
+                  <option value="event">General Event</option>
+                </select>
 
-  <!-- Available Exams -->
-  <div class="exam-list">
-    <h3>Available Assessments</h3>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Course</th>
-          <th>Title</th>
-          <th>Date/Time</th>
-          <th>Duration</th>
-          <th>Status</th>
-          <th>Action</th>
-        </tr>
-      </thead>
-      <tbody id="exams-table">
-        <tr><td colspan="7">Loading your assessments...</td></tr>
-      </tbody>
-    </table>
-  </div>
+                <input type="text" id="new_session_title" placeholder="Title/Topic" required>
+                <input type="date" id="new_session_date" required>
+                <input type="time" id="new_session_start_time" placeholder="Start Time" required>
+                <input type="time" id="new_session_end_time" placeholder="End Time (Optional)">
 
-  <!-- Grades Section -->
-  <div id="student-grades" class="grades-section">
-    <h3>Your Grades</h3>
-    <table>
-      <thead>
-        <tr>
-          <th>Course</th>
-          <th>Assessment</th>
-          <th>CAT (30%)</th>
-          <th>Exam (70%)</th>
-          <th>Total (%)</th>
-          <th>Grade</th>
-        </tr>
-      </thead>
-      <tbody id="grades-table">
-        <tr><td colspan="6">Loading your grades...</td></tr>
-      </tbody>
-    </table>
-  </div>
-</section>
+                <select id="new_session_program" required>
+                  <option value="">-- Select Program --</option>
+                  <option value="KRCHN">KRCHN Students</option>
+                  <option value="TVET">TVET Students</option>
+                </select>
+
+                <select id="new_session_intake_year" required>
+                  <option value="">-- Select Intake Year --</option>
+                  <option value="2024">March 2024</option>
+                  <option value="2025">March 2025</option>
+                  <option value="2026">March 2026</option>
+                  <option value="2027">March 2027</option>
+                  <option value="2028">March 2028</option>
+                </select>
+
+                <select id="new_session_block_term" required>
+                  <option value="">-- Select Block/Term --</option>
+                </select>
+
+                <select id="new_session_course">
+                  <option value="">-- Select Course (Optional) --</option>
+                </select>
+
+                <button type="submit">Schedule Session</button>
+              </form>
+
+              <hr>
+
+              <h3>Scheduled Sessions</h3>
+              <div class="toolbar">
+                <button onclick="exportTableToCSV('scheduledSessionsTableBody', 'Scheduled_Sessions_Export.csv')" class="btn-action export-btn">
+                  Export Sessions (CSV)
+                </button>
+              </div>
+
+              <table>
+                <thead>
+                  <tr>
+                    <th>Type</th>
+                    <th>Title</th>
+                    <th>Date/Time</th>
+                    <th>Program</th>
+                    <th>Block/Term</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="scheduledSessionsTableBody">
+                  <tr><td colspan="6">Loading scheduled sessions...</td></tr>
+                </tbody>
+              </table>
+
+            <hr>
+
+            <!-- Clinical Rotation Management is included as it's an operational task -->
+            <section id="clinical-management">
+              <h3>Clinical Rotation Management</h3>
+              <p>Define or edit names for clinical rotations by program, intake, block, or term.</p>
+
+              <form id="edit-clinical-names-form" class="inline-form">
+                <select id="clinical_program" required>
+                  <option value="">-- Select Program --</option>
+                  <option value="KRCHN">KRCHN Students</option>
+                  <option value="TVET">TVET Students</option>
+                </select>
+
+                <select id="clinical_intake" required>
+                  <option value="">-- Select Intake Year --</option>
+                  <option value="2024">March 2024</option>
+                  <option value="2025">March 2025</option>
+                  <option value="2026">March 2026</option>
+                  <option value="2027">March 2027</option>
+                  <option value="2028">March 2028</option>
+                </select>
+
+                <select id="clinical_block_term" required>
+                  <option value="">-- Select Block/Term --</option>
+                </select>
+
+                <input type="text" id="clinical_name_to_edit" placeholder="Clinical Area Name (e.g., Pediatrics Term 1)" required>
+                <button type="button" id="saveClinicalBtn">Save Clinical Name</button>
+              </form>
+
+              <table id="clinical-table" border="1" cellpadding="6" cellspacing="0" style="width:100%; margin-top:15px;">
+                <thead>
+                  <tr>
+                    <th>Program</th>
+                    <th>Intake</th>
+                    <th>Block/Term</th>
+                    <th>Clinical Area</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="clinical-table-body"></tbody>
+              </table>
+            </section>
+            <!-- END CORRECTION -->
+
+           </section> 
 
 
-      <section id="messages" class="tab-content">
-        <h2>Inbox / Messages</h2>
-        <form id="send-message-form" class="inline-form">
-          <input type="email" id="msg_recipient" placeholder="Recipient Email" required>
-          <textarea id="msg_body" placeholder="Message Body" rows="3"></textarea>
-          <button type="submit">Send Message</button>
-        </form>
-        <h3>Recent Messages</h3>
-        <table>
-          <thead><tr><th>From</th><th>To</th><th>Message</th><th>Date</th></tr></thead>
-          <tbody id="messages-table"><tr><td colspan="4">Loading messages...</td></tr></tbody>
-        </table>
-      </section>
+           <section id="attendance" class="tab-content">
+                <h2 style="color: #4C1D95;">Daily Attendance & Geo Check-in</h2>
+                <h3>Admin/Lecturer Self Check-in (Mark My Attendance) 📍</h3>
+                <p>Check in your own presence for the day. (Uses current location/time, requires Geo-location access).</p>
+                <button onclick="adminCheckIn()" class="btn-action">Mark My Attendance Now</button>
+                
+                <hr>
+                
+                <h3>Admin Manual Student Check-in</h3>
+                <p>Use this form to manually mark attendance for a student.</p>
+                <form id="manual-attendance-form" class="inline-form">
+                    <select id="att_student_id" required><option value="">-- Select Student --</option></select>
+                    <select id="att_session_type" required>
+                        <option value="">-- Select Session Type --</option>
+                        <option value="classroom">Classroom</option>
+                        <option value="clinical">Clinical Rotation</option>
+                        <option value="virtual">Virtual</option>
+                        <option value="call">On Call</option>
+                    </select>
+                    <input type="text" id="att_department" placeholder="Department/Area" required>
+                    <select id="att_course_id"><option value="">-- Select Course (Optional) --</option></select>
+                    <input id="att_location" placeholder="Location">
+                    <input id="att_date" type="date" required>
+                    <input id="att_time" type="time">
+                    <button type="submit" class="btn-action">Mark Attendance</button>
+                </form>
 
-      <section id="calendar" class="tab-content">
-        <h2>Calendar</h2>
-        <div id="calendar"><p>Simple calendar placeholder - Exam and Clinical dates will show here.</p></div>
-      </section>
+                <div id="attendance-records">
+                    <h3 style="color: #4C1D95;">Today's Attendance Records (Pending & Verified)</h3>
+                    <input type="text" id="attendance-search" placeholder="Search by Student Name..." onkeyup="filterTable('attendance-search', 'attendance-table', [0, 1, 2])">
+                    <div class="toolbar">
+                        <button onclick="exportTableToCSV('attendance-table', 'Todays_Attendance_Export.csv')" class="btn-action export-btn">Export Today's Records (CSV)</button>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Student</th>
+                                <th>Session Type</th>
+                                <th>Target (Course/Clinical)</th>
+                                <th>Department/Location</th>
+                                <th>Date/Time</th>
+                                <th>Geo Data</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="attendance-table">
+                            <tr><td colspan="7">Loading today's records...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
 
-      <section id="resources" class="tab-content">
-        <h2>Resource Center</h2>
-        <form id="upload-resource-form" class="inline-form">
-          <input type="file" id="resourceFile" required>
-          <input type="text" id="resourceTitle" placeholder="Title for file">
-          <button type="button" onclick="uploadResource()">Upload</button>
-        </form>
-        <h3>Available Resources</h3>
-        <table>
-          <thead><tr><th>File Name</th><th>Uploaded By</th><th>Date</th><th>Actions</th></tr></thead>
-          <tbody id="resources-list"><tr><td colspan="4">Loading resources...</td></tr></tbody>
-        </table>
-      </section>
-    </main>
-  </div>
+                <div id="past-attendance-history">
+                    <h3 style="color: #4C1D95;">Past Attendance History (All Users)</h3>
+                    <p>Records from previous days for all users.</p>
+                    <div class="toolbar">
+                        <button onclick="exportTableToCSV('past-attendance-table', 'Past_Attendance_History_Export.csv')" class="btn-action export-btn">Export History (CSV)</button>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>Session Type</th>
+                                <th>Target (Course/Clinical)</th>
+                                <th>Date/Time</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="past-attendance-table">
+                            <tr><td colspan="6">Loading history...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+            
+         <section id="cats" class="tab-content">
+              <h2>CATS / Exams Administration</h2>
+              <p>
+                Post online or manage scheduled assessments. Selecting a <strong>Program</strong>
+                dynamically filters the <strong>Course</strong> and <strong>Block/Term</strong> options.
+              </p>
 
-  <div id="mapModal" class="modal">
-    <div class="modal-content">
-      <span class="close" onclick="document.getElementById('mapModal').style.display='none'">&times;</span>
-      <h3>Attendance Check-in Map</h3>
-      <p class="message-status" id="mapInfo"></p>
-      <div id="attendanceMap"></div>
+              <form id="add-exam-form" class="inline-form">
+                <select id="exam_type" required>
+                  <option value="">-- Select Type --</option>
+                  <option value="EXAM">Final Exam</option>
+                  <option value="CAT">Continuous Assessment Test (CAT)</option>
+                </select>
+
+                <select id="exam_program" required>
+                  <option value="">-- Select Program --</option>
+                  <option value="KRCHN">KRCHN Students</option>
+                  <option value="TVET">TVET Students</option>
+                </select>
+
+                <select id="exam_course_id" required>
+                  <option value="">-- Select Course --</option>
+                </select>
+
+                <input type="text" id="exam_title" placeholder="Assessment Title" required>
+
+                <input
+                  type="url"
+                  id="exam_link"
+                  placeholder="(Optional) Online Exam/Quiz Link"
+                >
+
+                <input
+                  type="number"
+                  id="exam_duration_minutes"
+                  placeholder="Duration (Minutes, e.g., 60)"
+                  required
+                  min="5"
+                >
+
+                <input type="date" id="exam_date" required>
+                <input type="time" id="exam_start_time" required>
+
+                <select id="exam_status">
+                  <option value="Upcoming">Upcoming</option>
+                  <option value="Completed">Completed</option>
+                  <option value="InProgress">In Progress</option>
+                </select>
+
+                <select id="exam_intake">
+                  <option value="">-- Select Intake Year --</option>
+                  <option value="2024">March 2024</option>
+                  <option value="2025">March 2025</option>
+                  <option value="2026">March 2026</option>
+                  <option value="2027">March 2027</option>
+                  <option value="2028">March 2028</option>
+                </select>
+
+                <select id="exam_block_term">
+                  <option value="">-- Select Block/Term --</option>
+                </select>
+
+                <button type="submit">Post Assessment</button>
+              </form>
+
+              <div class="toolbar">
+                <input type="text" id="exam-search" placeholder="Search Assessments...">
+                <button class="btn-action export-btn">Export Assessments (CSV)</button>
+              </div>
+
+              <table>
+                <thead>
+                  <tr>
+                    <th>Type</th>
+                    <th>Program</th>
+                    <th>Course</th>
+                    <th>Title</th>
+                    <th>Date/Time</th>
+                    <th>Duration</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="exams-table">
+                  <tr><td colspan="8">Loading assessments...</td></tr>
+                </tbody>
+              </table>
+
+              <div id="gradeModal" class="modal">
+                <div class="modal-content">
+                  <span class="close">&times;</span>
+                  <h2>Grade Assessment</h2>
+                  <p id="gradeExamTitle">Assessment: <em>Loading...</em></p>
+
+                  <form id="grade-form">
+                    <div id="grade-students-list">
+                      <p>Loading enrolled students...</p>
+                    </div>
+                    <button type="submit">Save Grades</button>
+                  </form>
+                </div>
+              </div>
+
+              <div id="examEditModal" class="modal">
+                <div class="modal-content">
+                  <span class="close">&times;</span>
+                  <h2>Edit Exam</h2>
+                  <form id="edit-exam-form">
+                    <input type="hidden" id="edit_exam_id">
+                    <label>Title</label>
+                    <input type="text" id="edit_exam_title" required>
+                    <label>Date</label>
+                    <input type="date" id="edit_exam_date" required>
+                    <label>Status</label>
+                    <select id="edit_exam_status">
+                      <option>Upcoming</option>
+                      <option>InProgress</option>
+                      <option>Completed</option>
+                    </select>
+                    <button type="submit">Save Changes</button>
+                  </form>
+                </div>
+              </div>
+
+              <h3>Available Assessments (Students Portal Preview)</h3>
+              <div id="student-exams">
+                <p>Loading available assessments...</p>
+              </div>
+            </section>
+
+
+            <section id="resources" class="tab-content">
+                <h2>Resource Center</h2>
+                <p>Upload files to share with students based on their program, intake year, and block/term.</p>
+
+                <form id="upload-resource-form" class="inline-form">
+                    <select id="resource_program" required>
+                        <option value="">-- Select Program --</option>
+                        <option value="KRCHN">KRCHN Students</option>
+                        <option value="TVET">TVET Students</option>
+                    </select>
+
+                    <select id="resource_intake" required>
+                        <option value="">-- Select Intake Year --</option>
+                        <option value="2024">March 2024</option>
+                        <option value="2025">March 2025</option>
+                        <option value="2026">March 2026</option>
+                        <option value="2027">March 2027</option>
+                        <option value="2028">March 2028</option>
+                    </select>
+
+                    <select id="resource_block" required>
+                        <option value="">-- Select Block/Term --</option>
+                    </select>
+                    <input 
+                        type="file" 
+                        id="resource-file" 
+                        required
+                        accept=".pdf, .doc, .docx, .ppt, .pptx, .xls, .xlsx" 
+                        title="Accepts PDF and common Microsoft Office documents."
+                    >
+                    <input type="text" id="resource-title" placeholder="Title for file" required>
+                    <button type="submit">Upload</button>
+                </form>
+
+                <div class="toolbar">
+                    <input 
+                        type="text" 
+                        id="resource-search" 
+                        placeholder="Search Resources..." 
+                        onkeyup="filterTable('resource-search', 'resources-list', [0,1,2,3])">
+                    <button 
+                        onclick="exportTableToCSV('resources-list', 'Resource_Index_Export.csv')" 
+                        class="btn-action export-btn">
+                        Export Resource List (CSV)
+                    </button>
+                </div>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Program</th>
+                            <th>Title</th>
+                            <th>Intake</th>
+                            <th>Block/Term</th>
+                            <th>Uploaded By</th>
+                            <th>Date</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resources-list">
+                        <tr><td colspan="7">Loading resources...</td></tr>
+                    </tbody>
+                </table>
+            </section>
+            
+         <section id="messages" class="tab-content">
+            <h2>Inbox / Messages</h2>
+
+            <form id="send-message-form" class="inline-form">
+                <select id="msg_program" required>
+                    <option value="">-- Select Program --</option>
+                    <option value="ALL">ALL Students</option>
+                    <option value="KRCHN">KRCHN Students</option>
+                    <option value="TIVET">TIVET Students</option>
+                </select>
+                <textarea id="msg_body" placeholder="Message Body" rows="3"></textarea>
+                <button type="submit">Send Message</button>
+            </form>
+
+            <div id="admin-official-announcement" style="margin-top:20px;">
+                <h3>📣 Official Announcement</h3>
+                <textarea id="announcement-body" rows="4" placeholder="Type the official announcement here..."></textarea>
+                <br/>
+                <button id="save-announcement">Save Announcement</button>
+                <span id="announcement-feedback"></span>
+            </div>
+
+            <div id="messages-list" style="margin-top:20px;">
+                Loading messages...
+            </div>
+
+            <h3>Recent Messages (Admin Table)</h3>
+            <div class="toolbar">
+                <button onclick="exportTableToCSV('adminMessagesTableBody', 'Message_History_Export.csv')" class="btn-action export-btn">Export Messages (CSV)</button>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>To Program</th>
+                        <th>Sender</th>
+                        <th>Subject</th>
+                        <th>Message Body</th>
+                        <th>Date Sent</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="adminMessagesTableBody">
+                    <tr><td colspan="6">Loading admin messages...</td></tr>
+                </tbody>
+            </table>
+        </section>
+
+            <section id="calendar" class="tab-content">
+                <h2>System Calendar</h2>
+                <p>This calendar will display all scheduled Sessions, Exams/CATS, and Clinical Rotations.</p>
+                <div id="fullCalendarDisplay"></div> 
+            </section>
+            
+            <section id="welcome-editor" class="tab-content">
+                <h2>Edit Student Welcome Message</h2>
+                <p>The **Save Welcome Message** button must update the live message on the student-facing site.</p>
+                <form id="edit-welcome-form">
+                    <textarea id="welcome-message-editor" rows="20" placeholder="Paste the HTML content for the Welcome Message here..."></textarea>
+                    <button type="submit" class="btn-action">Save Welcome Message</button>
+                </form>
+                <h3>Current Live Preview</h3>
+                <div id="live-preview">
+                    <p>Loading live preview...</p>
+                </div>
+            </section>
+
+            <section id="audit" class="tab-content">
+                <!-- Renamed from Audit & Security Logs to Audit & Logs for the standard admin role -->
+                <h2>Audit & Logs 🔍</h2>
+                <p>Track critical administrative actions (user changes, file deletions, major system updates).</p>
+                
+                <h3>Filter Logs</h3>
+                <div class="toolbar">
+                    <select id="log-filter-user"><option value="">-- Filter by User --</option></select>
+                    <select id="log-filter-action"><option value="">-- Filter by Action Type --</option></select>
+                    <input type="date" id="log-filter-date-start">
+                    <input type="date" id="log-filter-date-end">
+                    <button onclick="fetchAuditLogs()" class="btn-action">Apply Filters</button>
+                    <button onclick="exportTableToCSV('audit-table', 'Audit_Log_Export.csv')" class="btn-action export-btn">Export All (CSV)</button>
+                </div>
+                
+                <table>
+                    <thead>
+                        <tr><th>Timestamp</th><th>User/Role</th><th>Action Type</th><th>Details (Target ID)</th><th>Status</th></tr>
+                    </thead>
+                    <tbody id="audit-table">
+                        <tr><td colspan="5">Loading recent critical events...</td></tr>
+                    </tbody>
+                </table>
+            </section>
+            
+            <!-- REMOVED: #security and #backup sections for the standard Admin role -->
+
+        </main>
     </div>
-  </div>
 
-
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-
-  <script>
-    /*******************
-     * Configuration
-     *******************/
-    // !!! IMPORTANT: REPLACE WITH YOUR ACTUAL KEYS AND URL !!!
-    const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
-    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    const RESOURCES_BUCKET = 'resources';
-    const IP_API_URL = 'https://api.ipify.org?format=json';
-    const DEVICE_ID_KEY = 'nchsm_device_id';
-
-    let currentUserProfile = null;
-    let attendanceMap = null;
-
-    /*******************
-     * Utilities
-     *******************/
-    function $(id){ return document.getElementById(id); }
-    function escapeHtml(s){ return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+    <!-- Modals (Kept as they are reused across different tabs) -->
+    <div id="mapModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="document.getElementById('mapModal').style.display='none'">&times;</span>
+            <h2>Geo Location Map</h2>
+            <div id="mapbox-map" style="height: 400px;">Map will load here...</div> 
+            <p id="map-details"></p>
+        </div>
+    </div>
     
-    function generateUUID() {
-      return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
-        (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
-      );
-    }
-    
-    // Simple tab switching function (re-used from your original script)
-    const navLinks = document.querySelectorAll('.nav a');
-    const tabs = document.querySelectorAll('.tab-content');
-    navLinks.forEach(link => {
-      link.addEventListener('click', e => {
-        e.preventDefault();
-        navLinks.forEach(l => l.classList.remove('active'));
-        link.classList.add('active');
-        tabs.forEach(tab => tab.classList.remove('active'));
-        const tabId = link.dataset.tab;
-        document.getElementById(tabId).classList.add('active');
-        
-        // Load data on tab switch
-        loadSectionData(tabId);
-      });
-    });
-
-    function showTab(tabId) {
-      navLinks.forEach(l => l.classList.remove('active'));
-      const activeLink = document.querySelector(`.nav a[data-tab="${tabId}"]`);
-      if (activeLink) activeLink.classList.add('active');
-      tabs.forEach(tab => tab.classList.remove('active'));
-      document.getElementById(tabId).classList.add('active');
-      loadSectionData(tabId);
-    }
-
-    async function loadSectionData(tabId) {
-        switch(tabId) {
-            case 'dashboard': loadDashboardData(); break;
-            case 'students': loadStudents(); break;
-            case 'courses': loadCourses(); break;
-            case 'attendance': loadAttendance(); populateAttendanceSelects(); break;
-            case 'cats': loadExams(); break;
-            case 'messages': loadMessages(); break;
-            case 'resources': loadResources(); break;
-        }
-    }
-
-    // --- Session / Init ---
-    async function initSession() {
-        const { data: { user } } = await sb.auth.getUser();
-        if (!user) {
-            window.location.href = "login.html"; // Redirect unauthenticated users
-            return;
-        }
-
-        const { data: profile } = await sb.from('profiles').select('*').eq('id', user.id).single();
-        if (profile) {
-            currentUserProfile = profile;
-            if (currentUserProfile.role !== 'admin' && currentUserProfile.role !== 'superadmin') {
-                alert("Access Denied: You do not have admin privileges.");
-                await logout();
-                return;
-            }
-        } else {
-             window.location.href = "login.html";
-            return;
-        }
-        
-        // Load default tab
-        loadSectionData('dashboard');
-        populateAttendanceSelects(); // Pre-load selects for forms
-    }
-
-    // Logout
-    async function logout() {
-      await sb.auth.signOut();
-      localStorage.removeItem("loggedInUser");
-      window.location.href = "login.html";
-    }
-
-    /*******************
-     * Dashboard Data
-     *******************/
-    async function loadDashboardData() {
-        // Total Students
-        const { data: studentsData } = await sb.from('profiles').select('id').eq('role', 'student');
-        $('totalStudents').textContent = studentsData?.length || 0;
-        $('totalCourses').textContent = 0; // Will be updated by loadCourses later
-
-        // Today's Check-ins (Geo Logs)
-        const today = new Date().toISOString().slice(0, 10);
-        const { data: checkinData } = await sb.from('geo_attendance_logs').select('id').gte('check_in_time', today);
-        $('todayCheckins').textContent = checkinData?.length || 0;
-
-        // Upcoming Exams
-        const { data: examData } = await sb.from('exams').select('id').eq('status', 'Upcoming');
-        $('upcomingExams').textContent = examData?.length || 0;
-    }
-
-    /*******************
-     * Students Tab
-     *******************/
-    // Add Student Form (from your original code - simplified insertion)
-    $('add-student-form').addEventListener('submit', async e => {
-      e.preventDefault();
-      const name = $('student-name').value.trim();
-      const email = $('student-email').value.trim();
-      const phone = $('student-phone').value.trim();
-      const password = $('student-password').value;
-
-      if(!name || !email || !phone || !password) return alert('Fill all fields');
-
-      try {
-        // 1. Create Auth User
-        const { data: signUpData, error: signUpError } = await sb.auth.signUp({ email, password });
-        if(signUpError) return alert('Signup failed: ' + signUpError.message);
-
-        // 2. Create Profile
-        const { error: profileError } = await sb.from('profiles').insert([{
-          id: signUpData.user.id,
-          full_name: name,
-          email,
-          phone,
-          role: 'student',
-          approved: true // Admins create approved accounts
-        }]);
-        if(profileError) return alert('Profile creation failed: ' + profileError.message);
-
-        alert('✅ Student added successfully!');
-        $('add-student-form').reset();
-        loadStudents();
-        loadDashboardData();
-      } catch(err) {
-        console.error(err);
-        alert('An unexpected error occurred during student creation.');
-      }
-    });
-
-    // Load Students List
-    async function loadStudents() {
-        const tbody = $('students-table');
-        tbody.innerHTML = '<tr><td colspan="6">Loading students...</td></tr>';
-        const { data, error } = await sb.from('profiles').select('*').eq('role', 'student').order('full_name');
-
-        if (error) {
-            tbody.innerHTML = `<tr><td colspan="6">Error loading students: ${error.message}</td></tr>`;
-            return;
-        }
-        
-        tbody.innerHTML = '';
-        data.forEach(s => {
-            tbody.innerHTML += `<tr>
-                <td>${escapeHtml(s.id.substring(0, 8))}...</td>
-                <td>${escapeHtml(s.full_name)}</td>
-                <td>${escapeHtml(s.email)}</td>
-                <td>${escapeHtml(s.phone)}</td>
-                <td>${s.approved ? 'Approved' : 'Pending'}</td>
-                <td><button class="btn btn-delete" onclick="deleteProfile('${s.id}')">Delete</button></td>
-            </tr>`;
-        });
-    }
-
-    async function deleteProfile(id) {
-        if (!confirm('Are you sure you want to delete this student profile?')) return;
-        const { error } = await sb.from('profiles').delete().eq('id', id);
-        if (error) return alert('Error deleting profile: ' + error.message);
-        alert('Profile deleted. Note: You must manually delete the user from the Supabase Auth section if needed.');
-        loadStudents();
-    }
-
-
-    /*******************
-     * Courses Tab
-     *******************/
-    // Add Course Form
-    $('add-course-form').addEventListener('submit', async e => {
-      e.preventDefault();
-      const name = $('course-name').value.trim();
-      const description = $('course-description').value.trim();
-      if (!name) return alert('Course name is required.');
-
-      const { error } = await sb.from('courses').insert([{ course_name: name, description }]);
-      if (error) return alert('Error adding course: ' + error.message);
-      
-      $('add-course-form').reset();
-      loadCourses();
-      loadDashboardData();
-    });
-
-    // Load Courses List
-    async function loadCourses() {
-        const tbody = $('courses-table');
-        tbody.innerHTML = '<tr><td colspan="3">Loading courses...</td></tr>';
-        const { data, error } = await sb.from('courses').select('*').order('course_name');
-
-        if (error) {
-            tbody.innerHTML = `<tr><td colspan="3">Error loading courses: ${error.message}</td></tr>`;
-            return;
-        }
-        
-        $('totalCourses').textContent = data?.length || 0; // Update Dashboard
-        tbody.innerHTML = '';
-        data.forEach(c => {
-            tbody.innerHTML += `<tr>
-                <td>${escapeHtml(c.course_name)}</td>
-                <td>${escapeHtml(c.description || '-')}</td>
-                <td><button class="btn btn-delete" onclick="deleteCourse(${c.id})">Delete</button></td>
-            </tr>`;
-        });
-
-        // Also update course selects in other tabs
-        populateAttendanceSelects();
-    }
-
-    async function deleteCourse(id) {
-        if (!confirm('Are you sure you want to delete this course?')) return;
-        const { error } = await sb.from('courses').delete().eq('id', id);
-        if (error) return alert('Error deleting course: ' + error.message);
-        loadCourses();
-    }
-
-    /*******************
-     * Attendance Tab (Admin-focused logic)
-     *******************/
-
-    // Utility function to get Geo-Location (same as SuperAdmin)
-    function getGeoLocation() {
-        return new Promise((resolve) => {
-            if (!navigator.geolocation) {
-                alert('Geolocation is not supported by your browser.');
-                return resolve({ lat: null, lng: null, accuracy: null });
-            }
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    resolve({ lat: position.coords.latitude, lng: position.coords.longitude, accuracy: position.coords.accuracy });
-                },
-                (error) => {
-                    console.error('Geolocation Error:', error);
-                    alert('Could not get location. Ensure permissions are granted.');
-                    resolve({ lat: null, lng: null, accuracy: null });
-                },
-                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-            );
-        });
-    }
-
-    async function getPublicIP() {
-        try {
-            const response = await fetch(IP_API_URL);
-            const data = await response.json();
-            return data.ip || '0.0.0.0';
-        } catch {
-            return '0.0.0.0';
-        }
-    }
-
-    function getDeviceId() {
-        let deviceId = localStorage.getItem(DEVICE_ID_KEY);
-        if (!deviceId) {
-            deviceId = generateUUID();
-            localStorage.setItem(DEVICE_ID_KEY, deviceId);
-        }
-        return deviceId;
-    }
-
-    // Admin Self Mark Attendance (Geo Log)
-    async function markMyAttendance() {
-        if (!currentUserProfile || !currentUserProfile.approved) {
-            return alert('Access Denied: You must be an approved user for check-in.');
-        }
-
-        const userId = currentUserProfile.id;
-        const deviceId = getDeviceId();
-        
-        try {
-            const [ipAddress, location] = await Promise.all([
-                getPublicIP(), 
-                getGeoLocation()
-            ]);
-            
-            if (!location.lat || !location.lng) return;
-
-            const sessionType = prompt(`Enter session type (e.g., Clinical, Office):`, 'Office');
-            if (!sessionType) return;
-            
-            const { error } = await sb.from('geo_attendance_logs').insert([{ 
-                student_id: userId, 
-                session_type: sessionType,
-                latitude: location.lat,
-                longitude: location.lng,
-                accuracy_meters: location.accuracy,
-                ip_address: ipAddress,
-                device_id: deviceId.substring(0, 8) 
-            }]);
-            
-            if (error) return alert('Geo Check-in failed: ' + error.message);
-
-            alert(`Attendance marked successfully! Session: ${sessionType}.`);
-            loadAttendance();
-            loadDashboardData();
-        } catch(err) {
-            console.error('markMyAttendance error:', err);
-            alert('An unexpected error occurred during check-in.');
-        }
-    }
-
-
-    // Populate Student and Course Selects for Manual Attendance
-    async function populateAttendanceSelects() {
-        try {
-            // Students
-            const { data: students } = await sb.from('profiles').select('id, full_name').eq('role', 'student').order('full_name');
-            const studentSelect = $('att_student_id');
-            studentSelect.innerHTML = '<option value="">-- Select Student --</option>';
-            if (students) {
-                students.forEach(s => {
-                    studentSelect.innerHTML += `<option value="${s.id}">${escapeHtml(s.full_name)}</option>`;
-                });
-            }
-            // Courses
-            const { data: courses } = await sb.from('courses').select('id, course_name').order('course_name');
-            const courseSelects = document.querySelectorAll('#att_course_id, #exam_course_id');
-            courseSelects.forEach(s => s.innerHTML = '<option value="">-- Select Course (Optional) --</option>');
-            if (courses) {
-                courses.forEach(c => {
-                    const opt = `<option value="${c.id}">${escapeHtml(c.course_name)}</option>`;
-                    courseSelects.forEach(s => s.insertAdjacentHTML('beforeend', opt));
-                });
-            }
-        } catch(err) {
-            console.error('populateAttendanceSelects', err);
-        }
-    }
-
-    // Manual Attendance Form Submission
-    $('manual-attendance-form').addEventListener('submit', async e => {
-        e.preventDefault();
-        const student_id = $('att_student_id').value;
-        const session_type = $('att_session_type').value;
-        const course_id = $('att_course_id').value || null;
-        const location = $('att_location').value.trim();
-        const date = $('att_date').value;
-        const time = $('att_time').value || null;
-        const marked_by = currentUserProfile.email || 'admin_manual';
-
-        if (!student_id || !date) return alert('Student and date required for manual entry.');
-        
-        // This inserts into the OLD 'attendance' table for manual records
-        const { error } = await sb.from('attendance').insert([{ 
-            student_id, session_type, course_id, location, time, date,
-            marked_by
-        }]);
-        
-        if (error) return alert('Add manual attendance error: ' + error.message);
-        $('manual-attendance-form').reset();
-        loadAttendance();
-    });
-
-    // Load Attendance Records (Geo Logs and Manual Logs combined)
-    async function loadAttendance(){
-        const tbody = $('attendance-table'); 
-        tbody.innerHTML = '<tr><td colspan="6">Loading records...</td></tr>';
-        
-        // Fetch records from the NEW 'geo_attendance_logs' table (Student check-ins)
-        const { data: geoData, error: geoError } = await sb.from('geo_attendance_logs')
-            .select('id, student_id, session_type, latitude, longitude, check_in_time, accuracy_meters, ip_address, profiles!geo_attendance_logs_student_id_fkey(full_name)')
-            .order('check_in_time', {ascending:false});
-        
-        // Fetch records from the OLD 'attendance' table (Manual check-ins)
-        const { data: oldData, error: oldError } = await sb.from('attendance')
-            .select('id, student_id, session_type, location, time, date, marked_by, profiles(full_name)')
-            .order('date', {ascending:false});
-
-        if (geoError || oldError) { 
-            console.warn('Attendance Load Error:', geoError || oldError);
-            tbody.innerHTML = `<tr><td colspan="6" style="color:red;">Error loading attendance logs. Check RLS policies.</td></tr>`;
-            return;
-        }
-
-        let combinedHtml = '';
-
-        // 1. Display GEO LOGS (High Priority for Admin)
-        if (geoData.length > 0) {
-            combinedHtml += `<tr><td colspan="6" style="font-weight:bold; background:#EBF8FF;">--- Geo-Location Student Check-in Logs ---</td></tr>`;
-            geoData.forEach(r => {
-                const studentName = r.profiles?.full_name || r.student_id || '-';
-                const geoIpText = `Acc: ${r.accuracy_meters.toFixed(1)}m | IP: ${r.ip_address || 'N/A'}`;
-                const checkinTime = new Date(r.check_in_time);
-                const time = checkinTime.toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit'});
-                const date = checkinTime.toLocaleDateString();
+    <div id="courseEditModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="document.getElementById('courseEditModal').style.display='none'">&times;</span>
+            <h2>Edit Course Details</h2>
+            <form id="edit-course-form">
+                <input type="hidden" id="edit_course_id"> 
                 
-                combinedHtml += `<tr style="background:#F7FAFD;">
-                    <td>${escapeHtml(studentName)}</td>
-                    <td>${escapeHtml(r.session_type)}</td>
-                    <td>Check-in: ${time}</td>
-                    <td>${date}</td>
-                    <td>${escapeHtml(geoIpText)}</td>
-                    <td>
-                        <button class="btn btn-map" onclick="showAttendanceMap(${r.latitude}, ${r.longitude}, '${escapeHtml(studentName)} Check-in')">Map</button>
-                        <button class="btn btn-delete" onclick="deleteGeoAttendance(${r.id})">Del</button>
-                    </td>
-                </tr>`;
-            });
-        }
-
-        // 2. Display OLD/MANUAL LOGS
-        if (oldData.length > 0) {
-            combinedHtml += `<tr><td colspan="6" style="font-weight:bold; background:#F1F5F9;">--- Manual/Old Attendance Records ---</td></tr>`;
-            oldData.forEach(r=>{
-                const studentName = r.profiles?.full_name || r.student_id || '-';
-                const locationText = (r.location || 'N/A') + ' at ' + (r.time || 'N/A');
-                const date = r.date || 'N/A';
+                <label for="edit_course_name">Course Name</label>
+                <input type="text" id="edit_course_name" required>
                 
-                combinedHtml += `<tr>
-                    <td>${escapeHtml(studentName)}</td>
-                    <td>${escapeHtml(r.session_type)}</td>
-                    <td>${escapeHtml(locationText)}</td>
-                    <td>${escapeHtml(date)}</td>
-                    <td>Manual by ${r.marked_by}</td>
-                    <td><button class="btn btn-delete" onclick="deleteManualAttendance(${r.id})">Delete</button></td>
-                </tr>`;
-            });
-        }
+                <label for="edit_course_unit_code">Unit Code</label>
+                <input type="text" id="edit_course_unit_code" required>
+                
+                <label for="edit_course_description">Description (Optional)</label>
+                <textarea id="edit_course_description" rows="3"></textarea>
+                
+                <hr>
 
-        tbody.innerHTML = combinedHtml || '<tr><td colspan="6">No attendance records found.</td></tr>';
-        loadDashboardData(); // Update check-in count
-    }
+                <label for="edit_course_program">Target Program</label>
+                <select id="edit_course_program" required onchange="updateBlockTermOptions('edit_course_program', 'edit_course_block')">
+                    <option value="KRCHN">KRCHN</option>
+                    <option value="TVET">TVET</option>
+                </select>
+                
+                <label for="edit_course_intake">Intake Year</label>
+                <select id="edit_course_intake">
+                    <option value="2024">March 2024</option>
+                    <option value="2025">March 2025</option>
+                    <option value="2026">March 2026</option>
+                    <option value="2027">March 2027</option>
+                    <option value="2028">March 2028</option>
+                </select>
+                
+                <label for="edit_course_block">Block/Term</label>
+                <select id="edit_course_block">
+                    <option value="">-- Select Block/Term --</option>
+                </select>
 
-    async function deleteGeoAttendance(id){
-        if (!confirm('Delete Geo Attendance Log?')) return;
-        const { error } = await sb.from('geo_attendance_logs').delete().eq('id', id);
-        if (error) return alert('Delete geo log error: ' + error.message);
-        await loadAttendance();
-    }
+                <button type="submit" class="btn-action">Update Course</button>
+            </form>
+        </div>
+    </div>
     
-    async function deleteManualAttendance(id){
-        if (!confirm('Delete Manual Attendance Log?')) return;
-        const { error } = await sb.from('attendance').delete().eq('id', id);
-        if (error) return alert('Delete manual log error: ' + error.message);
-        await loadAttendance();
-    }
+    <div id="userEditModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="document.getElementById('userEditModal').style.display='none'">&times;</span>
+            <h2>Edit User Profile</h2>
+            <form id="edit-user-form">
+                
+                <input type="hidden" id="edit_user_id"> 
+                <p class="subtitle">Editing User ID: <span id="edit_user_id_display">N/A</span></p>
+
+                <label for="edit_user_name">Full Name</label>
+                <input type="text" id="edit_user_name" required>
+
+                <label for="edit_user_email">Email</label>
+                <input type="email" id="edit_user_email" required>
+
+                <label for="edit_user_role">Role</label>
+                <select id="edit_user_role" required>
+                    <option value="student">Student</option>
+                    <option value="lecturer">Lecturer</option>
+                    <option value="admin">Admin</option>
+                    <!-- Super Admin role option removed/restricted -->
+                </select>
+                
+                <label for="edit_user_program">Program Type</label>
+                <select id="edit_user_program" required>
+                    <option value="KRCHN">KRCHN</option>
+                    <option value="TVET">TVET</option>
+                </select>
+
+                <label for="edit_user_intake">Intake Year</label>
+                <input type="text" id="edit_user_intake" placeholder="e.g., 2024" required>
+                
+                <label for="edit_user_block">Block/Term</label>
+                <select id="edit_user_block" required>
+                    <option value="">-- Select Block/Term --</option>
+                </select>
+
+                <label for="edit_user_block_status">Program Blocked Status</label>
+                <select id="edit_user_block_status" required>
+                    <option value="false">Active (Not Blocked)</option>
+                    <option value="true">BLOCKED</option>
+                </select>
+                
+                <hr>
+                <h3>Password Reset (Optional)</h3>
+                <p id="password-reset-feedback" style="color: red;"></p>
+                <label for="edit_user_new_password">New Password</label>
+                <input type="password" id="edit_user_new_password" placeholder="Leave blank to keep current password" autocomplete="new-password"> 
+                
+                <label for="edit_user_confirm_password">Confirm New Password</label>
+                <input type="password" id="edit_user_confirm_password" placeholder="Confirm new password" autocomplete="new-password"> 
+                
+                <button type="submit" class="btn-action">Save Changes</button>
+            </form>
+        </div>
+    </div>
     
-    // Leaflet Map Logic
-    function showAttendanceMap(lat, lng, label) {
-        if (!lat || !lng) {
-            return alert('No valid geo-coordinates found for this entry.');
-        }
-
-        $('mapModal').style.display = 'flex';
-        $('mapInfo').textContent = `Check-in location for ${label}.`;
-
-        // Clear existing map instance if it exists
-        if (attendanceMap) {
-            attendanceMap.remove();
-        }
-
-        // Initialize the map
-        setTimeout(() => {
-            attendanceMap = L.map('attendanceMap').setView([lat, lng], 16);
-
-            // Add the tile layer (OpenStreetMap)
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors'
-            }).addTo(attendanceMap);
-
-            // Add a marker for the check-in location
-            L.marker([lat, lng]).addTo(attendanceMap)
-                .bindPopup(`<b>${label}</b><br>Check-in Location.`)
-                .openPopup();
-        }, 100);
-    }
-
-/*******************
- * Student: CATS / Exams
- *******************/
-
-// Load Exams visible to this student
-async function loadStudentExams() {
-  const tbody = $('exams-table');
-  tbody.innerHTML = '<tr><td colspan="5">Loading your exams...</td></tr>';
-
-  try {
-    // Get student details (assume you have currentUserProfile object)
-    const program = currentUserProfile?.program;
-    const intake_year = currentUserProfile?.intake_year;
-    const block = currentUserProfile?.block;
-
-    // Fetch exams that match this student's program/intake/block
-    const { data: exams, error } = await sb
-      .from('exams')
-      .select('id, exam_name, exam_type, exam_date, exam_start_time, duration_minutes, online_link, status, course:course_id(course_name)')
-      .eq('target_program', program)
-      .eq('intake_year', intake_year)
-      .or(`block_term.eq.${block},block_term.is.null`)
-      .order('exam_date', { ascending: true });
-
-    if (error) {
-      console.error('Error loading exams:', error);
-      tbody.innerHTML = `<tr><td colspan="5">Error loading exams.</td></tr>`;
-      return;
-    }
-
-    if (!exams || exams.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="5">No exams or CATs scheduled for your program.</td></tr>`;
-      return;
-    }
-
-    tbody.innerHTML = '';
-    exams.forEach(exam => {
-      const courseName = exam.course?.course_name || 'N/A';
-      const dateTime = new Date(exam.exam_date).toLocaleDateString() + ' ' + (exam.exam_start_time || '');
-      const duration = exam.duration_minutes ? `${exam.duration_minutes} mins` : '-';
-      const onlineLink = exam.online_link
-        ? `<a href="${exam.online_link}" target="_blank" class="btn-action">Take Exam</a>`
-        : 'N/A';
-
-      tbody.innerHTML += `
-        <tr>
-          <td>${escapeHtml(exam.exam_type || '')}</td>
-          <td>${escapeHtml(courseName)}</td>
-          <td>${escapeHtml(exam.exam_name)}</td>
-          <td>${dateTime}</td>
-          <td>${escapeHtml(duration)}</td>
-          <td>${escapeHtml(exam.status)}</td>
-          <td>${onlineLink}</td>
-        </tr>
-      `;
-    });
-
-    // Also load grades after listing exams
-    loadStudentGrades();
-
-  } catch (err) {
-    console.error('Error:', err);
-    tbody.innerHTML = `<tr><td colspan="5">Failed to load exams.</td></tr>`;
-  }
-}
-
-// Load student grades (from exam_grades table)
-async function loadStudentGrades() {
-  const gradesDiv = $('student-grades');
-  gradesDiv.innerHTML = '<p>Loading your grades...</p>';
-
-  const userId = currentUserProfile?.id;
-  if (!userId) {
-    gradesDiv.innerHTML = '<p>Could not identify your account.</p>';
-    return;
-  }
-
-  const { data, error } = await sb
-    .from('exam_grades')
-    .select('cat_score, exam_score, exam_id, exams(exam_name, exam_type, course:course_id(course_name))')
-    .eq('student_id', userId);
-
-  if (error) {
-    gradesDiv.innerHTML = '<p>Error loading your grades.</p>';
-    return;
-  }
-
-  if (!data || data.length === 0) {
-    gradesDiv.innerHTML = '<p>No grades available yet.</p>';
-    return;
-  }
-
-  let html = `
-    <h3>Your Grades</h3>
-    <table class="grades-table">
-      <thead>
-        <tr><th>Type</th><th>Course</th><th>Exam</th><th>CAT</th><th>Exam</th><th>Total</th></tr>
-      </thead>
-      <tbody>
-  `;
-
-  data.forEach(g => {
-    const total = (g.cat_score || 0) + (g.exam_score || 0);
-    html += `
-      <tr>
-        <td>${escapeHtml(g.exams.exam_type || '')}</td>
-        <td>${escapeHtml(g.exams.course?.course_name || '')}</td>
-        <td>${escapeHtml(g.exams.exam_name || '')}</td>
-        <td>${g.cat_score ?? '-'}</td>
-        <td>${g.exam_score ?? '-'}</td>
-        <td>${total}</td>
-      </tr>
-    `;
-  });
-
-  html += '</tbody></table>';
-  gradesDiv.innerHTML = html;
-}
-
-// Auto-load on tab open
-document.addEventListener('DOMContentLoaded', loadStudentExams);
-
-    /*******************
-     * Messages Tab
-     *******************/
-    $('send-message-form').addEventListener('submit', async e => {
-        e.preventDefault();
-        const recipient = $('msg_recipient').value.trim();
-        const body = $('msg_body').value.trim();
-        const sender = currentUserProfile.email;
-
-        const { error } = await sb.from('messages').insert([{
-            sender_email: sender,
-            recipient_email: recipient,
-            message_body: body,
-            is_read: false
-        }]);
-
-        if (error) return alert('Error sending message: ' + error.message);
-        alert('Message sent successfully!');
-        $('send-message-form').reset();
-        loadMessages();
-    });
-
-    async function loadMessages() {
-        const tbody = $('messages-table');
-        tbody.innerHTML = '<tr><td colspan="4">Loading messages...</td></tr>';
-        
-        // Load messages sent by or received by this admin
-        const { data, error } = await sb.from('messages')
-            .select('*')
-            .or(`sender_email.eq.${currentUserProfile.email},recipient_email.eq.${currentUserProfile.email}`)
-            .order('created_at', { ascending: false });
-
-        if (error) {
-            tbody.innerHTML = `<tr><td colspan="4">Error loading messages: ${error.message}</td></tr>`;
-            return;
-        }
-
-        tbody.innerHTML = '';
-        data.forEach(m => {
-            const isReadStatus = m.is_read ? '' : '<span class="message-status">(Unread)</span>';
-            const date = new Date(m.created_at).toLocaleString();
-            tbody.innerHTML += `<tr>
-                <td>${escapeHtml(m.sender_email)}</td>
-                <td>${escapeHtml(m.recipient_email)} ${isReadStatus}</td>
-                <td>${escapeHtml(m.message_body.substring(0, 50))}...</td>
-                <td>${date}</td>
-            </tr>`;
-        });
-    }
-
-    /*******************
-     * Resources Tab
-     *******************/
-    async function uploadResource() {
-        const fileInput = $('resourceFile');
-        const title = $('resourceTitle').value.trim() || fileInput.files[0]?.name;
-        if (!fileInput.files.length) return alert('Please select a file to upload.');
-
-        const file = fileInput.files[0];
-        const filePath = `${currentUserProfile.email}/${Date.now()}_${file.name}`;
-
-        // 1. Upload to Supabase Storage
-        const { error: storageError } = await sb.storage.from(RESOURCES_BUCKET).upload(filePath, file);
-        if (storageError) return alert('Upload failed: ' + storageError.message);
-
-        // 2. Insert record into 'resources' table
-        const { error: dbError } = await sb.from('resources').insert([{
-            file_name: title,
-            storage_path: filePath,
-            uploaded_by: currentUserProfile.email
-        }]);
-
-        if (dbError) {
-            // Optional: Handle cleanup if DB insertion fails
-            alert('File uploaded, but DB record failed: ' + dbError.message);
-            return;
-        }
-
-        alert('Resource uploaded successfully!');
-        $('resourceFile').value = '';
-        $('resourceTitle').value = '';
-        loadResources();
-    }
+    <!-- Dependencies remain the same -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script> 
+    <script src="script.js"></script>
     
-    async function loadResources() {
-        const tbody = $('resources-list');
-        tbody.innerHTML = '<tr><td colspan="4">Loading resources...</td></tr>';
-        
-        const { data, error } = await sb.from('resources')
-            .select('*')
-            .order('created_at', { ascending: false });
-
-        if (error) {
-            tbody.innerHTML = `<tr><td colspan="4">Error loading resources: ${error.message}</td></tr>`;
-            return;
-        }
-
-        tbody.innerHTML = '';
-        data.forEach(r => {
-            const date = new Date(r.created_at).toLocaleDateString();
-            // Get public URL for download
-            const { data: publicUrlData } = sb.storage.from(RESOURCES_BUCKET).getPublicUrl(r.storage_path);
-            const downloadUrl = publicUrlData?.publicUrl || '#';
-
-            tbody.innerHTML += `<tr>
-                <td><a href="${downloadUrl}" target="_blank">${escapeHtml(r.file_name)}</a></td>
-                <td>${escapeHtml(r.uploaded_by)}</td>
-                <td>${date}</td>
-                <td><button class="btn btn-delete" onclick="deleteResource(${r.id}, '${r.storage_path}')">Delete</button></td>
-            </tr>`;
-        });
-    }
-
-    async function deleteResource(id, storagePath) {
-        if (!confirm('Are you sure you want to delete this resource?')) return;
-
-        // 1. Delete from Storage
-        const { error: storageError } = await sb.storage.from(RESOURCES_BUCKET).remove([storagePath]);
-        if (storageError) console.warn('Storage deletion failed, continuing with DB record:', storageError.message);
-
-        // 2. Delete from Database
-        const { error: dbError } = await sb.from('resources').delete().eq('id', id);
-        if (dbError) return alert('Error deleting resource record: ' + dbError.message);
-        
-        loadResources();
-    }
-
-    /*******************
-     * Initialization
-     *******************/
-    // The robust session listener for Admin login check
-    sb.auth.onAuthStateChange((event, session) => {
-        if ((event === 'INITIAL_SESSION' || event === 'SIGNED_IN') && session) {
-            initSession(); // Check user role and load data
-        } else if (event === 'SIGNED_OUT' || (event === 'INITIAL_SESSION' && !session)) {
-            window.location.href = "login.html";
-        }
-    });
-
-  </script>
-</body>
+    </body>
 </html>
+
