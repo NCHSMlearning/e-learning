@@ -1209,38 +1209,85 @@ async function handleEditCourse(e) {
  *******************************************************/
 
 /**
- * Populate the course select dropdown based on selected program
+ * Normalize strings for safe comparison
  */
-async function populateSessionCourseSelects(courses = null) {
-    const courseSelect = $('session_course_id');
-    const program = $('session_program').value;
-    courseSelect.innerHTML = ''; // clear previous options
+function normalizeStr(str) {
+    return str?.trim().toUpperCase() || '';
+}
 
-    let filteredCourses = [];
+/**
+ * Populate the course dropdown based on selected program
+ */
+async function populateSessionCourseSelects(courses = null, courseSelect = $('new_session_course')) {
+    const program = $('new_session_program').value;
+    courseSelect.innerHTML = '<option value="">-- Select Course (Optional) --</option>';
 
-    if (program) {
-        if (!courses) {
-            const { data } = await fetchData(
-                'courses',
-                'id, course_name',
-                { target_program: program },
-                'course_name',
-                true
-            );
-            filteredCourses = data || [];
-        } else {
-            filteredCourses = courses.filter(c => c.target_program === program);
-        }
+    if (!program) return;
+
+    if (!courses) {
+        const { data } = await fetchData(
+            'courses',
+            'id, course_name, target_program',
+            {},
+            'course_name',
+            true
+        );
+        courses = data || [];
     }
 
+    const filteredCourses = courses.filter(c => normalizeStr(c.target_program) === normalizeStr(program));
     populateSelect(courseSelect, filteredCourses, 'id', 'course_name', 'Select Course (Optional)');
+}
+
+/**
+ * Populate intake dropdown based on program
+ */
+async function populateIntakeSelect(intakeSelect = $('new_session_intake_year')) {
+    const program = $('new_session_program').value;
+    intakeSelect.innerHTML = '<option value="">-- Select Intake Year --</option>';
+
+    if (!program) return;
+
+    const { data: intakes } = await sb.from('program_intakes')
+        .select('intake_year')
+        .eq('program', program)
+        .order('intake_year', { ascending: false });
+
+    if (!intakes || intakes.length === 0) return;
+
+    populateSelect(intakeSelect, intakes, 'intake_year', 'intake_year', 'Select Intake');
+
+    // Optional: auto-select first intake and populate block immediately
+    intakeSelect.value = intakes[0].intake_year;
+    await populateBlockSelect();
+}
+
+/**
+ * Populate block/term dropdown based on program + intake
+ */
+async function populateBlockSelect(blockSelect = $('new_session_block_term')) {
+    const program = $('new_session_program').value;
+    const intake = $('new_session_intake_year').value;
+    blockSelect.innerHTML = '<option value="">-- Select Block/Term --</option>';
+
+    if (!program || !intake) return;
+
+    const { data: blocks } = await sb.from('program_blocks')
+        .select('block_term')
+        .eq('program', program)
+        .eq('intake_year', parseInt(intake, 10))
+        .order('block_term', { ascending: true });
+
+    if (!blocks || blocks.length === 0) return;
+
+    populateSelect(blockSelect, blocks, 'block_term', 'block_term', 'Select Block/Term');
 }
 
 /**
  * Load scheduled sessions into table
  */
 async function loadScheduledSessions() {
-    const tbody = $('scheduled-sessions-table');
+    const tbody = $('scheduledSessionsTableBody');
     tbody.innerHTML = '<tr><td colspan="6">Loading scheduled sessions...</td></tr>';
 
     const { data: sessions, error } = await fetchData(
@@ -1261,7 +1308,6 @@ async function loadScheduledSessions() {
         return;
     }
 
-    // Build table rows efficiently
     const fragment = document.createDocumentFragment();
     sessions.forEach(s => {
         const tr = document.createElement('tr');
@@ -1299,18 +1345,16 @@ async function handleAddSession(e) {
     const originalText = submitButton.textContent;
     setButtonLoading(submitButton, true, originalText);
 
-    const session_type = $('session_type').value.trim();
-    const session_title = $('session_title').value.trim();
-    const session_date = $('session_date').value;
-    const session_time = $('session_time').value || '09:00:00';
-    const target_program = $('session_program').value || null;
-    const intake_year = $('session_intake').value;
-    const block_term = $('session_block_term').value;
-    const program_type = $('session_program_type').value || 'Diploma';
-    const course_id = $('session_course_id').value || null;
+    const session_type = $('new_session_type').value.trim();
+    const session_title = $('new_session_title').value.trim();
+    const session_date = $('new_session_date').value;
+    const session_time = $('new_session_start_time').value || '09:00:00';
+    const target_program = $('new_session_program').value || null;
+    const intake_year = $('new_session_intake_year').value;
+    const block_term = $('new_session_block_term').value;
+    const course_id = $('new_session_course').value || null;
 
-    // Validate required fields
-    if (!session_type || !session_title || !session_date || !target_program || !intake_year || !block_term || !program_type) {
+    if (!session_type || !session_title || !session_date || !target_program || !intake_year || !block_term) {
         showFeedback('Please fill in all required fields.', 'error');
         setButtonLoading(submitButton, false, originalText);
         return;
@@ -1323,7 +1367,6 @@ async function handleAddSession(e) {
         session_time,
         target_program,
         session_type,
-        program_type,
         intake_year,
         block_term,
         course_id,
@@ -1400,6 +1443,20 @@ async function saveClinicalName() {
         showFeedback(`❌ Failed to save clinical area: ${error.message}`, 'error');
     }
 }
+
+/**
+ * Event listeners for the form
+ */
+$('new_session_program').addEventListener('change', async () => {
+    await populateSessionCourseSelects();
+    await populateIntakeSelect();
+    $('new_session_block_term').innerHTML = '<option value="">-- Select Block/Term --</option>';
+});
+
+$('new_session_intake_year').addEventListener('change', async () => {
+    await populateBlockSelect();
+});
+
 
 
 /*******************************************************
