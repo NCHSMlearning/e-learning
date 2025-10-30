@@ -284,26 +284,25 @@ async function fetchGlobalDataCaches() {
     // 1. Fetch all courses (needed for filtering in loadLecturerCourses)
     const { data: courses } = await fetchData(
         COURSES_TABLE,
-        'course_id, course_name, program_type, block_term', // Updated to include necessary fields
+        'course_id, course_name, program_type, block', // ✅ fixed: block_term → block
         {},
         'course_name',
         true
     );
     allCourses = courses || [];
 
-    // 2. Determine lecturerTargetProgram based on department (Logic is now in getProgramFilterFromDepartment)
-    // lecturerTargetProgram is set in initSession
-
+    // 2. Determine lecturerTargetProgram based on department
+    // (already handled in initSession)
+    
     // 3. Fetch all students filtered by lecturer’s program
     const STUDENT_TABLE = 'consolidated_user_profiles_table'; 
 
     let studentQuery = sb
         .from(STUDENT_TABLE)
-        // 🛑 CRITICAL FIX: Ensure all selected fields exist in the student profile table
-        .select('user_id, full_name, email, program, intake_year, block_term, status') 
+        // ✅ fixed: use correct columns that exist in your table
+        .select('user_id, full_name, email, program, intake_year, block, status')
         .eq('role', 'student');
 
-    // Apply program filter if available (Logic preserved)
     if (lecturerTargetProgram) {
         studentQuery = studentQuery.eq('program', lecturerTargetProgram);
     } else {
@@ -312,7 +311,6 @@ async function fetchGlobalDataCaches() {
         );
     }
 
-
     const { data: students, error: studentError } = await studentQuery.order(
         'full_name',
         { ascending: true }
@@ -320,7 +318,10 @@ async function fetchGlobalDataCaches() {
 
     if (studentError) {
         console.error('Error fetching filtered students:', studentError);
-        showFeedback('Failed to load student list. Please check the Supabase column names (program, block_term) and RLS policy.', 'error');
+        showFeedback(
+            'Failed to load student list. Please check the Supabase column names (program, block) and RLS policy.',
+            'error'
+        );
     }
 
     allStudents = students || [];
@@ -329,6 +330,7 @@ async function fetchGlobalDataCaches() {
         `✅ Loaded ${allStudents.length} student(s) for program: ${lecturerTargetProgram || 'None'}`
     );
 }
+
 
 
 function loadSectionData(tabId) { 
