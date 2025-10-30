@@ -576,14 +576,12 @@ async function loadLecturerCourses() {
 }
 
 
-// 🛑 OLD loadLecturerStudents (Renamed from my-courses to my-students)
-/**
- * Renders the allStudents cache, which is already filtered by fetchGlobalDataCaches.
- */
-
+// ✅ loadLecturerStudents (Final polished version)
 async function loadLecturerStudents() {
     const tbody = document.getElementById('lecturer-students-table');
     if (!tbody) return;
+
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;">Loading students...</td></tr>`;
 
     try {
         if (!currentUserProfile || !lecturerTargetProgram) {
@@ -606,26 +604,28 @@ async function loadLecturerStudents() {
             return;
         }
 
-        const studentsHtml = allStudents.map(profile => `
-            <tr>
-                <td>${profile.full_name || 'N/A'}</td>
-                <td>${profile.email || 'N/A'}</td>
-                <td>${profile.program || 'N/A'}</td>
-                <td>${profile.intake_year || 'N/A'}</td>
-                <td>${profile.block || 'N/A'}</td>
-                <td>
-                    <span class="status status-${(profile.status || 'Active').toLowerCase()}">
-                        ${profile.status || 'Active'}
-                    </span>
-                </td>
-                <td>
-                    <button class="btn-action" 
-                            onclick="showSendMessageModal('${profile.user_id}', '${profile.full_name?.replace(/'/g, "\\'") || ''}')">
-                        Message
-                    </button>
-                </td>
-            </tr>
-        `).join('');
+        const studentsHtml = allStudents.map(profile => {
+            const status = (profile.status || 'Active').toLowerCase();
+            return `
+                <tr>
+                    <td>${profile.full_name || 'N/A'}</td>
+                    <td>${profile.email || 'N/A'}</td>
+                    <td>${profile.program || 'N/A'}</td>
+                    <td>${profile.intake_year || 'N/A'}</td>
+                    <td>${profile.block || 'N/A'}</td>
+                    <td>
+                        <span class="status status-${status}">
+                            ${profile.status || 'Active'}
+                        </span>
+                    </td>
+                    <td>
+                        <button class="btn-action" 
+                                onclick="showSendMessageModal('${profile.user_id}', '${profile.full_name?.replace(/'/g, "\\'") || ''}')">
+                            Message
+                        </button>
+                    </td>
+                </tr>`;
+        }).join('');
 
         tbody.innerHTML = studentsHtml;
     } catch (err) {
