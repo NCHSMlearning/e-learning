@@ -1208,52 +1208,31 @@ async function handleEditCourse(e) {
  * 6. Manage Sessions Tab (Including Clinical)
  *******************************************************/
 
-async function populateBlockTerms() {
-    const program = $('new_session_program').value;
-    const intakeYear = $('new_session_intake_year').value;
-    const blockSelect = $('new_session_block_term');
-
-    // Clear current options first
-    blockSelect.innerHTML = '<option value="">-- Select Block/Term --</option>';
-
-    if (!program || !intakeYear) return;
-
-    try {
-        const { data, error } = await sb
-            .from('block_terms')
-            .select('id, block_name')
-            .eq('program', program)
-            .eq('intake_year', intakeYear)
-            .order('block_name', { ascending: true });
-
-        if (error) throw error;
-
-        if (data && data.length > 0) {
-            data.forEach(b => {
-                const opt = document.createElement('option');
-                opt.value = b.block_name;
-                opt.textContent = b.block_name;
-                blockSelect.appendChild(opt);
-            });
+async function populateSessionCourseSelects(courses = null) {
+    const courseSelect = $('session_course_id');
+    const program = $('session_program').value;
+    
+    let filteredCourses = [];
+    
+    if (!program) {
+        filteredCourses = []; 
+    } else {
+        if (!courses) {
+            const { data } = await fetchData('courses', 'id, course_name', { target_program: program }, 'course_name', true);
+            filteredCourses = data || [];
         } else {
-            const opt = document.createElement('option');
-            opt.value = '';
-            opt.textContent = '(No blocks found)';
-            blockSelect.appendChild(opt);
+            filteredCourses = courses.filter(c => c.target_program === program);
         }
-    } catch (err) {
-        console.error('Error loading blocks:', err.message);
     }
+    
+    populateSelect(courseSelect, filteredCourses, 'id', 'course_name', 'Select Course (Optional)');
 }
 
-// Watch for changes in Program or Intake Year
-$('new_session_program').addEventListener('change', populateBlockTerms);
-$('new_session_intake_year').addEventListener('change', populateBlockTerms);
 
 async function loadScheduledSessions() {
-    const tbody = $('scheduledSessionsTableBody');
+    const tbody = $('scheduled-sessions-table');
     tbody.innerHTML = '<tr><td colspan="6">Loading scheduled sessions...</td></tr>';
-
+    
     const { data: sessions, error } = await fetchData(
         'scheduled_sessions',
         '*, course:course_id(course_name)',
@@ -1277,49 +1256,50 @@ async function loadScheduledSessions() {
             detail += ` (${courseName})`;
         }
 
-        tbody.innerHTML += `
-            <tr>
-                <td>${escapeHtml(s.session_type)}</td>
-                <td>${escapeHtml(detail)}</td>
-                <td>${dateTime}</td>
-                <td>${escapeHtml(s.target_program || 'N/A')}</td>
-                <td>${escapeHtml(s.block_term || 'N/A')}</td>
-                <td>
-                    <button class="btn btn-delete" onclick="deleteSession('${s.id}', '${escapeHtml(s.session_title, true)}')">Delete</button>
-                </td>
-            </tr>`;
+        tbody.innerHTML += `<tr>
+            <td>${escapeHtml(s.session_type)}</td>
+            <td>${escapeHtml(detail)}</td>
+            <td>${dateTime}</td>
+            <td>${escapeHtml(s.target_program || 'N/A')}</td>
+            <td>${escapeHtml(s.block_term || 'N/A')}</td>
+            <td>
+                <button class="btn btn-delete" onclick="deleteSession('${s.id}', '${escapeHtml(s.session_title, true)}')">Delete</button>
+            </td>
+        </tr>`;
     });
 }
 
-async function handleScheduleSession(e) {
+async function handleAddSession(e) {
     e.preventDefault();
     const submitButton = e.submitter;
     const originalText = submitButton.textContent;
     setButtonLoading(submitButton, true, originalText);
 
-    const session_type = $('new_session_type').value.trim();
-    const session_title = $('new_session_title').value.trim();
-    const session_date = $('new_session_date').value;
-    const start_time = $('new_session_start_time').value || '09:00';
-    const end_time = $('new_session_end_time').value || null;
-    const target_program = $('new_session_program').value;
-    const intake_year = $('new_session_intake_year').value;
-    const block_term = $('new_session_block_term').value;
-    const course_id = $('new_session_course').value || null;
+    const session_type = $('session_type').value.trim();
+    const session_title = $('session_title').value.trim();
+    const session_date = $('session_date').value;
+    const session_time = $('session_time').value || '09:00:00'; // default if empty
+    const target_program = $('session_program').value || null;
+    const intake_year = $('session_intake').value;
+    const block_term = $('session_block_term').value;
+    const program_type = $('session_program_type').value || 'Diploma'; // ADD this field
+    const course_id = $('session_course_id').value || null;
 
-    if (!session_type || !session_title || !session_date || !target_program || !intake_year || !block_term) {
+    // Validate required fields
+    if (!session_type || !session_title || !session_date || !target_program || !intake_year || !block_term || !program_type) {
         showFeedback('Please fill in all required fields.', 'error');
         setButtonLoading(submitButton, false, originalText);
         return;
     }
 
     const sessionData = {
-        session_type,
-        session_title,
-        session_date,
-        session_time: start_time,
-        end_time,
+        title: session_type,            // maps to 'title' column
+        session_title,                  // session_title column
+        session_date,                   // timestamp
+        session_time,                   // time
         target_program,
+        session_type,
+        program_type,                   // NEW
         intake_year,
         block_term,
         course_id,
@@ -1328,12 +1308,15 @@ async function handleScheduleSession(e) {
 
     try {
         const { error, data } = await sb.from('scheduled_sessions').insert([sessionData]).select('id');
+
         if (error) throw error;
 
-        await logAudit('SESSION_ADD', `Session created: ${session_title}`, data?.[0]?.id, 'SUCCESS');
+        await logAudit('SESSION_ADD', `Successfully scheduled session: ${session_title}.`, data?.[0]?.id, 'SUCCESS');
         showFeedback('✅ Session scheduled successfully!', 'success');
         e.target.reset();
         loadScheduledSessions();
+        renderFullCalendar();
+
     } catch (error) {
         await logAudit('SESSION_ADD', `Failed to schedule session: ${session_title}. Reason: ${error.message}`, null, 'FAILURE');
         showFeedback(`❌ Failed to schedule session: ${error.message}`, 'error');
@@ -1342,20 +1325,21 @@ async function handleScheduleSession(e) {
     }
 }
 
+
 async function deleteSession(sessionId, sessionTitle) {
     if (!confirm(`Are you sure you want to delete session: ${sessionTitle}?`)) return;
     const { error } = await sb.from('scheduled_sessions').delete().eq('id', sessionId);
-
-    if (error) {
+    if (error) { 
         await logAudit('SESSION_DELETE', `Failed to delete session ${sessionTitle}. Reason: ${error.message}`, sessionId, 'FAILURE');
-        showFeedback(`Failed to delete session: ${error.message}`, 'error');
-    } else {
+        showFeedback(`Failed to delete session: ${error.message}`, 'error'); 
+    } 
+    else { 
         await logAudit('SESSION_DELETE', `Session ${sessionTitle} deleted successfully.`, sessionId, 'SUCCESS');
-        showFeedback('Session deleted successfully!', 'success');
-        loadScheduledSessions();
+        showFeedback('Session deleted successfully!', 'success'); 
+        loadScheduledSessions(); 
+        renderFullCalendar(); 
     }
 }
-
 
 async function saveClinicalName() {
     const program = $('clinical_program').value;
