@@ -616,12 +616,13 @@ async function updateBlockTermOptions(programSelectId, blockTermSelectId) {
   const blockTermSelect = $(blockTermSelectId);
   if (!blockTermSelect) return;
 
-  // Clear old options
+  // Clear previous options
   blockTermSelect.innerHTML = '<option value="">-- Select Block/Term --</option>';
 
   if (!program) return;
 
   try {
+    // Fetch from program_blocks using correct column names
     const { data: blocks, error } = await sb
       .from('program_blocks')
       .select('block_term_value, block_term_label')
@@ -630,11 +631,12 @@ async function updateBlockTermOptions(programSelectId, blockTermSelectId) {
 
     if (error) throw error;
 
-    if (blocks?.length) {
+    // Populate dropdown
+    if (blocks && blocks.length > 0) {
       blocks.forEach(b => {
         const opt = document.createElement('option');
-        opt.value = b.block_term_value;   // 👈 stores 'A', 'B', 'Term_1' etc.
-        opt.textContent = b.block_term_label; // 👈 shows 'Block A', 'Term 1' etc.
+        opt.value = b.block_term_value;   // e.g., A, B, Term_1
+        opt.textContent = b.block_term_label; // e.g., Block A, Term 1
         blockTermSelect.appendChild(opt);
       });
     } else {
