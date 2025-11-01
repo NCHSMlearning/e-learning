@@ -1,40 +1,10 @@
 /**********************************************************************************
- * Final Integrated JavaScript File (script.js)
+* Final Integrated JavaScript File (script.js)
  * SUPERADMIN DASHBOARD - COURSE, USER, ATTENDANCE & FULL FILTERING MANAGEMENT
  * (Includes: Strategic Admin Features, Online Exam Enhancements, Mass Promotion)
  *
  * **FIXED: Button loading/reset, Consolidated Table Logic, Audit Logging**
- *
- * 🌟 FIXES IMPLEMENTED 🌟
- * - Added e.preventDefault() to handleEditUser and handleAddExam to stop page reload.
- * - Replaced blocking alert() with non-blocking Toast Notifications (showFeedback).
  **********************************************************************************/
-
-// --- CSS for Toast Notifications (REQUIRED IN YOUR HTML/CSS) ---
-/*
-.toast-container {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    z-index: 10000;
-}
-.toast {
-    padding: 15px;
-    margin-bottom: 10px;
-    border-radius: 5px;
-    color: white;
-    font-weight: bold;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-    opacity: 0.9;
-    transition: opacity 0.5s ease-out;
-}
-.toast-success { background-color: #2ecc71; }
-.toast-error { background-color: #e74c3c; }
-.toast-warning { background-color: #f39c12; }
-.toast-info { background-color: #3498db; }
-*/
-// -----------------------------------------------------------------
-
  // Hides the .html extension in the URL
     if (window.location.pathname.endsWith('.html')) {
         const cleanPath = window.location.pathname.replace(/\.html$/, '');
@@ -44,7 +14,7 @@
 // !!! IMPORTANT: CHECK YOUR KEYS AND URL !!!
 // REPLACE with your actual Supabase URL and ANON_KEY
 const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co'; 
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Ppk';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     // 🔒 Redirect to login if not authenticated
@@ -90,39 +60,12 @@ function escapeHtml(s, isAttribute = false){
 /**
  * @param {string} message 
  * @param {'success'|'error'|'warning'|'info'} type 
- * * 🌟 UPDATED: Uses a non-blocking toast notification.
- * Requires a <div id="toast-container"></div> in your HTML.
  */
 function showFeedback(message, type = 'success') {
-    const toastContainer = document.getElementById('toast-container');
-    
-    // Fallback to alert if toast container is not found, but log a warning
-    if (!toastContainer) {
-        console.warn("Toast container not found. Falling back to alert(). Add <div id='toast-container'></div> to your HTML.");
-        const prefix = type === 'success' ? '✅ Success: ' : 
+    const prefix = type === 'success' ? '✅ Success: ' : 
                    type === 'error' ? '❌ Error: ' :
                    type === 'warning' ? '⚠️ Warning: ' : 'ℹ️ Info: ';
-        alert(prefix + message);
-        return;
-    }
-    
-    const toast = document.createElement('div');
-    toast.className = `toast toast-${type}`;
-    toast.textContent = message; 
-
-    // Add prefix icon for visibility
-    const icon = type === 'success' ? '✅ ' : 
-                 type === 'error' ? '❌ ' :
-                 type === 'warning' ? '⚠️ ' : 'ℹ️ ';
-    toast.textContent = icon + message;
-
-    // Append and set timer to remove
-    toastContainer.appendChild(toast);
-    
-    setTimeout(() => {
-        toast.style.opacity = '0'; // Start fade out
-        setTimeout(() => toast.remove(), 500); // Remove element after fade
-    }, 3000); 
+    alert(prefix + message);
 }
 
 /**
@@ -1052,7 +995,7 @@ async function openEditUserModal(userId) {
 }
 
 async function handleEditUser(e) {
-  e.preventDefault(); // 🌟 FIX: Prevent page reload
+  e.preventDefault();
   const submitButton = e.submitter;
   const originalText = submitButton.textContent;
   setButtonLoading(submitButton, true, originalText);
@@ -1766,7 +1709,7 @@ async function populateExamCourseSelects(courses = null) {
 
 // Add Exam / CAT
 async function handleAddExam(e) {
-  e.preventDefault(); // 🌟 FIX: Prevent page reload
+  e.preventDefault();
   const submitButton = e.submitter;
   const originalText = submitButton.textContent;
   setButtonLoading(submitButton, true, originalText);
@@ -2196,7 +2139,15 @@ function escapeHtml(str) {
     .replace(/'/g, "&#039;");
 }
 
-// NOTE: showFeedback function is at the top of the script now, using Toast
+function showFeedback(msg, type = 'info') {
+  alert(msg); // Replace this with toast/snackbar if desired
+}
+
+function setButtonLoading(btn, isLoading, originalText) {
+  if (!btn) return;
+  btn.disabled = isLoading;
+  btn.textContent = isLoading ? 'Processing...' : originalText;
+}
 
 async function logAudit(action, details, refId = null, status = 'SUCCESS') {
   if (!window.sb) return;
@@ -2424,7 +2375,7 @@ async function loadPublicAnnouncements() {
 }
 
 // ---------------- Save Official Announcement ----------------
-document.getElementById('save-announcement')?.addEventListener('click', async () => {
+document.getElementById('save-announcement').addEventListener('click', async () => {
   const textarea = document.getElementById('announcement-body');
   const content = textarea.value.trim();
   const feedback = document.getElementById('announcement-feedback');
@@ -2455,7 +2406,7 @@ document.getElementById('save-announcement')?.addEventListener('click', async ()
 });
 
 // ---------------- Initialization ----------------
-document.getElementById('send-message-form')?.addEventListener('submit', handleSendMessage);
+document.getElementById('send-message-form').addEventListener('submit', handleSendMessage);
 
 async function initMessagesSection() {
   await loadStudentMessages();
@@ -2468,6 +2419,11 @@ document.addEventListener('DOMContentLoaded', initMessagesSection);
 
 
 
+/*******************************************************
+ * 11. Resources Tab (Fully Corrected)
+ *******************************************************/
+ 
+// -------------------- Handle Upload Form --------------------
 /*******************************************************
  * 11. Resources Tab (Fully Corrected)
  *******************************************************/
@@ -2655,7 +2611,6 @@ async function updateSystemStatus(newStatus) {
     if (existing?.length > 0) {
         ({ error } = await sb.from(SETTINGS_TABLE).update(updateData).eq('id', existing[0].id));
     } else {
-        // Insert a new record if none exists (should be handled by updateSystemStatus, but for robustness)
         ({ error } = await sb.from(SETTINGS_TABLE).insert([updateData]));
     }
 
