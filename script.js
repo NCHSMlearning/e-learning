@@ -4,7 +4,6 @@
  * (Includes: Strategic Admin Features, Online Exam Enhancements, Mass Promotion)
  *
  * **FIXED: Button loading/reset, Consolidated Table Logic, Audit Logging**
- * **FIXED: DYNAMIC BLOCK/TERM OPTIONS USING DB LOOKUP (SCALABLE)**
  **********************************************************************************/
  // Hides the .html extension in the URL
     if (window.location.pathname.endsWith('.html')) {
@@ -38,7 +37,6 @@ const MESSAGE_KEY = 'student_welcome';
 const AUDIT_TABLE = 'audit_logs'; 
 const GLOBAL_SETTINGS_KEY = 'global_system_status'; 
 const USER_PROFILE_TABLE = 'consolidated_user_profiles_table'; // Consolidated User Table
-const PROGRAM_BLOCKS_TABLE = 'program_blocks'; // NEW: Table to store Block/Term options
 
 // Global Variables
 let currentUserProfile = null;
@@ -174,8 +172,8 @@ async function loadSectionData(tabId) {
         case 'enroll': 
             loadStudents(); 
             // Initialize Mass Promotion Selects
-            updateBlockTermOptions('promote_intake', 'promote_from_block', 'promote_intake');
-            updateBlockTermOptions('promote_intake', 'promote_to_block', 'promote_intake');
+            updateBlockTermOptions('promote_intake', 'promote_from_block');
+            updateBlockTermOptions('promote_intake', 'promote_to_block');
             break; 
         case 'courses': loadCourses(); break;
         case 'sessions': loadScheduledSessions(); populateSessionCourseSelects(); break;
@@ -234,54 +232,48 @@ async function initSession() {
     
     // ENROLLMENT/USER TAB
     $('add-account-form')?.addEventListener('submit', handleAddAccount);
-    // ⬇️ CORRECTION APPLIED HERE 
-    $('account-program')?.addEventListener('change', () => updateBlockTermOptions('account-program', 'account-block-term', 'account-intake')); 
-    $('account-intake')?.addEventListener('change', () => updateBlockTermOptions('account-program', 'account-block-term', 'account-intake'));
+    $('account-program')?.addEventListener('change', () => updateBlockTermOptions('account-program', 'account-block-term')); 
+    $('account-intake')?.addEventListener('change', () => updateBlockTermOptions('account-program', 'account-block-term'));
     $('user-search')?.addEventListener('keyup', () => filterTable('user-search', 'users-table', [1, 2, 4]));
     
     // NEW: MASS PROMOTION LISTENER
     $('mass-promotion-form')?.addEventListener('submit', handleMassPromotion);
-    // ⬇️ CORRECTION APPLIED HERE 
     $('promote_intake')?.addEventListener('change', () => {
-        updateBlockTermOptions('promote_intake', 'promote_from_block', 'promote_intake');
-        updateBlockTermOptions('promote_intake', 'promote_to_block', 'promote_intake');
+        updateBlockTermOptions('promote_intake', 'promote_from_block');
+        updateBlockTermOptions('promote_intake', 'promote_to_block');
     });
 
     // COURSES TAB
     $('add-course-form')?.addEventListener('submit', handleAddCourse);
     $('course-search')?.addEventListener('keyup', () => filterTable('course-search', 'courses-table', [0, 1, 3]));
-    // ⬇️ CORRECTION APPLIED HERE 
-    $('course-program')?.addEventListener('change', () => { updateBlockTermOptions('course-program', 'course-block', 'course-intake'); });
-    $('course-intake')?.addEventListener('change', () => { updateBlockTermOptions('course-program', 'course-block', 'course-intake'); });
+    $('course-program')?.addEventListener('change', () => { updateBlockTermOptions('course-program', 'course-block'); });
+    $('course-intake')?.addEventListener('change', () => { updateBlockTermOptions('course-program', 'course-block'); });
     
     // SESSIONS TAB
     $('add-session-form')?.addEventListener('submit', handleAddSession);
-    // ⬇️ CORRECTION APPLIED HERE 
     $('session_program')?.addEventListener('change', () => { 
-        updateBlockTermOptions('session_program', 'session_block_term', 'session_intake'); 
+        updateBlockTermOptions('session_program', 'session_block_term'); 
         populateSessionCourseSelects(); 
     });
-    $('session_intake')?.addEventListener('change', () => updateBlockTermOptions('session_program', 'session_block_term', 'session_intake')); 
-    $('clinical_program')?.addEventListener('change', () => { updateBlockTermOptions('clinical_program', 'clinical_block_term', 'clinical_intake'); }); 
-    $('clinical_intake')?.addEventListener('change', () => updateBlockTermOptions('clinical_program', 'clinical_block_term', 'clinical_intake')); 
+    $('session_intake')?.addEventListener('change', () => updateBlockTermOptions('session_program', 'session_block_term')); 
+    $('clinical_program')?.addEventListener('change', () => { updateBlockTermOptions('clinical_program', 'clinical_block_term'); }); 
+    $('clinical_intake')?.addEventListener('change', () => updateBlockTermOptions('clinical_program', 'clinical_block_term')); 
 
     // CATS/EXAMS TAB
     $('add-exam-form')?.addEventListener('submit', handleAddExam);
-    // ⬇️ CORRECTION APPLIED HERE 
     $('exam_program')?.addEventListener('change', () => { 
         populateExamCourseSelects(); // This handles populating exam_course_id
-        updateBlockTermOptions('exam_program', 'exam_block_term', 'exam_intake'); 
+        updateBlockTermOptions('exam_program', 'exam_block_term'); 
     });
-    $('exam_intake')?.addEventListener('change', () => updateBlockTermOptions('exam_program', 'exam_block_term', 'exam_intake')); 
+    $('exam_intake')?.addEventListener('change', () => updateBlockTermOptions('exam_program', 'exam_block_term')); 
     
     // MESSAGE/WELCOME EDITOR TAB
     $('send-message-form')?.addEventListener('submit', handleSendMessage);
     $('edit-welcome-form')?.addEventListener('submit', handleSaveWelcomeMessage); 
     
-    // RESOURCES TAB
-    // ⬇️ CORRECTION APPLIED HERE
-    $('resource_program')?.addEventListener('change', () => { updateBlockTermOptions('resource_program', 'resource_block', 'resource_intake'); });
-    $('resource_intake')?.addEventListener('change', () => { updateBlockTermOptions('resource_program', 'resource_block', 'resource_intake'); });
+    // RESOURCES TAB <-- BLOCK/TERM NOW USES STANDARD FUNCTION
+    $('resource_program')?.addEventListener('change', () => { updateBlockTermOptions('resource_program', 'resource_block'); });
+    $('resource_intake')?.addEventListener('change', () => { updateBlockTermOptions('resource_program', 'resource_block'); });
     
     // NEW: SECURITY TAB
     $('global-password-reset-form')?.addEventListener('submit', handleGlobalPasswordReset);
@@ -292,9 +284,8 @@ async function initSession() {
     document.querySelector('#userEditModal .close')?.addEventListener('click', () => { $('userEditModal').style.display = 'none'; });
     document.querySelector('#mapModal .close')?.addEventListener('click', () => { $('mapModal').style.display = 'none'; });
     $('edit-course-form')?.addEventListener('submit', handleEditCourse);
-    // ⬇️ CORRECTION APPLIED HERE
-    $('edit_course_program')?.addEventListener('change', () => { updateBlockTermOptions('edit_course_program', 'edit_course_block', 'edit_course_intake'); });
-    $('edit_course_intake')?.addEventListener('change', () => { updateBlockTermOptions('edit_course_program', 'edit_course_block', 'edit_course_intake'); });
+    $('edit_course_program')?.addEventListener('change', () => { updateBlockTermOptions('edit_course_program', 'edit_course_block'); });
+    $('edit_course_intake')?.addEventListener('change', () => { updateBlockTermOptions('edit_course_program', 'edit_course_block'); });
     document.querySelector('#courseEditModal .close')?.addEventListener('click', () => { $('courseEditModal').style.display = 'none'; });
 } 
 
@@ -617,56 +608,46 @@ function getRoleFields(role) {
 }
 
 // ==========================================================
-// *** CORE LOGIC FUNCTIONS: DYNAMIC BLOCK/TERM LOADING ***
+// *** CORE LOGIC FUNCTIONS ***
 // ==========================================================
 
-/**
- * Dynamically updates the Block/Term dropdown based on selected Program and Intake Year.
- * This version fetches data from the PROGRAM_BLOCKS_TABLE (Scalable/DB-Driven).
- * * @param {string} programSelectId - ID of the Program select element (e.g., 'account-program')
- * @param {string} blockTermSelectId - ID of the Block/Term select element (e.g., 'account-block-term')
- * @param {string} intakeSelectId - ID of the Intake Year select element (e.g., 'account-intake')
- */
-async function updateBlockTermOptions(programSelectId, blockTermSelectId, intakeSelectId) {
-    const program = $(programSelectId)?.value;
-    const intake = $(intakeSelectId)?.value; 
-    const blockTermSelect = $(blockTermSelectId);
-    
-    if (!blockTermSelect) return;
+function updateBlockTermOptions(programSelectId, blockTermSelectId) {
+  const program = $(programSelectId)?.value;
+  const blockTermSelect = $(blockTermSelectId);
+  if (!blockTermSelect) return;
 
-    // Clear previous options
-    blockTermSelect.innerHTML = '<option value="">-- Select Block/Term --</option>';
+  // Clear previous options
+  blockTermSelect.innerHTML = '<option value="">-- Select Block/Term --</option>';
 
-    // Guard Clause: If Program or Intake are not selected, stop here.
-    if (!program || !intake) {
-        return;
-    }
-    
-    // Fetch options from Supabase
-    const { data: blocks, error } = await sb.from(PROGRAM_BLOCKS_TABLE)
-        .select('block_term')
-        .eq('program', program)
-        .eq('intake_year', intake)
-        .order('block_term', { ascending: true }); // Order for consistency
+  // Determine available options based on program
+  let options = [];
+  if (program === 'KRCHN') {
+    options = [
+      { value: 'A', text: 'Block A' },
+      { value: 'B', text: 'Block B' }
+    ];
+  } else if (program === 'TVET') {
+    options = [
+      { value: 'Term_1', text: 'Term 1' },
+      { value: 'Term_2', text: 'Term 2' },
+      { value: 'Term_3', text: 'Term 3' }
+    ];
+  } else {
+    // Default or other programs
+    options = [
+      { value: 'A', text: 'Block A / Term 1' },
+      { value: 'B', text: 'Block B / Term 2' },
+  
+    ];
+  }
 
-    if (error) {
-        console.error('Error fetching program blocks:', error);
-        blockTermSelect.innerHTML = '<option value="">-- Error Loading Blocks --</option>';
-        return;
-    }
-
-    if (!blocks || blocks.length === 0) {
-        blockTermSelect.innerHTML = `<option value="">-- No Blocks/Terms found for ${program} ${intake} --</option>`;
-        return;
-    }
-
-    // Populate new options
-    blocks.forEach(opt => {
-        const option = document.createElement('option');
-        option.value = opt.block_term;
-        option.textContent = opt.block_term;
-        blockTermSelect.appendChild(option);
-    });
+  // Add new options
+  options.forEach(opt => {
+    const option = document.createElement('option');
+    option.value = opt.value;
+    option.textContent = opt.text;
+    blockTermSelect.appendChild(option);
+  });
 }
 
 async function handleAddAccount(e) {
@@ -1000,13 +981,8 @@ async function openEditUserModal(userId) {
     $('edit_user_program').value = user.program || 'KRCHN';
     $('edit_user_intake').value = user.intake_year || '2024';
     $('edit_user_block_status').value = user.block_program_year ? 'true' : 'false';
-    
-    // Call the dynamic function correctly to populate options first
-    await updateBlockTermOptions('edit_user_program', 'edit_user_block', 'edit_user_intake');
-    
-    // Set the block value (this must happen AFTER block options are loaded)
-    $('edit_user_block').value = user.block || ''; 
-    
+    updateBlockTermOptions('edit_user_program', 'edit_user_block');
+    $('edit_user_block').value = user.block || 'Block_A'; // Use a default block value that matches updateBlockTermOptions output
     $('userEditModal').style.display = 'flex';
   } catch (e) {
     showFeedback(`Failed to load user: ${e.message}`, 'error');
@@ -1171,7 +1147,7 @@ async function deleteCourse(courseId, unitCode) {
     }
 }
 
-async function openEditCourseModal(id, name, unit_code, description, target_program, intake_year, block) {
+function openEditCourseModal(id, name, unit_code, description, target_program, intake_year, block) {
     $('edit_course_id').value = id;
     $('edit_course_name').value = name; 
     $('edit_course_unit_code').value = unit_code; 
@@ -1179,8 +1155,8 @@ async function openEditCourseModal(id, name, unit_code, description, target_prog
     $('edit_course_program').value = target_program || ''; 
     $('edit_course_intake').value = intake_year; 
     
-    // 1. Load correct block options based on program and intake
-    await updateBlockTermOptions('edit_course_program', 'edit_course_block', 'edit_course_intake'); 
+    // 1. Load correct block options based on program
+    updateBlockTermOptions('edit_course_program', 'edit_course_block'); 
     
     // 2. Set the block value (this must happen AFTER block options are loaded)
     $('edit_course_block').value = block;
@@ -1303,12 +1279,31 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Optionally auto-select first intake and populate block
     intakeSelect.value = intakes[0].intake_year;
-    
-    // Call the dynamic function correctly
-    await updateBlockTermOptions('new_session_program', 'new_session_block_term', 'new_session_intake_year');
+    await populateBlockSelect();
   }
 
-  // NOTE: populateBlockSelect is now REDUNDANT since updateBlockTermOptions handles the logic.
+  async function populateBlockSelect() {
+    if (!programSelect || !intakeSelect || !blockSelect) return;
+    const program = programSelect.value;
+    const intake = intakeSelect.value;
+    blockSelect.innerHTML = '<option value="">-- Select Block/Term --</option>';
+    if (!program || !intake) return;
+
+    const { data: blocks } = await sb.from('program_blocks')
+      .select('block_term')
+      .eq('program', program)
+      .eq('intake_year', parseInt(intake, 10))
+      .order('block_term', { ascending: true });
+
+    if (!blocks || blocks.length === 0) return;
+
+    blocks.forEach(b => {
+      const opt = document.createElement('option');
+      opt.value = b.block_term;
+      opt.textContent = b.block_term;
+      blockSelect.appendChild(opt);
+    });
+  }
 
   // --- Scheduled Sessions ---
   async function loadScheduledSessions() {
@@ -1358,24 +1353,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     tbody.innerHTML = '';
     tbody.appendChild(fragment);
   }
-  
-    async function deleteSession(sessionId, sessionTitle) {
-      if (!confirm(`Are you sure you want to delete the session: ${sessionTitle}?`)) return;
-      try {
-        const { error } = await sb.from('scheduled_sessions').delete().eq('id', sessionId);
-        if (error) throw error;
-        await logAudit('SESSION_DELETE', `Deleted session: ${sessionTitle}.`, sessionId, 'SUCCESS');
-        showFeedback('Session deleted successfully!', 'success');
-        loadScheduledSessions(); 
-        renderFullCalendar();
-      } catch (err) {
-        await logAudit('SESSION_DELETE', `Failed to delete session: ${sessionTitle}. Reason: ${err.message}`, sessionId, 'FAILURE');
-        showFeedback(`Failed to delete session: ${err.message}`, 'error');
-      }
-    }
-    
-    // Expose deleteSession globally since it's used in table HTML
-    window.deleteSession = deleteSession;
 
   // --- Clinical Save ---
   async function saveClinical() {
@@ -1410,18 +1387,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // --- Event Listeners (Handled in initSession) ---
-  
-  if (programSelect && intakeSelect && blockSelect) {
-    // If the elements exist, ensure we run the initial logic
+  // --- Event Listeners ---
+  if (programSelect) {
     programSelect.addEventListener('change', async () => {
       await populateSessionCourses();
-      await populateIntakeSelect(); // This now calls updateBlockTermOptions internally
+      await populateIntakeSelect();
+      if (blockSelect) blockSelect.innerHTML = '<option value="">-- Select Block/Term --</option>';
     });
+  }
 
+  if (intakeSelect) {
     intakeSelect.addEventListener('change', async () => {
-      // Re-populate blocks when intake changes
-      await updateBlockTermOptions('new_session_program', 'new_session_block_term', 'new_session_intake_year');
+      await populateBlockSelect();
     });
   }
 
@@ -1433,6 +1410,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (programSelect) {
     await populateSessionCourses();
     await populateIntakeSelect();
+    await populateBlockSelect();
     loadScheduledSessions();
   }
 });
@@ -2146,8 +2124,40 @@ async function renderFullCalendar() {
 // *************************************************************************
 
 // ---------------- Utility Functions ----------------
-// Note: Overriding functions from section 1/4 - should be consolidated for production
-// Keeping for now to ensure scope integrity of this section.
+function escapeHtml(str) {
+  if (!str) return '';
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function showFeedback(msg, type = 'info') {
+  alert(msg); // Replace this with toast/snackbar if desired
+}
+
+function setButtonLoading(btn, isLoading, originalText) {
+  if (!btn) return;
+  btn.disabled = isLoading;
+  btn.textContent = isLoading ? 'Processing...' : originalText;
+}
+
+async function logAudit(action, details, refId = null, status = 'SUCCESS') {
+  if (!window.sb) return;
+  try {
+    await sb.from('audit_logs').insert({
+      action,
+      details,
+      reference_id: refId,
+      status,
+      performed_by: currentUserProfile?.id || null
+    });
+  } catch (err) {
+    console.error('Failed to log audit:', err);
+  }
+}
 
 // ---------------- Student Messages ----------------
 async function loadStudentMessages() {
@@ -2360,7 +2370,7 @@ async function loadPublicAnnouncements() {
 }
 
 // ---------------- Save Official Announcement ----------------
-document.getElementById('save-announcement')?.addEventListener('click', async () => {
+document.getElementById('save-announcement').addEventListener('click', async () => {
   const textarea = document.getElementById('announcement-body');
   const content = textarea.value.trim();
   const feedback = document.getElementById('announcement-feedback');
@@ -2391,7 +2401,7 @@ document.getElementById('save-announcement')?.addEventListener('click', async ()
 });
 
 // ---------------- Initialization ----------------
-document.getElementById('send-message-form')?.addEventListener('submit', handleSendMessage);
+document.getElementById('send-message-form').addEventListener('submit', handleSendMessage);
 
 async function initMessagesSection() {
   await loadStudentMessages();
@@ -2404,6 +2414,11 @@ document.addEventListener('DOMContentLoaded', initMessagesSection);
 
 
 
+/*******************************************************
+ * 11. Resources Tab (Fully Corrected)
+ *******************************************************/
+ 
+// -------------------- Handle Upload Form --------------------
 /*******************************************************
  * 11. Resources Tab (Fully Corrected)
  *******************************************************/
