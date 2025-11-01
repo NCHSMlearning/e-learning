@@ -611,7 +611,7 @@ function getRoleFields(role) {
 // *** CORE LOGIC FUNCTIONS ***
 // ==========================================================
 
-function updateBlockTermOptions(programSelectId, blockTermSelectId) {
+async function updateBlockTermOptions(programSelectId, blockTermSelectId) {
   const program = $(programSelectId)?.value;
   const blockTermSelect = $(blockTermSelectId);
   if (!blockTermSelect) return;
@@ -619,36 +619,64 @@ function updateBlockTermOptions(programSelectId, blockTermSelectId) {
   // Clear previous options
   blockTermSelect.innerHTML = '<option value="">-- Select Block/Term --</option>';
 
-  // Determine available options based on program
-  let options = [];
-  if (program === 'KRCHN') {
-    options = [
-      { value: 'A', text: 'Block A' },
-      { value: 'B', text: 'Block B' }
-    ];
-  } else if (program === 'TVET') {
-    options = [
-      { value: 'Term_1', text: 'Term 1' },
-      { value: 'Term_2', text: 'Term 2' },
-      { value: 'Term_3', text: 'Term 3' }
-    ];
-  } else {
-    // Default or other programs
-    options = [
-      { value: 'A', text: 'Block A / Term 1' },
-      { value: 'B', text: 'Block B / Term 2' },
-  
-    ];
-  }
+  // If no program selected, stop
+  if (!program) return;
 
-  // Add new options
-  options.forEach(opt => {
-    const option = document.createElement('option');
-    option.value = opt.value;
-    option.textContent = opt.text;
-    blockTermSelect.appendChild(option);
-  });
+  try {
+    // Try to fetch dynamic block/term data from Supabase
+    const { data: blocks, error } = await sb
+      .from('program_blocks')
+      .select('block_term')
+      .eq('program', program)
+      .order('block_term', { ascending: true });
+
+    if (error) {
+      console.warn('Error loading blocks:', error.message);
+      return;
+    }
+
+    // If database returned valid blocks
+    if (blocks && blocks.length > 0) {
+      blocks.forEach(b => {
+        const opt = document.createElement('option');
+        opt.value = b.block_term;
+        opt.textContent = b.block_term;
+        blockTermSelect.appendChild(opt);
+      });
+      return;
+    }
+
+    // Otherwise fallback for hardcoded programs
+    let fallbackOptions = [];
+    if (program === 'KRCHN') {
+      fallbackOptions = [
+        { value: 'A', text: 'Block A' },
+        { value: 'B', text: 'Block B' }
+      ];
+    } else if (program === 'TVET') {
+      fallbackOptions = [
+        { value: 'Term_1', text: 'Term 1' },
+        { value: 'Term_2', text: 'Term 2' },
+        { value: 'Term_3', text: 'Term 3' }
+      ];
+    } else {
+      fallbackOptions = [
+        { value: 'A', text: 'Block A / Term 1' },
+        { value: 'B', text: 'Block B / Term 2' }
+      ];
+    }
+
+    fallbackOptions.forEach(opt => {
+      const option = document.createElement('option');
+      option.value = opt.value;
+      option.textContent = opt.text;
+      blockTermSelect.appendChild(option);
+    });
+  } catch (err) {
+    console.error('Failed to update block/term options:', err.message);
+  }
 }
+
 
 async function handleAddAccount(e) {
   e.preventDefault();
