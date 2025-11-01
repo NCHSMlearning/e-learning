@@ -616,66 +616,35 @@ async function updateBlockTermOptions(programSelectId, blockTermSelectId) {
   const blockTermSelect = $(blockTermSelectId);
   if (!blockTermSelect) return;
 
-  // Clear previous options
+  // Clear old options
   blockTermSelect.innerHTML = '<option value="">-- Select Block/Term --</option>';
 
-  // If no program selected, stop
   if (!program) return;
 
   try {
-    // Try to fetch dynamic block/term data from Supabase
     const { data: blocks, error } = await sb
       .from('program_blocks')
-      .select('block_term')
+      .select('block_term_value, block_term_label')
       .eq('program', program)
-      .order('block_term', { ascending: true });
+      .order('id', { ascending: true });
 
-    if (error) {
-      console.warn('Error loading blocks:', error.message);
-      return;
-    }
+    if (error) throw error;
 
-    // If database returned valid blocks
-    if (blocks && blocks.length > 0) {
+    if (blocks?.length) {
       blocks.forEach(b => {
         const opt = document.createElement('option');
-        opt.value = b.block_term;
-        opt.textContent = b.block_term;
+        opt.value = b.block_term_value;   // 👈 stores 'A', 'B', 'Term_1' etc.
+        opt.textContent = b.block_term_label; // 👈 shows 'Block A', 'Term 1' etc.
         blockTermSelect.appendChild(opt);
       });
-      return;
-    }
-
-    // Otherwise fallback for hardcoded programs
-    let fallbackOptions = [];
-    if (program === 'KRCHN') {
-      fallbackOptions = [
-        { value: 'A', text: 'Block A' },
-        { value: 'B', text: 'Block B' }
-      ];
-    } else if (program === 'TVET') {
-      fallbackOptions = [
-        { value: 'Term_1', text: 'Term 1' },
-        { value: 'Term_2', text: 'Term 2' },
-        { value: 'Term_3', text: 'Term 3' }
-      ];
     } else {
-      fallbackOptions = [
-        { value: 'A', text: 'Block A / Term 1' },
-        { value: 'B', text: 'Block B / Term 2' }
-      ];
+      console.warn(`⚠️ No block/term records found for ${program}`);
     }
-
-    fallbackOptions.forEach(opt => {
-      const option = document.createElement('option');
-      option.value = opt.value;
-      option.textContent = opt.text;
-      blockTermSelect.appendChild(option);
-    });
   } catch (err) {
-    console.error('Failed to update block/term options:', err.message);
+    console.error('❌ Failed to update block/term options:', err.message);
   }
 }
+
 
 
 async function handleAddAccount(e) {
