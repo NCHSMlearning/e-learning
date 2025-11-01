@@ -611,40 +611,46 @@ function getRoleFields(role) {
 // *** CORE LOGIC FUNCTIONS ***
 // ==========================================================
 
-async function updateBlockTermOptions(programSelectId, blockTermSelectId) {
+function updateBlockTermOptions(programSelectId, blockTermSelectId) {
   const program = $(programSelectId)?.value;
   const blockTermSelect = $(blockTermSelectId);
   if (!blockTermSelect) return;
 
-  // Clear previous options
+  // Clear old options
   blockTermSelect.innerHTML = '<option value="">-- Select Block/Term --</option>';
 
+  // Stop if no program selected
   if (!program) return;
 
-  try {
-    // Fetch from program_blocks using correct column names
-    const { data: blocks, error } = await sb
-      .from('program_blocks')
-      .select('block_term_value, block_term_label')
-      .eq('program', program)
-      .order('id', { ascending: true });
+  // Define your hardcoded options
+  let options = [];
 
-    if (error) throw error;
-
-    // Populate dropdown
-    if (blocks && blocks.length > 0) {
-      blocks.forEach(b => {
-        const opt = document.createElement('option');
-        opt.value = b.block_term_value;   // e.g., A, B, Term_1
-        opt.textContent = b.block_term_label; // e.g., Block A, Term 1
-        blockTermSelect.appendChild(opt);
-      });
-    } else {
-      console.warn(`⚠️ No block/term records found for ${program}`);
-    }
-  } catch (err) {
-    console.error('❌ Failed to update block/term options:', err.message);
+  if (program === 'KRCHN') {
+    options = [
+      { value: 'A', text: 'Block A' },
+      { value: 'B', text: 'Block B' }
+    ];
+  } else if (program === 'TVET') {
+    options = [
+      { value: 'Term_1', text: 'Term 1' },
+      { value: 'Term_2', text: 'Term 2' },
+      { value: 'Term_3', text: 'Term 3' }
+    ];
+  } else {
+    // Default for other programs
+    options = [
+      { value: 'A', text: 'Block A / Term 1' },
+      { value: 'B', text: 'Block B / Term 2' }
+    ];
   }
+
+  // Add the options to the dropdown
+  options.forEach(opt => {
+    const option = document.createElement('option');
+    option.value = opt.value;
+    option.textContent = opt.text;
+    blockTermSelect.appendChild(option);
+  });
 }
 
 
