@@ -1924,24 +1924,24 @@ async function handleAddExam(e) {
 
     // 3. Use optional chaining (?) for safer value retrieval
     const exam_type = $('exam_type')?.value;
-    const exam_link = $('exam_link')?.value.trim();
+    const exam_link = $('exam_link')?.value.trim() || null; // Use null if link is empty
     const exam_duration_minutes = parseInt($('exam_duration_minutes')?.value);
     const exam_start_time = $('exam_start_time')?.value;
     const program = $('exam_program')?.value;
-    const course_id = $('exam_course_id')?.value;
+    const course_id = $('exam_course_id')?.value || null; // <--- Set to null if optional Course is blank
     const exam_title = $('exam_title')?.value.trim();
     const exam_date = $('exam_date')?.value;
     const exam_status = $('exam_status')?.value;
     const intake = $('exam_intake')?.value;
     const block_term = $('exam_block_term')?.value;
 
-    // 4. Input Validation (Checks for null/empty values resulting from the guards)
+    // 4. Input Validation (Course ID has been REMOVED from the required list)
     if (
-        !program || !course_id || !exam_title || !exam_date ||
+        !program || !exam_title || !exam_date ||
         !intake || !block_term || !exam_type || isNaN(exam_duration_minutes)
     ) {
         showFeedback(
-            'All exam fields (Program, Course, Title, Date, Intake, Block/Term, Type, and Duration) are required.',
+            'The following fields are required: Program, Title, Date, Intake, Block/Term, Type, and Duration.',
             'error'
         );
         setButtonLoading(submitButton, false, originalText);
@@ -1952,11 +1952,11 @@ async function handleAddExam(e) {
     try {
         const { error, data } = await sb.from('exams').insert({
             exam_name: exam_title,
-            course_id,
+            course_id: course_id, // Safely inserted as ID or null
             exam_date,
             exam_start_time,
             exam_type,
-            online_link: exam_link || null,
+            online_link: exam_link, 
             duration_minutes: exam_duration_minutes,
             target_program: program,
             intake_year: intake,
