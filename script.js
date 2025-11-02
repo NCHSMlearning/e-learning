@@ -812,12 +812,13 @@ async function loadPendingApprovals() {
         <td>${escapeHtml(u.program || 'N/A')}</td>
         <td>${new Date(u.created_at).toLocaleDateString()}</td>
         <td>
-          <button class="btn btn-approve" onclick="approveUser('${u.user_id}', '${escapeHtml(u.full_name, true)}')">Approve</button>
-          <button class="btn btn-delete" onclick="deleteProfile('${u.user_id}', '${escapeHtml(u.full_name, true)}')">Reject</button>
+          <button class="btn btn-approve" onclick="approveUser('${u.user_id}', ${JSON.stringify(u.full_name)})">Approve</button>
+          <button class="btn btn-delete" onclick="deleteProfile('${u.user_id}', ${JSON.stringify(u.full_name)})">Reject</button>
         </td>
       </tr>`;
   });
 }
+
 
 async function loadAllUsers() {
   const tbody = $('users-table');
