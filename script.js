@@ -1091,15 +1091,16 @@ async function handleEditUser(e) {
   };
 
   try {
-    // Update consolidated profile
-    const { error: profileError } = await sb
-      .from(USER_PROFILE_TABLE)
+    // Update consolidated profile and get updated row
+    const { data: updatedRow, error: profileError } = await sb
+      .from('consolidated_user_profiles_table') // replace USER_PROFILE_TABLE if needed
       .update({ ...updatedData, role: newRole })
-      .eq('user_id', userId);
+      .eq('user_id', userId)
+      .select('*');
 
     if (profileError) throw profileError;
 
-    // Optional audit log
+    // Audit log
     await logAudit(
       'USER_EDIT',
       `Edited profile for user ID ${userId.substring(0, 8)}. Role: ${newRole}.`,
@@ -1110,8 +1111,16 @@ async function handleEditUser(e) {
     showFeedback('User profile updated successfully!', 'success');
     $('userEditModal').style.display = 'none';
 
-    // Reload dashboard and tables
-    loadAllUsers();
+    // Update row in the table dynamically
+    const row = document.querySelector(`tr[data-user-id="${userId}"]`);
+    if (row && updatedRow?.[0]) {
+      row.children[0].textContent = updatedRow[0].full_name;
+      row.children[1].textContent = updatedRow[0].email;
+      row.children[2].textContent = updatedRow[0].role;
+      row.children[3].textContent = updatedRow[0].program;
+    }
+
+    // Refresh dependent UI
     loadStudents();
     loadDashboardData();
 
@@ -1127,6 +1136,7 @@ async function handleEditUser(e) {
     setButtonLoading(submitButton, false, originalText);
   }
 }
+
 
 
 /*******************************************************
