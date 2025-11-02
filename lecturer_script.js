@@ -296,50 +296,91 @@ async function fetchGlobalDataCaches() {
 
     allCourses = courses || [];
 }
-async function loadStudents() {
-    const STUDENT_TABLE = 'consolidated_user_profiles_table';
+// 2. Fetch all students filtered by lecturer’s program
 
-    try {
-        let query = supabase
-            .from(STUDENT_TABLE)
-            .select('user_id, full_name, email, program, intake_year, block, status')
-            .eq('role', 'student');
+const STUDENT_TABLE = 'consolidated_user_profiles_table'; // ✅ Ensure correct table name
 
-        if (lecturerTargetProgram) {
-            query = query.eq('program', lecturerTargetProgram);
-        } else {
-            console.warn(
-                `⚠️ No program assigned for department "${currentUserProfile.department}". Loading zero students.`
-            );
-        }
+let studentQuery = sb
+.from(STUDENT_TABLE)
+.select('user_id, full_name, email, program, intake_year, block, status')
+.eq('role', 'student');
 
-        const { data: students, error } = await query.order('full_name', { ascending: true });
 
-        if (error) {
-            console.error('Error fetching students:', error);
-            showFeedback(
-                'Failed to load student list. Please check the Supabase column names (program, block) and RLS policy.',
-                'error'
-            );
-            return;
-        }
+// ✅ Normalize lecturer’s department (case-insensitive)
 
-        allStudents = students || [];
-        console.log(
-            `✅ Loaded ${allStudents.length} student(s) for program: ${lecturerTargetProgram || 'None'}`
-        );
+if (currentUserProfile?.department) {
 
-        // Update dashboard and table
-        loadLecturerStudents();
-        loadLecturerDashboardData();
-    } catch (err) {
-        console.error('Unexpected error fetching students:', err);
-    }
+const dept = currentUserProfile.department.toLowerCase();
+
+
+
+// ✅ Only two valid departments: Nursing → KRCHN, TIVET → TIVET
+
+if (dept === 'nursing') {
+lecturerTargetProgram = 'KRCHN';
+} else if (dept === 'tivet') {
+
+lecturerTargetProgram = 'TIVET';
+
+} else {
+
+lecturerTargetProgram = null;
+
 }
 
-// Call it
-loadStudents();
+}
 
+
+
+// ✅ Apply program filter if available
+
+if (lecturerTargetProgram) {
+
+studentQuery = studentQuery.eq('program', lecturerTargetProgram);
+
+} else {
+
+console.warn(
+
+`⚠️ No program assigned for department "${currentUserProfile.department}".`
+
+);
+
+}
+
+
+
+const { data: students, error: studentError } = await studentQuery.order(
+
+'full_name',
+
+{ ascending: true }
+
+);
+
+
+
+if (studentError) {
+
+console.error('Error fetching filtered students:', studentError);
+
+showFeedback('Failed to load student list. Please try again.', 'error');
+
+}
+
+
+
+allStudents = students || [];
+
+
+
+console.log(
+
+`✅ Loaded ${allStudents.length} student(s) for program: ${lecturerTargetProgram || 'None'}`
+
+);
+
+}
 
 
 function loadSectionData(tabId) { 
