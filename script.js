@@ -319,6 +319,7 @@ async function logout() {
     localStorage.removeItem("loggedInUser");
     window.location.href = "login.html";
    }
+ }
  
 /*******************************************************
  * 1.5. AUDIT LOGGING (NEW STRATEGIC FEATURE)
@@ -2971,4 +2972,3 @@ $('restore-form')?.addEventListener('submit', e => {
 // INITIALIZATION
 // =================================================================
 document.addEventListener('DOMContentLoaded', initSession);
-}
