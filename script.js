@@ -166,7 +166,6 @@ async function loadSectionData(tabId) {
     
     switch(tabId) {
         case 'dashboard': 
-      
             loadDashboardData(); 
             break;
         case 'users': loadAllUsers(); break;
@@ -180,13 +179,26 @@ async function loadSectionData(tabId) {
         case 'courses': loadCourses(); break;
         case 'sessions': loadScheduledSessions(); populateSessionCourseSelects(); break;
         case 'attendance': loadAttendance(); populateAttendanceSelects(); break;
-        case 'cats': loadExams(); populateExamCourseSelects(); break;
-        case 'messages': loadAdminMessages(); loadWelcomeMessageForEdit(); break; // <-- FIXED: loadAdminMessages called here
+        
+        // 🛠️ FIX APPLIED: Attach the form listener when the 'cats' tab loads
+        case 'cats': 
+            const addExamForm = $('add-exam-form');
+            if (addExamForm) {
+                // Remove/add ensures no duplicate listeners if the tab is re-clicked
+                addExamForm.removeEventListener('submit', handleAddExam); 
+                addExamForm.addEventListener('submit', handleAddExam);
+            }
+            loadExams(); 
+            populateExamCourseSelects(); 
+            break;
+        // 🛠️ END FIX
+
+        case 'messages': loadAdminMessages(); loadWelcomeMessageForEdit(); break;
         case 'calendar': renderFullCalendar(); break;
         case 'resources': loadResources(); break;
         case 'welcome-editor': loadWelcomeMessageForEdit(); break; 
-        case 'audit': loadAuditLogs(); break; // NEW
-        case 'security': loadSystemStatus(); break; // NEW
+        case 'audit': loadAuditLogs(); break; 
+        case 'security': loadSystemStatus(); break; 
         case 'backup': loadBackupHistory(); break;
     }
 }
@@ -261,13 +273,13 @@ async function initSession() {
     $('clinical_program')?.addEventListener('change', () => { updateBlockTermOptions('clinical_program', 'clinical_block_term'); }); 
     $('clinical_intake')?.addEventListener('change', () => updateBlockTermOptions('clinical_program', 'clinical_block_term')); 
 
-    // CATS/EXAMS TAB
-    $('add-exam-form')?.addEventListener('submit', handleAddExam);
-    $('exam_program')?.addEventListener('change', () => { 
-        populateExamCourseSelects(); // This handles populating exam_course_id
-        updateBlockTermOptions('exam_program', 'exam_block_term'); 
-    });
-    $('exam_intake')?.addEventListener('change', () => updateBlockTermOptions('exam_program', 'exam_block_term')); 
+    // CATS/EXAMS TAB (CORRECTED initSession BLOCK)
+// The submit listener is DELETED from here. It must run when the tab is clicked.
+$('exam_program')?.addEventListener('change', () => { 
+    populateExamCourseSelects(); 
+    updateBlockTermOptions('exam_program', 'exam_block_term'); 
+});
+$('exam_intake')?.addEventListener('change', () => updateBlockTermOptions('exam_program', 'exam_block_term'));
     
     // MESSAGE/WELCOME EDITOR TAB
     $('send-message-form')?.addEventListener('submit', handleSendMessage);
