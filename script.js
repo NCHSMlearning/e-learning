@@ -910,19 +910,29 @@ async function loadStudents() {
 // ==========================================================
 // *** WRITE OPERATIONS (Approve / Role Change / Delete / Edit) ***
 // ==========================================================
-async function approveUser(userId, fullName) {
+async function approveUser(userId, fullName, studentId) {
   if (!confirm(`Approve user ${fullName}?`)) return;
 
   const { error } = await sb
     .from(USER_PROFILE_TABLE)
-    .update({ status: 'approved' })
+    .update({ status: 'approved', student_id: studentId }) // save student ID
     .eq('user_id', userId);
 
   if (error) {
-    await logAudit('USER_APPROVE', `Failed to approve user ${fullName}. Reason: ${error.message}`, userId, 'FAILURE');
+    await logAudit(
+      'USER_APPROVE',
+      `Failed to approve user ${fullName} (Student ID: ${studentId}). Reason: ${error.message}`,
+      userId,
+      'FAILURE'
+    );
     showFeedback(`Failed: ${error.message}`, 'error');
   } else {
-    await logAudit('USER_APPROVE', `User ${fullName} approved successfully.`, userId, 'SUCCESS');
+    await logAudit(
+      'USER_APPROVE',
+      `User ${fullName} (Student ID: ${studentId}) approved successfully.`,
+      userId,
+      'SUCCESS'
+    );
     showFeedback('User approved successfully!', 'success');
     loadPendingApprovals();
     loadAllUsers();
@@ -930,6 +940,7 @@ async function approveUser(userId, fullName) {
     loadDashboardData();
   }
 }
+
 
 async function updateUserRole(userId, newRole, fullName) {
   if (!confirm(`Change user ${fullName}'s role to ${newRole}?`)) return;
