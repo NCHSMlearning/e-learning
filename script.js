@@ -4,6 +4,8 @@
  * (Includes: Strategic Admin Features, Online Exam Enhancements, Mass Promotion)
  *
  * **FIXED: Button loading/reset, Consolidated Table Logic, Audit Logging**
+ *
+ * *** FIX APPLIED: Removed unintended openEditUserModal call on DOMContentLoaded ***
  **********************************************************************************/
  // Hides the .html extension in the URL
     if (window.location.pathname.endsWith('.html')) {
@@ -305,6 +307,8 @@ document.addEventListener('DOMContentLoaded', () => {
     $('edit_course_intake')?.addEventListener('change', () => {
         updateBlockTermOptions('edit_course_program', 'edit_course_block');
     });
+
+    // *** FIX APPLIED: Removed unintended openEditUserModal call here ***
 });
 
 
