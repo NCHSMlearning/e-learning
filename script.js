@@ -322,8 +322,40 @@ async function logout() {
  }
  
 /*******************************************************
- * 1.5. AUDIT LOGGING (NEW STRATEGIC FEATURE)
+ * 1.5. LOGOUT & AUDIT LOGGING (NEW STRATEGIC FEATURE)
  *******************************************************/
+
+/**
+ * Handles the user logout process, including auditing, Supabase sign-out, 
+ * and client-side cleanup.
+ */
+async function logout() {
+    // Attempt to retrieve user data for audit log
+    const userProfile = currentUserProfile || { full_name: 'Unknown User' };
+
+    try {
+        // 1. Audit Log (Uses the function defined below)
+        if (typeof logAudit === 'function') {
+            await logAudit('LOGOUT', `User ${userProfile.full_name} logged out.`);
+        }
+        
+        // 2. Supabase Sign Out
+        await sb.auth.signOut();
+        
+    } catch (error) {
+        console.error("Logout error (Supabase/Audit):", error);
+        // Continue with client-side cleanup even on error
+    }
+    
+    // 3. Client-side Cleanup
+    localStorage.removeItem("loggedInUser");
+    sessionStorage.removeItem('authToken'); 
+    sessionStorage.removeItem('userRole'); 
+
+    // 4. Redirect
+    window.location.href = "login.html";
+}
+
 
 /**
  * Logs a critical action to the audit_logs table.
@@ -363,7 +395,6 @@ async function loadAuditLogs() {
     tbody.innerHTML = '';
     logs.forEach(log => {
         const timestamp = new Date(log.timestamp).toLocaleString();
-        // Use consistent status classes for visualization
         const statusClass = log.status === 'SUCCESS' ? 'status-approved' : 'status-danger';
 
         tbody.innerHTML += `
