@@ -297,91 +297,68 @@ async function fetchGlobalDataCaches() {
     allCourses = courses || [];
 }
 // 2. Fetch all students filtered by lecturer’s program
+async function loadStudents() {
+    try {
+        const STUDENT_TABLE = 'consolidated_user_profiles_table'; // Ensure correct table name
 
-const STUDENT_TABLE = 'consolidated_user_profiles_table'; // ✅ Ensure correct table name
+        // Base query: all students
+        let studentQuery = sb
+            .from(STUDENT_TABLE)
+            .select('user_id, full_name, email, program, intake_year, block, status')
+            .eq('role', 'student');
 
-let studentQuery = sb
-.from(STUDENT_TABLE)
-.select('user_id, full_name, email, program, intake_year, block, status')
-.eq('role', 'student');
+        // Normalize lecturer’s department (case-insensitive)
+        if (currentUserProfile?.department) {
+            const dept = currentUserProfile.department.toLowerCase();
 
+            // Map department to program
+            if (dept === 'nursing') {
+                lecturerTargetProgram = 'KRCHN';
+            } else if (dept === 'tivet') {
+                lecturerTargetProgram = 'TIVET';
+            } else {
+                lecturerTargetProgram = null;
+            }
+        }
 
-// ✅ Normalize lecturer’s department (case-insensitive)
+        // Apply program filter if available
+        if (lecturerTargetProgram) {
+            studentQuery = studentQuery.eq('program', lecturerTargetProgram);
+        } else {
+            console.warn(
+                `⚠️ No program assigned for department "${currentUserProfile?.department}".`
+            );
+        }
 
-if (currentUserProfile?.department) {
+        // Execute query
+        const { data: students, error: studentError } = await studentQuery.order('full_name', {
+            ascending: true
+        });
 
-const dept = currentUserProfile.department.toLowerCase();
+        if (studentError) {
+            console.error('Error fetching filtered students:', studentError);
+            showFeedback('Failed to load student list. Please try again.', 'error');
+            return;
+        }
 
+        allStudents = students || [];
 
+        console.log(
+            `✅ Loaded ${allStudents.length} student(s) for program: ${lecturerTargetProgram || 'None'}`
+        );
 
-// ✅ Only two valid departments: Nursing → KRCHN, TIVET → TIVET
+        // Update dashboard and table
+        loadLecturerStudents();
+        loadLecturerDashboardData();
 
-if (dept === 'nursing') {
-lecturerTargetProgram = 'KRCHN';
-} else if (dept === 'tivet') {
-
-lecturerTargetProgram = 'TIVET';
-
-} else {
-
-lecturerTargetProgram = null;
-
+    } catch (err) {
+        console.error('Unexpected error fetching students:', err);
+        showFeedback('An unexpected error occurred while loading students.', 'error');
+    }
 }
 
-}
-
-
-
-// ✅ Apply program filter if available
-
-if (lecturerTargetProgram) {
-
-studentQuery = studentQuery.eq('program', lecturerTargetProgram);
-
-} else {
-
-console.warn(
-
-`⚠️ No program assigned for department "${currentUserProfile.department}".`
-
-);
-
-}
-
-
-
-const { data: students, error: studentError } = await studentQuery.order(
-
-'full_name',
-
-{ ascending: true }
-
-);
-
-
-
-if (studentError) {
-
-console.error('Error fetching filtered students:', studentError);
-
-showFeedback('Failed to load student list. Please try again.', 'error');
-
-}
-
-
-
-allStudents = students || [];
-
-
-
-console.log(
-
-`✅ Loaded ${allStudents.length} student(s) for program: ${lecturerTargetProgram || 'None'}`
-
-);
-
-}
-
+// Call the function
+loadStudents();
 
 function loadSectionData(tabId) { 
     document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
