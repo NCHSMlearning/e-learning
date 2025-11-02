@@ -522,63 +522,65 @@ async function handlePhotoUpload(file) {
 // === 5. STUDENT, COURSE & DASHBOARD LOADERS ===
 // =================================================================
 
+/**
+ * Load lecturer dashboard summary data.
+ */
 async function loadLecturerDashboardData() {
-    // Use the count of filtered courses for the lecturer's program
-    $('total_courses_count').textContent = allCourses.filter(c => c.program_type === lecturerTargetProgram)?.length || '0'; 
-    $('total_students_count').textContent = allStudents.length || '0';
-    
-    // FIX: Dynamically update the dashboard filter info text (using the banner)
+    // Total courses for this lecturer's program
+    const programCourses = allCourses.filter(c => c.target_program === lecturerTargetProgram && c.status === 'Active');
+    $('total_courses_count').textContent = programCourses.length || '0';
+
+    // Total students for this program
+    const programStudents = allStudents.filter(s => s.program === lecturerTargetProgram);
+    $('total_students_count').textContent = programStudents.length || '0';
+
+    // Update filter info in banner
     const filterInfoEl = document.querySelector('#welcome-banner span:last-child');
-    if (filterInfoEl && lecturerTargetProgram) { 
+    if (filterInfoEl && lecturerTargetProgram) {
         filterInfoEl.textContent = `This dashboard is filtered to your assigned program: ${lecturerTargetProgram}. All student/grade data shown is relevant to your assignment.`;
     }
 
-    const today = new Date().toISOString().split('T')[0];
-    
     // Fetch today's sessions for this lecturer
+    const today = new Date().toISOString().split('T')[0];
     const { data: recentSessions } = await fetchDataForLecturer(
         SESSIONS_TABLE,
         'id',
         { lecturer_id: currentUserProfile.user_id, session_date: today }
     );
-    
+
     $('recent_sessions_count').textContent = recentSessions?.length || '0';
 }
 
-// 🛑 NEW: Function for the My Courses tab
 /**
- * Renders the lecturer's relevant courses, filtered by program.
+ * Load the lecturer's courses table, filtered by program.
  */
 async function loadLecturerCourses() {
     const tbody = $('lecturer-courses-table');
     if (!tbody) return;
 
-    // Ensure profile and program data exist
     if (!currentUserProfile || !lecturerTargetProgram) {
         tbody.innerHTML = `
-            <tr><td colspan="6">No courses loaded. Your department is not assigned a program.</td></tr>`;
+            <tr><td colspan="6" style="text-align:center;">No courses loaded. Your department is not assigned a program.</td></tr>`;
         return;
     }
 
-    // ✅ Filter the global cache by the lecturer's actual target program (KRCHN, TVET, etc.)
-    const filteredCourses = allCourses.filter(course => 
-        course.target_program === lecturerTargetProgram &&
-        course.status === 'Active'
+    const filteredCourses = (allCourses || []).filter(course =>
+        course.target_program === lecturerTargetProgram && course.status === 'Active'
     );
 
-    // 🧩 Handle empty result
     if (filteredCourses.length === 0) {
         tbody.innerHTML = `
-            <tr><td colspan="6" class="text-center text-gray-500">
+            <tr><td colspan="6" style="text-align:center; color: gray;">
                 No courses currently found for program: <b>${lecturerTargetProgram}</b>.
             </td></tr>`;
         return;
     }
 
-    // ✅ Render matched courses
     const coursesHtml = filteredCourses.map(course => {
-        // Dummy student count (you can replace with actual logic later)
-        const studentCount = allStudents.length > 0 ? (Math.floor(Math.random() * 10) + 30) : 'N/A';
+        // Count students enrolled in this course
+        const studentCount = allStudents?.filter(student =>
+            student.enrolled_courses?.includes(course.unit_code)
+        ).length || 0;
 
         return `
             <tr>
@@ -593,17 +595,17 @@ async function loadLecturerCourses() {
                         View Grades
                     </button>
                 </td>
-            </tr>
-        `;
+            </tr>`;
     }).join('');
 
     tbody.innerHTML = coursesHtml;
 }
 
-
-// ✅ loadLecturerStudents (Final polished version)
+/**
+ * Load the lecturer's students table, filtered by program.
+ */
 async function loadLecturerStudents() {
-    const tbody = document.getElementById('lecturer-students-table');
+    const tbody = $('lecturer-students-table');
     if (!tbody) return;
 
     tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;">Loading students...</td></tr>`;
@@ -619,7 +621,8 @@ async function loadLecturerStudents() {
             return;
         }
 
-        if (!allStudents || allStudents.length === 0) {
+        const programStudents = allStudents.filter(s => s.program === lecturerTargetProgram);
+        if (programStudents.length === 0) {
             tbody.innerHTML = `
                 <tr>
                     <td colspan="7" style="text-align:center;">
@@ -629,7 +632,7 @@ async function loadLecturerStudents() {
             return;
         }
 
-        const studentsHtml = allStudents.map(profile => {
+        const studentsHtml = programStudents.map(profile => {
             const status = (profile.status || 'Active').toLowerCase();
             return `
                 <tr>
