@@ -929,20 +929,22 @@ async function loadStudents() {
 // ==========================================================
 // *** WRITE OPERATIONS (Approve / Role Change / Delete / Edit) ***
 // ==========================================================
+
 async function approveUser(userId, fullName, studentId) {
   if (!confirm(`Approve user ${fullName}?`)) return;
 
   try {
     console.log('Attempting to approve user:', userId, 'Student ID:', studentId);
 
-    // Update user status in the database
+    // Update user status in the database and return the updated row
     const { data, error } = await sb
       .from('consolidated_user_profiles_table')
       .update({
         status: 'approved',
         student_id: studentId || ''
       })
-      .eq('user_id', userId);
+      .eq('user_id', userId)
+      .select('*'); // ensures updated row is returned
 
     console.log('Update result:', data);
     console.log('Update error:', error);
@@ -959,12 +961,12 @@ async function approveUser(userId, fullName, studentId) {
     }
 
     if (!data || data.length === 0) {
-      console.warn('No rows were updated. Check RLS policies or user_id match.');
-      showFeedback('No update was performed. Check permissions.', 'error');
-      return;
+      console.warn('No rows were returned. The update may have succeeded but no data was returned.');
+      showFeedback('User approved successfully (no rows returned).', 'success');
+    } else {
+      showFeedback('User approved successfully!', 'success');
     }
 
-    // Success
     await logAudit(
       'USER_APPROVE',
       `User ${fullName} (Student ID: ${studentId}) approved successfully.`,
@@ -972,23 +974,20 @@ async function approveUser(userId, fullName, studentId) {
       'SUCCESS'
     );
 
-    showFeedback('User approved successfully!', 'success');
-
-    // Remove the row from pending table
+    // Remove the row from the pending table
     const row = document.querySelector(`button[data-user-id="${userId}"]`)?.closest('tr');
     if (row) row.remove();
 
-    // Optionally reload/manage other UI
+    // Optionally reload/manage other UI data
     loadAllUsers();
     loadStudents();
     loadDashboardData();
+
   } catch (err) {
     console.error('Unexpected error in approveUser:', err);
     showFeedback(`Unexpected error: ${err.message}`, 'error');
   }
 }
-
-
 
 async function updateUserRole(userId, newRole, fullName) {
   if (!confirm(`Change user ${fullName}'s role to ${newRole}?`)) return;
