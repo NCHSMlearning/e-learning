@@ -1077,12 +1077,10 @@ async function handleEditUser(e) {
   setButtonLoading(submitButton, true, originalText);
 
   const userId = $('edit_user_id').value;
-  const newEmail = $('edit_user_email').value.trim();
-  const newRole = $('edit_user_role').value;
-
   const updatedData = {
     full_name: $('edit_user_name').value.trim(),
-    email: newEmail,
+    email: $('edit_user_email').value.trim(),
+    role: $('edit_user_role').value,
     program: $('edit_user_program').value || null,
     intake_year: $('edit_user_intake').value || null,
     block: $('edit_user_block').value || null,
@@ -1090,20 +1088,39 @@ async function handleEditUser(e) {
     status: 'approved'
   };
 
+  // Optional password fields
+  const newPassword = $('edit_user_new_password').value.trim();
+  const confirmPassword = $('edit_user_confirm_password').value.trim();
+
+  if (newPassword && newPassword !== confirmPassword) {
+    $('password-reset-feedback').textContent = "Passwords do not match!";
+    setButtonLoading(submitButton, false, originalText);
+    return;
+  }
+
   try {
-    // Update consolidated profile and get updated row
+    // Update user profile
     const { data: updatedRow, error: profileError } = await sb
-      .from('consolidated_user_profiles_table') // replace USER_PROFILE_TABLE if needed
-      .update({ ...updatedData, role: newRole })
+      .from('consolidated_user_profiles_table')
+      .update(updatedData)
       .eq('user_id', userId)
       .select('*');
 
     if (profileError) throw profileError;
 
+    // Optionally update password if provided
+    if (newPassword) {
+      const { error: pwError } = await sb.auth.updateUser({
+        id: userId,
+        password: newPassword
+      });
+      if (pwError) throw pwError;
+    }
+
     // Audit log
     await logAudit(
       'USER_EDIT',
-      `Edited profile for user ID ${userId.substring(0, 8)}. Role: ${newRole}.`,
+      `Edited profile for user ID ${userId.substring(0, 8)}. Role: ${updatedData.role}.`,
       userId,
       'SUCCESS'
     );
@@ -1111,7 +1128,7 @@ async function handleEditUser(e) {
     showFeedback('User profile updated successfully!', 'success');
     $('userEditModal').style.display = 'none';
 
-    // Update row in the table dynamically
+    // Update table row dynamically
     const row = document.querySelector(`tr[data-user-id="${userId}"]`);
     if (row && updatedRow?.[0]) {
       row.children[0].textContent = updatedRow[0].full_name;
@@ -1124,14 +1141,14 @@ async function handleEditUser(e) {
     loadStudents();
     loadDashboardData();
 
-  } catch (e) {
+  } catch (err) {
     await logAudit(
       'USER_EDIT',
-      `Failed to edit profile for user ID ${userId.substring(0, 8)}. Reason: ${e.message}`,
+      `Failed to edit profile for user ID ${userId.substring(0, 8)}. Reason: ${err.message}`,
       userId,
       'FAILURE'
     );
-    showFeedback('Failed to update user: ' + (e.message || e), 'error');
+    showFeedback('Failed to update user: ' + (err.message || err), 'error');
   } finally {
     setButtonLoading(submitButton, false, originalText);
   }
