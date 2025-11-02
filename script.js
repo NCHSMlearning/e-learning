@@ -2971,3 +2971,4 @@ $('restore-form')?.addEventListener('submit', e => {
 // INITIALIZATION
 // =================================================================
 document.addEventListener('DOMContentLoaded', initSession);
+}
