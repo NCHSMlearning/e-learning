@@ -314,6 +314,7 @@ async function logout() {
     await sb.auth.signOut();
     localStorage.removeItem("loggedInUser");
     window.location.href = "login.html";
+   }
 }
 
 /*******************************************************
