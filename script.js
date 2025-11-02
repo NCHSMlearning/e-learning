@@ -810,14 +810,16 @@ async function loadPendingApprovals() {
         <td>${escapeHtml(u.email)}</td>
         <td>${escapeHtml(u.role || 'N/A')}</td>
         <td>${escapeHtml(u.program || 'N/A')}</td>
+        <td>${escapeHtml(u.student_id || 'N/A')}</td>
         <td>${new Date(u.created_at).toLocaleDateString()}</td>
         <td>
-          <button class="btn btn-approve" onclick="approveUser('${u.user_id}', ${JSON.stringify(u.full_name)})">Approve</button>
+          <button class="btn btn-approve" onclick="approveUser('${u.user_id}', ${JSON.stringify(u.full_name)}, ${JSON.stringify(u.student_id)})">Approve</button>
           <button class="btn btn-delete" onclick="deleteProfile('${u.user_id}', ${JSON.stringify(u.full_name)})">Reject</button>
         </td>
       </tr>`;
   });
 }
+
 
 
 async function loadAllUsers() {
