@@ -930,11 +930,12 @@ async function loadStudents() {
 // *** WRITE OPERATIONS (Approve / Role Change / Delete / Edit) ***
 // ==========================================================
 
-async function approveUser(userId, fullName, studentId) {
+async function approveUser(userId, fullName, studentId, email, role = 'student', program = 'N/A') {
   if (!confirm(`Approve user ${fullName}?`)) return;
 
   try {
-    console.log('Attempting to approve user:', userId, 'Student ID:', studentId);
+    // Log inputs for debugging
+    console.log('Attempting to approve user:', { userId, fullName, studentId, email, role, program });
 
     // Update status in the database
     const { data, error } = await sb
@@ -944,10 +945,10 @@ async function approveUser(userId, fullName, studentId) {
         student_id: studentId || ''
       })
       .eq('user_id', userId)
-      .select('*'); // ensures updated row is returned if policy allows
+      .select('*'); // may return empty if RLS prevents reading
 
-    console.log('Update result:', data);
-    console.log('Update error:', error);
+    console.log('Supabase update data:', data);
+    console.log('Supabase update error:', error);
 
     if (error) {
       await logAudit(
@@ -979,9 +980,9 @@ async function approveUser(userId, fullName, studentId) {
       manageTbody.innerHTML += `
         <tr data-user-id="${userId}">
           <td>${escapeHtml(fullName)}</td>
-          <td>${escapeHtml(data?.[0]?.email || '')}</td>
-          <td>${escapeHtml(data?.[0]?.role || 'N/A')}</td>
-          <td>${escapeHtml(data?.[0]?.program || 'N/A')}</td>
+          <td>${escapeHtml(email)}</td>
+          <td>${escapeHtml(role)}</td>
+          <td>${escapeHtml(program)}</td>
           <td>${escapeHtml(studentId || 'N/A')}</td>
           <td>Approved</td>
           <td>
@@ -989,10 +990,10 @@ async function approveUser(userId, fullName, studentId) {
             <button class="btn btn-delete">Delete</button>
           </td>
         </tr>`;
-      attachManageUserEventListeners([data?.[0]]); // attach edit/delete listeners
+      attachManageUserEventListeners([{ user_id: userId }]); // attach edit/delete listeners
     }
 
-    // Optionally reload other UI elements
+    // Refresh dependent UI
     loadStudents();
     loadDashboardData();
 
@@ -1001,6 +1002,7 @@ async function approveUser(userId, fullName, studentId) {
     showFeedback(`Unexpected error: ${err.message}`, 'error');
   }
 }
+
 
 async function updateUserRole(userId, newRole, fullName) {
   if (!confirm(`Change user ${fullName}'s role to ${newRole}?`)) return;
