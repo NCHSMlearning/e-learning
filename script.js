@@ -936,7 +936,7 @@ async function approveUser(userId, fullName, studentId) {
   try {
     console.log('Attempting to approve user:', userId, 'Student ID:', studentId);
 
-    // Update user status in the database and return the updated row
+    // Update status in the database
     const { data, error } = await sb
       .from('consolidated_user_profiles_table')
       .update({
@@ -944,7 +944,7 @@ async function approveUser(userId, fullName, studentId) {
         student_id: studentId || ''
       })
       .eq('user_id', userId)
-      .select('*'); // ensures updated row is returned
+      .select('*'); // ensures updated row is returned if policy allows
 
     console.log('Update result:', data);
     console.log('Update error:', error);
@@ -960,13 +960,8 @@ async function approveUser(userId, fullName, studentId) {
       return;
     }
 
-    if (!data || data.length === 0) {
-      console.warn('No rows were returned. The update may have succeeded but no data was returned.');
-      showFeedback('User approved successfully (no rows returned).', 'success');
-    } else {
-      showFeedback('User approved successfully!', 'success');
-    }
-
+    // Success feedback
+    showFeedback('User approved successfully!', 'success');
     await logAudit(
       'USER_APPROVE',
       `User ${fullName} (Student ID: ${studentId}) approved successfully.`,
@@ -974,12 +969,30 @@ async function approveUser(userId, fullName, studentId) {
       'SUCCESS'
     );
 
-    // Remove the row from the pending table
-    const row = document.querySelector(`button[data-user-id="${userId}"]`)?.closest('tr');
-    if (row) row.remove();
+    // Remove row from pending table
+    const pendingRow = document.querySelector(`button[data-user-id="${userId}"]`)?.closest('tr');
+    if (pendingRow) pendingRow.remove();
 
-    // Optionally reload/manage other UI data
-    loadAllUsers();
+    // Add user to Manage Users table
+    const manageTbody = $('manage-users-table');
+    if (manageTbody) {
+      manageTbody.innerHTML += `
+        <tr data-user-id="${userId}">
+          <td>${escapeHtml(fullName)}</td>
+          <td>${escapeHtml(data?.[0]?.email || '')}</td>
+          <td>${escapeHtml(data?.[0]?.role || 'N/A')}</td>
+          <td>${escapeHtml(data?.[0]?.program || 'N/A')}</td>
+          <td>${escapeHtml(studentId || 'N/A')}</td>
+          <td>Approved</td>
+          <td>
+            <button class="btn btn-edit">Edit</button>
+            <button class="btn btn-delete">Delete</button>
+          </td>
+        </tr>`;
+      attachManageUserEventListeners([data?.[0]]); // attach edit/delete listeners
+    }
+
+    // Optionally reload other UI elements
     loadStudents();
     loadDashboardData();
 
