@@ -601,9 +601,6 @@ async function loadLecturerCourses() {
     tbody.innerHTML = coursesHtml;
 }
 
-/**
- * Load the lecturer's students table, filtered by program.
- */
 async function loadLecturerStudents() {
     const tbody = $('lecturer-students-table');
     if (!tbody) return;
@@ -612,6 +609,7 @@ async function loadLecturerStudents() {
 
     try {
         if (!currentUserProfile || !lecturerTargetProgram) {
+            console.log('No lecturer profile or target program found.');
             tbody.innerHTML = `
                 <tr>
                     <td colspan="7" style="text-align:center;">
@@ -621,7 +619,16 @@ async function loadLecturerStudents() {
             return;
         }
 
-        const programStudents = allStudents.filter(s => s.program === lecturerTargetProgram);
+        console.log('Lecturer Target Program:', lecturerTargetProgram);
+        console.log('All Students Programs:', allStudents.map(s => s.program));
+
+        // Filter ignoring case and trimming spaces
+        const programStudents = allStudents.filter(s => 
+            s.program?.trim().toLowerCase() === lecturerTargetProgram?.trim().toLowerCase()
+        );
+
+        console.log('Filtered Students:', programStudents);
+
         if (programStudents.length === 0) {
             tbody.innerHTML = `
                 <tr>
