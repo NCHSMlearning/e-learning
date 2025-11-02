@@ -279,15 +279,34 @@ async function initSession() {
     $('global-password-reset-form')?.addEventListener('submit', handleGlobalPasswordReset);
     $('account-deactivation-form')?.addEventListener('submit', handleAccountDeactivation);
 
-    // MODAL/EDIT LISTENERS
+  // MODAL/EDIT LISTENERS
+document.addEventListener('DOMContentLoaded', () => {
+    // Edit User Form
     $('edit-user-form')?.addEventListener('submit', handleEditUser);
-    document.querySelector('#userEditModal .close')?.addEventListener('click', () => { $('userEditModal').style.display = 'none'; });
-    document.querySelector('#mapModal .close')?.addEventListener('click', () => { $('mapModal').style.display = 'none'; });
+
+    // Close modals
+    document.querySelector('#userEditModal .close')?.addEventListener('click', () => {
+        $('userEditModal').style.display = 'none';
+    });
+    document.querySelector('#mapModal .close')?.addEventListener('click', () => {
+        $('mapModal').style.display = 'none';
+    });
+    document.querySelector('#courseEditModal .close')?.addEventListener('click', () => {
+        $('courseEditModal').style.display = 'none';
+    });
+
+    // Edit Course Form
     $('edit-course-form')?.addEventListener('submit', handleEditCourse);
-    $('edit_course_program')?.addEventListener('change', () => { updateBlockTermOptions('edit_course_program', 'edit_course_block'); });
-    $('edit_course_intake')?.addEventListener('change', () => { updateBlockTermOptions('edit_course_program', 'edit_course_block'); });
-    document.querySelector('#courseEditModal .close')?.addEventListener('click', () => { $('courseEditModal').style.display = 'none'; });
-} 
+
+    // Program/Intake change listeners for block/term options
+    $('edit_course_program')?.addEventListener('change', () => {
+        updateBlockTermOptions('edit_course_program', 'edit_course_block');
+    });
+    $('edit_course_intake')?.addEventListener('change', () => {
+        updateBlockTermOptions('edit_course_program', 'edit_course_block');
+    });
+});
+
 
 // Logout
 async function logout() {
