@@ -1909,63 +1909,74 @@ async function populateExamCourseSelects(courses = null) {
 
 // Add Exam / CAT
 async function handleAddExam(e) {
-  e.preventDefault();
-  const submitButton = e.submitter;
-  const originalText = submitButton.textContent;
-  setButtonLoading(submitButton, true, originalText);
+    // 1. CRITICAL: Stop the page refresh immediately
+    e.preventDefault();
+    
+    // 2. Safely get the submit button and check
+    const submitButton = e.submitter;
+    if (!submitButton) {
+        console.error("Form submitter button not found.");
+        return; 
+    }
 
-  const exam_type = $('exam_type').value;
-  const exam_link = $('exam_link').value.trim();
-  const exam_duration_minutes = parseInt($('exam_duration_minutes').value);
-  const exam_start_time = $('exam_start_time').value;
-  const program = $('exam_program').value;
-  const course_id = $('exam_course_id').value;
-  const exam_title = $('exam_title').value.trim();
-  const exam_date = $('exam_date').value;
-  const exam_status = $('exam_status').value;
-  const intake = $('exam_intake').value;
-  const block_term = $('exam_block_term').value;
+    const originalText = submitButton.textContent;
+    setButtonLoading(submitButton, true, originalText);
 
-  if (
-    !program || !course_id || !exam_title || !exam_date ||
-    !intake || !block_term || !exam_type || isNaN(exam_duration_minutes)
-  ) {
-    showFeedback(
-      'All exam fields (Program, Course, Title, Date, Intake, Block/Term, Type, and Duration) are required.',
-      'error'
-    );
-    setButtonLoading(submitButton, false, originalText);
-    return;
-  }
+    // 3. Use optional chaining (?) for safer value retrieval
+    const exam_type = $('exam_type')?.value;
+    const exam_link = $('exam_link')?.value.trim();
+    const exam_duration_minutes = parseInt($('exam_duration_minutes')?.value);
+    const exam_start_time = $('exam_start_time')?.value;
+    const program = $('exam_program')?.value;
+    const course_id = $('exam_course_id')?.value;
+    const exam_title = $('exam_title')?.value.trim();
+    const exam_date = $('exam_date')?.value;
+    const exam_status = $('exam_status')?.value;
+    const intake = $('exam_intake')?.value;
+    const block_term = $('exam_block_term')?.value;
 
-  try {
-    const { error, data } = await sb.from('exams').insert({
-      exam_name: exam_title,
-      course_id,
-      exam_date,
-      exam_start_time,
-      exam_type,
-      online_link: exam_link || null,
-      duration_minutes: exam_duration_minutes,
-      target_program: program,
-      intake_year: intake,
-      block_term,
-      status: exam_status
-    }).select('id');
+    // 4. Input Validation (Checks for null/empty values resulting from the guards)
+    if (
+        !program || !course_id || !exam_title || !exam_date ||
+        !intake || !block_term || !exam_type || isNaN(exam_duration_minutes)
+    ) {
+        showFeedback(
+            'All exam fields (Program, Course, Title, Date, Intake, Block/Term, Type, and Duration) are required.',
+            'error'
+        );
+        setButtonLoading(submitButton, false, originalText);
+        return;
+    }
 
-    if (error) throw error;
+    // 5. Try/Catch Block for Supabase operation
+    try {
+        const { error, data } = await sb.from('exams').insert({
+            exam_name: exam_title,
+            course_id,
+            exam_date,
+            exam_start_time,
+            exam_type,
+            online_link: exam_link || null,
+            duration_minutes: exam_duration_minutes,
+            target_program: program,
+            intake_year: intake,
+            block_term,
+            status: exam_status
+        }).select('id');
 
-    await logAudit('EXAM_ADD', `Posted new ${exam_type}: ${exam_title}.`, data?.[0]?.id, 'SUCCESS');
-    showFeedback('Assessment added successfully!', 'success');
-    e.target.reset();
-    loadExams();
-    renderFullCalendar();
-  } catch (error) {
-    await logAudit('EXAM_ADD', `Failed to add ${exam_type}: ${exam_title}. ${error.message}`, null, 'FAILURE');
-    showFeedback(`Failed to add assessment: ${error.message}`, 'error');
-  } finally {
-    setButtonLoading(submitButton, false, originalText);
-  }
+        if (error) throw error;
+
+        await logAudit('EXAM_ADD', `Posted new ${exam_type}: ${exam_title}.`, data?.[0]?.id, 'SUCCESS');
+        showFeedback('Assessment added successfully!', 'success');
+        e.target.reset(); // Reset the form after success
+        loadExams();
+        renderFullCalendar();
+    } catch (error) {
+        await logAudit('EXAM_ADD', `Failed to add ${exam_type}: ${exam_title}. ${error.message}`, null, 'FAILURE');
+        showFeedback(`Failed to add assessment: ${error.message}`, 'error');
+    } finally {
+        setButtonLoading(submitButton, false, originalText);
+    }
 }
 
 // Load Exams
