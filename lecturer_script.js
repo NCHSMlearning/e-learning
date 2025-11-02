@@ -297,42 +297,47 @@ async function fetchGlobalDataCaches() {
     allCourses = courses || [];
 }
 async function loadStudents() {
-    const STUDENT_TABLE = 'consolidated_user_profiles_table'; 
+    const STUDENT_TABLE = 'consolidated_user_profiles_table';
 
-    let studentQuery = sb
-        .from(STUDENT_TABLE)
-        .select('user_id, full_name, email, program, intake_year, block, status')
-        .eq('role', 'student');
+    try {
+        let query = supabase
+            .from(STUDENT_TABLE)
+            .select('user_id, full_name, email, program, intake_year, block, status')
+            .eq('role', 'student');
 
-    if (lecturerTargetProgram) {
-        studentQuery = studentQuery.eq('program', lecturerTargetProgram);
-    } else {
-        console.warn(
-            `⚠️ No program assigned for department "${currentUserProfile.department}". Loading zero students.`
+        if (lecturerTargetProgram) {
+            query = query.eq('program', lecturerTargetProgram);
+        } else {
+            console.warn(
+                `⚠️ No program assigned for department "${currentUserProfile.department}". Loading zero students.`
+            );
+        }
+
+        const { data: students, error } = await query.order('full_name', { ascending: true });
+
+        if (error) {
+            console.error('Error fetching students:', error);
+            showFeedback(
+                'Failed to load student list. Please check the Supabase column names (program, block) and RLS policy.',
+                'error'
+            );
+            return;
+        }
+
+        allStudents = students || [];
+        console.log(
+            `✅ Loaded ${allStudents.length} student(s) for program: ${lecturerTargetProgram || 'None'}`
         );
+
+        // Update dashboard and table
+        loadLecturerStudents();
+        loadLecturerDashboardData();
+    } catch (err) {
+        console.error('Unexpected error fetching students:', err);
     }
-
-    const { data: students, error: studentError } = await studentQuery.order(
-        'full_name',
-        { ascending: true }
-    );
-
-    if (studentError) {
-        console.error('Error fetching filtered students:', studentError);
-        showFeedback(
-            'Failed to load student list. Please check the Supabase column names (program, block) and RLS policy.',
-            'error'
-        );
-    }
-
-    allStudents = students || [];
-
-    console.log(
-        `✅ Loaded ${allStudents.length} student(s) for program: ${lecturerTargetProgram || 'None'}`
-    );
 }
 
-// Call the function
+// Call it
 loadStudents();
 
 
