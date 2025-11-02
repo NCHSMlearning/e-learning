@@ -221,109 +221,105 @@ async function initSession() {
         return;
     }
     
-   // Continue with app initialization
-loadSectionData('dashboard');
-    
-// Setup Event Listeners
-    
-// ATTENDANCE TAB
-$('att_session_type')?.addEventListener('change', toggleAttendanceFields);
-toggleAttendanceFields(); 
-$('manual-attendance-form')?.addEventListener('submit', handleManualAttendance);
-$('attendance-search')?.addEventListener('keyup', () => filterTable('attendance-search', 'attendance-table', [0, 1, 2]));
-    
-// ENROLLMENT/USER TAB
-$('add-account-form')?.addEventListener('submit', handleAddAccount);
-$('account-program')?.addEventListener('change', () => updateBlockTermOptions('account-program', 'account-block-term')); 
-$('account-intake')?.addEventListener('change', () => updateBlockTermOptions('account-program', 'account-block-term'));
-$('user-search')?.addEventListener('keyup', () => filterTable('user-search', 'users-table', [1, 2, 4]));
-    
-// NEW: MASS PROMOTION LISTENER
-$('mass-promotion-form')?.addEventListener('submit', handleMassPromotion);
-$('promote_intake')?.addEventListener('change', () => {
-    updateBlockTermOptions('promote_intake', 'promote_from_block');
-    updateBlockTermOptions('promote_intake', 'promote_to_block');
-});
+   // Continue with app initialization
+    loadSectionData('dashboard');
+    
+    // Setup Event Listeners
+    
+    // ATTENDANCE TAB
+    $('att_session_type')?.addEventListener('change', toggleAttendanceFields);
+    toggleAttendanceFields(); 
+    $('manual-attendance-form')?.addEventListener('submit', handleManualAttendance);
+    $('attendance-search')?.addEventListener('keyup', () => filterTable('attendance-search', 'attendance-table', [0, 1, 2]));
+    
+    // ENROLLMENT/USER TAB
+    $('add-account-form')?.addEventListener('submit', handleAddAccount);
+    $('account-program')?.addEventListener('change', () => updateBlockTermOptions('account-program', 'account-block-term')); 
+    $('account-intake')?.addEventListener('change', () => updateBlockTermOptions('account-program', 'account-block-term'));
+    $('user-search')?.addEventListener('keyup', () => filterTable('user-search', 'users-table', [1, 2, 4]));
+    
+    // NEW: MASS PROMOTION LISTENER
+    $('mass-promotion-form')?.addEventListener('submit', handleMassPromotion);
+    $('promote_intake')?.addEventListener('change', () => {
+        updateBlockTermOptions('promote_intake', 'promote_from_block');
+        updateBlockTermOptions('promote_intake', 'promote_to_block');
+    });
 
-// COURSES TAB
-$('add-course-form')?.addEventListener('submit', handleAddCourse);
-$('course-search')?.addEventListener('keyup', () => filterTable('course-search', 'courses-table', [0, 1, 3]));
-$('course-program')?.addEventListener('change', () => { updateBlockTermOptions('course-program', 'course-block'); });
-$('course-intake')?.addEventListener('change', () => { updateBlockTermOptions('course-program', 'course-block'); });
-    
-// SESSIONS TAB
-$('add-session-form')?.addEventListener('submit', handleAddSession);
-$('session_program')?.addEventListener('change', () => { 
-    updateBlockTermOptions('session_program', 'session_block_term'); 
-    populateSessionCourseSelects(); 
-});
-$('session_intake')?.addEventListener('change', () => updateBlockTermOptions('session_program', 'session_block_term')); 
-$('clinical_program')?.addEventListener('change', () => { updateBlockTermOptions('clinical_program', 'clinical_block_term'); }); 
-$('clinical_intake')?.addEventListener('change', () => updateBlockTermOptions('clinical_program', 'clinical_block_term')); 
+    // COURSES TAB
+    $('add-course-form')?.addEventListener('submit', handleAddCourse);
+    $('course-search')?.addEventListener('keyup', () => filterTable('course-search', 'courses-table', [0, 1, 3]));
+    $('course-program')?.addEventListener('change', () => { updateBlockTermOptions('course-program', 'course-block'); });
+    $('course-intake')?.addEventListener('change', () => { updateBlockTermOptions('course-program', 'course-block'); });
+    
+    // SESSIONS TAB
+    $('add-session-form')?.addEventListener('submit', handleAddSession);
+    $('session_program')?.addEventListener('change', () => { 
+        updateBlockTermOptions('session_program', 'session_block_term'); 
+        populateSessionCourseSelects(); 
+    });
+    $('session_intake')?.addEventListener('change', () => updateBlockTermOptions('session_program', 'session_block_term')); 
+    $('clinical_program')?.addEventListener('change', () => { updateBlockTermOptions('clinical_program', 'clinical_block_term'); }); 
+    $('clinical_intake')?.addEventListener('change', () => updateBlockTermOptions('clinical_program', 'clinical_block_term')); 
 
-// CATS/EXAMS TAB
-$('add-exam-form')?.addEventListener('submit', handleAddExam);
-$('exam_program')?.addEventListener('change', () => { 
-    populateExamCourseSelects(); // This handles populating exam_course_id
-    updateBlockTermOptions('exam_program', 'exam_block_term'); 
-});
-$('exam_intake')?.addEventListener('change', () => updateBlockTermOptions('exam_program', 'exam_block_term')); 
-    
-// MESSAGE/WELCOME EDITOR TAB
-$('send-message-form')?.addEventListener('submit', handleSendMessage);
-$('edit-welcome-form')?.addEventListener('submit', handleSaveWelcomeMessage); 
-    
-// RESOURCES TAB <-- BLOCK/TERM NOW USES STANDARD FUNCTION
-$('resource_program')?.addEventListener('change', () => { updateBlockTermOptions('resource_program', 'resource_block'); });
-$('resource_intake')?.addEventListener('change', () => { updateBlockTermOptions('resource_program', 'resource_block'); });
-    
-// NEW: SECURITY TAB
-$('global-password-reset-form')?.addEventListener('submit', handleGlobalPasswordReset);
-$('account-deactivation-form')?.addEventListener('submit', handleAccountDeactivation);
+    // CATS/EXAMS TAB
+    $('add-exam-form')?.addEventListener('submit', handleAddExam);
+    $('exam_program')?.addEventListener('change', () => { 
+        populateExamCourseSelects(); // This handles populating exam_course_id
+        updateBlockTermOptions('exam_program', 'exam_block_term'); 
+    });
+    $('exam_intake')?.addEventListener('change', () => updateBlockTermOptions('exam_program', 'exam_block_term')); 
+    
+    // MESSAGE/WELCOME EDITOR TAB
+    $('send-message-form')?.addEventListener('submit', handleSendMessage);
+    $('edit-welcome-form')?.addEventListener('submit', handleSaveWelcomeMessage); 
+    
+    // RESOURCES TAB <-- BLOCK/TERM NOW USES STANDARD FUNCTION
+    $('resource_program')?.addEventListener('change', () => { updateBlockTermOptions('resource_program', 'resource_block'); });
+    $('resource_intake')?.addEventListener('change', () => { updateBlockTermOptions('resource_program', 'resource_block'); });
+    
+    // NEW: SECURITY TAB
+    $('global-password-reset-form')?.addEventListener('submit', handleGlobalPasswordReset);
+    $('account-deactivation-form')?.addEventListener('submit', handleAccountDeactivation);
 
-// --- LOGOUT LISTENER (THE FIX!) ---
-const logoutButton = document.getElementById('logoutButton'); 
-    
-if (logoutButton) {
-    // Attach the function reference correctly
-    logoutButton.addEventListener('click', (e) => {
-        e.preventDefault(); 
-        logout(); // Calls the function defined below
-    });
-} else {
-    console.error("Logout button not found. Expected ID: 'logoutButton'."); 
-}
-// --- END LOGOUT LISTENER ---
-
-// MODAL/EDIT LISTENERS
+  // MODAL/EDIT LISTENERS
 document.addEventListener('DOMContentLoaded', () => {
-    // Edit User Form
-    $('edit-user-form')?.addEventListener('submit', handleEditUser);
+    // Edit User Form
+    $('edit-user-form')?.addEventListener('submit', handleEditUser);
 
-    // Close modals
-    document.querySelector('#userEditModal .close')?.addEventListener('click', () => {
-        $('userEditModal').style.display = 'none';
-    });
-    document.querySelector('#mapModal .close')?.addEventListener('click', () => {
-        $('mapModal').style.display = 'none';
-    });
-    document.querySelector('#courseEditModal .close')?.addEventListener('click', () => {
-        $('courseEditModal').style.display = 'none';
-    });
+    // Close modals
+    document.querySelector('#userEditModal .close')?.addEventListener('click', () => {
+        $('userEditModal').style.display = 'none';
+    });
+    document.querySelector('#mapModal .close')?.addEventListener('click', () => {
+        $('mapModal').style.display = 'none';
+    });
+    document.querySelector('#courseEditModal .close')?.addEventListener('click', () => {
+        $('courseEditModal').style.display = 'none';
+    });
 
-    // Edit Course Form
-    $('edit-course-form')?.addEventListener('submit', handleEditCourse);
+    // Edit Course Form
+    $('edit-course-form')?.addEventListener('submit', handleEditCourse);
 
-    // Program/Intake change listeners for block/term options
-    $('edit_course_program')?.addEventListener('change', () => {
-        updateBlockTermOptions('edit_course_program', 'edit_course_block');
-    });
-    $('edit_course_intake')?.addEventListener('change', () => {
-        updateBlockTermOptions('edit_course_program', 'edit_course_block');
-    });
+    // Program/Intake change listeners for block/term options
+    $('edit_course_program')?.addEventListener('change', () => {
+        updateBlockTermOptions('edit_course_program', 'edit_course_block');
+    });
+    $('edit_course_intake')?.addEventListener('change', () => {
+        updateBlockTermOptions('edit_course_program', 'edit_course_block');
+    });
 
-    // *** FIX APPLIED: Removed unintended openEditUserModal call here ***
+    // *** FIX APPLIED: Removed unintended openEditUserModal call here ***
 });
+
+
+// Logout
+async function logout() {
+    await logAudit('LOGOUT', `User ${currentUserProfile.full_name} logged out.`);
+    await sb.auth.signOut();
+    localStorage.removeItem("loggedInUser");
+    window.location.href = "login.html";
+   }
+ }
  
 /*******************************************************
  * 1.5. LOGOUT & AUDIT LOGGING (NEW STRATEGIC FEATURE)
