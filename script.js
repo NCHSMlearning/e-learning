@@ -1093,47 +1093,55 @@ async function openEditUserModal(userId) {
 async function handleEditUser(e) {
   e.preventDefault();
   const submitButton = e.submitter;
-  const originalText = submitButton.textContent;
-  setButtonLoading(submitButton, true, originalText);
-
-  const userId = $('edit_user_id').value;
-  const updatedData = {
-    full_name: $('edit_user_name').value.trim(),
-    email: $('edit_user_email').value.trim(),
-    role: $('edit_user_role').value,
-    program: $('edit_user_program').value || null,
-    intake_year: $('edit_user_intake').value || null,
-    block: $('edit_user_block').value || null,
-    block_program_year: $('edit_user_block_status').value === 'true',
-    status: 'approved'
-  };
-
-  // Optional password fields
-  const newPassword = $('edit_user_new_password').value.trim();
-  const confirmPassword = $('edit_user_confirm_password').value.trim();
-
-  if (newPassword && newPassword !== confirmPassword) {
-    $('password-reset-feedback').textContent = "Passwords do not match!";
-    setButtonLoading(submitButton, false, originalText);
-    return;
-  }
+  const originalText = submitButton ? submitButton.textContent : 'Saving...';
+  if (submitButton) setButtonLoading(submitButton, true, originalText);
 
   try {
-    // Update user profile
+    const userId = $('edit_user_id').value;
+    if (!userId) throw new Error('User ID is missing.');
+
+    console.log('Editing user:', userId);
+
+    const updatedData = {
+      full_name: $('edit_user_name').value.trim(),
+      email: $('edit_user_email').value.trim(),
+      role: $('edit_user_role').value,
+      program: $('edit_user_program').value || null,
+      intake_year: $('edit_user_intake').value || null,
+      block: $('edit_user_block').value || null,
+      block_program_year: $('edit_user_block_status').value === 'true',
+      status: 'approved'
+    };
+
+    // Password check
+    const newPassword = $('edit_user_new_password').value.trim();
+    const confirmPassword = $('edit_user_confirm_password').value.trim();
+    if (newPassword && newPassword !== confirmPassword) {
+      console.warn('Passwords do not match!');
+      $('password-reset-feedback').textContent = "Passwords do not match!";
+      return;
+    }
+
+    // Update profile table
+    console.log('Updating profile with data:', updatedData);
     const { data: updatedRow, error: profileError } = await sb
       .from('consolidated_user_profiles_table')
       .update(updatedData)
       .eq('user_id', userId)
       .select('*');
 
+    console.log('Profile update response:', { updatedRow, profileError });
+
     if (profileError) throw profileError;
 
-    // Optionally update password if provided
+    // Update password if provided
     if (newPassword) {
-      const { error: pwError } = await sb.auth.updateUser({
+      console.log('Updating password for user:', userId);
+      const { data: pwData, error: pwError } = await sb.auth.updateUser({
         id: userId,
         password: newPassword
       });
+      console.log('Password update response:', { pwData, pwError });
       if (pwError) throw pwError;
     }
 
@@ -1148,7 +1156,7 @@ async function handleEditUser(e) {
     showFeedback('User profile updated successfully!', 'success');
     $('userEditModal').style.display = 'none';
 
-    // Update table row dynamically
+    // Update row in table dynamically
     const row = document.querySelector(`tr[data-user-id="${userId}"]`);
     if (row && updatedRow?.[0]) {
       row.children[0].textContent = updatedRow[0].full_name;
@@ -1157,20 +1165,30 @@ async function handleEditUser(e) {
       row.children[3].textContent = updatedRow[0].program;
     }
 
+    console.log('UI table row updated successfully.');
+
     // Refresh dependent UI
     loadStudents();
     loadDashboardData();
 
   } catch (err) {
-    await logAudit(
-      'USER_EDIT',
-      `Failed to edit profile for user ID ${userId.substring(0, 8)}. Reason: ${err.message}`,
-      userId,
-      'FAILURE'
-    );
+    console.error('Error in handleEditUser:', err);
     showFeedback('Failed to update user: ' + (err.message || err), 'error');
+
+    // Audit log failure
+    try {
+      const userId = $('edit_user_id')?.value || 'unknown';
+      await logAudit(
+        'USER_EDIT',
+        `Failed to edit profile for user ID ${userId.substring(0, 8)}. Reason: ${err.message}`,
+        userId,
+        'FAILURE'
+      );
+    } catch (logErr) {
+      console.error('Audit log failed:', logErr);
+    }
   } finally {
-    setButtonLoading(submitButton, false, originalText);
+    if (submitButton) setButtonLoading(submitButton, false, originalText);
   }
 }
 
