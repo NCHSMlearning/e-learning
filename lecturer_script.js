@@ -296,16 +296,11 @@ async function fetchGlobalDataCaches() {
 
     allCourses = courses || [];
 }
-
-    // 2. Determine lecturerTargetProgram based on department
-    // (already handled in initSession)
-    
-    // 3. Fetch all students filtered by lecturer’s program
+async function loadStudents() {
     const STUDENT_TABLE = 'consolidated_user_profiles_table'; 
 
     let studentQuery = sb
         .from(STUDENT_TABLE)
-        // ✅ fixed: use correct columns that exist in your table
         .select('user_id, full_name, email, program, intake_year, block, status')
         .eq('role', 'student');
 
@@ -336,6 +331,9 @@ async function fetchGlobalDataCaches() {
         `✅ Loaded ${allStudents.length} student(s) for program: ${lecturerTargetProgram || 'None'}`
     );
 }
+
+// Call the function
+loadStudents();
 
 
 
