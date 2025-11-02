@@ -803,6 +803,7 @@ async function loadPendingApprovals() {
   }
 
   tbody.innerHTML = '';
+
   pending.forEach(u => {
     tbody.innerHTML += `
       <tr>
@@ -813,10 +814,28 @@ async function loadPendingApprovals() {
         <td>${escapeHtml(u.student_id || 'N/A')}</td>
         <td>${new Date(u.created_at).toLocaleDateString()}</td>
         <td>
-          <button class="btn btn-approve" onclick="approveUser('${u.user_id}', ${JSON.stringify(u.full_name)}, ${JSON.stringify(u.student_id)})">Approve</button>
-          <button class="btn btn-delete" onclick="deleteProfile('${u.user_id}', ${JSON.stringify(u.full_name)})">Reject</button>
+          <button class="btn btn-approve">Approve</button>
+          <button class="btn btn-delete">Reject</button>
         </td>
       </tr>`;
+  });
+
+  // Attach event listeners to the buttons
+  const approveButtons = tbody.querySelectorAll('.btn-approve');
+  const deleteButtons = tbody.querySelectorAll('.btn-delete');
+
+  approveButtons.forEach((btn, index) => {
+    btn.addEventListener('click', () => {
+      const u = pending[index];
+      approveUser(u.user_id, u.full_name, u.student_id || '');
+    });
+  });
+
+  deleteButtons.forEach((btn, index) => {
+    btn.addEventListener('click', () => {
+      const u = pending[index];
+      deleteProfile(u.user_id, u.full_name);
+    });
   });
 }
 
