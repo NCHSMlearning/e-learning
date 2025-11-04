@@ -11,7 +11,7 @@ if (window.location.pathname.endsWith('.html')) {
 // --- ⚠️ IMPORTANT: SUPABASE CONFIGURATION ---
 const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co'; 
 // *** CRITICAL: REPLACE THIS PLACEHOLDER WITH YOUR LIVE ANON KEY ***
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Pkk'; 
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk'; 
 
 // --- Global Supabase Client ---
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -238,15 +238,11 @@ async function initSession() {
     
     if (profile) {
         currentUserProfile = profile;
-        // Ensure program is set before fetching global data
         lecturerTargetProgram = getProgramFilterFromDepartment(currentUserProfile.department); 
 
         document.querySelector('header h1').textContent = `Welcome, ${currentUserProfile.full_name || 'Lecturer'}!`;
         
-        // 1. Fetch all courses (required by multiple functions)
         await fetchGlobalDataCaches(); 
-        // 2. Then, fetch the subset of students for the lecturer's program
-        await loadStudents(); 
         
         loadSectionData('dashboard'); 
         setupEventListeners();
@@ -270,26 +266,25 @@ function showAuthFailure(error) {
  * Maps the lecturer's department to the student's program code.
  */
 function getProgramFilterFromDepartment(department) {
+    // Modify these based on your institution's department-to-program mapping
     if (!department) return null;
     const dept = department.toLowerCase();
     
-    // Use consistent program codes
     if (dept.includes('nursing') || dept.includes('midwifery') || dept.includes('maternal health')) {
         return 'KRCHN';
     }
-    // Assuming 'TVET' is the program code for the technical department
     if (dept.includes('clinical') || dept.includes('dental') || dept.includes('tivet') || dept.includes('general education')) {
-        return 'TVET'; 
+        return 'TVET';
     }
     return null; 
 }
 
 
 async function fetchGlobalDataCaches() {
-    // 1. Fetch all courses (needed for filtering in loadLecturerCourses and populating selects)
+    // 1. Fetch all courses (needed for filtering in loadLecturerCourses)
     const { data: courses, error } = await fetchData(
         COURSES_TABLE,
-        'id, course_name, target_program, block, intake_year, status, unit_code, course_id', 
+        'id, course_name, target_program, block, intake_year, status, unit_code',
         {}, // no filters — load all
         'course_name',
         true
@@ -304,19 +299,34 @@ async function fetchGlobalDataCaches() {
 // 2. Fetch all students filtered by lecturer’s program
 async function loadStudents() {
     try {
-        const STUDENT_TABLE = 'consolidated_user_profiles_table'; 
+        const STUDENT_TABLE = 'consolidated_user_profiles_table'; // Ensure correct table name
 
+        // Base query: all students
         let studentQuery = sb
             .from(STUDENT_TABLE)
-            .select('user_id, full_name, email, program, intake_year, block, status, enrolled_courses') // Included enrolled_courses
+            .select('user_id, full_name, email, program, intake_year, block, status')
             .eq('role', 'student');
+
+        // Normalize lecturer’s department (case-insensitive)
+        if (currentUserProfile?.department) {
+            const dept = currentUserProfile.department.toLowerCase();
+
+            // Map department to program
+            if (dept === 'nursing') {
+                lecturerTargetProgram = 'KRCHN';
+            } else if (dept === 'tivet') {
+                lecturerTargetProgram = 'TIVET';
+            } else {
+                lecturerTargetProgram = null;
+            }
+        }
 
         // Apply program filter if available
         if (lecturerTargetProgram) {
             studentQuery = studentQuery.eq('program', lecturerTargetProgram);
         } else {
             console.warn(
-                `⚠️ No program filter applied: lecturerTargetProgram is null.`
+                `⚠️ No program assigned for department "${currentUserProfile?.department}".`
             );
         }
 
@@ -347,6 +357,9 @@ async function loadStudents() {
     }
 }
 
+// Call the function
+loadStudents();
+
 function loadSectionData(tabId) { 
     document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
     if (!currentUserProfile) return;
@@ -354,6 +367,7 @@ function loadSectionData(tabId) {
     switch(tabId) {
         case 'profile': loadLecturerProfile(); break;
         case 'dashboard': loadLecturerDashboardData(); break;
+        // 🛑 CRITICAL FIX: Mapping to the new tab structure
         case 'my-courses': loadLecturerCourses(); break; 
         case 'my-students': loadLecturerStudents(); break; 
         case 'sessions': loadLecturerSessions(); populateSessionFormSelects(); break;
@@ -466,9 +480,12 @@ function loadLecturerProfile() {
   const avatarUrl = currentUserProfile.avatar_url || 'images/default_passport.png';
 $('profile-img').src = avatarUrl;
     
-    // Display current user details
+    // ⬇️ CORRECTION: Updated IDs to match the new HTML structure ⬇️
     $('profile_name_display').textContent = currentUserProfile.full_name || 'N/A';
     $('profile_role_display').textContent = currentUserProfile.role || 'N/A';
+    // ⬆️ CORRECTION ENDS ⬆️
+    
+    // These IDs are correct and remain the same in the new HTML <span> tags:
     $('profile_id').textContent = currentUserProfile.employee_id || 'N/A';
     $('profile_email').textContent = currentUserProfile.email || 'N/A';
     $('profile_phone').textContent = currentUserProfile.phone || 'N/A';
@@ -536,8 +553,9 @@ async function loadLecturerDashboardData() {
     const programCourses = allCourses.filter(c => c.target_program === lecturerTargetProgram && c.status === 'Active');
     $('total_courses_count').textContent = programCourses.length || '0';
 
-    // Total students for this program (already filtered in allStudents)
-    $('total_students_count').textContent = allStudents.length || '0';
+    // Total students for this program
+    const programStudents = allStudents.filter(s => s.program === lecturerTargetProgram);
+    $('total_students_count').textContent = programStudents.length || '0';
 
     // Update filter info in banner
     const filterInfoEl = document.querySelector('#welcome-banner span:last-child');
@@ -570,7 +588,7 @@ async function loadLecturerCourses() {
     }
 
     const filteredCourses = (allCourses || []).filter(course =>
-        course.target_program === lecturerTargetProgram && course.status === 'Active' 
+        course.target_program === lecturerTargetProgram && course.status === 'Active'
     );
 
     if (filteredCourses.length === 0) {
@@ -582,7 +600,7 @@ async function loadLecturerCourses() {
     }
 
     const coursesHtml = filteredCourses.map(course => {
-        // Count students enrolled in this course (relies on 'enrolled_courses' in student profile)
+        // Count students enrolled in this course
         const studentCount = allStudents?.filter(student =>
             student.enrolled_courses?.includes(course.unit_code)
         ).length || 0;
@@ -614,6 +632,7 @@ async function loadLecturerStudents() {
 
     try {
         if (!currentUserProfile || !lecturerTargetProgram) {
+            console.log('No lecturer profile or target program found.');
             tbody.innerHTML = `
                 <tr>
                     <td colspan="7" style="text-align:center;">
@@ -623,8 +642,15 @@ async function loadLecturerStudents() {
             return;
         }
 
-        // Students were already filtered globally in allStudents by loadStudents()
-        const programStudents = allStudents; 
+        console.log('Lecturer Target Program:', lecturerTargetProgram);
+        console.log('All Students Programs:', allStudents.map(s => s.program));
+
+        // Filter ignoring case and trimming spaces
+        const programStudents = allStudents.filter(s => 
+            s.program?.trim().toLowerCase() === lecturerTargetProgram?.trim().toLowerCase()
+        );
+
+        console.log('Filtered Students:', programStudents);
 
         if (programStudents.length === 0) {
             tbody.innerHTML = `
@@ -694,8 +720,8 @@ function populateSessionFormSelects() {
         blockSelect.innerHTML = '<option value="">-- Select Program First --</option>';
     }
 
-    // Filter courses by the correct course program field ('target_program' in courses table)
-    const filteredCourses = allCourses.filter(c => c.target_program === lecturerTargetProgram);
+    // Filter courses by the target program for a more accurate list
+    const filteredCourses = allCourses.filter(c => c.program_type === lecturerTargetProgram);
     populateSelect($('session_course_id'), filteredCourses, 'course_id', 'course_name', 'Select Course');
 }
 
@@ -792,8 +818,8 @@ async function loadLecturerSessions() {
 
 function loadAttendanceSelects() {
     populateSelect($('att_student_id'), allStudents, 'user_id', 'full_name', 'Select Student');
-    // Filter courses by the correct course program field ('target_program' in courses table)
-    const filteredCourses = allCourses.filter(c => c.target_program === lecturerTargetProgram);
+    // Filter courses by the target program for a more accurate list
+    const filteredCourses = allCourses.filter(c => c.program_type === lecturerTargetProgram);
     populateSelect($('att_course_id'), filteredCourses, 'course_id', 'course_name', 'Select Course (Optional)');
 }
 
@@ -904,10 +930,11 @@ async function loadTodaysAttendanceRecords() {
     
     const today = new Date().toISOString().split('T')[0];
     
-    // Optimized query for today's logs, joining user details
+    // Use the optimized query to fetch logs for this lecturer or their students
     const { data: logs, error } = await sb
       .from(ATTENDANCE_TABLE)
       .select(`*, user:user_id(full_name, program)`)   
+      .or(`user_role.eq.lecturer,user.program.eq.${lecturerTargetProgram}`) 
       .gte('check_in_time', today)
       .order('check_in_time', { ascending: false });
 
@@ -916,23 +943,16 @@ async function loadTodaysAttendanceRecords() {
       return;
     }
 
-    // Client-side filtering to ensure only relevant logs are displayed based on program/role
-    const relevantLogs = logs.filter(l => 
-        l.user_id === currentUserProfile.user_id || // Lecturer's own check-ins
-        (l.user?.program && l.user.program === lecturerTargetProgram) || // Students in the lecturer's program
-        l.recorded_by_id === currentUserProfile.user_id // Manual entries by this lecturer
-    );
-
-    if (!relevantLogs || relevantLogs.length === 0) {
+    if (!logs || logs.length === 0) {
       tbody.innerHTML = '<tr><td colspan="7">No relevant attendance records found for today.</td></tr>';
       return;
     }
 
     tbody.innerHTML = '';
-    relevantLogs.forEach(l => {
-        // Fallback for user name if the join fails
+    logs.forEach(l => {
+        // Fallback for user name if the join fails (e.g., student was deleted)
         const student = allStudents.find(s => s.user_id === l.user_id);
-        const userName = l.user?.full_name || student?.full_name || (l.user_id === currentUserProfile.user_id ? currentUserProfile.full_name : 'N/A');
+        const userName = l.user?.full_name || student?.full_name || (l.user_role === 'lecturer' ? currentUserProfile.full_name : 'N/A');
         
         const target = allCourses.find(c => c.course_id === l.course_id)?.course_name || l.course_id || 'General';
         const dateTime = new Date(l.check_in_time).toLocaleTimeString();
@@ -964,12 +984,14 @@ function viewCheckInMap(lat, lng, name, locationElementId) {
     const mapModal = $('mapModal');
     mapModal.style.display = 'block';
     
+    // Check if Leaflet map container exists
     const mapContainer = $('mapbox-map');
     if (!mapContainer) {
         showFeedback("Error: Map container not found.", "error");
         return;
     }
     
+    // Prevent map from re-initializing if it already exists
     if (attendanceMap) {
         attendanceMap.remove();
     }
@@ -994,7 +1016,7 @@ function viewCheckInMap(lat, lng, name, locationElementId) {
 }
 
 // =================================================================
-// === 8. EXAMS, RESOURCES, MESSAGING IMPLEMENTATION ===
+// === 8. EXAMS, RESOURCES, MESSAGING (PLACEHOLDER FUNCTIONS - START IMPLEMENTED) ===
 // =================================================================
 
 function populateExamFormSelects() {
@@ -1015,8 +1037,8 @@ function populateExamFormSelects() {
     }
 
     populateSelect($('exam_intake'), allIntakes, 'id', 'name', 'Select Intake Year');
-    // Filter courses by the correct course program field ('target_program' in courses table)
-    const filteredCourses = allCourses.filter(c => c.target_program === lecturerTargetProgram);
+    // Filter courses by the target program for a more accurate list
+    const filteredCourses = allCourses.filter(c => c.program_type === lecturerTargetProgram);
     populateSelect($('exam_course_id'), filteredCourses, 'course_id', 'course_name', 'Select Course');
 }
 
@@ -1118,10 +1140,9 @@ function populateResourceFormSelects() {
         blockSelect.innerHTML = '<option value="">-- Select Program First --</option>';
     }
 
-    // Filter courses by the correct course program field ('target_program' in courses table)
-    const filteredCourses = allCourses.filter(c => c.target_program === lecturerTargetProgram);
-    // Assuming HTML ID for resource course selection is 'resource_course_id'
-    populateSelect($('resource_course_id'), filteredCourses, 'course_id', 'course_name', 'Select Course');
+    // Filter courses by the target program for a more accurate list
+    const filteredCourses = allCourses.filter(c => c.program_type === lecturerTargetProgram);
+    populateSelect($('resource_intake'), filteredCourses, 'course_id', 'course_name', 'Select Course');
 }
 
 async function handleUploadResource(e) {
@@ -1135,7 +1156,7 @@ async function handleUploadResource(e) {
     const formData = {
         title: $('resource_title').value,
         program: $('resource_program').value,
-        course_id: $('resource_course_id').value, // Corrected ID usage
+        course_id: $('resource_intake').value, // Misnamed ID in HTML, treated as course_id
         block_term: $('resource_block').value,
     };
 
@@ -1227,33 +1248,14 @@ function closeEditResourceModal() {
 }
 
 
-function populateMessageFormSelects(selectedUserId = null, selectedUserName = null) {
+function populateMessageFormSelects() {
     // Populate message targets
     const targetSelect = $('msg_target');
-    
-    // Default options
-    let targetOptions = [
-        { id: 'all-students', name: `All ${lecturerTargetProgram || 'Assigned'} Students` },
+    const targetOptions = [
+        { id: 'all-students', name: `All ${lecturerTargetProgram} Students` },
         { id: 'custom-user', name: 'Specific Student/User (Enter ID/Email)' },
     ];
-    
-    // Add the selected user to the options if provided
-    if (selectedUserId && selectedUserName) {
-        const userOptionExists = targetOptions.some(opt => opt.id === selectedUserId);
-        if (!userOptionExists) {
-            targetOptions.push({ 
-                id: selectedUserId, 
-                name: `Student: ${selectedUserName}` 
-            });
-        }
-    }
-    
     populateSelect(targetSelect, targetOptions, 'id', 'name', 'Select Message Target');
-
-    // Set the selected user as the default if provided
-    if (selectedUserId) {
-        targetSelect.value = selectedUserId;
-    }
 }
 
 async function handleSendMessage(e) { 
@@ -1273,31 +1275,22 @@ async function handleSendMessage(e) {
         return;
     }
     
-    // Determine the receiver ID based on the selection
-    let receiverId = 'GROUP'; // Default for groups
-    let targetGroup = formData.target;
-    if (formData.target !== 'all-students' && formData.target !== 'custom-user') {
-        // If the target is a specific user_id
-        receiverId = formData.target;
-        targetGroup = 'specific-user';
-    }
-    
     try {
+        // Simple insert for now (more complex logic is needed for "all-students" targeting)
         const { error } = await sb.from(MESSAGES_TABLE).insert({
             sender_id: currentUserProfile.user_id,
             sender_name: currentUserProfile.full_name,
             subject: formData.subject,
             body: formData.body,
-            receiver_id: receiverId, // Updated receiver ID
+            receiver_id: 'SYSTEM', // Placeholder: Would be a specific user ID or a group tag
             target_program: lecturerTargetProgram,
-            target_group: targetGroup, // Updated target group tag
+            target_group: formData.target, // Storing the selected group for history
         });
 
         if (error) throw error;
 
         showFeedback(`✅ Message sent successfully!`, 'success');
         e.target.reset();
-        populateMessageFormSelects(); // Reset form select
         loadLecturerMessages(); 
     } catch (error) {
         console.error('Message sending failed:', error);
@@ -1311,7 +1304,8 @@ async function loadLecturerMessages() {
     const tbody = $('messages-table');
     tbody.innerHTML = '<tr><td colspan="5">Loading messages...</td></tr>';
     
-    // Fetch messages sent by this lecturer
+    // Fetch messages sent by this lecturer (sent_messages table would be better, but using current structure)
+    // Here we'll show messages sent *by* the lecturer for history, or received by them.
     const { data: sentMessages, error } = await fetchData(MESSAGES_TABLE, '*', { sender_id: currentUserProfile.user_id }, 'sent_at', false);
 
     if (error) {
@@ -1325,22 +1319,12 @@ async function loadLecturerMessages() {
     }
 
     tbody.innerHTML = sentMessages.map(m => {
-        // Better display logic for message targets
-        let targetDisplay;
-        if (m.target_group === 'all-students') {
-            targetDisplay = `All ${m.target_program} Students`;
-        } else if (m.target_group === 'specific-user') {
-            const student = allStudents.find(s => s.user_id === m.receiver_id);
-            targetDisplay = student ? student.full_name : `User ID: ${m.receiver_id}`;
-        } else {
-            targetDisplay = m.target_group;
-        }
-
+        const target = m.target_group === 'all-students' ? `All ${m.target_program} Students` : m.receiver_id;
         return `
             <tr>
                 <td>${new Date(m.sent_at).toLocaleString()}</td>
                 <td>${m.subject}</td>
-                <td>${targetDisplay}</td>
+                <td>${target}</td>
                 <td><span class="status status-success">Sent</span></td>
                 <td><button class="btn-action" style="background-color:#4C1D95;" onclick="showFeedback('Viewing message ${m.id}', 'info')">View</button></td>
             </tr>
@@ -1348,20 +1332,7 @@ async function loadLecturerMessages() {
     }).join('');
 }
 
-/**
- * Opens the message modal and pre-populates the target.
- */
 function showSendMessageModal(userId, fullName) { 
-    const modal = $('messageModal');
-    if (!modal) {
-        showFeedback(`Error: Messaging modal not found. Cannot message ${fullName}.`, 'error');
-        return;
-    }
-    
-    // 1. Reset form and populate selects, setting the specific student
-    $('send-message-form')?.reset();
-    populateMessageFormSelects(userId, fullName);
-    
-    // 2. Open the modal
-    modal.style.display = 'block';
+    showFeedback(`Direct message feature for ${fullName} (${userId}) needs implementation.`, 'info');
+    // Implementation would involve setting the 'msg_target' select to the specific user.
 }
