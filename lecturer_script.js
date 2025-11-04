@@ -32,7 +32,8 @@ let currentUserProfile = null;
 let currentUserId = null; 
 let attendanceMap = null; 
 let allCourses = []; 
-let allStudents = []; // Contains students filtered by lecturerTargetProgram
+// Contains students filtered by lecturerTargetProgram, loaded once
+let allStudents = []; 
 let lecturerTargetProgram = null; 
 
 // --- Academic Structure Constants (Used for filtering) ---
@@ -238,11 +239,15 @@ async function initSession() {
     
     if (profile) {
         currentUserProfile = profile;
+        // Ensure program is set before fetching global data
         lecturerTargetProgram = getProgramFilterFromDepartment(currentUserProfile.department); 
 
         document.querySelector('header h1').textContent = `Welcome, ${currentUserProfile.full_name || 'Lecturer'}!`;
         
+        // 1. Fetch all courses (required by multiple functions)
         await fetchGlobalDataCaches(); 
+        // 2. Then, fetch the subset of students for the lecturer's program
+        await loadStudents(); 
         
         loadSectionData('dashboard'); 
         setupEventListeners();
@@ -296,37 +301,23 @@ async function fetchGlobalDataCaches() {
 
     allCourses = courses || [];
 }
+
 // 2. Fetch all students filtered by lecturer’s program
 async function loadStudents() {
     try {
-        const STUDENT_TABLE = 'consolidated_user_profiles_table'; // Ensure correct table name
+        const STUDENT_TABLE = 'consolidated_user_profiles_table'; 
 
-        // Base query: all students
         let studentQuery = sb
             .from(STUDENT_TABLE)
-            .select('user_id, full_name, email, program, intake_year, block, status')
+            .select('user_id, full_name, email, program, intake_year, block, status, enrolled_courses, cumulative_absences') // Added required fields
             .eq('role', 'student');
-
-        // Normalize lecturer’s department (case-insensitive)
-        if (currentUserProfile?.department) {
-            const dept = currentUserProfile.department.toLowerCase();
-
-            // Map department to program
-            if (dept === 'nursing') {
-                lecturerTargetProgram = 'KRCHN';
-            } else if (dept === 'tivet') {
-                lecturerTargetProgram = 'TIVET';
-            } else {
-                lecturerTargetProgram = null;
-            }
-        }
 
         // Apply program filter if available
         if (lecturerTargetProgram) {
             studentQuery = studentQuery.eq('program', lecturerTargetProgram);
         } else {
             console.warn(
-                `⚠️ No program assigned for department "${currentUserProfile?.department}".`
+                `⚠️ No program filter applied: lecturerTargetProgram is null.`
             );
         }
 
@@ -347,18 +338,12 @@ async function loadStudents() {
             `✅ Loaded ${allStudents.length} student(s) for program: ${lecturerTargetProgram || 'None'}`
         );
 
-        // Update dashboard and table
-        loadLecturerStudents();
-        loadLecturerDashboardData();
-
     } catch (err) {
         console.error('Unexpected error fetching students:', err);
         showFeedback('An unexpected error occurred while loading students.', 'error');
     }
 }
 
-// Call the function
-loadStudents();
 
 function loadSectionData(tabId) { 
     document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
@@ -367,7 +352,6 @@ function loadSectionData(tabId) {
     switch(tabId) {
         case 'profile': loadLecturerProfile(); break;
         case 'dashboard': loadLecturerDashboardData(); break;
-        // 🛑 CRITICAL FIX: Mapping to the new tab structure
         case 'my-courses': loadLecturerCourses(); break; 
         case 'my-students': loadLecturerStudents(); break; 
         case 'sessions': loadLecturerSessions(); populateSessionFormSelects(); break;
@@ -480,10 +464,9 @@ function loadLecturerProfile() {
   const avatarUrl = currentUserProfile.avatar_url || 'images/default_passport.png';
 $('profile-img').src = avatarUrl;
     
-    // ⬇️ CORRECTION: Updated IDs to match the new HTML structure ⬇️
+    // CORRECTION: Updated IDs to match the new HTML structure
     $('profile_name_display').textContent = currentUserProfile.full_name || 'N/A';
     $('profile_role_display').textContent = currentUserProfile.role || 'N/A';
-    // ⬆️ CORRECTION ENDS ⬆️
     
     // These IDs are correct and remain the same in the new HTML <span> tags:
     $('profile_id').textContent = currentUserProfile.employee_id || 'N/A';
@@ -542,20 +525,138 @@ async function handlePhotoUpload(file) {
     }
 }
 // =================================================================
-// === 5. STUDENT, COURSE & DASHBOARD LOADERS ===
+// === 5. STUDENT, COURSE & DASHBOARD LOADERS (WITH ACTIONABLE ALERTS) ===
 // =================================================================
+
+/**
+ * Helper to calculate the count of students deemed "at risk" for the lecturer's program.
+ * NOTE: This relies on 'cumulative_absences' or 'overall_grade_status' being in the student view.
+ */
+async function countStudentsAtRisk() {
+    const RISK_THRESHOLD_ABSENCES = 5; 
+
+    // allStudents is already filtered by program, check status and absences
+    if (!allStudents || allStudents.length === 0) return 0;
+    
+    // Simple client-side risk calculation
+    const studentsAtRisk = allStudents.filter(s => 
+        (s.cumulative_absences && s.cumulative_absences > RISK_THRESHOLD_ABSENCES) || 
+        (s.status?.toLowerCase() === 'probation')
+    );
+
+    return studentsAtRisk.length;
+}
+
+/**
+ * Counts the number of required attendance logs the lecturer hasn't processed.
+ */
+async function countPendingAttendanceLogs() {
+    const daysAgo = new Date();
+    daysAgo.setDate(daysAgo.getDate() - 7); // Look back 7 days
+
+    // 1. Get all scheduled sessions by this lecturer in the last 7 days (Program filter applied by utility)
+    const { data: recentSessions, error: sessionError } = await fetchDataForLecturer(
+        SESSIONS_TABLE,
+        'id, session_date, session_time',
+        { 
+            lecturer_id: currentUserProfile.user_id,
+        },
+        'session_date',
+        true
+    );
+
+    if (sessionError) {
+        console.error('Error counting sessions:', sessionError);
+        return 0;
+    }
+
+    // 2. Get all attendance logs recorded with a session_id by this lecturer
+    const { data: attendanceLogs, error: logError } = await fetchData(
+        ATTENDANCE_TABLE,
+        'session_id', 
+        { recorded_by_id: currentUserProfile.user_id }
+    );
+
+    if (logError) {
+        console.error('Error counting logs:', logError);
+        return 0;
+    }
+
+    const recordedSessionIds = new Set(attendanceLogs?.map(log => log.session_id).filter(id => id) || []);
+    
+    // 3. Pending = Sessions that have passed their date/time AND whose ID is NOT in the recordedSessionIds Set
+    let pendingCount = 0;
+    const now = new Date();
+
+    for (const session of recentSessions) {
+        if (!recordedSessionIds.has(session.id)) {
+            const sessionDateTime = new Date(`${session.session_date}T${session.session_time}`);
+            
+            // Only count if the session time has actually passed and is within the last 7 days
+            if (sessionDateTime < now && sessionDateTime > daysAgo) {
+                pendingCount++;
+            }
+        }
+    }
+
+    return pendingCount;
+}
+
+/**
+ * Counts the number of exams/CATs assigned to this lecturer that are 'Grading' status.
+ */
+async function countExamsDueForGrading() {
+    // Filtered by lecturer_id AND program via fetchDataForLecturer
+    const { data: exams, error } = await fetchDataForLecturer(
+        EXAMS_TABLE, 
+        'id', 
+        { 
+            lecturer_id: currentUserProfile.user_id, 
+            exam_status: 'Grading' // Assuming this status is set when the exam is taken/closed
+        }
+    );
+
+    if (error) {
+        console.error('Error counting exams due:', error);
+        return 0;
+    }
+
+    return exams?.length || 0;
+}
+
+/**
+ * Fetches the number of unread messages sent to this lecturer or their program group.
+ */
+async function countUnreadMessages() {
+    // 1. Messages sent directly to the lecturer (receiver_id = currentUserId)
+    const { data: directMessages } = await fetchData(
+        MESSAGES_TABLE, 
+        'id', 
+        { receiver_id: currentUserProfile.user_id, is_read: false } // **CRITICAL**: Needs 'is_read' column in DB
+    );
+    
+    // 2. Messages sent to the lecturer's program group (target_program = lecturerTargetProgram)
+    const { data: groupMessages } = await fetchData(
+        MESSAGES_TABLE, 
+        'id', 
+        { target_program: lecturerTargetProgram, target_group: 'all-lecturers', is_read: false } 
+    );
+    
+    const directCount = directMessages?.length || 0;
+    const groupCount = groupMessages?.length || 0;
+    
+    return directCount + groupCount;
+}
+
 
 /**
  * Load lecturer dashboard summary data.
  */
 async function loadLecturerDashboardData() {
-    // Total courses for this lecturer's program
+    // 1. General Info
     const programCourses = allCourses.filter(c => c.target_program === lecturerTargetProgram && c.status === 'Active');
     $('total_courses_count').textContent = programCourses.length || '0';
-
-    // Total students for this program
-    const programStudents = allStudents.filter(s => s.program === lecturerTargetProgram);
-    $('total_students_count').textContent = programStudents.length || '0';
+    $('total_students_count').textContent = allStudents.length || '0'; // allStudents is already filtered
 
     // Update filter info in banner
     const filterInfoEl = document.querySelector('#welcome-banner span:last-child');
@@ -563,15 +664,11 @@ async function loadLecturerDashboardData() {
         filterInfoEl.textContent = `This dashboard is filtered to your assigned program: ${lecturerTargetProgram}. All student/grade data shown is relevant to your assignment.`;
     }
 
-    // Fetch today's sessions for this lecturer
-    const today = new Date().toISOString().split('T')[0];
-    const { data: recentSessions } = await fetchDataForLecturer(
-        SESSIONS_TABLE,
-        'id',
-        { lecturer_id: currentUserProfile.user_id, session_date: today }
-    );
-
-    $('recent_sessions_count').textContent = recentSessions?.length || '0';
+    // 2. Actionable Alerts (CRITICAL)
+    $('students_at_risk_count').textContent = await countStudentsAtRisk();
+    $('pending_attendance_count').textContent = await countPendingAttendanceLogs();
+    $('exams_due_count').textContent = await countExamsDueForGrading();
+    $('unread_messages_count').textContent = await countUnreadMessages();
 }
 
 /**
@@ -600,7 +697,7 @@ async function loadLecturerCourses() {
     }
 
     const coursesHtml = filteredCourses.map(course => {
-        // Count students enrolled in this course
+        // Count students enrolled in this course (relies on 'enrolled_courses' in student profile)
         const studentCount = allStudents?.filter(student =>
             student.enrolled_courses?.includes(course.unit_code)
         ).length || 0;
@@ -614,7 +711,7 @@ async function loadLecturerCourses() {
                 <td>${studentCount}</td>
                 <td>
                     <button class="btn-action" 
-                        onclick="showFeedback('Viewing grades for ${course.course_name}', 'info')">
+                        onclick="showFeedback('Viewing grades for ${course.course_name.replace(/'/g, "\\'")}', 'info')">
                         View Grades
                     </button>
                 </td>
@@ -632,7 +729,6 @@ async function loadLecturerStudents() {
 
     try {
         if (!currentUserProfile || !lecturerTargetProgram) {
-            console.log('No lecturer profile or target program found.');
             tbody.innerHTML = `
                 <tr>
                     <td colspan="7" style="text-align:center;">
@@ -642,15 +738,8 @@ async function loadLecturerStudents() {
             return;
         }
 
-        console.log('Lecturer Target Program:', lecturerTargetProgram);
-        console.log('All Students Programs:', allStudents.map(s => s.program));
-
-        // Filter ignoring case and trimming spaces
-        const programStudents = allStudents.filter(s => 
-            s.program?.trim().toLowerCase() === lecturerTargetProgram?.trim().toLowerCase()
-        );
-
-        console.log('Filtered Students:', programStudents);
+        // Students were already filtered globally in allStudents by loadStudents()
+        const programStudents = allStudents; 
 
         if (programStudents.length === 0) {
             tbody.innerHTML = `
@@ -721,8 +810,8 @@ function populateSessionFormSelects() {
     }
 
     // Filter courses by the target program for a more accurate list
-    const filteredCourses = allCourses.filter(c => c.program_type === lecturerTargetProgram);
-    populateSelect($('session_course_id'), filteredCourses, 'course_id', 'course_name', 'Select Course');
+    const filteredCourses = allCourses.filter(c => c.target_program === lecturerTargetProgram); // Corrected property name to target_program
+    populateSelect($('session_course_id'), filteredCourses, 'unit_code', 'course_name', 'Select Course'); // Changed valueKey to unit_code
 }
 
 async function handleAddSession(e) {
@@ -794,7 +883,7 @@ async function loadLecturerSessions() {
     }
     
     tbody.innerHTML = sessions.map(s => {
-        const courseName = allCourses.find(c => c.course_id === s.course_id)?.course_name || s.course_id;
+        const courseName = allCourses.find(c => c.unit_code === s.course_id)?.course_name || s.course_id; // Use unit_code
         const dateTime = `${new Date(s.session_date).toLocaleDateString()} @ ${s.session_time}`;
         const attendanceLink = `${SUPABASE_URL}/attendance?session_id=${s.id}`; // Example link structure
 
@@ -819,8 +908,8 @@ async function loadLecturerSessions() {
 function loadAttendanceSelects() {
     populateSelect($('att_student_id'), allStudents, 'user_id', 'full_name', 'Select Student');
     // Filter courses by the target program for a more accurate list
-    const filteredCourses = allCourses.filter(c => c.program_type === lecturerTargetProgram);
-    populateSelect($('att_course_id'), filteredCourses, 'course_id', 'course_name', 'Select Course (Optional)');
+    const filteredCourses = allCourses.filter(c => c.target_program === lecturerTargetProgram);
+    populateSelect($('att_course_id'), filteredCourses, 'unit_code', 'course_name', 'Select Course (Optional)');
 }
 
 async function lecturerCheckIn() {
@@ -954,7 +1043,7 @@ async function loadTodaysAttendanceRecords() {
         const student = allStudents.find(s => s.user_id === l.user_id);
         const userName = l.user?.full_name || student?.full_name || (l.user_role === 'lecturer' ? currentUserProfile.full_name : 'N/A');
         
-        const target = allCourses.find(c => c.course_id === l.course_id)?.course_name || l.course_id || 'General';
+        const target = allCourses.find(c => c.unit_code === l.course_id)?.course_name || l.course_id || 'General'; // Use unit_code
         const dateTime = new Date(l.check_in_time).toLocaleTimeString();
         const locationText = l.location_details || 'N/A';
         const geoId = `geo-${l.id}`;
@@ -1000,6 +1089,7 @@ function viewCheckInMap(lat, lng, name, locationElementId) {
     $('map-details').textContent = `Location for ${name}: ${locationText}`;
     
     // Initialize the map (Uses L.map from Leaflet)
+    // NOTE: Leaflet library (L) must be included in the HTML for this to work.
     attendanceMap = L.map('mapbox-map').setView([lat, lng], 16);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -1016,7 +1106,7 @@ function viewCheckInMap(lat, lng, name, locationElementId) {
 }
 
 // =================================================================
-// === 8. EXAMS, RESOURCES, MESSAGING (PLACEHOLDER FUNCTIONS - START IMPLEMENTED) ===
+// === 8. EXAMS, RESOURCES, MESSAGING IMPLEMENTATION ===
 // =================================================================
 
 function populateExamFormSelects() {
@@ -1038,8 +1128,8 @@ function populateExamFormSelects() {
 
     populateSelect($('exam_intake'), allIntakes, 'id', 'name', 'Select Intake Year');
     // Filter courses by the target program for a more accurate list
-    const filteredCourses = allCourses.filter(c => c.program_type === lecturerTargetProgram);
-    populateSelect($('exam_course_id'), filteredCourses, 'course_id', 'course_name', 'Select Course');
+    const filteredCourses = allCourses.filter(c => c.target_program === lecturerTargetProgram);
+    populateSelect($('exam_course_id'), filteredCourses, 'unit_code', 'course_name', 'Select Course'); // Changed valueKey to unit_code
 }
 
 async function handleAddExam(e) {
@@ -1107,7 +1197,7 @@ async function loadLecturerExams() {
     }
     
     tbody.innerHTML = exams.map(e => {
-        const courseName = allCourses.find(c => c.course_id === e.course_id)?.course_name || e.course_id;
+        const courseName = allCourses.find(c => c.unit_code === e.course_id)?.course_name || e.course_id; // Use unit_code
         const examDate = new Date(e.exam_date).toLocaleDateString();
         return `
             <tr>
@@ -1141,8 +1231,8 @@ function populateResourceFormSelects() {
     }
 
     // Filter courses by the target program for a more accurate list
-    const filteredCourses = allCourses.filter(c => c.program_type === lecturerTargetProgram);
-    populateSelect($('resource_intake'), filteredCourses, 'course_id', 'course_name', 'Select Course');
+    const filteredCourses = allCourses.filter(c => c.target_program === lecturerTargetProgram);
+    populateSelect($('resource_intake'), filteredCourses, 'unit_code', 'course_name', 'Select Course'); // Changed ID, but maps to course_id (unit_code)
 }
 
 async function handleUploadResource(e) {
@@ -1156,7 +1246,7 @@ async function handleUploadResource(e) {
     const formData = {
         title: $('resource_title').value,
         program: $('resource_program').value,
-        course_id: $('resource_intake').value, // Misnamed ID in HTML, treated as course_id
+        course_id: $('resource_intake').value, // This is the unit_code
         block_term: $('resource_block').value,
     };
 
@@ -1222,7 +1312,7 @@ async function loadLecturerResources() {
     }
     
     tbody.innerHTML = resources.map(r => {
-        const courseName = allCourses.find(c => c.course_id === r.course_id)?.course_name || r.course_id;
+        const courseName = allCourses.find(c => c.unit_code === r.course_id)?.course_name || r.course_id; // Use unit_code
         const uploadDate = new Date(r.uploaded_at).toLocaleDateString();
         return `
             <tr>
@@ -1248,14 +1338,31 @@ function closeEditResourceModal() {
 }
 
 
-function populateMessageFormSelects() {
+function populateMessageFormSelects(selectedUserId = null, selectedUserName = null) {
     // Populate message targets
     const targetSelect = $('msg_target');
-    const targetOptions = [
-        { id: 'all-students', name: `All ${lecturerTargetProgram} Students` },
-        { id: 'custom-user', name: 'Specific Student/User (Enter ID/Email)' },
+    
+    // Default options
+    let targetOptions = [
+        { id: 'all-students', name: `All ${lecturerTargetProgram || 'Assigned'} Students` },
+        { id: 'custom-user', name: 'Specific User (Manual ID/Email)' },
     ];
+    
+    // If a specific user is selected via the student list, add them to the options
+    if (selectedUserId && selectedUserName) {
+        // Ensure the specific user is the first option
+        targetOptions.unshift({ 
+            id: selectedUserId, 
+            name: `Specific Student: ${selectedUserName}` 
+        });
+    }
+    
     populateSelect(targetSelect, targetOptions, 'id', 'name', 'Select Message Target');
+
+    // Set the selected user as the default if provided
+    if (selectedUserId) {
+        targetSelect.value = selectedUserId;
+    }
 }
 
 async function handleSendMessage(e) { 
@@ -1275,23 +1382,42 @@ async function handleSendMessage(e) {
         return;
     }
     
+    // Determine the receiver ID and group tag
+    let receiverId = 'SYSTEM_GROUP'; 
+    let targetGroup = formData.target;
+    
+    if (formData.target === 'custom-user') {
+        // Needs front-end input for ID/Email
+        showFeedback('The "Specific User (Manual)" feature requires additional input fields.', 'error');
+        setButtonLoading(button, false);
+        return;
+    } else if (formData.target !== 'all-students') {
+        // This is a specific user_id
+        receiverId = formData.target;
+        targetGroup = 'specific-user';
+    }
+    
     try {
-        // Simple insert for now (more complex logic is needed for "all-students" targeting)
         const { error } = await sb.from(MESSAGES_TABLE).insert({
             sender_id: currentUserProfile.user_id,
             sender_name: currentUserProfile.full_name,
             subject: formData.subject,
             body: formData.body,
-            receiver_id: 'SYSTEM', // Placeholder: Would be a specific user ID or a group tag
+            receiver_id: receiverId, 
             target_program: lecturerTargetProgram,
-            target_group: formData.target, // Storing the selected group for history
+            target_group: targetGroup, 
         });
 
         if (error) throw error;
 
         showFeedback(`✅ Message sent successfully!`, 'success');
         e.target.reset();
+        populateMessageFormSelects(); // Reset form select
         loadLecturerMessages(); 
+        
+        // Close modal if open
+        $('messageModal').style.display = 'none';
+        
     } catch (error) {
         console.error('Message sending failed:', error);
         showFeedback(`Message sending failed: ${error.message}`, 'error');
@@ -1304,8 +1430,7 @@ async function loadLecturerMessages() {
     const tbody = $('messages-table');
     tbody.innerHTML = '<tr><td colspan="5">Loading messages...</td></tr>';
     
-    // Fetch messages sent by this lecturer (sent_messages table would be better, but using current structure)
-    // Here we'll show messages sent *by* the lecturer for history, or received by them.
+    // Fetch messages sent by this lecturer
     const { data: sentMessages, error } = await fetchData(MESSAGES_TABLE, '*', { sender_id: currentUserProfile.user_id }, 'sent_at', false);
 
     if (error) {
@@ -1319,12 +1444,22 @@ async function loadLecturerMessages() {
     }
 
     tbody.innerHTML = sentMessages.map(m => {
-        const target = m.target_group === 'all-students' ? `All ${m.target_program} Students` : m.receiver_id;
+        // Better display logic for message targets
+        let targetDisplay;
+        if (m.target_group === 'all-students') {
+            targetDisplay = `All ${m.target_program} Students`;
+        } else if (m.target_group === 'specific-user') {
+            const student = allStudents.find(s => s.user_id === m.receiver_id);
+            targetDisplay = student ? student.full_name : `User ID: ${m.receiver_id}`;
+        } else {
+            targetDisplay = m.target_group;
+        }
+
         return `
             <tr>
                 <td>${new Date(m.sent_at).toLocaleString()}</td>
                 <td>${m.subject}</td>
-                <td>${target}</td>
+                <td>${targetDisplay}</td>
                 <td><span class="status status-success">Sent</span></td>
                 <td><button class="btn-action" style="background-color:#4C1D95;" onclick="showFeedback('Viewing message ${m.id}', 'info')">View</button></td>
             </tr>
@@ -1332,7 +1467,20 @@ async function loadLecturerMessages() {
     }).join('');
 }
 
+/**
+ * Opens the message modal and pre-populates the target.
+ */
 function showSendMessageModal(userId, fullName) { 
-    showFeedback(`Direct message feature for ${fullName} (${userId}) needs implementation.`, 'info');
-    // Implementation would involve setting the 'msg_target' select to the specific user.
+    const modal = $('messageModal');
+    
+    // 1. Reset form and populate selects, setting the specific student
+    $('send-message-form')?.reset();
+    populateMessageFormSelects(userId, fullName);
+    
+    // 2. Open the modal
+    if (modal) {
+        modal.style.display = 'block';
+    } else {
+        showFeedback(`Error: Messaging modal not found. Cannot message ${fullName}.`, 'error');
+    }
 }
