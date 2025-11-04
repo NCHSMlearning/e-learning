@@ -2,15 +2,16 @@
 // === NCHSM LECTURER DASHBOARD SCRIPT - FINAL INTEGRATED & CORRECTED VERSION ===
 // =================================================================
 
-// === 1. CONFIGURATION, CLIENT SETUP, & GLOBAL VARIABLES ===
-
+// Ensure clean URL path
 if (window.location.pathname.endsWith('.html')) {
     const cleanPath = window.location.pathname.replace(/\.html$/, '');
     window.history.replaceState({}, '', cleanPath);
 }
-// --- ⚠️ IMPORTANT: SUPABASE CONFIGURATION ---
+
+// === 1. CONFIGURATION, CLIENT SETUP, & GLOBAL VARIABLES ===
+
+// --- ✅ VALID SUPABASE CONFIGURATION (Using the Key You Provided) ---
 const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co'; 
-// *** CRITICAL: REPLACE THIS PLACEHOLDER WITH YOUR LIVE ANON KEY ***
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Pkk'; 
 
 // --- Global Supabase Client ---
@@ -24,7 +25,6 @@ const SESSIONS_TABLE = 'scheduled_sessions';
 const ATTENDANCE_TABLE = 'geo_attendance_logs';
 const MESSAGES_TABLE = 'messages'; 
 const RESOURCES_TABLE = 'resources';
-// --- Storage Buckets ---
 const RESOURCES_BUCKET = 'resources'; 
 
 // --- Global Variables & Caches ---
@@ -32,15 +32,14 @@ let currentUserProfile = null;
 let currentUserId = null; 
 let attendanceMap = null; 
 let allCourses = []; 
-let allStudents = []; // Contains students filtered by lecturerTargetProgram
+let allStudents = []; 
 let lecturerTargetProgram = null; 
 
-// --- Academic Structure Constants (Used for filtering) ---
+// --- Academic Structure Constants ---
 const ACADEMIC_STRUCTURE = {
     'KRCHN': ['Block A', 'Block B', 'Block C', 'Block D', 'Block E', 'Block F'],
     'TVET': ['Term 1', 'Term 2', 'Term 3']
 };
-
 let allIntakes = [
     { id: '2024', name: '2024' },
     { id: '2025', name: '2025' },
@@ -49,10 +48,10 @@ let allIntakes = [
     { id: '2028', name: '2028' }
 ]; 
 
-// --- Program Field Mapping (Centralized for fetchDataForLecturer) ---
+// --- Program Field Mapping (For RLS filtering) ---
 const PROGRAM_FIELD_MAP = {
     [USER_PROFILE_TABLE]: 'program',
-    'student_lecturer_view': 'program',
+    'student_lecturer_view': 'program', 
     [EXAMS_TABLE]: 'target_program',
     [SESSIONS_TABLE]: 'target_program',
     [RESOURCES_TABLE]: 'program_type'
@@ -131,13 +130,16 @@ function showFeedback(message, type) {
     feedbackEl.classList.add(`feedback-${type}`);
     feedbackEl.style.display = 'block';
 
-    if (type !== 'error') {
+    if (type !== 'error' && type !== 'critical') {
         setTimeout(() => {
             feedbackEl.style.display = 'none';
         }, 5000);
     }
 }
 
+/**
+ * General data fetching utility (Used for global data or non-RLS filtered data).
+ */
 async function fetchData(tableName, selectQuery = '*', filters = {}, order = 'created_at', ascending = false) {
     let query = sb.from(tableName).select(selectQuery);
 
@@ -151,7 +153,7 @@ async function fetchData(tableName, selectQuery = '*', filters = {}, order = 'cr
 
     const { data, error } = await query;
     if (error) {
-        console.error(`Error loading ${tableName}:`, error);
+        console.error(`Error loading ${tableName} (Query: ${JSON.stringify(filters)}):`, error);
         return { data: null, error };
     }
     return { data, error: null };
@@ -170,11 +172,12 @@ async function fetchDataForLecturer(
     let query = sb.from(tableName).select(selectQuery);
 
     const programFieldName = PROGRAM_FIELD_MAP[tableName];
+    let appliedProgramFilter = lecturerTargetProgram;
 
     // Apply program filter if table supports it and lecturerTargetProgram is set
-    if (programFieldName && lecturerTargetProgram) {
+    if (programFieldName && appliedProgramFilter) {
         if (!filters[programFieldName]) {
-            query = query.eq(programFieldName, lecturerTargetProgram);
+            query = query.eq(programFieldName, appliedProgramFilter);
         }
     }
 
@@ -190,7 +193,8 @@ async function fetchDataForLecturer(
 
     const { data, error } = await query;
     if (error) {
-        console.error(`Error loading ${tableName} (Program Filter Applied: ${lecturerTargetProgram}):`, error);
+        console.error(`Error loading ${tableName} (Program Filter: ${appliedProgramFilter}, Query: ${JSON.stringify(filters)}):`, error);
+        // This is where RLS errors often appear.
         return { data: null, error }; 
     }
     return { data, error: null };
@@ -211,19 +215,29 @@ async function initSession() {
     let error = null;
 
     try {
+        // --- 1. Check for Active Session ---
+        // This is the first call that might fail if the API key is invalid/revoked or network is down.
         const { data: { session: currentSession }, error: sessionError } = await sb.auth.getSession();
         
-        if (sessionError || !currentSession) {
-            error = sessionError || { message: "No active session found." };
-        } else {
+        if (sessionError) {
+            console.error("Session Check Failed (Likely API/Key Error):", sessionError);
+            error = sessionError;
+        } else if (!currentSession) {
+            error = { message: "No active session found." };
+        } 
+        
+        // --- 2. Fetch User Profile & Role Check ---
+        if (!error && currentSession) {
             currentUserId = currentSession.user.id; 
             
+            // This is the second call, which often fails if RLS is not configured correctly.
             const { data: userProfile, error: profileError } = await sb.from(USER_PROFILE_TABLE)
                 .select('*')
                 .eq('user_id', currentUserId)
                 .single();
             
             if (profileError) {
+                console.error("Profile Fetch Failed (Likely RLS Error):", profileError);
                 error = profileError;
             } else if (userProfile.role !== 'lecturer') {
                 error = { message: `Access Denied. User role is '${userProfile.role}', expected 'lecturer'.` };
@@ -238,15 +252,14 @@ async function initSession() {
     
     if (profile) {
         currentUserProfile = profile;
-        // Ensure program is set before fetching global data
         lecturerTargetProgram = getProgramFilterFromDepartment(currentUserProfile.department); 
 
         document.querySelector('header h1').textContent = `Welcome, ${currentUserProfile.full_name || 'Lecturer'}!`;
         
-        // 1. Fetch all courses (required by multiple functions)
-        await fetchGlobalDataCaches(); 
-        // 2. Then, fetch the subset of students for the lecturer's program
-        await loadStudents(); 
+        await Promise.all([
+            fetchGlobalDataCaches(), 
+            loadStudents() 
+        ]);
         
         loadSectionData('dashboard'); 
         setupEventListeners();
@@ -259,25 +272,28 @@ async function initSession() {
 }
 
 function showAuthFailure(error) {
-    console.error("Initialization Failed, Redirecting to Login:", error);
-    const errorMessage = error?.message || "No active session found.";
-    alert(`Authentication Failed: ${errorMessage}\n\nPlease log in again.`);
-    localStorage.clear(); 
-    window.location.assign('/login'); 
+    console.error("CRITICAL Initialization Failed, Redirecting to Login:", error);
+    
+    let errorMessage = error?.message || "An unknown authentication error occurred.";
+    if (error?.code === 'PGRST301' || error?.code === '404') {
+        errorMessage = "Database access failed. Check RLS policies or API key validity.";
+    }
+
+    showFeedback(`Authentication Failed: ${errorMessage}\n\nPlease log in again.`, 'critical');
+    
+    setTimeout(() => {
+        localStorage.clear(); 
+        window.location.assign('/login'); 
+    }, 3000);
 }
 
-/**
- * Maps the lecturer's department to the student's program code.
- */
 function getProgramFilterFromDepartment(department) {
     if (!department) return null;
     const dept = department.toLowerCase();
     
-    // Use consistent program codes
     if (dept.includes('nursing') || dept.includes('midwifery') || dept.includes('maternal health')) {
         return 'KRCHN';
     }
-    // Assuming 'TVET' is the program code for the technical department
     if (dept.includes('clinical') || dept.includes('dental') || dept.includes('tivet') || dept.includes('general education')) {
         return 'TVET'; 
     }
@@ -286,11 +302,11 @@ function getProgramFilterFromDepartment(department) {
 
 
 async function fetchGlobalDataCaches() {
-    // 1. Fetch all courses (needed for filtering in loadLecturerCourses and populating selects)
+    // 1. Fetch all courses 
     const { data: courses, error } = await fetchData(
         COURSES_TABLE,
         'id, course_name, target_program, block, intake_year, status, unit_code, course_id', 
-        {}, // no filters — load all
+        {}, 
         'course_name',
         true
     );
@@ -301,43 +317,36 @@ async function fetchGlobalDataCaches() {
 
     allCourses = courses || [];
 }
-// 2. Fetch all students filtered by lecturer’s program
+
 async function loadStudents() {
     try {
         const STUDENT_TABLE = 'consolidated_user_profiles_table'; 
 
         let studentQuery = sb
             .from(STUDENT_TABLE)
-            .select('user_id, full_name, email, program, intake_year, block, status, enrolled_courses') // Included enrolled_courses
+            .select('user_id, full_name, email, program, intake_year, block, status, enrolled_courses') 
             .eq('role', 'student');
 
-        // Apply program filter if available
         if (lecturerTargetProgram) {
             studentQuery = studentQuery.eq('program', lecturerTargetProgram);
         } else {
-            console.warn(
-                `⚠️ No program filter applied: lecturerTargetProgram is null.`
-            );
+            console.warn(`⚠️ No program filter applied: lecturerTargetProgram is null.`);
         }
 
-        // Execute query
         const { data: students, error: studentError } = await studentQuery.order('full_name', {
             ascending: true
         });
 
         if (studentError) {
             console.error('Error fetching filtered students:', studentError);
-            showFeedback('Failed to load student list. Please try again.', 'error');
+            showFeedback('Failed to load student list. Please check RLS for user profiles.', 'error');
             return;
         }
 
         allStudents = students || [];
 
-        console.log(
-            `✅ Loaded ${allStudents.length} student(s) for program: ${lecturerTargetProgram || 'None'}`
-        );
+        console.log(`✅ Loaded ${allStudents.length} student(s) for program: ${lecturerTargetProgram || 'None'}`);
 
-        // Update dashboard and table
         loadLecturerStudents();
         loadLecturerDashboardData();
 
@@ -437,18 +446,15 @@ async function logout() {
     try {
         const { error } = await sb.auth.signOut();
 
-        // Ignore harmless "Auth session missing" errors
         if (error && error.name !== 'AuthSessionMissingError') {
             console.error('Logout error:', error);
             showFeedback('Logout failed. Please try again.', 'error');
             return;
         }
 
-        // Clear any cached data for safety
         localStorage.clear();
         sessionStorage.clear();
 
-        // Redirect to login page
         window.location.assign('/login');
     } catch (err) {
         console.error('Unexpected logout error:', err);
@@ -473,7 +479,7 @@ $('profile-img').src = avatarUrl;
     $('profile_email').textContent = currentUserProfile.email || 'N/A';
     $('profile_phone').textContent = currentUserProfile.phone || 'N/A';
     $('profile_dept').textContent = currentUserProfile.department || 'N/A';
-    $('profile_join_date').textContent = new Date(currentUserProfile.join_date).toLocaleDateString() || 'N/A';
+    $('profile_join_date').textContent = currentUserProfile.join_date ? new Date(currentUserProfile.join_date).toLocaleDateString() : 'N/A';
     $('profile_program_focus').textContent = lecturerTargetProgram || 'N/A (No Program Assigned)';
     }
 
@@ -528,9 +534,6 @@ async function handlePhotoUpload(file) {
 // === 5. STUDENT, COURSE & DASHBOARD LOADERS ===
 // =================================================================
 
-/**
- * Load lecturer dashboard summary data.
- */
 async function loadLecturerDashboardData() {
     // Total courses for this lecturer's program
     const programCourses = allCourses.filter(c => c.target_program === lecturerTargetProgram && c.status === 'Active');
@@ -556,9 +559,6 @@ async function loadLecturerDashboardData() {
     $('recent_sessions_count').textContent = recentSessions?.length || '0';
 }
 
-/**
- * Load the lecturer's courses table, filtered by program.
- */
 async function loadLecturerCourses() {
     const tbody = $('lecturer-courses-table');
     if (!tbody) return;
@@ -582,7 +582,6 @@ async function loadLecturerCourses() {
     }
 
     const coursesHtml = filteredCourses.map(course => {
-        // Count students enrolled in this course (relies on 'enrolled_courses' in student profile)
         const studentCount = allStudents?.filter(student =>
             student.enrolled_courses?.includes(course.unit_code)
         ).length || 0;
@@ -623,7 +622,6 @@ async function loadLecturerStudents() {
             return;
         }
 
-        // Students were already filtered globally in allStudents by loadStudents()
         const programStudents = allStudents; 
 
         if (programStudents.length === 0) {
@@ -665,7 +663,7 @@ async function loadLecturerStudents() {
         tbody.innerHTML = `
             <tr>
                 <td colspan="7" style="text-align:center;">
-                    Failed to load student list. Please check the Supabase column names (program, block) and RLS policy.
+                    Failed to load student list. Please check the Supabase RLS policy.
                 </td>
             </tr>`;
     }
@@ -694,7 +692,6 @@ function populateSessionFormSelects() {
         blockSelect.innerHTML = '<option value="">-- Select Program First --</option>';
     }
 
-    // Filter courses by the correct course program field ('target_program' in courses table)
     const filteredCourses = allCourses.filter(c => c.target_program === lecturerTargetProgram);
     populateSelect($('session_course_id'), filteredCourses, 'course_id', 'course_name', 'Select Course');
 }
@@ -748,7 +745,6 @@ async function loadLecturerSessions() {
     const tbody = $('sessions-table');
     tbody.innerHTML = '<tr><td colspan="6">Loading your scheduled sessions...</td></tr>';
     
-    // Filtered by lecturer_id AND program via fetchDataForLecturer
     const { data: sessions, error } = await fetchDataForLecturer(
         SESSIONS_TABLE, 
         '*', 
@@ -770,7 +766,7 @@ async function loadLecturerSessions() {
     tbody.innerHTML = sessions.map(s => {
         const courseName = allCourses.find(c => c.course_id === s.course_id)?.course_name || s.course_id;
         const dateTime = `${new Date(s.session_date).toLocaleDateString()} @ ${s.session_time}`;
-        const attendanceLink = `${SUPABASE_URL}/attendance?session_id=${s.id}`; // Example link structure
+        const attendanceLink = `${SUPABASE_URL}/attendance?session_id=${s.id}`; 
 
         return `
             <tr>
@@ -792,7 +788,6 @@ async function loadLecturerSessions() {
 
 function loadAttendanceSelects() {
     populateSelect($('att_student_id'), allStudents, 'user_id', 'full_name', 'Select Student');
-    // Filter courses by the correct course program field ('target_program' in courses table)
     const filteredCourses = allCourses.filter(c => c.target_program === lecturerTargetProgram);
     populateSelect($('att_course_id'), filteredCourses, 'course_id', 'course_name', 'Select Course (Optional)');
 }
@@ -868,7 +863,7 @@ async function handleManualAttendance(e) {
         setButtonLoading(button, false);
         return;
     }
-
+    
     const checkinDateTime = `${formData.date}T${formData.time || '12:00'}:00.000Z`;
 
     try {
@@ -904,7 +899,6 @@ async function loadTodaysAttendanceRecords() {
     
     const today = new Date().toISOString().split('T')[0];
     
-    // Optimized query for today's logs, joining user details
     const { data: logs, error } = await sb
       .from(ATTENDANCE_TABLE)
       .select(`*, user:user_id(full_name, program)`)   
@@ -916,11 +910,10 @@ async function loadTodaysAttendanceRecords() {
       return;
     }
 
-    // Client-side filtering to ensure only relevant logs are displayed based on program/role
     const relevantLogs = logs.filter(l => 
-        l.user_id === currentUserProfile.user_id || // Lecturer's own check-ins
-        (l.user?.program && l.user.program === lecturerTargetProgram) || // Students in the lecturer's program
-        l.recorded_by_id === currentUserProfile.user_id // Manual entries by this lecturer
+        l.user_id === currentUserProfile.user_id || 
+        (l.user?.program && l.user.program === lecturerTargetProgram) || 
+        l.recorded_by_id === currentUserProfile.user_id 
     );
 
     if (!relevantLogs || relevantLogs.length === 0) {
@@ -930,7 +923,6 @@ async function loadTodaysAttendanceRecords() {
 
     tbody.innerHTML = '';
     relevantLogs.forEach(l => {
-        // Fallback for user name if the join fails
         const student = allStudents.find(s => s.user_id === l.user_id);
         const userName = l.user?.full_name || student?.full_name || (l.user_id === currentUserProfile.user_id ? currentUserProfile.full_name : 'N/A');
         
@@ -977,7 +969,7 @@ function viewCheckInMap(lat, lng, name, locationElementId) {
     const locationText = $(locationElementId)?.textContent || 'N/A';
     $('map-details').textContent = `Location for ${name}: ${locationText}`;
     
-    // Initialize the map (Uses L.map from Leaflet)
+    // NOTE: Requires Leaflet (L.map) library to be loaded in the HTML.
     attendanceMap = L.map('mapbox-map').setView([lat, lng], 16);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -987,7 +979,6 @@ function viewCheckInMap(lat, lng, name, locationElementId) {
     L.marker([lat, lng]).addTo(attendanceMap)
         .bindPopup(`<b>${name}'s Check-in Location</b><br>${locationText}`).openPopup();
         
-    // Fix map display issue inside modal
     setTimeout(() => {
         attendanceMap.invalidateSize();
     }, 300); 
@@ -1015,7 +1006,6 @@ function populateExamFormSelects() {
     }
 
     populateSelect($('exam_intake'), allIntakes, 'id', 'name', 'Select Intake Year');
-    // Filter courses by the correct course program field ('target_program' in courses table)
     const filteredCourses = allCourses.filter(c => c.target_program === lecturerTargetProgram);
     populateSelect($('exam_course_id'), filteredCourses, 'course_id', 'course_name', 'Select Course');
 }
@@ -1046,7 +1036,7 @@ async function handleAddExam(e) {
             exam_name: formData.name,
             exam_date: formData.date,
             exam_type: formData.type,
-            target_program: formData.program, // Matches DB column
+            target_program: formData.program, 
             block_term: formData.block_term,
             course_id: formData.course_id,
             intake_year: formData.intake,
@@ -1071,7 +1061,6 @@ async function loadLecturerExams() {
     const tbody = $('exams-table');
     tbody.innerHTML = '<tr><td colspan="6">Loading exams...</td></tr>';
     
-    // Filtered by lecturer_id AND program via fetchDataForLecturer
     const { data: exams, error } = await fetchDataForLecturer(EXAMS_TABLE, '*', { lecturer_id: currentUserProfile.user_id }, 'exam_date', false);
 
     if (error) {
@@ -1118,9 +1107,7 @@ function populateResourceFormSelects() {
         blockSelect.innerHTML = '<option value="">-- Select Program First --</option>';
     }
 
-    // Filter courses by the correct course program field ('target_program' in courses table)
     const filteredCourses = allCourses.filter(c => c.target_program === lecturerTargetProgram);
-    // Assuming HTML ID for resource course selection is 'resource_course_id'
     populateSelect($('resource_course_id'), filteredCourses, 'course_id', 'course_name', 'Select Course');
 }
 
@@ -1135,7 +1122,7 @@ async function handleUploadResource(e) {
     const formData = {
         title: $('resource_title').value,
         program: $('resource_program').value,
-        course_id: $('resource_course_id').value, // Corrected ID usage
+        course_id: $('resource_course_id').value, 
         block_term: $('resource_block').value,
     };
 
@@ -1161,7 +1148,7 @@ async function handleUploadResource(e) {
 
         const { error: insertError } = await sb.from(RESOURCES_TABLE).insert({
             title: formData.title,
-            program_type: formData.program, // Matches DB column
+            program_type: formData.program, 
             course_id: formData.course_id,
             block_term: formData.block_term,
             file_url: publicUrl,
@@ -1187,7 +1174,6 @@ async function loadLecturerResources() {
     const tbody = $('resources-list');
     tbody.innerHTML = '<tr><td colspan="5">Loading resources...</td></tr>';
     
-    // Filtered by program via fetchDataForLecturer
     const { data: resources, error } = await fetchDataForLecturer(RESOURCES_TABLE, '*', null, 'uploaded_at', false);
     
     if (error) {
@@ -1228,16 +1214,13 @@ function closeEditResourceModal() {
 
 
 function populateMessageFormSelects(selectedUserId = null, selectedUserName = null) {
-    // Populate message targets
     const targetSelect = $('msg_target');
     
-    // Default options
     let targetOptions = [
         { id: 'all-students', name: `All ${lecturerTargetProgram || 'Assigned'} Students` },
         { id: 'custom-user', name: 'Specific Student/User (Enter ID/Email)' },
     ];
     
-    // Add the selected user to the options if provided
     if (selectedUserId && selectedUserName) {
         const userOptionExists = targetOptions.some(opt => opt.id === selectedUserId);
         if (!userOptionExists) {
@@ -1250,7 +1233,6 @@ function populateMessageFormSelects(selectedUserId = null, selectedUserName = nu
     
     populateSelect(targetSelect, targetOptions, 'id', 'name', 'Select Message Target');
 
-    // Set the selected user as the default if provided
     if (selectedUserId) {
         targetSelect.value = selectedUserId;
     }
@@ -1273,11 +1255,9 @@ async function handleSendMessage(e) {
         return;
     }
     
-    // Determine the receiver ID based on the selection
-    let receiverId = 'GROUP'; // Default for groups
+    let receiverId = 'GROUP'; 
     let targetGroup = formData.target;
     if (formData.target !== 'all-students' && formData.target !== 'custom-user') {
-        // If the target is a specific user_id
         receiverId = formData.target;
         targetGroup = 'specific-user';
     }
@@ -1288,16 +1268,16 @@ async function handleSendMessage(e) {
             sender_name: currentUserProfile.full_name,
             subject: formData.subject,
             body: formData.body,
-            receiver_id: receiverId, // Updated receiver ID
+            receiver_id: receiverId, 
             target_program: lecturerTargetProgram,
-            target_group: targetGroup, // Updated target group tag
+            target_group: targetGroup, 
         });
 
         if (error) throw error;
 
         showFeedback(`✅ Message sent successfully!`, 'success');
         e.target.reset();
-        populateMessageFormSelects(); // Reset form select
+        populateMessageFormSelects(); 
         loadLecturerMessages(); 
     } catch (error) {
         console.error('Message sending failed:', error);
@@ -1311,7 +1291,6 @@ async function loadLecturerMessages() {
     const tbody = $('messages-table');
     tbody.innerHTML = '<tr><td colspan="5">Loading messages...</td></tr>';
     
-    // Fetch messages sent by this lecturer
     const { data: sentMessages, error } = await fetchData(MESSAGES_TABLE, '*', { sender_id: currentUserProfile.user_id }, 'sent_at', false);
 
     if (error) {
@@ -1325,7 +1304,6 @@ async function loadLecturerMessages() {
     }
 
     tbody.innerHTML = sentMessages.map(m => {
-        // Better display logic for message targets
         let targetDisplay;
         if (m.target_group === 'all-students') {
             targetDisplay = `All ${m.target_program} Students`;
@@ -1358,10 +1336,8 @@ function showSendMessageModal(userId, fullName) {
         return;
     }
     
-    // 1. Reset form and populate selects, setting the specific student
     $('send-message-form')?.reset();
     populateMessageFormSelects(userId, fullName);
     
-    // 2. Open the modal
     modal.style.display = 'block';
 }
