@@ -1,5 +1,6 @@
 // =================================================================
 // === NCHSM LECTURER DASHBOARD SCRIPT - FINAL INTEGRATED & CORRECTED VERSION ===
+// === FIX: STUDENT ID / REG NO. ADDED AND RENDERED IN STUDENTS/ATTENDANCE ===
 // =================================================================
 
 // === 1. CONFIGURATION, CLIENT SETUP, & GLOBAL VARIABLES ===
@@ -309,16 +310,19 @@ async function loadStudents() {
 
         let studentQuery = sb
             .from(STUDENT_TABLE)
-            .select('user_id, full_name, email, program, intake_year, block, status, enrolled_courses, cumulative_absences') // Added required fields
+            .select('user_id, full_name, email, program, intake_year, block, status, enrolled_courses, cumulative_absences, student_id') // ⬅️ CRITICAL: ADDED student_id HERE
             .eq('role', 'student');
 
-        // Apply program filter if available
+        // CRITICAL: Apply program filter based on the lecturer's department mapping
         if (lecturerTargetProgram) {
             studentQuery = studentQuery.eq('program', lecturerTargetProgram);
         } else {
             console.warn(
-                `⚠️ No program filter applied: lecturerTargetProgram is null.`
+                `⚠️ No program filter applied: lecturerTargetProgram is null. The lecturer's department may need mapping.`
             );
+            // If no program is set, we set allStudents to empty to prevent RLS errors.
+            allStudents = [];
+            return; 
         }
 
         // Execute query
@@ -328,14 +332,14 @@ async function loadStudents() {
 
         if (studentError) {
             console.error('Error fetching filtered students:', studentError);
-            showFeedback('Failed to load student list. Please try again.', 'error');
+            showFeedback('Failed to load student list. Please check RLS policy.', 'error');
             return;
         }
 
         allStudents = students || [];
 
         console.log(
-            `✅ Loaded ${allStudents.length} student(s) for program: ${lecturerTargetProgram || 'None'}`
+            `✅ Loaded ${allStudents.length} student(s) for program: ${lecturerTargetProgram}`
         );
 
     } catch (err) {
@@ -530,7 +534,6 @@ async function handlePhotoUpload(file) {
 
 /**
  * Helper to calculate the count of students deemed "at risk" for the lecturer's program.
- * NOTE: This relies on 'cumulative_absences' or 'overall_grade_status' being in the student view.
  */
 async function countStudentsAtRisk() {
     const RISK_THRESHOLD_ABSENCES = 5; 
@@ -725,14 +728,14 @@ async function loadLecturerStudents() {
     const tbody = $('lecturer-students-table');
     if (!tbody) return;
 
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;">Loading students...</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;">Loading students...</td></tr>`;
 
     try {
-        if (!currentUserProfile || !lecturerTargetProgram) {
+        if (!currentUserProfile || !lecturerTargetProgram || allStudents.length === 0) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="7" style="text-align:center;">
-                        No student program is assigned to your department.
+                    <td colspan="8" style="text-align:center;">
+                        No **${lecturerTargetProgram || 'Assigned'}** students found in the database matching your department focus.
                     </td>
                 </tr>`;
             return;
@@ -741,22 +744,12 @@ async function loadLecturerStudents() {
         // Students were already filtered globally in allStudents by loadStudents()
         const programStudents = allStudents; 
 
-        if (programStudents.length === 0) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="7" style="text-align:center;">
-                        No ${lecturerTargetProgram} students found in the database matching your department.
-                    </td>
-                </tr>`;
-            return;
-        }
-
         const studentsHtml = programStudents.map(profile => {
             const status = (profile.status || 'Active').toLowerCase();
             return `
                 <tr>
                     <td>${profile.full_name || 'N/A'}</td>
-                    <td>${profile.email || 'N/A'}</td>
+                    <td>${profile.student_id || 'N/A'}</td> <td>${profile.email || 'N/A'}</td>
                     <td>${profile.program || 'N/A'}</td>
                     <td>${profile.intake_year || 'N/A'}</td>
                     <td>${profile.block || 'N/A'}</td>
@@ -779,7 +772,7 @@ async function loadLecturerStudents() {
         console.error('Failed to load student list:', err);
         tbody.innerHTML = `
             <tr>
-                <td colspan="7" style="text-align:center;">
+                <td colspan="8" style="text-align:center;">
                     Failed to load student list. Please check the Supabase column names (program, block) and RLS policy.
                 </td>
             </tr>`;
@@ -1015,34 +1008,35 @@ async function handleManualAttendance(e) {
 async function loadTodaysAttendanceRecords() {
     const tbody = $('attendance-table');
     if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="7">Loading today\'s records...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8">Loading today\'s records...</td></tr>';
     
     const today = new Date().toISOString().split('T')[0];
     
-    // Use the optimized query to fetch logs for this lecturer or their students
+    // Select student_id for the Reg. No. column display
     const { data: logs, error } = await sb
       .from(ATTENDANCE_TABLE)
-      .select(`*, user:user_id(full_name, program)`)   
+      .select(`*, user:user_id(full_name, program, student_id)`) // ⬅️ FETCHING student_id
       .or(`user_role.eq.lecturer,user.program.eq.${lecturerTargetProgram}`) 
       .gte('check_in_time', today)
       .order('check_in_time', { ascending: false });
 
     if (error) {
-      tbody.innerHTML = `<tr><td colspan="7">Error loading logs: ${error.message}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8">Error loading logs: ${error.message}</td></tr>`;
       return;
     }
 
     if (!logs || logs.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="7">No relevant attendance records found for today.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8">No relevant attendance records found for today.</td></tr>';
       return;
     }
 
     tbody.innerHTML = '';
     logs.forEach(l => {
-        // Fallback for user name if the join fails (e.g., student was deleted)
+        // Fallback for user name and ID
         const student = allStudents.find(s => s.user_id === l.user_id);
         const userName = l.user?.full_name || student?.full_name || (l.user_role === 'lecturer' ? currentUserProfile.full_name : 'N/A');
-        
+        const regNo = l.user?.student_id || student?.student_id || 'N/A'; // ⬅️ GETTING Reg. No.
+
         const target = allCourses.find(c => c.unit_code === l.course_id)?.course_name || l.course_id || 'General'; // Use unit_code
         const dateTime = new Date(l.check_in_time).toLocaleTimeString();
         const locationText = l.location_details || 'N/A';
@@ -1051,10 +1045,10 @@ async function loadTodaysAttendanceRecords() {
         let rowHtml = `
             <tr>
                 <td>${userName}</td>
-                <td>${l.session_type || 'N/A'}</td>
+                <td>${regNo}</td> <td>${l.session_type || 'N/A'}</td>
                 <td>${target}</td>
-                <td id="${geoId}">${locationText}</td> 
                 <td>${dateTime}</td>
+                <td id="${geoId}">${locationText}</td> 
                 <td><span class="status status-${(l.status || 'N/A').toLowerCase()}">${l.status}</span></td>
                 <td>
                     <button onclick="viewCheckInMap(${l.latitude}, ${l.longitude}, '${userName}', '${geoId}')" 
