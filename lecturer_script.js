@@ -304,18 +304,25 @@ async function fetchGlobalDataCaches() {
 }
 
 // *************************************************************************
-// 2. Fetch all students filtered by lecturer’s program
+// 2. Fetch and Display Students Filtered by Lecturer’s Program
 // *************************************************************************
 
-const STUDENT_TABLE = 'consolidated_user_profiles_table'; 
+const STUDENT_TABLE = 'consolidated_user_profiles_table';
+let allStudents = [];
 
-async function loadStudents() {  // ✅ renamed to match initSession()
+/**
+ * Loads and displays students supervised by this lecturer.
+ * Filters automatically based on department (nursing → KRCHN, tvet → TVET)
+ */
+async function loadStudents() {
   try {
+    // 🟢 1. Build the base query
     let studentQuery = sb
       .from(STUDENT_TABLE)
-      .select('user_id, full_name, email, program, intake_year, block, status')
+      .select('user_id, full_name, email, registration_number, program, intake_year, block, status')
       .eq('role', 'student');
 
+    // 🟢 2. Determine lecturer’s department → map to target program
     let lecturerTargetProgram = null;
     const dept = currentUserProfile?.department?.toLowerCase() || null;
 
@@ -325,12 +332,14 @@ async function loadStudents() {  // ✅ renamed to match initSession()
       lecturerTargetProgram = 'TVET';
     }
 
+    // 🟢 3. Filter by program if mapping exists
     if (lecturerTargetProgram) {
       studentQuery = studentQuery.eq('program', lecturerTargetProgram);
     } else {
       console.warn(`⚠️ No valid program mapping for department "${dept || 'unknown'}".`);
     }
 
+    // 🟢 4. Execute query
     const { data: students, error: studentError } = await studentQuery.order('full_name', { ascending: true });
 
     if (studentError) {
@@ -341,10 +350,41 @@ async function loadStudents() {  // ✅ renamed to match initSession()
 
     allStudents = students || [];
     console.log(`✅ Loaded ${allStudents.length} student(s) for program: ${lecturerTargetProgram || 'None'}`);
+
+    // 🟢 5. Render students in the table
+    renderStudentsTable();
   } catch (err) {
     console.error('Unexpected error loading students:', err);
     showFeedback('An unexpected error occurred while loading students.', 'error');
   }
+}
+
+/**
+ * Renders student data in the lecturer table
+ */
+function renderStudentsTable() {
+  const tbody = document.getElementById('lecturer-students-table');
+  if (!tbody) return;
+
+  if (!allStudents.length) {
+    tbody.innerHTML = `<tr><td colspan="7">No students found under your supervision.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = allStudents.map(student => `
+    <tr>
+      <td>${student.full_name || 'N/A'}</td>
+      <td>${student.registration_number || 'N/A'}</td>
+      <td>${student.program || 'N/A'}</td>
+      <td>${student.intake_year || 'N/A'}</td>
+      <td>${student.status || 'N/A'}</td>
+      <td>--</td>
+      <td>
+        <button class="btn-action" onclick="viewStudentProfile('${student.user_id}')">Profile</button>
+        <button class="btn-action" onclick="viewStudentRecord('${student.user_id}')">Record</button>
+      </td>
+    </tr>
+  `).join('');
 }
 
 
