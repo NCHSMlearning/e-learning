@@ -307,17 +307,15 @@ async function fetchGlobalDataCaches() {
 // 2. Fetch all students filtered by lecturer’s program
 // *************************************************************************
 
-const STUDENT_TABLE = 'consolidated_user_profiles_table'; // ✅ Ensure correct table name
+const STUDENT_TABLE = 'consolidated_user_profiles_table'; 
 
-async function loadStudentsByLecturerProgram() {
+async function loadStudents() {  // ✅ renamed to match initSession()
   try {
-    // ✅ Build base query
     let studentQuery = sb
       .from(STUDENT_TABLE)
       .select('user_id, full_name, email, program, intake_year, block, status')
       .eq('role', 'student');
 
-    // ✅ Normalize lecturer’s department (case-insensitive)
     let lecturerTargetProgram = null;
     const dept = currentUserProfile?.department?.toLowerCase() || null;
 
@@ -327,14 +325,12 @@ async function loadStudentsByLecturerProgram() {
       lecturerTargetProgram = 'TVET';
     }
 
-    // ✅ Apply program filter if available
     if (lecturerTargetProgram) {
       studentQuery = studentQuery.eq('program', lecturerTargetProgram);
     } else {
       console.warn(`⚠️ No valid program mapping for department "${dept || 'unknown'}".`);
     }
 
-    // ✅ Execute query
     const { data: students, error: studentError } = await studentQuery.order('full_name', { ascending: true });
 
     if (studentError) {
@@ -350,6 +346,7 @@ async function loadStudentsByLecturerProgram() {
     showFeedback('An unexpected error occurred while loading students.', 'error');
   }
 }
+
 
 
 
