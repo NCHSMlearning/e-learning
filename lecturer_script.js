@@ -308,6 +308,7 @@ async function fetchGlobalDataCaches() {
 // *************************************************************************
 
 const STUDENT_TABLE = 'consolidated_user_profiles_table';
+let allStudents = []; // ✅ Global for table + modal use
 
 /**
  * Loads and displays students supervised by this lecturer.
@@ -316,16 +317,16 @@ async function loadStudents() {
     try {
         let studentQuery = sb
             .from(STUDENT_TABLE)
-            .select('user_id, full_name, email, program, intake_year, block, status')
+            .select('user_id, full_name, email, program, intake_year, block, status, cumulative_absences, student_id')
             .eq('role', 'student');
 
         // Determine lecturer’s target program based on department
         let lecturerTargetProgram = null;
         const dept = currentUserProfile?.department?.toLowerCase() || null;
 
-        if (dept === 'nursing') {
+        if (dept?.includes('nursing')) {
             lecturerTargetProgram = 'KRCHN';
-        } else if (dept === 'tvet') {
+        } else if (dept?.includes('tvet')) {
             lecturerTargetProgram = 'TVET';
         }
 
@@ -363,7 +364,7 @@ function renderStudentTable() {
     if (!tbody) return;
 
     if (!allStudents || allStudents.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7">No students found for your department.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7">No students found for your department or program.</td></tr>`;
         return;
     }
 
@@ -383,6 +384,10 @@ function renderStudentTable() {
     `).join('');
 }
 
+// *************************************************************************
+// 3. Student Info Modals
+// *************************************************************************
+
 /**
  * Opens a modal showing the student’s profile info.
  */
@@ -390,12 +395,14 @@ function viewStudentProfile(studentId) {
     const student = allStudents.find(s => s.user_id === studentId);
     if (!student) return alert('Student not found.');
 
+    closeModal('student-profile-modal'); // Prevent duplicates
+
     const modalHtml = `
         <div class="modal-overlay" id="student-profile-modal">
             <div class="modal">
                 <h3>Student Profile</h3>
                 <p><strong>Name:</strong> ${student.full_name}</p>
-                <p><strong>Email:</strong> ${student.email}</p>
+                <p><strong>Email:</strong> ${student.email || 'N/A'}</p>
                 <p><strong>Program:</strong> ${student.program}</p>
                 <p><strong>Intake Year:</strong> ${student.intake_year}</p>
                 <p><strong>Status:</strong> ${student.status}</p>
@@ -411,6 +418,8 @@ function viewStudentProfile(studentId) {
 function viewStudentRecord(studentId) {
     const student = allStudents.find(s => s.user_id === studentId);
     if (!student) return alert('Student not found.');
+
+    closeModal('student-record-modal'); // Prevent duplicates
 
     const modalHtml = `
         <div class="modal-overlay" id="student-record-modal">
@@ -431,7 +440,6 @@ function closeModal(id) {
     const modal = document.getElementById(id);
     if (modal) modal.remove();
 }
-
 
 
 function loadSectionData(tabId) { 
