@@ -308,47 +308,47 @@ async function fetchGlobalDataCaches() {
 // *************************************************************************
 
 const STUDENT_TABLE = 'consolidated_user_profiles_table';
+let allStudents = [];
 
 /**
  * Loads and displays students supervised by this lecturer.
  */
 async function loadStudents() {
     try {
+        // Step 1: Base query
         let studentQuery = sb
             .from(STUDENT_TABLE)
-            .select('user_id, full_name, email, student_id, program, intake_year, block, status, cumulative_absences')
+            .select('user_id, full_name, student_id, email, program, intake_year, block, status, cumulative_absences, department')
             .eq('role', 'student');
 
-        // Determine lecturer’s target program based on department
+        // Step 2: Determine lecturer’s department and filter
+        const dept = currentUserProfile?.department?.toLowerCase() || '';
         let lecturerTargetProgram = null;
-        const dept = currentUserProfile?.department?.toLowerCase() || null;
 
-        if (dept === 'nursing') {
+        if (dept.includes('nursing')) {
             lecturerTargetProgram = 'KRCHN';
-        } else if (dept === 'tvet') {
+        } else if (dept.includes('tvet')) {
             lecturerTargetProgram = 'TVET';
         }
 
-        // Apply program filter
+        // Step 3: Apply filter if matched
         if (lecturerTargetProgram) {
             studentQuery = studentQuery.eq('program', lecturerTargetProgram);
         } else {
-            console.warn(`⚠️ No valid program mapping for department "${dept || 'unknown'}".`);
+            console.warn(`⚠️ Unknown department "${dept || 'none'}". Showing all students.`);
         }
 
-        // Execute query
-        const { data: students, error: studentError } = await studentQuery.order('full_name', { ascending: true });
-
-        if (studentError) {
-            console.error('Error fetching filtered students:', studentError);
-            showFeedback('Failed to load student list. Please try again.', 'error');
+        // Step 4: Execute
+        const { data: students, error } = await studentQuery.order('full_name', { ascending: true });
+        if (error) {
+            console.error('❌ Error fetching filtered students:', error);
+            showFeedback('Failed to load student list.', 'error');
             return;
         }
 
         allStudents = students || [];
-        console.log(`✅ Loaded ${allStudents.length} student(s) for program: ${lecturerTargetProgram || 'None'}`);
-
-        renderStudentTable(); // Render results to table
+        console.log(`✅ Loaded ${allStudents.length} student(s) for program: ${lecturerTargetProgram || 'All'}`);
+        renderStudentTable();
     } catch (err) {
         console.error('Unexpected error loading students:', err);
         showFeedback('An unexpected error occurred while loading students.', 'error');
@@ -359,7 +359,7 @@ async function loadStudents() {
  * Renders students in the lecturer’s table.
  */
 function renderStudentTable() {
-    const tbody = document.getElementById('lecturer-students-table');
+    const tbody = document.getElementById('students-table-body');
     if (!tbody) return;
 
     if (!allStudents || allStudents.length === 0) {
@@ -395,11 +395,12 @@ function viewStudentProfile(studentId) {
             <div class="modal">
                 <h3>Student Profile</h3>
                 <p><strong>Name:</strong> ${student.full_name}</p>
-                <p><strong>Reg. No.:</strong> ${student.student_id || 'N/A'}</p>
+                <p><strong>Reg. No.:</strong> ${student.student_id}</p>
                 <p><strong>Email:</strong> ${student.email}</p>
                 <p><strong>Program:</strong> ${student.program}</p>
                 <p><strong>Intake Year:</strong> ${student.intake_year}</p>
                 <p><strong>Status:</strong> ${student.status}</p>
+                <p><strong>Cumulative Absences:</strong> ${student.cumulative_absences || '0'} days</p>
                 <button class="btn-close" onclick="closeModal('student-profile-modal')">Close</button>
             </div>
         </div>`;
@@ -432,6 +433,7 @@ function closeModal(id) {
     const modal = document.getElementById(id);
     if (modal) modal.remove();
 }
+
 
 function loadSectionData(tabId) { 
     document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
