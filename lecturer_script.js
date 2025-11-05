@@ -303,50 +303,54 @@ async function fetchGlobalDataCaches() {
     allCourses = courses || [];
 }
 
+// *************************************************************************
 // 2. Fetch all students filtered by lecturer’s program
-async function loadStudents() {
-    try {
-        const STUDENT_TABLE = 'consolidated_user_profiles_table'; 
+// *************************************************************************
 
-        let studentQuery = sb
-            .from(STUDENT_TABLE)
-            .select('user_id, full_name, email, program, intake_year, block, status, enrolled_courses, cumulative_absences, student_id') // ⬅️ CRITICAL: ADDED student_id HERE
-            .eq('role', 'student');
+const STUDENT_TABLE = 'consolidated_user_profiles_table'; // ✅ Ensure correct table name
 
-        // CRITICAL: Apply program filter based on the lecturer's department mapping
-        if (lecturerTargetProgram) {
-            studentQuery = studentQuery.eq('program', lecturerTargetProgram);
-        } else {
-            console.warn(
-                `⚠️ No program filter applied: lecturerTargetProgram is null. The lecturer's department may need mapping.`
-            );
-            // If no program is set, we set allStudents to empty to prevent RLS errors.
-            allStudents = [];
-            return; 
-        }
+async function loadStudentsByLecturerProgram() {
+  try {
+    // ✅ Build base query
+    let studentQuery = sb
+      .from(STUDENT_TABLE)
+      .select('user_id, full_name, email, program, intake_year, block, status')
+      .eq('role', 'student');
 
-        // Execute query
-        const { data: students, error: studentError } = await studentQuery.order('full_name', {
-            ascending: true
-        });
+    // ✅ Normalize lecturer’s department (case-insensitive)
+    let lecturerTargetProgram = null;
+    const dept = currentUserProfile?.department?.toLowerCase() || null;
 
-        if (studentError) {
-            console.error('Error fetching filtered students:', studentError);
-            showFeedback('Failed to load student list. Please check RLS policy.', 'error');
-            return;
-        }
-
-        allStudents = students || [];
-
-        console.log(
-            `✅ Loaded ${allStudents.length} student(s) for program: ${lecturerTargetProgram}`
-        );
-
-    } catch (err) {
-        console.error('Unexpected error fetching students:', err);
-        showFeedback('An unexpected error occurred while loading students.', 'error');
+    if (dept === 'nursing') {
+      lecturerTargetProgram = 'KRCHN';
+    } else if (dept === 'tivet') {
+      lecturerTargetProgram = 'TIVET';
     }
+
+    // ✅ Apply program filter if available
+    if (lecturerTargetProgram) {
+      studentQuery = studentQuery.eq('program', lecturerTargetProgram);
+    } else {
+      console.warn(`⚠️ No valid program mapping for department "${dept || 'unknown'}".`);
+    }
+
+    // ✅ Execute query
+    const { data: students, error: studentError } = await studentQuery.order('full_name', { ascending: true });
+
+    if (studentError) {
+      console.error('Error fetching filtered students:', studentError);
+      showFeedback('Failed to load student list. Please try again.', 'error');
+      return;
+    }
+
+    allStudents = students || [];
+    console.log(`✅ Loaded ${allStudents.length} student(s) for program: ${lecturerTargetProgram || 'None'}`);
+  } catch (err) {
+    console.error('Unexpected error loading students:', err);
+    showFeedback('An unexpected error occurred while loading students.', 'error');
+  }
 }
+
 
 
 function loadSectionData(tabId) { 
