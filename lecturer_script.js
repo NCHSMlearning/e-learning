@@ -279,7 +279,7 @@ function getProgramFilterFromDepartment(department) {
     if (dept.includes('nursing') || dept.includes('midwifery') || dept.includes('maternal health')) {
         return 'KRCHN';
     }
-    if (dept.includes('clinical') || dept.includes('dental') || dept.includes('tivet') || dept.includes('general education')) {
+    if (dept.includes('clinical') || dept.includes('dental') || dept.includes('tvet') || dept.includes('general education')) {
         return 'TVET';
     }
     return null; 
@@ -323,8 +323,8 @@ async function loadStudentsByLecturerProgram() {
 
     if (dept === 'nursing') {
       lecturerTargetProgram = 'KRCHN';
-    } else if (dept === 'tivet') {
-      lecturerTargetProgram = 'TIVET';
+    } else if (dept === 'tvet') {
+      lecturerTargetProgram = 'TVET';
     }
 
     // ✅ Apply program filter if available
