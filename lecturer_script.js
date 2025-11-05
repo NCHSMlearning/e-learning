@@ -316,7 +316,7 @@ async function loadStudents() {
     try {
         let studentQuery = sb
             .from(STUDENT_TABLE)
-            .select('user_id, full_name, email, program, intake_year, block, status')
+            .select('user_id, full_name, email, student_id, program, intake_year, block, status, cumulative_absences')
             .eq('role', 'student');
 
         // Determine lecturer’s target program based on department
@@ -329,7 +329,7 @@ async function loadStudents() {
             lecturerTargetProgram = 'TVET';
         }
 
-        // Apply filter
+        // Apply program filter
         if (lecturerTargetProgram) {
             studentQuery = studentQuery.eq('program', lecturerTargetProgram);
         } else {
@@ -395,6 +395,7 @@ function viewStudentProfile(studentId) {
             <div class="modal">
                 <h3>Student Profile</h3>
                 <p><strong>Name:</strong> ${student.full_name}</p>
+                <p><strong>Reg. No.:</strong> ${student.student_id || 'N/A'}</p>
                 <p><strong>Email:</strong> ${student.email}</p>
                 <p><strong>Program:</strong> ${student.program}</p>
                 <p><strong>Intake Year:</strong> ${student.intake_year}</p>
