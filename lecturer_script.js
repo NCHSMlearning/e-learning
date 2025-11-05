@@ -308,7 +308,6 @@ async function fetchGlobalDataCaches() {
 // *************************************************************************
 
 const STUDENT_TABLE = 'consolidated_user_profiles_table';
-let allStudents = [];
 
 /**
  * Loads and displays students supervised by this lecturer.
