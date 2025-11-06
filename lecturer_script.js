@@ -894,49 +894,50 @@ function populateSessionFormSelects() {
 }
 
 async function handleAddSession(e) {
-    e.preventDefault();
-    const button = e.submitter;
-    setButtonLoading(button, true, 'Schedule Session & Notify Students');
-    
-    const formData = {
-        topic: $('session_topic').value,
-        date: $('session_date').value,
-        time: $('session_time').value,
-        program: $('session_program').value,
-        block_term: $('session_block_term').value,
-        course_id: $('session_course_id').value
-    };
+  e.preventDefault();
+  const button = e.submitter;
+  setButtonLoading(button, true, 'Schedule Session & Notify Students');
+  
+  const formData = {
+    topic: $('session_topic').value,
+    date: $('session_date').value,
+    time: $('session_time').value,
+    program: $('session_program').value,
+    block_term: $('session_block_term').value,
+    course_id: $('session_course_id').value
+  };
 
-    if (Object.values(formData).some(v => !v)) {
-        showFeedback('Please fill in all session details.', 'error');
-        setButtonLoading(button, false);
-        return;
-    }
+  if (Object.values(formData).some(v => !v)) {
+    showFeedback('Please fill in all session details.', 'error');
+    setButtonLoading(button, false);
+    return;
+  }
 
-    try {
-        const { error } = await sb.from(SESSIONS_TABLE).insert({
-            session_topic: formData.topic,
-            session_date: formData.date,
-            session_time: formData.time,
-            target_program: formData.program, 
-            block_term: formData.block_term,
-            course_id: formData.course_id,
-            lecturer_id: currentUserProfile.user_id,
-            lecturer_name: currentUserProfile.full_name
-        });
+  try {
+    const { error } = await sb.from(SESSIONS_TABLE).insert({
+      session_title: formData.topic,        // ✅ matches your table’s "session_title"
+      session_date: formData.date,
+      session_time: formData.time,
+      target_program: formData.program, 
+      block_term: formData.block_term,
+      course_id: formData.course_id,
+      lecturer_id: currentUserProfile.user_id  // ✅ keep only this
+      // 🗑️ removed lecturer_name (doesn’t exist in DB)
+    });
 
-        if (error) throw error;
+    if (error) throw error;
 
-        showFeedback(`✅ Session "${formData.topic}" scheduled successfully!`, 'success');
-        e.target.reset();
-        loadLecturerSessions(); 
-    } catch (error) {
-        console.error('Session scheduling failed:', error);
-        showFeedback(`Scheduling failed: ${error.message}`, 'error');
-    } finally {
-        setButtonLoading(button, false);
-    }
+    showFeedback(`✅ Session "${formData.topic}" scheduled successfully!`, 'success');
+    e.target.reset();
+    loadLecturerSessions(); 
+  } catch (error) {
+    console.error('Session scheduling failed:', error);
+    showFeedback(`Scheduling failed: ${error.message}`, 'error');
+  } finally {
+    setButtonLoading(button, false);
+  }
 }
+
 
 async function loadLecturerSessions() { 
     const tbody = $('sessions-table');
