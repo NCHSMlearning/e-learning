@@ -358,11 +358,11 @@ async function loadStudents() {
  * Renders students in the lecturer’s table.
  */
 function renderStudentTable() {
-    const tbody = document.getElementById('students-table-body');
+    const tbody = document.getElementById('lecturer-students-table');
     if (!tbody) return;
 
     if (!allStudents || allStudents.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7">No students found for your department.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8">No students found for your department.</td></tr>`;
         return;
     }
 
@@ -370,10 +370,11 @@ function renderStudentTable() {
         <tr>
             <td>${student.full_name || 'N/A'}</td>
             <td>${student.student_id || 'N/A'}</td>
+            <td>${student.email || 'N/A'}</td>
             <td>${student.program || 'N/A'}</td>
             <td>${student.intake_year || 'N/A'}</td>
             <td>${student.status || 'N/A'}</td>
-            <td>${student.cumulative_absences ? student.cumulative_absences + ' days' : '0 days'}</td>
+            <td>0 days</td>
             <td>
                 <button class="btn-action btn-view-profile" onclick="viewStudentProfile('${student.user_id}')">Profile</button>
                 <button class="btn-action btn-record" onclick="viewStudentRecord('${student.user_id}')">Record</button>
@@ -381,6 +382,7 @@ function renderStudentTable() {
         </tr>
     `).join('');
 }
+
 
 /**
  * Opens a modal showing the student’s profile info.
