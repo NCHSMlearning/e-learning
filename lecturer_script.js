@@ -317,7 +317,7 @@ async function loadStudents() {
         // Step 1: Base query
         let studentQuery = sb
             .from(STUDENT_TABLE)
-            .select('user_id, full_name, student_id, email, program, intake_year, block, status, cumulative_absences, department')
+            .select('user_id, full_name, student_id, email, program, intake_year, block, status, department')
             .eq('role', 'student');
 
         // Step 2: Determine lecturer’s department and filter
@@ -373,7 +373,7 @@ function renderStudentTable() {
             <td>${student.program || 'N/A'}</td>
             <td>${student.intake_year || 'N/A'}</td>
             <td>${student.status || 'N/A'}</td>
-            <td>${student.cumulative_absences || '0'} days</td>
+            <td>${student.cumulative_absences ? student.cumulative_absences + ' days' : '0 days'}</td>
             <td>
                 <button class="btn-action btn-view-profile" onclick="viewStudentProfile('${student.user_id}')">Profile</button>
                 <button class="btn-action btn-record" onclick="viewStudentRecord('${student.user_id}')">Record</button>
