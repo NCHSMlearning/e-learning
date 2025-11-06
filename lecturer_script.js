@@ -358,7 +358,7 @@ async function loadStudents() {
  * Renders students in the lecturer’s table.
  */
 function renderStudentTable() {
-    const tbody = document.getElementById('lecturer-students-table');
+    const tbody = document.getElementById('students-table-body');
     if (!tbody) return;
 
     if (!allStudents || allStudents.length === 0) {
@@ -374,7 +374,7 @@ function renderStudentTable() {
             <td>${student.program || 'N/A'}</td>
             <td>${student.intake_year || 'N/A'}</td>
             <td>${student.status || 'N/A'}</td>
-            <td>0 days</td>
+            <td>${student.cumulative_absences || '0'} days</td>
             <td>
                 <button class="btn-action btn-view-profile" onclick="viewStudentProfile('${student.user_id}')">Profile</button>
                 <button class="btn-action btn-record" onclick="viewStudentRecord('${student.user_id}')">Record</button>
@@ -382,7 +382,6 @@ function renderStudentTable() {
         </tr>
     `).join('');
 }
-
 
 /**
  * Opens a modal showing the student’s profile info.
