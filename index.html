@@ -912,6 +912,51 @@ async function logout() {
 // *************************************************************************
 // *** 3. CORE DATA AND DASHBOARD FUNCTIONS ***
 // *************************************************************************
+/**
+ * Load a message from app_settings safely.
+ */
+async function loadStudentMessage(key, elementId) {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+
+    element.textContent = 'Loading...';
+
+    try {
+        const { data, error } = await sb
+            .from('app_settings')
+            .select('value')
+            .eq('key', key)
+            .maybeSingle();
+
+        if (error) throw error;
+
+        if (data && data.value) {
+            element.innerHTML = data.value;
+        } else {
+            element.textContent = 'No message available.';
+        }
+    } catch (err) {
+        console.error(`❌ Failed to load ${key}:`, err);
+        element.textContent = 'Failed to load message. Please refresh.';
+    }
+}
+
+/**
+ * Load the student's profile photo.
+ */
+function loadProfilePhoto() {
+    const passportImg = document.getElementById('passport-preview');
+    const passportCard = document.getElementById('action-passport');
+
+    const hasPhoto = currentUserProfile?.passport_url;
+    if (passportCard) passportCard.style.display = hasPhoto ? 'block' : 'none';
+
+    if (passportImg) {
+        passportImg.src = hasPhoto
+            ? currentUserProfile.passport_url
+            : '/default-avatar.png'; // fallback image
+    }
+}
 
 
 /**
