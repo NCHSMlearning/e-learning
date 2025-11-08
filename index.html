@@ -1637,7 +1637,7 @@ function getDeviceId() {
 window.getDeviceId = getDeviceId;
 
 // ------------------------
-// Geo Check-In (MODIFIED for Class session targeting)
+// Geo Check-In (FINAL CORRECTED to save Course Name for Class)
 // ------------------------
 async function geoCheckIn() {
     const button = document.getElementById('check-in-button');
@@ -1666,9 +1666,9 @@ async function geoCheckIn() {
         }
 
         // TargetSelect format is now ID|NAME
-        const [targetId, targetName] = targetSelect.split('|');
+        const [targetId, targetNameFromDropdown] = targetSelect.split('|');
 
-        if (!targetId || !targetName) {
+        if (!targetId || !targetNameFromDropdown) {
             if (geoMessage) geoMessage.textContent = 'Error: Invalid target selected.';
             return;
         }
@@ -1701,7 +1701,7 @@ async function geoCheckIn() {
             }
         }
 
-        // Find the target entry to get coordinates
+        // Find the target entry to get coordinates and the CORRECT name
         let targetEntry = sessionType === 'Clinical'
             ? cachedClinicalAreas.find(c => c.id === targetId)
             : cachedCourses.find(c => c.id === targetId);
@@ -1712,8 +1712,17 @@ async function geoCheckIn() {
             return;
         }
 
-        const dbTargetId = targetEntry.id; 
-        const selectedCourseId = sessionType === 'Class' ? targetEntry.id : null; // Use course ID for class, null for clinical
+        const dbTargetId = targetEntry.id; 
+        const selectedCourseId = sessionType === 'Class' ? targetEntry.id : null; 
+
+        // 🎯 CRITICAL FIX: Determine the display name to save in the log
+        let targetNameToLog = targetNameFromDropdown; 
+
+        if (sessionType === 'Class') {
+            // For class sessions, override the name with the actual Course Name from cache
+            // This is necessary because the dropdown value might contain a generic location name.
+            targetNameToLog = targetEntry.name; 
+        }
 
         // Haversine distance calculation
         const R = 6371000; // Earth radius in meters
@@ -1733,7 +1742,7 @@ async function geoCheckIn() {
             p_check_in_time: checkInTime,
             p_session_type: sessionType === 'Clinical' ? 'Clinical' : 'Class',
             p_target_id: dbTargetId,
-            p_target_name: targetName, // ✅ Use the retrieved target name (Course Name for Class)
+            p_target_name: targetNameToLog, // ✅ Using the corrected variable here!
             p_latitude: location.lat,
             p_longitude: location.lon,
             p_accuracy_m: location.acc,
@@ -1764,10 +1773,7 @@ async function geoCheckIn() {
         if (button) button.disabled = false;
     }
 }
-
-// Attach to global scope for button onclick
 window.geoCheckIn = geoCheckIn;
-
 // *************************************************************************
 // *** 6. SUPABASE DATA LOADING FUNCTIONS (Courses, Exams, Resources) ***
 // *************************************************************************
