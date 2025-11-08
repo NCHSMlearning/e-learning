@@ -259,7 +259,7 @@
             background-color: var(--color-card-bg);
             padding: 30px;
             border-radius: 12px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
             border-top: 5px solid var(--color-primary); 
             max-width: 800px;
             margin: 0 auto;
@@ -458,14 +458,14 @@
                 <h2>STUDENT PORTAL</h2>
             </div>
             <ul class="nav">
-                <li><a href="#" data-tab="dashboard" class="active" onclick="closeMenu()">🏠 Dashboard</a></li>
-                <li><a href="#" data-tab="profile" onclick="closeMenu()">👤 Profile</a></li>
-                <li><a href="#" data-tab="calendar" onclick="closeMenu()">📅 Academic Calendar</a></li> 
-                <li><a href="#" data-tab="courses" onclick="closeMenu()">📚 My Courses</a></li>
-                <li><a href="#" data-tab="attendance" onclick="closeMenu()">✅ Attendance</a></li>
-                <li><a href="#" data-tab="cats" onclick="closeMenu()">📝 CATS/Exams</a></li>
-                <li><a href="#" data-tab="resources" onclick="closeMenu()">📁 Resources</a></li>
-                <li><a href="#" data-tab="messages" onclick="closeMenu()">💬 Messages</a></li>
+                <li><a href="#" data-tab="dashboard" class="active">🏠 Dashboard</a></li>
+                <li><a href="#" data-tab="profile">👤 Profile</a></li>
+                <li><a href="#" data-tab="calendar">📅 Academic Calendar</a></li> 
+                <li><a href="#" data-tab="courses">📚 My Courses</a></li>
+                <li><a href="#" data-tab="attendance">✅ Attendance</a></li>
+                <li><a href="#" data-tab="cats">📝 CATS/Exams</a></li>
+                <li><a href="#" data-tab="resources">📁 Resources</a></li>
+                <li><a href="#" data-tab="messages">💬 Messages</a></li>
             </ul>
             <div class="logout"><a href="#" onclick="logout()">Logout</a></div>
         </aside>
@@ -677,9 +677,16 @@
                 <h3 style="color: var(--color-primary);">Past Attendance History (Check-in Logs)</h3>
                 <div style="overflow-x: auto;">
                     <table>
-                        <thead><tr><th>Time</th><th>Session Type</th><th>Target</th><th>Friendly Name</th><th>GPS / Acc (m)</th><th>Verified</th></tr></thead>
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Session Type</th>
+                                <th>Target</th>
+                                <th>Verified</th>
+                            </tr>
+                        </thead>
                         <tbody id="geo-attendance-history">
-                            <tr><td colspan="6">Loading geo check-in history...</td></tr>
+                            <tr><td colspan="4">Loading geo check-in history...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -878,7 +885,7 @@ function showTab(tabId) {
     const activeTab = document.getElementById(tabId);
     if (activeTab) activeTab.classList.add('active');
 
-    // Close mobile menu if open
+    // Close mobile menu if open (This is the mechanism now used by ALL nav clicks)
     closeMenu();
 
     // Load tab-specific data
@@ -1519,17 +1526,19 @@ async function loadClassTargets() {
 window.loadClassTargets = loadClassTargets;
 
 // ------------------------
-// Load Attendance History
+// Load Attendance History (REVISED to hide location details)
 // ------------------------
 async function loadGeoAttendanceHistory(userId) {
     const tableBody = document.getElementById('geo-attendance-history');
     if (!tableBody) return;
-    tableBody.innerHTML = '<tr><td colspan="6">Loading geo check-in history...</td></tr>';
+    // Set colspan to 4 (Time, Type, Target, Verified)
+    tableBody.innerHTML = '<tr><td colspan="4">Loading geo check-in history...</td></tr>';
 
     try {
         const { data: logs, error } = await sb
             .from('geo_attendance_logs')
-            .select('check_in_time, session_type, target_name, location_friendly_name, accuracy_m, is_verified, latitude, longitude')
+            // ONLY select the non-sensitive fields
+            .select('check_in_time, session_type, target_name, is_verified')
             .eq('student_id', userId)
             .order('check_in_time', { ascending: false })
             .limit(100);
@@ -1538,22 +1547,20 @@ async function loadGeoAttendanceHistory(userId) {
 
         tableBody.innerHTML = '';
         if (!logs || logs.length === 0) {
-            tableBody.innerHTML = '<tr><td colspan="6">No check-in logs found.</td></tr>';
+            tableBody.innerHTML = '<tr><td colspan="4">No check-in logs found.</td></tr>';
             return;
         }
 
         logs.forEach(log => {
             const timeStr = new Date(log.check_in_time).toLocaleString();
             const verifiedText = log.is_verified ? '✅ Verified' : '⏳ Pending Review';
-            const gpsAndAccuracy = `${log.latitude?.toFixed(4) || 'N/A'}, ${log.longitude?.toFixed(4) || 'N/A'} / ${log.accuracy_m?.toFixed(1) || 'N/A'}m`;
+            // Removed: gpsAndAccuracy calculation and use in row structure
 
             const row = `
                 <tr>
                     <td>${timeStr}</td>
                     <td>${log.session_type}</td>
                     <td>${log.target_name}</td>
-                    <td>${log.location_friendly_name || 'N/A'}</td>
-                    <td>${gpsAndAccuracy}</td>
                     <td>${verifiedText}</td>
                 </tr>
             `;
@@ -1561,7 +1568,7 @@ async function loadGeoAttendanceHistory(userId) {
         });
     } catch (error) {
         console.error("Failed to load attendance history:", error);
-        tableBody.innerHTML = `<tr><td colspan="6" style="color:#EF4444;">Error loading attendance logs: ${error.message}</td></tr>`;
+        tableBody.innerHTML = `<tr><td colspan="4" style="color:#EF4444;">Error loading attendance logs: ${error.message}</td></tr>`;
     }
 }
 window.loadGeoAttendanceHistory = loadGeoAttendanceHistory;
@@ -1641,7 +1648,7 @@ window.getDeviceId = getDeviceId;
 // ------------------------
 async function geoCheckIn() {
     const button = document.getElementById('check-in-button');
-    const geoMessage = document.getElementById('geoMessage');
+    const geoMessage = document.getElementById('geo-message'); // Corrected reference
 
     if (button) button.disabled = true;
     if (geoMessage) geoMessage.textContent = '⏱️ Initializing check-in...';
@@ -1748,8 +1755,8 @@ async function geoCheckIn() {
             console.error('Check-in failed:', error);
             if (geoMessage) geoMessage.textContent = `Check-in failed: ${error.message}`;
         } else {
-            if (geoMessage) geoMessage.innerHTML = `✅ Check-in successful at ${new Date(checkInTime).toLocaleTimeString()} near <strong>${location.friendly}</strong>.<br>
-                Distance: ${distanceMeters.toFixed(1)} m. Accuracy: ${location.acc.toFixed(1)} m.`;
+            // Updated success message to only show time and friendly name (excluding distance/accuracy)
+            if (geoMessage) geoMessage.innerHTML = `✅ Check-in successful at ${new Date(checkInTime).toLocaleTimeString()} near <strong>${location.friendly}</strong>. Verification: ${isVerified ? 'SUCCESS' : 'PENDING'}.`;
 
             if (typeof loadGeoAttendanceHistory === 'function') {
                 loadGeoAttendanceHistory(currentUserId);
