@@ -1600,7 +1600,7 @@ async function geoCheckIn() {
     if (geoMessage) geoMessage.textContent = '⏱️ Initializing check-in...';
 
     try {
-        // Ensure profile is loaded
+        // Ensure student profile is loaded
         if (!currentUserProfile) await loadProfile(currentUserId);
         const studentProfile = currentUserProfile;
         if (!studentProfile) {
@@ -1637,13 +1637,26 @@ async function geoCheckIn() {
             );
         });
 
-        // Find target entry
-        let targetEntry = null;
-        if (sessionType === 'Clinical') {
-            targetEntry = cachedClinicalAreas.find(c => c.id === targetId);
-        } else {
-            targetEntry = cachedCourses.find(c => c.id === targetId);
+        // Reverse-geocode for friendly name if missing
+        if (!location.friendly) {
+            try {
+                const res = await fetch(`${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${location.lat}&lon=${location.lon}&format=json`);
+                if (res.ok) {
+                    const geoData = await res.json();
+                    location.friendly = geoData?.display_name || `Lat:${location.lat.toFixed(4)}, Lon:${location.lon.toFixed(4)}`;
+                } else {
+                    location.friendly = `Lat:${location.lat.toFixed(4)}, Lon:${location.lon.toFixed(4)} (Geo-API failed)`;
+                }
+            } catch (err) {
+                location.friendly = `Lat:${location.lat.toFixed(4)}, Lon:${location.lon.toFixed(4)} (Geo-API error)`;
+                console.warn('Reverse geocoding error:', err);
+            }
         }
+
+        // Find the target entry in cached arrays
+        let targetEntry = sessionType === 'Clinical'
+            ? cachedClinicalAreas.find(c => c.id === targetId)
+            : cachedCourses.find(c => c.id === targetId);
 
         if (!targetEntry || (sessionType === 'Clinical' && (targetEntry.latitude === null || targetEntry.longitude === null))) {
             if (geoMessage) geoMessage.textContent = 'Error: Target location coordinates not found.';
