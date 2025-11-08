@@ -448,10 +448,7 @@
         <span>NCHSM Digital Student Portal</span>
     </div>
     
-    <div class="overlay" onclick="toggleMenu()"></div>
-
-
-    <div class="container">
+    <div class="overlay" onclick="closeMenu()"></div> <div class="container">
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <img src="https://raw.githubusercontent.com/NCHSMlearning/e-learning/main/images/Logo_NCHSM.png" alt="NCHSM Logo" style="filter: invert(1); width: 80px;">
@@ -755,7 +752,7 @@
     pdfjsLib.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     
     // *************************************************************************
-    // *** NEW MOBILE MENU LOGIC ***
+    // *** NEW MOBILE MENU LOGIC (CONSOLIDATED AND CORRECTED) ***
     // *************************************************************************
     const sidebar = document.getElementById('sidebar');
     const overlay = document.querySelector('.overlay');
@@ -774,20 +771,15 @@
         document.body.style.overflow = 'hidden'; // Prevent scrolling the background content
     }
 
+    /**
+     * ✅ CORRECTED closeMenu function. This single definition now handles all closing scenarios.
+     */
     function closeMenu() {
         sidebar.classList.remove('open');
         overlay.classList.remove('active');
         document.body.style.overflow = 'auto'; // Restore scrolling
     }
-    
-    // Auto-close menu if a link is clicked on mobile
-    function closeMenu() {
-        if (window.innerWidth <= 768) {
-            sidebar.classList.remove('open');
-            overlay.classList.remove('active');
-            document.body.style.overflow = 'auto';
-        }
-    }
+    window.closeMenu = closeMenu; // Expose globally for the overlay onclick
 
 
     // Hides the .html extension in the URL
@@ -869,7 +861,7 @@
 // ------------------------
 const navLinks = document.querySelectorAll('.nav a');
 const tabs = document.querySelectorAll('.tab-content');
-const menu = document.getElementById('menu'); // Your mobile menu container
+// const menu = document.getElementById('menu'); // Removed, sidebar is used directly
 
 // ------------------------
 // Show tab and load data
@@ -885,8 +877,10 @@ function showTab(tabId) {
     const activeTab = document.getElementById(tabId);
     if (activeTab) activeTab.classList.add('active');
 
-    // Close mobile menu if open (This is the mechanism now used by ALL nav clicks)
-    closeMenu();
+    // Close mobile menu if open (This is the robust mechanism)
+    if (sidebar.classList.contains('open')) {
+        closeMenu();
+    }
 
     // Load tab-specific data
     switch(tabId) {
@@ -927,15 +921,7 @@ function showTab(tabId) {
 }
 
 // ------------------------
-// Close mobile menu
-// ------------------------
-function closeMenu() {
-    if (menu) menu.classList.remove('open'); // make sure 'open' matches your CSS
-}
-window.closeMenu = closeMenu;
-
-// ------------------------
-// Attach event listeners
+// Attach event listeners (REMOVED redundant closeMenu calls here)
 // ------------------------
 navLinks.forEach(link => {
     link.addEventListener('click', e => {
@@ -948,10 +934,10 @@ navLinks.forEach(link => {
 // ------------------------
 // Optional: Toggle menu button (hamburger)
 // ------------------------
-const menuToggle = document.getElementById('menu-toggle');
-if (menuToggle && menu) {
+const menuToggle = document.querySelector('.menu-toggle');
+if (menuToggle && sidebar) {
     menuToggle.addEventListener('click', () => {
-        menu.classList.toggle('open');
+        toggleMenu(); // Correctly calls the main logic
     });
 }
 
@@ -1593,6 +1579,7 @@ function updateTargetSelect() {
         }));
         label = 'Department/Area:';
     } else if (sessionType === 'Class') {
+        // Store the name as the value along with the ID for the check-in function
         targetList = cachedCourses.map(c => ({
             id: c.id,
             name: c.name,
@@ -1617,8 +1604,9 @@ function updateTargetSelect() {
         attendanceTargetSelect.appendChild(defaultOption);
 
         targetList.forEach(target => {
+            // ** CRITICAL FIX: The value now stores ID|NAME **
             const option = document.createElement('option');
-            option.value = `${target.id}|${target.name}`;
+            option.value = `${target.id}|${target.name}`; 
             option.textContent = target.text;
             attendanceTargetSelect.appendChild(option);
         });
@@ -1644,17 +1632,16 @@ function getDeviceId() {
 window.getDeviceId = getDeviceId;
 
 // ------------------------
-// Geo Check-In
+// Geo Check-In (MODIFIED for Class session targeting)
 // ------------------------
 async function geoCheckIn() {
     const button = document.getElementById('check-in-button');
-    const geoMessage = document.getElementById('geo-message'); // Corrected reference
+    const geoMessage = document.getElementById('geo-message');
 
     if (button) button.disabled = true;
     if (geoMessage) geoMessage.textContent = '⏱️ Initializing check-in...';
 
     try {
-        // Ensure student profile is loaded
         if (!currentUserProfile) await loadProfile(currentUserId);
         const studentProfile = currentUserProfile;
         if (!studentProfile) {
@@ -1673,7 +1660,9 @@ async function geoCheckIn() {
             return;
         }
 
+        // TargetSelect format is now ID|NAME
         const [targetId, targetName] = targetSelect.split('|');
+
         if (!targetId || !targetName) {
             if (geoMessage) geoMessage.textContent = 'Error: Invalid target selected.';
             return;
@@ -1691,7 +1680,7 @@ async function geoCheckIn() {
             );
         });
 
-        // Reverse-geocode for friendly name if missing
+        // Reverse-geocode for friendly name
         if (!location.friendly) {
             try {
                 const res = await fetch(`${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${location.lat}&lon=${location.lon}&format=json`);
@@ -1707,18 +1696,19 @@ async function geoCheckIn() {
             }
         }
 
-        // Find the target entry in cached arrays
+        // Find the target entry to get coordinates
         let targetEntry = sessionType === 'Clinical'
             ? cachedClinicalAreas.find(c => c.id === targetId)
             : cachedCourses.find(c => c.id === targetId);
-
+            
+        // 🐛 Added a check for targetEntry here as well
         if (!targetEntry || (sessionType === 'Clinical' && (targetEntry.latitude === null || targetEntry.longitude === null))) {
             if (geoMessage) geoMessage.textContent = 'Error: Target location coordinates not found.';
             return;
         }
 
-        const dbTargetId = targetEntry.id; // Use UUID
-        const selectedCourseId = sessionType === 'Class' ? targetEntry.id : null;
+        const dbTargetId = targetEntry.id; 
+        const selectedCourseId = sessionType === 'Class' ? targetEntry.id : null; // Use course ID for class, null for clinical
 
         // Haversine distance calculation
         const R = 6371000; // Earth radius in meters
@@ -1738,7 +1728,7 @@ async function geoCheckIn() {
             p_check_in_time: checkInTime,
             p_session_type: sessionType === 'Clinical' ? 'Clinical' : 'Class',
             p_target_id: dbTargetId,
-            p_target_name: targetName,
+            p_target_name: targetName, // ✅ Use the retrieved target name (Course Name for Class)
             p_latitude: location.lat,
             p_longitude: location.lon,
             p_accuracy_m: location.acc,
@@ -1755,7 +1745,6 @@ async function geoCheckIn() {
             console.error('Check-in failed:', error);
             if (geoMessage) geoMessage.textContent = `Check-in failed: ${error.message}`;
         } else {
-            // Updated success message to only show time and friendly name (excluding distance/accuracy)
             if (geoMessage) geoMessage.innerHTML = `✅ Check-in successful at ${new Date(checkInTime).toLocaleTimeString()} near <strong>${location.friendly}</strong>. Verification: ${isVerified ? 'SUCCESS' : 'PENDING'}.`;
 
             if (typeof loadGeoAttendanceHistory === 'function') {
@@ -1771,6 +1760,8 @@ async function geoCheckIn() {
     }
 }
 
+// Attach to global scope for button onclick
+window.geoCheckIn = geoCheckIn;
 
 // *************************************************************************
 // *** 6. SUPABASE DATA LOADING FUNCTIONS (Courses, Exams, Resources) ***
@@ -1796,7 +1787,8 @@ async function loadCourses() {
         return;
     }
 
-    .is.null,block.eq.General`;
+    try {
+        const blockFilter = `block.eq.${block},block.is.null,block.eq.General`;
 
         const { data: courses, error } = await sb
             .from('courses')
