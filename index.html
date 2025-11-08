@@ -1390,38 +1390,41 @@ async function loadClinicalTargets() {
             .or(blockTerm ? `block.ilike.${blockTerm},block.is.null` : 'block.is.null');
         if (areaError) throw areaError;
 
-        // Load textual clinical names including coordinates
+        // Load textual clinical names including UUID and coordinates
         let { data: nameData, error: nameError } = await sb
             .from('clinical_names')
-            .select('id, clinical_area_name, latitude, longitude, program, intake_year, block_term')
+            .select('id, uuid, clinical_area_name, latitude, longitude, program, intake_year, block_term')
             .ilike('program', program)
             .ilike('intake_year', intakeYear)
             .or(blockTerm ? `block_term.ilike.${blockTerm},block_term.is.null` : 'block_term.is.null');
         if (nameError) throw nameError;
 
-        // Map textual names to temporary UUIDs but keep coordinates from DB
+        // Map textual names to use actual UUIDs and keep coordinates
         nameData = (nameData || []).map(n => ({
-    id: n.uuid,                 // use actual UUID from DB
-    original_id: n.id,          // keep integer ID if needed
-    name: n.clinical_area_name,
-    latitude: n.latitude,       
-    longitude: n.longitude,     
-    block: n.block_term || null
-}));
+            id: n.uuid,                 // real UUID from DB
+            original_id: n.id,          // integer ID
+            name: n.clinical_area_name, // exact name
+            latitude: n.latitude,       
+            longitude: n.longitude,     
+            block: n.block_term || null
+        }));
 
-
-        // Merge + deduplicate
+        // Merge geo areas and textual names, remove duplicates
         const merged = [...(areaData || []), ...(nameData || [])]
             .filter((v, i, a) => a.findIndex(t => t.name === v.name) === i)
             .sort((a, b) => a.name.localeCompare(b.name));
 
         cachedClinicalAreas = merged;
 
+        // Debug: log the merged list to verify
+        console.table(cachedClinicalAreas);
+
     } catch (error) {
         console.error("Error loading clinical areas:", error);
         cachedClinicalAreas = [];
     }
 }
+
 
 // Loads courses for the 'Class' attendance check-in dropdown.
 async function loadClassTargets() {
