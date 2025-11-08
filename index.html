@@ -539,6 +539,15 @@
                     </div>
                 </div>
             </section>
+            <div id="latest-announcement-card" class="card" style="flex-basis: 300px; border-left-color: var(--color-success); display: none; cursor: pointer;">
+        <h4><span id="announcement-title" style="color: var(--color-primary);">Loading...</span></h4>
+        <p id="announcement-body" style="margin-bottom: 10px;">Loading message body...</p>
+        <div style="font-size: 0.8em; margin-top: 5px; opacity: 0.9;">
+            <span id="announcement-date"></span> | 
+            <span id="announcement-status" style="font-weight: bold;"></span>
+        </div>
+        <button onclick="showTab('messages')" class="profile-button" style="background-color: var(--color-primary); margin-top: 15px;">Go to Messages Tab</button>
+    </div>
 
 
             <section id="profile" class="tab-content">
@@ -996,17 +1005,18 @@ function loadProfilePhoto() {
     const photoUrl = currentUserProfile?.passport_url;
 
     if (passportCard) {
-        passportCard.style.display = photoUrl ? 'block' : 'none';
+        // Hides or shows the "Missing Photo" action card
+        passportCard.style.display = photoUrl ? 'block' : 'none'; 
     }
 
     if (passportImg) {
         // Set the image or fallback
-        passportImg.src = photoUrl || '/default-avatar.png';
+        passportImg.src = photoUrl || 'https://dummyimage.com/150x150/cccccc/000000.png&text=NO+PHOTO';
 
         // If image fails to load (404), switch to fallback
         passportImg.onerror = function() {
             this.onerror = null; // prevent infinite loop
-            this.src = '/default-avatar.png';
+            this.src = 'https://dummyimage.com/150x150/cccccc/000000.png&text=NO+PHOTO';
         };
     }
 }
@@ -1043,7 +1053,7 @@ async function loadWelcomeDetails() {
 
   // ---------------- Load other messages ----------------
 await loadStudentMessage('student_welcome', 'student-welcome-message'); // keep this if you want the welcome message
-await loadLatestOfficialAnnouncement(); // replaced the old app_settings call for the banner
+await loadLatestOfficialAnnouncement(); // loads the announcement for the TOP BANNER
 }
 /** * Load the latest official announcement from notifications for the dashboard banner. */
 async function loadLatestOfficialAnnouncement() {
@@ -1072,6 +1082,65 @@ async function loadLatestOfficialAnnouncement() {
     console.error('Failed to load official announcement:', err);
     element.textContent = 'Failed to load announcement. Please refresh.';
   }
+}
+
+/**
+ * 📢 NEW: Load the single latest system message/announcement for the Action Required CARD.
+ */
+async function loadSystemMessages(studentProgram) {
+    const card = document.getElementById('latest-announcement-card');
+    const titleElement = document.getElementById('announcement-title');
+    const bodyElement = document.getElementById('announcement-body');
+    const dateElement = document.getElementById('announcement-date');
+    const statusElement = document.getElementById('announcement-status');
+
+    if (!card || !studentProgram) return;
+
+    // Default state: hidden
+    card.style.display = 'none';
+
+    try {
+        // Fetch only the SINGLE latest message relevant to the student's program
+        const { data: messages, error } = await sb
+            .from('system_messages') 
+            .select('date_posted, title, message_body, message_type, status')
+            .eq('recipient_program', studentProgram)
+            .order('date_posted', { ascending: false })
+            .limit(1); // Crucial: Only fetch the latest one
+
+        if (error) throw error;
+        
+        if (messages && messages.length > 0) {
+            const latestMsg = messages[0];
+            const date = new Date(latestMsg.date_posted).toLocaleDateString('en-GB');
+            const statusColor = latestMsg.status === 'UNREAD' ? 'var(--color-alert)' : 'var(--color-success)';
+            const statusText = latestMsg.status === 'UNREAD' ? 'New' : 'Seen';
+            const cardBorderColor = latestMsg.status === 'UNREAD' ? 'var(--color-alert)' : 'var(--color-primary)';
+            
+
+            // 1. Inject content into the card
+            titleElement.textContent = (latestMsg.title || 'New Announcement').toUpperCase();
+            bodyElement.textContent = latestMsg.message_body;
+            dateElement.textContent = date;
+            
+            // Set status text and color
+            statusElement.textContent = `Status: ${statusText}`;
+            statusElement.style.color = statusColor;
+
+            // 2. Ensure the card is visible and styled
+            card.style.display = 'block'; 
+            card.style.borderLeftColor = cardBorderColor;
+
+        } else {
+            // If no announcements, hide the card
+            card.style.display = 'none';
+        }
+
+    } catch (error) {
+        console.error('Error loading system messages for dashboard:', error.message);
+        // If error, hide the card
+        card.style.display = 'none';
+    }
 }
 
 
@@ -1151,33 +1220,36 @@ async function loadDashboardMetrics(userId) {
     const newResourcesCount = cachedResources.filter(r => r.created_at >= oneWeekAgo).length;
     document.getElementById('dashboard-new-resources').textContent = newResourcesCount;
 
-// --- PROFILE COMPLETION CHECK ---
-const passportCard = document.getElementById('action-passport');
-const passportImg = document.getElementById('passport-preview');
+    // --- PROFILE COMPLETION CHECK ---
+    const passportCard = document.getElementById('action-passport');
+    const passportImg = document.getElementById('passport-preview');
 
-let profileIncomplete = !(currentUserProfile && currentUserProfile.passport_url);
+    let profileIncomplete = !(currentUserProfile && currentUserProfile.passport_url);
 
-// Show/hide the card
-if (passportCard) passportCard.style.display = profileIncomplete ? 'block' : 'none';
+    // Show/hide the card
+    if (passportCard) passportCard.style.display = profileIncomplete ? 'block' : 'none';
 
-// Set the profile photo (or fallback)
-if (passportImg) {
-    if (currentUserProfile && currentUserProfile.passport_url) {
-        // Append timestamp to force reload
-        passportImg.src = currentUserProfile.passport_url + '?t=' + new Date().getTime();
-    } else {
-        passportImg.src = '/default-avatar.png'; // fallback image
+    // Set the profile photo (or fallback)
+    if (passportImg) {
+        if (currentUserProfile && currentUserProfile.passport_url) {
+            // Append timestamp to force reload
+            passportImg.src = currentUserProfile.passport_url + '?t=' + new Date().getTime();
+        } else {
+            passportImg.src = 'https://dummyimage.com/150x150/cccccc/000000.png&text=NO+PHOTO'; // fallback image
+        }
     }
-}
 
-
-
+    // --- NEW: Load System Message Card ---
+    if (currentUserProfile && currentUserProfile.program) {
+        loadSystemMessages(currentUserProfile.program);
+    }
 
     const actionsContainer = document.getElementById('dashboard-actions');
     const actionTitle = document.getElementById('actions-title');
 
 
     if (actionTitle && actionsContainer) {
+        // Count visible children
         const visibleActions = Array.from(actionsContainer.children).filter(child => child.style.display !== 'none').length;
         actionTitle.style.display = visibleActions === 0 ? 'none' : 'block';
     }
@@ -1855,9 +1927,7 @@ function escapeHtml(str) {
 
 /**
  * Student Dashboard: loadExams()
- /**
- * Student Dashboard: loadExams()
- */
+ */
 async function loadExams() {
   const tableBody = document.getElementById('exams-table');
   if (!tableBody) return;
