@@ -1390,22 +1390,22 @@ async function loadClinicalTargets() {
             .or(blockTerm ? `block.ilike.${blockTerm},block.is.null` : 'block.is.null');
         if (areaError) throw areaError;
 
-        // Load textual clinical names
+        // Load textual clinical names including coordinates
         let { data: nameData, error: nameError } = await sb
             .from('clinical_names')
-            .select('id, clinical_area_name, program, intake_year, block_term')
+            .select('id, clinical_area_name, latitude, longitude, program, intake_year, block_term')
             .ilike('program', program)
             .ilike('intake_year', intakeYear)
             .or(blockTerm ? `block_term.ilike.${blockTerm},block_term.is.null` : 'block_term.is.null');
         if (nameError) throw nameError;
 
-        // Map textual names to temporary UUIDs
+        // Map textual names to temporary UUIDs but keep coordinates from DB
         nameData = (nameData || []).map(n => ({
             id: crypto.randomUUID(),        // temporary UUID for frontend selection
-            original_id: n.id,              // preserve original integer ID
+            original_id: n.id,              // preserve original ID
             name: n.clinical_area_name,
-            latitude: null,
-            longitude: null,
+            latitude: n.latitude,           // keep actual DB value
+            longitude: n.longitude,         // keep actual DB value
             block: n.block_term || null
         }));
 
@@ -1421,9 +1421,6 @@ async function loadClinicalTargets() {
         cachedClinicalAreas = [];
     }
 }
-
-
-
 
 // Loads courses for the 'Class' attendance check-in dropdown.
 async function loadClassTargets() {
