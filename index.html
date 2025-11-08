@@ -1365,12 +1365,20 @@ if (uploadButton) {
 // *** 5. ATTENDANCE LOGIC (GeoCheckIn) ***
 // *************************************************************************
 
-// Loads both clinical area locations and named rotations for the student's cohort
-async function loadClinicalTargets() {
-    if (!currentUserProfile || (!currentUserProfile.program && !currentUserProfile.department) || !currentUserProfile.intake_year) {
-        await loadProfile(currentUserId);
-    }
+// Cached data
+let cachedClinicalAreas = [];
+let cachedCourses = [];
 
+// Load student profile if not already loaded
+async function loadProfileIfNeeded() {
+    if (!currentUserProfile) await loadProfile(currentUserId);
+}
+
+// -----------------------------
+// Load Clinical Areas
+// -----------------------------
+async function loadClinicalTargets() {
+    await loadProfileIfNeeded();
     const program = currentUserProfile?.program || currentUserProfile?.department;
     const intakeYear = currentUserProfile?.intake_year;
     const blockTerm = currentUserProfile?.block || null;
@@ -1381,8 +1389,7 @@ async function loadClinicalTargets() {
     }
 
     try {
-        // Load geo-based clinical areas
-        let { data: areaData, error: areaError } = await sb
+        const { data: areaData, error: areaError } = await sb
             .from('clinical_areas')
             .select('id, name, latitude, longitude, block, program, intake_year')
             .ilike('program', program)
@@ -1390,8 +1397,7 @@ async function loadClinicalTargets() {
             .or(blockTerm ? `block.ilike.${blockTerm},block.is.null` : 'block.is.null');
         if (areaError) throw areaError;
 
-        // Load textual clinical names including UUID and coordinates
-        let { data: nameData, error: nameError } = await sb
+        const { data: nameData, error: nameError } = await sb
             .from('clinical_names')
             .select('id, uuid, clinical_area_name, latitude, longitude, program, intake_year, block_term')
             .ilike('program', program)
@@ -1399,47 +1405,39 @@ async function loadClinicalTargets() {
             .or(blockTerm ? `block_term.ilike.${blockTerm},block_term.is.null` : 'block_term.is.null');
         if (nameError) throw nameError;
 
-        // Map textual names to use actual UUIDs and keep coordinates
-        nameData = (nameData || []).map(n => ({
-            id: n.uuid,                 // real UUID from DB
-            original_id: n.id,          // integer ID
-            name: n.clinical_area_name, // exact name
-            latitude: n.latitude,       
-            longitude: n.longitude,     
+        const mappedNames = (nameData || []).map(n => ({
+            id: n.uuid,
+            original_id: n.id,
+            name: n.clinical_area_name,
+            latitude: n.latitude,
+            longitude: n.longitude,
             block: n.block_term || null
         }));
 
-        // Merge geo areas and textual names, remove duplicates
-        const merged = [...(areaData || []), ...(nameData || [])]
+        cachedClinicalAreas = [...(areaData || []), ...mappedNames]
             .filter((v, i, a) => a.findIndex(t => t.name === v.name) === i)
             .sort((a, b) => a.name.localeCompare(b.name));
 
-        cachedClinicalAreas = merged;
-
-        // Debug: log the merged list to verify
         console.table(cachedClinicalAreas);
-
     } catch (error) {
         console.error("Error loading clinical areas:", error);
         cachedClinicalAreas = [];
     }
 }
 
-
-// Loads courses for the 'Class' attendance check-in dropdown.
+// -----------------------------
+// Load Class Courses
+// -----------------------------
 async function loadClassTargets() {
-    if (!currentUserProfile || (!currentUserProfile.program && !currentUserProfile.department) || !currentUserProfile.intake_year) {
-        await loadProfile(currentUserId); 
-    }
-
+    await loadProfileIfNeeded();
     const program = currentUserProfile?.program || currentUserProfile?.department;
-    if (!program || !currentUserProfile.intake_year) {
+    const intakeYear = currentUserProfile?.intake_year;
+    const block = currentUserProfile?.block || null;
+
+    if (!program || !intakeYear) {
         cachedCourses = [];
         return;
     }
-
-    const block = currentUserProfile.block; 
-    const intakeYear = currentUserProfile.intake_year;
 
     try {
         let query = sb
@@ -1448,82 +1446,28 @@ async function loadClassTargets() {
             .eq('program', program)
             .eq('intake_year', intakeYear);
 
-        if (block) {
-            const blockFilter = `block.eq.${block},block.is.null,block.eq.General`;
-            query = query.or(blockFilter);
-        } else {
-            query = query.is('block', null);
-        }
+        if (block) query = query.or(`block.eq.${block},block.is.null,block.eq.General`);
+        else query = query.is('block', null);
 
         const { data, error } = await query.order('name');
         if (error) throw error;
 
-        cachedCourses = data.map(course => ({
-            id: course.id,
-            name: course.name,
-            code: course.code,
-            latitude: course.latitude,
-            longitude: course.longitude
+        cachedCourses = (data || []).map(c => ({
+            id: c.id,
+            name: c.name,
+            code: c.code,
+            latitude: c.latitude,
+            longitude: c.longitude
         }));
-
     } catch (error) {
         console.error("Error loading class targets:", error);
         cachedCourses = [];
     }
 }
 
-// Fetch and display student's geo check-in history.
-async function loadGeoAttendanceHistory(userId) {
-    const tableBody = document.getElementById('geo-attendance-history');
-    if (!tableBody) return;
-    tableBody.innerHTML = '<tr><td colspan="6">Loading geo check-in history...</td></tr>';
-
-    try {
-        const { data: logs, error } = await sb
-            .from('geo_attendance_logs')
-            .select('check_in_time, session_type, target_name, location_friendly_name, accuracy_m, is_verified, latitude, longitude')
-            .eq('student_id', userId)
-            .order('check_in_time', { ascending: false })
-            .limit(100);
-
-        if (error) throw error;
-
-        tableBody.innerHTML = '';
-        if (logs.length === 0) {
-            tableBody.innerHTML = '<tr><td colspan="6">No check-in logs found.</td></tr>';
-            return;
-        }
-
-        logs.forEach(log => {
-            const timeStr = new Date(log.check_in_time).toLocaleString();
-            const verifiedText =
-                  log.is_verified === true ? '✅ Verified' :
-                  log.is_verified === false ? '⏳ Pending Review' :
-                     '⏳ Pending Review';
-
-                 
-            const gpsAndAccuracy = `${log.latitude.toFixed(4)}, ${log.longitude.toFixed(4)} / ${log.accuracy_m ? log.accuracy_m.toFixed(1) : 'N/A'}m`;
-            
-            const row = `
-                <tr>
-                    <td>${timeStr}</td>
-                    <td>${log.session_type}</td>
-                    <td>${log.target_name}</td>
-                    <td>${log.location_friendly_name || 'N/A'}</td>
-                    <td>${gpsAndAccuracy}</td> 
-                    <td>${verifiedText}</td>
-                </tr>
-            `;
-            tableBody.innerHTML += row;
-        });
-
-    } catch (error) {
-        console.error("Failed to load attendance history:", error);
-        tableBody.innerHTML = `<tr><td colspan="6" style="color:#EF4444;">Error loading attendance logs: ${error.message}</td></tr>`;
-    }
-}
-
-// Update attendance target dropdown.
+// -----------------------------
+// Update Target Dropdown
+// -----------------------------
 function updateTargetSelect() {
     if (!sessionTypeSelect || !attendanceTargetSelect || !geoMessage) return;
 
@@ -1553,11 +1497,12 @@ function updateTargetSelect() {
     const targetLabel = document.getElementById('target-label');
     if (targetLabel) targetLabel.textContent = label;
 
-    if (targetList.length === 0) {
-        const message = sessionType === 'Class'
-            ? 'No active courses found for your block.'
-            : 'No clinical areas assigned to your block.';
-        attendanceTargetSelect.innerHTML = `<option value="">${message}</option>`;
+    if (!targetList.length) {
+        attendanceTargetSelect.innerHTML = `<option value="">${
+            sessionType === 'Class'
+                ? 'No active courses found for your block.'
+                : 'No clinical areas assigned to your block.'
+        }</option>`;
     } else {
         const defaultOption = document.createElement('option');
         defaultOption.value = '';
@@ -1570,14 +1515,16 @@ function updateTargetSelect() {
             option.textContent = target.text;
             attendanceTargetSelect.appendChild(option);
         });
-        
+
         attendanceTargetSelect.selectedIndex = 0;
     }
 
     geoMessage.innerHTML = `Please select a specific <strong>${label.replace(':', '')}</strong> to check in.`;
 }
 
-// Persistent device ID.
+// -----------------------------
+// Device ID
+// -----------------------------
 function getDeviceId() {
     let deviceId = localStorage.getItem('device_id');
     if (!deviceId) {
@@ -1587,192 +1534,120 @@ function getDeviceId() {
     return deviceId;
 }
 
+// -----------------------------
+// Helper: distance between coordinates
+// -----------------------------
+function getDistanceMeters(lat1, lon1, lat2, lon2) {
+    const R = 6371000;
+    const toRad = x => x * Math.PI / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}
 
-
-async function geoCheckIn() {
-    const button = document.getElementById('check-in-button');
-
-    try {
-        if (!currentUserProfile) await loadProfile(currentUserId);
-        const studentProfile = currentUserProfile;
-
-        if (!studentProfile) {
-            geoMessage.textContent = 'Error: Student profile not loaded.';
-            return;
-        }
-
-        const studentProgram = studentProfile?.program || studentProfile?.department || null;
-
-        const deviceId = getDeviceId();
-        const sessionType = sessionTypeSelect.value;
-        const targetSelect = attendanceTargetSelect.value;
-        const checkInTime = new Date().toISOString();
-
-        if (!sessionType || !targetSelect || targetSelect === '') {
-            geoMessage.textContent = 'Error: Select session type and target.';
-            return;
-        }
-
-        const [targetId, targetName] = targetSelect.split('|');
-        if (!targetId || !targetName) {
-            geoMessage.textContent = 'Error: Invalid target selected.';
-            return;
-        }
-
-        if (button) button.disabled = true;
-        geoMessage.textContent = '⏱️ Requesting device location... (Allow up to 15 seconds for GPS lock)';
-
-        const getLocation = () => new Promise(resolve => {
-            if (!navigator.geolocation) {
-                return resolve({ lat: FALLBACK_LAT, lon: FALLBACK_LON, acc: FALLBACK_ACCURACY, friendly: 'Fallback Location: GPS Unavailable' });
-            }
-            navigator.geolocation.getCurrentPosition(
-                pos => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude, acc: pos.coords.accuracy, friendly: null }),
-                () => resolve({ lat: FALLBACK_LAT, lon: FALLBACK_LON, acc: FALLBACK_ACCURACY, friendly: 'Fallback Location: GPS Permission Denied/Timeout' }),
-                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-            );
-        });
-
-        const location = await getLocation();
-
-        // Device sharing check
-        const { data: existing, error: deviceError } = await sb
-            .from('geo_attendance_logs')
-            .select('student_id')
-            .eq('device_id', deviceId)
-            .neq('student_id', currentUserId)
-            .limit(1);
-        if (deviceError) throw deviceError;
-        if (existing?.length > 0) {
-            geoMessage.textContent = '⛔ Check-in blocked: Device is registered to another student.';
-            return;
-        }
-
-        let isVerified = false;
-        let distanceToTarget = null;
-
-        // Reverse geocoding fallback
-        if (!location.friendly) {
-            try {
-                const res = await fetch(`${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${location.lat}&lon=${location.lon}&format=json`);
-                if (res.ok) {
-                    const geoData = await res.json();
-                    location.friendly = geoData?.display_name || `Lat:${location.lat.toFixed(4)}, Lon:${location.lon.toFixed(4)}`;
-                } else {
-                    location.friendly = `Lat:${location.lat.toFixed(4)}, Lon:${location.lon.toFixed(4)} (Geo-API Failed)`;
-                }
-            } catch {
-                location.friendly = `Lat:${location.lat.toFixed(4)}, Lon:${location.lon.toFixed(4)} (Geo-API Error)`;
-            }
-        }
-
-        // Resolve DB-safe target ID
-        let targetEntry;
-        if (sessionType === 'Clinical') {
-            targetEntry = cachedClinicalAreas.find(c => c.id === targetId);
-        } else {
-            targetEntry = cachedCourses.find(c => c.id === targetId);
-        }
-
-        if (!targetEntry || (sessionType === 'Clinical' && (targetEntry.latitude === null || targetEntry.longitude === null))) {
-            geoMessage.textContent = 'Error: Target location coordinates not found.';
-            return;
-        }
-
-        const dbTargetId = targetEntry.original_id ?? targetEntry.id;
-        const selectedCourseId = targetEntry.course_id || null;
-
-        const getDistanceMeters = (lat1, lon1, lat2, lon2) => {
-            const R = 6371000;
-            const toRad = x => x * Math.PI / 180;
-            const dLat = toRad(lat2 - lat1);
-            const dLon = toRad(lon2 - lon1);
-            const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-            return R * c;
-        };
-
-        distanceToTarget = getDistanceMeters(location.lat, location.lon, targetEntry.latitude, targetEntry.longitude);
-
-        if (distanceToTarget <= MAX_DISTANCE_RADIUS) {
-            isVerified = true;
-            geoMessage.textContent = `✅ Within check-in area (${distanceToTarget.toFixed(1)} m). Verified.`;
-        } else {
-            isVerified = false;
-            geoMessage.textContent = `❌ ${distanceToTarget.toFixed(1)} m away (Max ${MAX_DISTANCE_RADIUS} m). Pending review.`;
-        }
-
-     // Safe function to close menu
+// -----------------------------
+// Safe menu close
+// -----------------------------
 function closeMenu() {
     const menu = document.getElementById('menu');
     if (menu) menu.classList.remove('open');
 }
 
-// Check-in handler
+// -----------------------------
+// GeoCheckIn
+// -----------------------------
 async function geoCheckIn() {
-    const button = document.getElementById('checkInButton');
+    const button = document.getElementById('check-in-button');
     const geoMessage = document.getElementById('geoMessage');
+    if (!currentUserProfile) await loadProfile(currentUserId);
+
+    const studentProfile = currentUserProfile;
+    if (!studentProfile) {
+        geoMessage.textContent = 'Error: Student profile not loaded.';
+        return;
+    }
+
+    const sessionType = sessionTypeSelect.value;
+    const targetSelect = attendanceTargetSelect.value;
+    const deviceId = getDeviceId();
+    const checkInTime = new Date().toISOString();
+
+    if (!sessionType || !targetSelect || targetSelect === '') {
+        geoMessage.textContent = 'Error: Select session type and target.';
+        return;
+    }
+
+    const [targetId, targetName] = targetSelect.split('|');
+    if (!targetId || !targetName) {
+        geoMessage.textContent = 'Error: Invalid target selected.';
+        return;
+    }
 
     if (button) button.disabled = true;
+    geoMessage.textContent = '⏱️ Requesting device location...';
 
-    try {
-        // Determine target ID and name
-        let dbTargetId;
-        let targetNameToUse;
+    // Get location
+    const location = await new Promise(resolve => {
+        if (!navigator.geolocation) resolve({ lat: FALLBACK_LAT, lon: FALLBACK_LON, acc: FALLBACK_ACCURACY, friendly: 'GPS unavailable' });
+        navigator.geolocation.getCurrentPosition(
+            pos => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude, acc: pos.coords.accuracy, friendly: null }),
+            () => resolve({ lat: FALLBACK_LAT, lon: FALLBACK_LON, acc: FALLBACK_ACCURACY, friendly: 'Fallback Location' }),
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        );
+    });
 
-        if (sessionType === 'Clinical') {
-            const selectedArea = cachedClinicalAreas.find(a => a.name === targetName);
-            if (!selectedArea) {
-                geoMessage.textContent = "🚫 Clinical area not found";
-                return;
-            }
-            dbTargetId = selectedArea.id;           // ✅ UUID
-            targetNameToUse = selectedArea.name;
-        } else {
-            dbTargetId = selectedCourseId;          // courses already UUID
-            targetNameToUse = targetName;
-        }
+    // Resolve target
+    const targetEntry = sessionType === 'Clinical'
+        ? cachedClinicalAreas.find(c => c.id === targetId)
+        : cachedCourses.find(c => c.id === targetId);
 
-        // RPC call
-        const { error } = await sb.rpc('check_in_and_defer_fk', {
-            p_student_id: currentUserId,
-            p_check_in_time: checkInTime,
-            p_session_type: sessionType === 'Clinical' ? 'Clinical' : 'Class',
-            p_target_id: dbTargetId,
-            p_target_name: targetNameToUse,
-            p_latitude: location.lat,
-            p_longitude: location.lon,
-            p_accuracy_m: location.acc,
-            p_location_friendly_name: location.friendly,
-            p_program: studentProgram,
-            p_block: studentProfile.block,
-            p_intake_year: studentProfile.intake_year,
-            p_device_id: deviceId,
-            p_is_verified: isVerified,
-            p_course_id: sessionType === 'Clinical' ? null : selectedCourseId
-        });
-
-        if (error) {
-            console.error('Check-in failed:', error);
-            geoMessage.textContent = `Check-in failed: ${error.message}`;
-        } else {
-            geoMessage.innerHTML = `✅ Check-in successful at ${new Date(checkInTime).toLocaleTimeString()} near <strong>${location.friendly}</strong>.<br>
-            Distance: ${(distanceToTarget || 0).toFixed(1)} m. Accuracy: ${location.acc.toFixed(1)} m.`;
-            loadGeoAttendanceHistory(currentUserId);
-            loadDashboardMetrics(currentUserId);
-        }
-
-    } catch (e) {
-        console.error('GeoCheckIn error:', e);
-        geoMessage.textContent = `🚫 Critical error: ${e.message}`;
-    } finally {
+    if (!targetEntry || (sessionType === 'Clinical' && (targetEntry.latitude === null || targetEntry.longitude === null))) {
+        geoMessage.textContent = 'Error: Target location coordinates not found.';
         if (button) button.disabled = false;
+        return;
     }
+
+    const dbTargetId = targetEntry.id; // UUID
+    const selectedCourseId = targetEntry.course_id || null;
+    const distanceToTarget = getDistanceMeters(location.lat, location.lon, targetEntry.latitude, targetEntry.longitude);
+    const isVerified = distanceToTarget <= MAX_DISTANCE_RADIUS;
+
+    if (isVerified) geoMessage.textContent = `✅ Within check-in area (${distanceToTarget.toFixed(1)} m). Verified.`;
+    else geoMessage.textContent = `❌ ${distanceToTarget.toFixed(1)} m away. Pending review.`;
+
+    // RPC call
+    const { error } = await sb.rpc('check_in_and_defer_fk', {
+        p_student_id: currentUserId,
+        p_check_in_time: checkInTime,
+        p_session_type: sessionType,
+        p_target_id: dbTargetId,
+        p_target_name: targetName,
+        p_latitude: location.lat,
+        p_longitude: location.lon,
+        p_accuracy_m: location.acc,
+        p_location_friendly_name: location.friendly,
+        p_program: studentProfile.program,
+        p_block: studentProfile.block,
+        p_intake_year: studentProfile.intake_year,
+        p_device_id: deviceId,
+        p_is_verified: isVerified,
+        p_course_id: sessionType === 'Clinical' ? null : selectedCourseId
+    });
+
+    if (error) {
+        geoMessage.textContent = `Check-in failed: ${error.message}`;
+        console.error('Check-in failed:', error);
+    } else {
+        geoMessage.innerHTML = `✅ Check-in successful at ${new Date(checkInTime).toLocaleTimeString()} near <strong>${location.friendly}</strong>.<br>
+        Distance: ${distanceToTarget.toFixed(1)} m. Accuracy: ${location.acc.toFixed(1)} m.`;
+        loadGeoAttendanceHistory(currentUserId);
+        loadDashboardMetrics(currentUserId);
+    }
+
+    if (button) button.disabled = false;
 }
-
-
-
-
 
 // *************************************************************************
 // *** 6. SUPABASE DATA LOADING FUNCTIONS (Courses, Exams, Resources) ***
