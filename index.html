@@ -857,49 +857,96 @@
 // *************************************************************************
 // *** 2. UI AND NAVIGATION LOGIC ***
 // *************************************************************************
+// ------------------------
+// Cached DOM elements
+// ------------------------
 const navLinks = document.querySelectorAll('.nav a');
 const tabs = document.querySelectorAll('.tab-content');
+const menu = document.getElementById('menu'); // Your mobile menu container
 
-
+// ------------------------
+// Show tab and load data
+// ------------------------
 function showTab(tabId) {
+    // Highlight active link
     navLinks.forEach(l => l.classList.remove('active'));
     const activeLink = document.querySelector(`.nav a[data-tab="${tabId}"]`);
     if (activeLink) activeLink.classList.add('active');
 
-
+    // Show active tab content
     tabs.forEach(tab => tab.classList.remove('active'));
     const activeTab = document.getElementById(tabId);
     if (activeTab) activeTab.classList.add('active');
 
+    // Close mobile menu if open
+    closeMenu();
 
-    // Load data specific to the tab being activated
-    if (tabId === 'profile' && currentUserId) loadProfile(currentUserId);
-    if (tabId === 'attendance' && currentUserId) {
-        loadGeoAttendanceHistory(currentUserId);
-        updateTargetSelect();
+    // Load tab-specific data
+    switch(tabId) {
+        case 'profile':
+            if (currentUserId) loadProfile(currentUserId);
+            break;
+        case 'attendance':
+            if (currentUserId) {
+                loadGeoAttendanceHistory(currentUserId);
+                updateTargetSelect();
+            }
+            break;
+        case 'dashboard':
+            if (currentUserId) {
+                loadWelcomeDetails();
+                loadDashboardMetrics(currentUserId);
+            }
+            break;
+        case 'courses':
+            if (currentUserId) loadCourses();
+            break;
+        case 'resources':
+            if (currentUserId) loadResources();
+            break;
+        case 'cats':
+            if (currentUserId) loadExams();
+            break;
+        case 'messages':
+            if (currentUserId) loadStudentMessagesAndAnnouncements();
+            break;
+        case 'calendar':
+            if (currentUserId) loadAcademicCalendar();
+            break;
     }
-    if (tabId === 'dashboard' && currentUserId) {
-        loadWelcomeDetails();
-        loadDashboardMetrics(currentUserId);
-    }
-    if (tabId === 'courses' && currentUserId) loadCourses(); 
-    if (tabId === 'resources' && currentUserId) loadResources();
-    if (tabId === 'cats' && currentUserId) loadExams();
-    if (tabId === 'messages' && currentUserId) loadStudentMessagesAndAnnouncements();
-    if (tabId === 'calendar' && currentUserId) loadAcademicCalendar();
 
-    // Always refresh latest official announcement for the dashboard
+    // Always refresh latest announcement
     if (currentUserId) loadLatestOfficialAnnouncement();
 }
 
+// ------------------------
+// Close mobile menu
+// ------------------------
+function closeMenu() {
+    if (menu) menu.classList.remove('open'); // make sure 'open' matches your CSS
+}
+window.closeMenu = closeMenu;
 
+// ------------------------
+// Attach event listeners
+// ------------------------
 navLinks.forEach(link => {
     link.addEventListener('click', e => {
         e.preventDefault();
-        showTab(link.dataset.tab);
-        closeMenu(); // Close the mobile menu on item click
+        const tabId = link.dataset.tab;
+        if (tabId) showTab(tabId);
     });
 });
+
+// ------------------------
+// Optional: Toggle menu button (hamburger)
+// ------------------------
+const menuToggle = document.getElementById('menu-toggle');
+if (menuToggle && menu) {
+    menuToggle.addEventListener('click', () => {
+        menu.classList.toggle('open');
+    });
+}
 
 
 async function logout() {
