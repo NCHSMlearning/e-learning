@@ -946,34 +946,37 @@ async function loadWelcomeDetails() {
 }
 
 /**
- * Load a message from app_settings safely.
+ * Load the latest official announcement from notifications for the dashboard banner.
  */
-async function loadStudentMessage(key, elementId) {
-  const element = document.getElementById(elementId);
+async function loadLatestOfficialAnnouncement() {
+  const element = document.getElementById('student-announcement');
   if (!element) return;
 
-  element.textContent = 'Loading...';
+  element.textContent = 'Loading latest announcement...';
 
   try {
     const { data, error } = await sb
-      .from('app_settings')
-      .select('value')
-      .eq('key', key)
-      .maybeSingle();
+      .from('notifications')
+      .select('*')
+      .eq('subject', 'Official Announcement')
+      .order('created_at', { ascending: false })
+      .limit(1); // Get only the newest announcement
 
     if (error) throw error;
 
-    if (data && data.value) {
-      element.innerHTML = data.value;
+    if (data && data.length > 0) {
+      element.innerHTML = `
+        <strong>📣 Official Announcement:</strong>
+        <p>${data[0].message}</p>
+      `;
     } else {
-      element.textContent = 'No message available.';
+      element.textContent = 'No official announcements at this time.';
     }
   } catch (err) {
-    console.error(`❌ Failed to load ${key}:`, err);
-    element.textContent = 'Failed to load message. Please refresh.';
+    console.error('Failed to load official announcement:', err);
+    element.textContent = 'Failed to load announcement. Please refresh.';
   }
 }
-
 
 /**
  * Calculates and updates all dashboard metrics.
