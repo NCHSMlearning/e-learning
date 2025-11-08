@@ -912,16 +912,35 @@ async function logout() {
 
 
 /**
- * Load the student header, welcome message, and announcement.
+ * Load the student header, welcome message, and announcement with dynamic greeting and clock.
  */
 async function loadWelcomeDetails() {
   const studentName = currentUserProfile?.full_name || 'Student';
   const welcomeHeader = document.getElementById('welcome-header');
 
-  if (welcomeHeader) {
-    welcomeHeader.textContent = `Welcome back, ${studentName}!`;
+  function getGreeting(hour) {
+    if (hour >= 5 && hour < 12) return "Good Morning";
+    if (hour >= 12 && hour < 17) return "Good Afternoon";
+    if (hour >= 17 && hour < 21) return "Good Evening";
+    return "Good Night";
   }
 
+  function updateHeader() {
+    const now = new Date();
+    const hour = now.getHours();
+    const minute = now.getMinutes().toString().padStart(2, '0');
+    const second = now.getSeconds().toString().padStart(2, '0');
+    
+    if (welcomeHeader) {
+      welcomeHeader.textContent = `${getGreeting(hour)}, ${studentName} — ${hour.toString().padStart(2,'0')}:${minute}:${second}`;
+    }
+  }
+
+  // Initialize and start the live clock
+  updateHeader();
+  setInterval(updateHeader, 1000);
+
+  // Load the other messages
   await loadStudentMessage('student_welcome', 'student-welcome-message');
   await loadStudentMessage('welcome_message', 'student-announcement');
 }
