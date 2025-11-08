@@ -1597,35 +1597,37 @@ async function geoCheckIn() {
     const geoMessage = document.getElementById('geoMessage');
 
     if (button) button.disabled = true;
+    if (geoMessage) geoMessage.textContent = '⏱️ Initializing check-in...';
 
     try {
+        // Ensure profile is loaded
         if (!currentUserProfile) await loadProfile(currentUserId);
         const studentProfile = currentUserProfile;
         if (!studentProfile) {
-            geoMessage.textContent = 'Error: Student profile not loaded.';
+            if (geoMessage) geoMessage.textContent = 'Error: Student profile not loaded.';
             return;
         }
 
         const studentProgram = studentProfile?.program || studentProfile?.department || null;
         const deviceId = getDeviceId();
-        const sessionType = sessionTypeSelect.value;
-        const targetSelect = attendanceTargetSelect.value;
+        const sessionType = sessionTypeSelect?.value;
+        const targetSelect = attendanceTargetSelect?.value;
         const checkInTime = new Date().toISOString();
 
         if (!sessionType || !targetSelect || targetSelect === '') {
-            geoMessage.textContent = 'Error: Select session type and target.';
+            if (geoMessage) geoMessage.textContent = 'Error: Select session type and target.';
             return;
         }
 
         const [targetId, targetName] = targetSelect.split('|');
-
         if (!targetId || !targetName) {
-            geoMessage.textContent = 'Error: Invalid target selected.';
+            if (geoMessage) geoMessage.textContent = 'Error: Invalid target selected.';
             return;
         }
 
-        // Get location
-        geoMessage.textContent = '⏱️ Requesting device location... (Allow up to 15 seconds for GPS lock)';
+        if (geoMessage) geoMessage.textContent = '⏱️ Requesting device location... (Allow up to 15 seconds for GPS lock)';
+
+        // Get geolocation
         const location = await new Promise(resolve => {
             if (!navigator.geolocation) return resolve({ lat: FALLBACK_LAT, lon: FALLBACK_LON, acc: FALLBACK_ACCURACY, friendly: 'GPS unavailable' });
             navigator.geolocation.getCurrentPosition(
@@ -1635,27 +1637,35 @@ async function geoCheckIn() {
             );
         });
 
-        // Resolve DB-safe target entry
-        let targetEntry = sessionType === 'Clinical'
-            ? cachedClinicalAreas.find(c => c.id === targetId)
-            : cachedCourses.find(c => c.id === targetId);
+        // Find target entry
+        let targetEntry = null;
+        if (sessionType === 'Clinical') {
+            targetEntry = cachedClinicalAreas.find(c => c.id === targetId);
+        } else {
+            targetEntry = cachedCourses.find(c => c.id === targetId);
+        }
 
         if (!targetEntry || (sessionType === 'Clinical' && (targetEntry.latitude === null || targetEntry.longitude === null))) {
-            geoMessage.textContent = 'Error: Target location coordinates not found.';
+            if (geoMessage) geoMessage.textContent = 'Error: Target location coordinates not found.';
             return;
         }
 
-        const dbTargetId = targetEntry.id; // UUID
+        const dbTargetId = targetEntry.id; // Use UUID
         const selectedCourseId = sessionType === 'Class' ? targetEntry.id : null;
 
-        // Distance calculation
-        const R = 6371000;
+        // Haversine distance calculation
+        const R = 6371000; // Earth radius in meters
         const toRad = x => x * Math.PI / 180;
-        const distanceToTarget = Math.sqrt(Math.sin(toRad(location.lat - targetEntry.latitude)/2)**2 + Math.cos(toRad(location.lat)) * Math.cos(toRad(targetEntry.latitude)) * Math.sin(toRad(location.lon - targetEntry.longitude)/2)**2);
-        const distanceMeters = 2 * R * Math.atan2(Math.sqrt(distanceToTarget), Math.sqrt(1 - distanceToTarget));
+        const dLat = toRad(location.lat - targetEntry.latitude);
+        const dLon = toRad(location.lon - targetEntry.longitude);
+        const lat1 = toRad(location.lat);
+        const lat2 = toRad(targetEntry.latitude);
+        const a = Math.sin(dLat/2)**2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon/2)**2;
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        const distanceMeters = R * c;
         const isVerified = distanceMeters <= MAX_DISTANCE_RADIUS;
 
-        // RPC check-in
+        // RPC call to insert check-in
         const { error } = await sb.rpc('check_in_and_defer_fk', {
             p_student_id: currentUserId,
             p_check_in_time: checkInTime,
@@ -1676,20 +1686,25 @@ async function geoCheckIn() {
 
         if (error) {
             console.error('Check-in failed:', error);
-            geoMessage.textContent = `Check-in failed: ${error.message}`;
+            if (geoMessage) geoMessage.textContent = `Check-in failed: ${error.message}`;
         } else {
-            geoMessage.innerHTML = `✅ Check-in successful at ${new Date(checkInTime).toLocaleTimeString()} near <strong>${location.friendly}</strong>.<br>
+            if (geoMessage) geoMessage.innerHTML = `✅ Check-in successful at ${new Date(checkInTime).toLocaleTimeString()} near <strong>${location.friendly}</strong>.<br>
                 Distance: ${distanceMeters.toFixed(1)} m. Accuracy: ${location.acc.toFixed(1)} m.`;
-            loadGeoAttendanceHistory(currentUserId);
+
+            if (typeof loadGeoAttendanceHistory === 'function') {
+                loadGeoAttendanceHistory(currentUserId);
+            }
         }
 
     } catch (e) {
         console.error('GeoCheckIn error:', e);
-        geoMessage.textContent = `🚫 Critical error: ${e.message}`;
+        if (geoMessage) geoMessage.textContent = `🚫 Critical error: ${e.message}`;
     } finally {
         if (button) button.disabled = false;
     }
 }
+
+// Attach to global scope for button onclick
 window.geoCheckIn = geoCheckIn;
 
 // ------------------------
