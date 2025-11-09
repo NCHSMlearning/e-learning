@@ -2165,24 +2165,31 @@ document.getElementById('edit-exam-form').addEventListener('submit', saveEditedE
 
 // Open Grade Modal
 async function openGradeModal(examId, examName) {
-  // 1. Fetch only students assigned to this exam
+  // 1. Fetch assigned students first
+  const { data: assigned, error: assignError } = await sb
+    .from('exam_students')
+    .select('student_id')
+    .eq('exam_id', examId);
+
+  if (assignError) return showFeedback('Error fetching assigned students', 'error');
+
+  const assignedIds = assigned.map(s => s.student_id);
+
+  // 2. Fetch only those students
   const { data: students, error: studentError } = await sb
     .from('consolidated_user_profiles_table')
     .select('user_id, full_name')
-    .in('user_id',
-        sb.from('exam_students')
-          .select('student_id')
-          .eq('exam_id', examId)
-    )
+    .in('user_id', assignedIds)
     .order('full_name');
 
   if (studentError) return showFeedback('Error loading students for grading.', 'error');
 
-  // 2. Fetch existing grades for these students and this exam
+  // 3. Fetch existing grades for these students and this exam
   const { data: existingGrades } = await sb
     .from('exam_grades')
     .select('*')
     .eq('exam_id', examId);
+
 
   // 3. Build modal HTML
   const modalHtml = `
