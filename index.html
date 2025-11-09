@@ -1479,7 +1479,7 @@ if (uploadButton) {
 }
 
 // *************************************************************************
-// *** 5. ATTENDANCE LOGIC (GeoCheckIn) ***
+// *** 5. ATTENDANCE LOGIC (GeoCheckIn) - 🏆 CORRECTED FOR COURSE NAME ***
 // *************************************************************************
 
 // Cached data (already declared elsewhere)
@@ -1681,7 +1681,7 @@ function updateTargetSelect() {
         attendanceTargetSelect.appendChild(defaultOption);
 
         targetList.forEach(target => {
-            // ** CRITICAL FIX: The value now stores ID|NAME **
+            // ** CRITICAL: The dropdown value stores ID|NAME (Name is the Course Name) **
             const option = document.createElement('option');
             option.value = `${target.id}|${target.name}`; 
             option.textContent = target.text;
@@ -1779,22 +1779,29 @@ async function geoCheckIn() {
             : cachedCourses.find(c => c.id === targetId);
             
         // 🐛 Added a check for targetEntry here as well
-        if (!targetEntry || (sessionType === 'Clinical' && (targetEntry.latitude === null || targetEntry.longitude === null))) {
+        if (!targetEntry || (targetEntry.latitude === null || targetEntry.longitude === null)) {
             if (geoMessage) geoMessage.textContent = 'Error: Target location coordinates not found.';
             return;
         }
 
-        const dbTargetId = targetEntry.id; 
-        const selectedCourseId = sessionType === 'Class' ? targetEntry.id : null; 
+        let dbTargetId = targetEntry.id;
+        let targetNameToLog = targetNameFromDropdown; // Default: Use the name from the dropdown value
+        let selectedCourseId = null;
 
-        // 🎯 CRITICAL FIX: Determine the display name to save in the log
-        let targetNameToLog = targetNameFromDropdown; 
-
+        // 🎯 CRITICAL FIX: Explicitly set name and ID for logging based on type
         if (sessionType === 'Class') {
-            // For class sessions, override the name with the actual Course Name from cache
-            // This is necessary because the dropdown value might contain a generic location name.
+            // For class, the target name MUST be the course name for the report, 
+            // and the course_id must also be set.
             targetNameToLog = targetEntry.name; 
+            selectedCourseId = targetEntry.id;
+            // dbTargetId remains the course ID
+        } else if (sessionType === 'Clinical') {
+            // For clinical, the target name is the clinical area name, 
+            // and course_id is null.
+            targetNameToLog = targetEntry.name;
+            dbTargetId = targetEntry.id; // Use the location/area ID
         }
+
 
         // Haversine distance calculation
         const R = 6371000; // Earth radius in meters
@@ -1813,8 +1820,8 @@ async function geoCheckIn() {
             p_student_id: currentUserId,
             p_check_in_time: checkInTime,
             p_session_type: sessionType === 'Clinical' ? 'Clinical' : 'Class',
-            p_target_id: dbTargetId,
-            p_target_name: targetNameToLog, // ✅ Using the corrected variable here!
+            p_target_id: dbTargetId,                 // <--- Target ID (Course ID or Location ID)
+            p_target_name: targetNameToLog,          // <--- Corrected name (Course Name or Location Name)
             p_latitude: location.lat,
             p_longitude: location.lon,
             p_accuracy_m: location.acc,
@@ -1824,7 +1831,7 @@ async function geoCheckIn() {
             p_intake_year: studentProfile.intake_year,
             p_device_id: deviceId,
             p_is_verified: isVerified,
-            p_course_id: selectedCourseId
+            p_course_id: selectedCourseId            // <--- Course ID (Null for Clinical)
         });
 
         if (error) {
