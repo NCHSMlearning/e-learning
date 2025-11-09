@@ -355,7 +355,6 @@ async function loadDashboardData() {
 
     // Data Integrity Placeholder 
     $('dataIntegrityScore').textContent = '98.5%';
-
     loadStudentWelcomeMessage();
 }
 
@@ -604,8 +603,8 @@ async function handleMassPromotion(e) {
 }
 
 /**
- * Fetches all user profiles (Students, Lecturers, Admins) 
- * and renders them to the Users Management table. (COMPLETED)
+ * Fetches all user profiles (Students, Lecturers, Admins)
+ * and renders them to the Users Management table.
  */
 async function loadAllUsers() {
     const tbody = $('users-table');
@@ -614,43 +613,46 @@ async function loadAllUsers() {
     if (!tbody) return;
     if (userSearchInput) userSearchInput.value = '';
 
-    tbody.innerHTML = '<tr><td colspan="8">Loading all user profiles...</td></tr>';
-    
+    tbody.innerHTML = '<tr><td colspan="7">Loading all user profiles...</td></tr>';
+
     const { data: users, error } = await fetchData(USER_PROFILE_TABLE, '*', {}, 'full_name', true);
 
     if (error) {
-        tbody.innerHTML = `<tr><td colspan="8">Error loading users: ${error.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7">Error loading users: ${error.message}</td></tr>`;
         await logAudit('USER_FETCH_ALL', 'Failed to load all user profiles.', null, 'FAILURE');
         return;
     }
 
     if (!users || users.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8">No user accounts found.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7">No user accounts found.</td></tr>';
         return;
     }
 
     tbody.innerHTML = '';
-    
+
     users.forEach(user => {
         const userIdShort = user.user_id ? user.user_id.substring(0, 8) : 'N/A';
-        const statusClass = user.status === 'approved' ? 'status-approved' : 
-                            user.status === 'pending' ? 'status-pending' : 'status-danger';
+        const statusClass = user.status === 'approved'
+            ? 'status-approved'
+            : user.status === 'pending'
+            ? 'status-pending'
+            : 'status-danger';
 
         const row = `
             <tr>
                 <td>${userIdShort}</td>
                 <td>${escapeHtml(user.full_name)}</td>
-                <td>${escapeHtml(user.role)}</td>
                 <td>${escapeHtml(user.email)}</td>
-                <td>${escapeHtml(user.program || 'N/A')}</td>
-                <td>${escapeHtml(user.intake_year || 'N/A')} / ${escapeHtml(user.block || 'N/A')}</td>
+                <td>${escapeHtml(user.role)}</td>
+                <td>${escapeHtml(user.program || 'N/A')} ${user.intake_year ? `/ ${escapeHtml(user.intake_year)}` : ''} ${user.block ? `/ ${escapeHtml(user.block)}` : ''}</td>
                 <td class="${statusClass}">${escapeHtml(user.status)}</td>
                 <td>
                     <button class="btn btn-sm btn-edit" onclick="openEditUserModal('${user.user_id}')">Edit</button>
-                    ${user.role !== 'superadmin' ? 
-                        `<button class="btn btn-sm btn-danger" onclick="toggleUserStatus('${user.user_id}', '${user.status}')">
+                    ${user.role !== 'superadmin'
+                        ? `<button class="btn btn-sm btn-danger" onclick="toggleUserStatus('${user.user_id}', '${user.status}')">
                             ${user.status === 'approved' ? 'Deactivate' : 'Activate'}
-                        </button>` : ''
+                          </button>`
+                        : ''
                     }
                 </td>
             </tr>
