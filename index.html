@@ -1092,9 +1092,6 @@ async function loadLatestOfficialAnnouncement() {
   }
 }
 
-/**
- * 📢 NEW: Load the single latest system message/announcement for the Action Required CARD.
- */
 async function loadSystemMessages(studentProgram) {
     const card = document.getElementById('latest-announcement-card');
     const titleElement = document.getElementById('announcement-title');
@@ -1104,49 +1101,41 @@ async function loadSystemMessages(studentProgram) {
 
     if (!card || !studentProgram) return;
 
-    // Default state: hidden
     card.style.display = 'none';
 
     try {
-        // Fetch only the SINGLE latest message relevant to the student's program
+        // Fetch the single latest notification for the student's program
         const { data: messages, error } = await sb
-            .from('system_messages') 
-            .select('date_posted, title, message_body, message_type, status')
-            .eq('recipient_program', studentProgram)
-            .order('date_posted', { ascending: false })
-            .limit(1); // Crucial: Only fetch the latest one
+            .from('notifications')
+            .select('created_at, subject, message, is_read, target_program')
+            .or(`target_program.eq.${studentProgram},target_program.is.null`) // relevant to student's program or all
+            .order('created_at', { ascending: false })
+            .limit(1);
 
         if (error) throw error;
-        
+
         if (messages && messages.length > 0) {
             const latestMsg = messages[0];
-            const date = new Date(latestMsg.date_posted).toLocaleDateString('en-GB');
-            const statusColor = latestMsg.status === 'UNREAD' ? 'var(--color-alert)' : 'var(--color-success)';
-            const statusText = latestMsg.status === 'UNREAD' ? 'New' : 'Seen';
-            const cardBorderColor = latestMsg.status === 'UNREAD' ? 'var(--color-alert)' : 'var(--color-primary)';
-            
+            const date = new Date(latestMsg.created_at).toLocaleDateString('en-GB');
+            const statusColor = !latestMsg.is_read ? 'var(--color-alert)' : 'var(--color-success)';
+            const statusText = !latestMsg.is_read ? 'New' : 'Seen';
+            const cardBorderColor = !latestMsg.is_read ? 'var(--color-alert)' : 'var(--color-primary)';
 
-            // 1. Inject content into the card
-            titleElement.textContent = (latestMsg.title || 'New Announcement').toUpperCase();
-            bodyElement.textContent = latestMsg.message_body;
+            titleElement.textContent = (latestMsg.subject || 'New Announcement').toUpperCase();
+            bodyElement.textContent = latestMsg.message;
             dateElement.textContent = date;
-            
-            // Set status text and color
             statusElement.textContent = `Status: ${statusText}`;
             statusElement.style.color = statusColor;
 
-            // 2. Ensure the card is visible and styled
-            card.style.display = 'block'; 
+            card.style.display = 'block';
             card.style.borderLeftColor = cardBorderColor;
 
         } else {
-            // If no announcements, hide the card
             card.style.display = 'none';
         }
 
     } catch (error) {
-        console.error('Error loading system messages for dashboard:', error.message);
-        // If error, hide the card
+        console.error('Error loading notifications for dashboard:', error.message);
         card.style.display = 'none';
     }
 }
