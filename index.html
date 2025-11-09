@@ -741,6 +741,20 @@
     </table>
   </div>
   </section>
+<!-- Provisional Transcript Modal -->
+<div id="transcript-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); justify-content:center; align-items:center; z-index:1000;">
+  <div style="background:white; padding:20px; border-radius:8px; max-width:400px; width:90%; position:relative;">
+    <button onclick="closeTranscriptModal()" style="position:absolute; top:10px; right:10px;">✖</button>
+    <h3 id="transcript-exam-name" style="margin-bottom:10px;"></h3>
+    <table style="width:100%; border-collapse:collapse;">
+      <tr><td>CAT 1:</td><td id="transcript-cat1"></td></tr>
+      <tr><td>CAT 2:</td><td id="transcript-cat2"></td></tr>
+      <tr><td>Final Exam:</td><td id="transcript-final"></td></tr>
+      <tr><td>Total Score:</td><td id="transcript-total"></td></tr>
+      <tr><td>Status:</td><td id="transcript-status"></td></tr>
+    </table>
+  </div>
+</div>
 
 
             <section id="resources" class="tab-content">
@@ -1932,6 +1946,47 @@ function escapeHtml(str) {
 /**
  * Student Dashboard: loadExams() – works with current exams_with_courses table/view
  */
+// ======================
+// Modal Functions
+// ======================
+function viewProvisionalTranscript(examId) {
+  const exam = cachedExams.find(e => e.id === examId);
+  if (!exam) return alert("Exam not found.");
+
+  const grade = exam.grade || {};
+  const totalScore = grade.total_score;
+
+  // Colors: red if <50%, green if final, gray if provisional
+  const cat1Color = grade.cat_1_score < 50 ? 'red' : 'black';
+  const cat2Color = grade.cat_2_score < 50 ? 'red' : 'black';
+  const finalColor = grade.exam_score < 50 ? 'red' : 'black';
+  const totalColor = totalScore !== undefined
+    ? (grade.result_status === 'Final' ? 'green' : (totalScore < 50 ? 'red' : 'black'))
+    : 'black';
+  const statusColor = grade.result_status === 'Final' ? 'green' : 'gray';
+
+  document.getElementById('transcript-exam-name').textContent = exam.exam_name || 'N/A';
+  document.getElementById('transcript-cat1').textContent = grade.cat_1_score ?? '-';
+  document.getElementById('transcript-cat1').style.color = cat1Color;
+  document.getElementById('transcript-cat2').textContent = grade.cat_2_score ?? '-';
+  document.getElementById('transcript-cat2').style.color = cat2Color;
+  document.getElementById('transcript-final').textContent = grade.exam_score ?? '-';
+  document.getElementById('transcript-final').style.color = finalColor;
+  document.getElementById('transcript-total').textContent = totalScore !== undefined ? `${totalScore}%` : '-';
+  document.getElementById('transcript-total').style.color = totalColor;
+  document.getElementById('transcript-status').textContent = grade.result_status || 'Provisional';
+  document.getElementById('transcript-status').style.color = statusColor;
+
+  document.getElementById('transcript-modal').style.display = 'flex';
+}
+
+function closeTranscriptModal() {
+  document.getElementById('transcript-modal').style.display = 'none';
+}
+
+// ======================
+// Load Exams Function
+// ======================
 async function loadExams() {
   const tableBody = document.getElementById('exams-table');
   if (!tableBody) return;
@@ -1951,9 +2006,6 @@ async function loadExams() {
   }
 
   try {
-    // -------------------------------
-    // 1️⃣ Fetch exams from your table/view
-    // -------------------------------
     const { data: exams, error: examsError } = await sb
       .from('exams_with_courses')
       .select(`
@@ -1973,9 +2025,6 @@ async function loadExams() {
 
     if (examsError) throw examsError;
 
-    // -------------------------------
-    // 2️⃣ Fetch exam grades for this student
-    // -------------------------------
     const { data: grades, error: gradesError } = await sb
       .from('exam_grades')
       .select(`
@@ -1991,33 +2040,26 @@ async function loadExams() {
 
     if (gradesError) throw gradesError;
 
-    // -------------------------------
-    // 3️⃣ Merge exams with grades
-    // -------------------------------
-    const examsWithGrades = exams.map(exam => {
+    cachedExams = exams.map(exam => {
       const grade = grades.find(g => g.exam_id === exam.id);
       return { ...exam, grade };
     });
 
-    cachedExams = examsWithGrades;
-    tableBody.innerHTML = '';
+    // Filter by dropdown
+    const filter = document.getElementById('exam-type-filter')?.value || 'all';
+    let filteredExams = cachedExams;
+    if (filter === 'CAT') filteredExams = cachedExams.filter(e => e.exam_name.toLowerCase().includes('cat'));
+    if (filter === 'Final') filteredExams = cachedExams.filter(e => e.exam_name.toLowerCase().includes('final'));
 
-    // -------------------------------
-    // 4️⃣ Render exams table
-    // -------------------------------
-    if (!cachedExams.length) {
-      tableBody.innerHTML = `<tr><td colspan="9">No exams scheduled.</td></tr>`;
+    tableBody.innerHTML = '';
+    if (!filteredExams.length) {
+      tableBody.innerHTML = `<tr><td colspan="9">No exams found.</td></tr>`;
       return;
     }
 
-    cachedExams.forEach(exam => {
+    filteredExams.forEach(exam => {
       const dateStr = exam.exam_date
-        ? new Date(exam.exam_date).toLocaleDateString('en-US', {
-            weekday: 'short',
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric'
-          })
+        ? new Date(exam.exam_date).toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })
         : 'N/A';
 
       const gradeEntry = exam.grade;
@@ -2031,9 +2073,12 @@ async function loadExams() {
         ? `<span style="color:var(--color-success); font-weight:700;">Final</span>`
         : `<span style="color:var(--color-warning); font-weight:700;">${resultStatus}</span>`;
 
-      const actionBtn = exam.exam_link
-        ? `<a href="${exam.exam_link}" target="_blank" class="profile-button" style="background-color: var(--color-success); padding:8px 12px; font-size:0.9em; margin-top:0;">Start Exam</a>`
-        : `<span style="color:gray;">No Link</span>`;
+      // Dual Action buttons
+      let actionBtn = '';
+      if (exam.exam_link) {
+        actionBtn += `<a href="${exam.exam_link}" target="_blank" class="profile-button" style="background-color: var(--color-success); padding:6px 10px; font-size:0.85em; margin-right:5px;">Start Exam</a>`;
+      }
+      actionBtn += `<button onclick="viewProvisionalTranscript('${exam.id}')" class="profile-button" style="background-color: var(--color-primary); padding:6px 10px; font-size:0.85em;">View Transcript</button>`;
 
       tableBody.innerHTML += `
         <tr>
@@ -2055,12 +2100,11 @@ async function loadExams() {
     cachedExams = [];
   }
 
-  if (typeof loadDashboardMetrics === 'function') {
-    loadDashboardMetrics(currentUserId);
-  }
+  if (typeof loadDashboardMetrics === 'function') loadDashboardMetrics(currentUserId);
 }
 
-
+// Load exams on page load
+window.onload = loadExams;
 /**
  * viewResource() renders files in responsive iframe/canvas.
  */
