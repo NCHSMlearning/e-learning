@@ -1421,10 +1421,25 @@ async function toggleSessionStatus(sessionId, currentStatus) { console.log(`Togg
 
 
 // Global script execution start
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    // Wait a tiny bit to ensure Supabase has initialized properly
+    const maxWait = 20; // 2 seconds (20 × 100ms)
+    let waitCount = 0;
+
+    while (typeof supabase === 'undefined' && waitCount < maxWait) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        waitCount++;
+    }
+
     if (typeof supabase !== 'undefined') {
-        initSession();
+        try {
+            await initSession(); // ✅ Run the fixed session logic
+        } catch (err) {
+            console.error('Error initializing session:', err);
+            window.location.href = 'login.html';
+        }
     } else {
-        console.error("❌ SUPABASE LIBRARY MISSING: Ensure the Supabase CDN link is included in your admin.html.");
+        console.error("❌ SUPABASE LIBRARY MISSING: Ensure the Supabase CDN link is included in admin.html");
+        alert('Supabase library failed to load. Please refresh the page.');
     }
 });
