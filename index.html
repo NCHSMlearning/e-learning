@@ -1941,7 +1941,7 @@ function escapeHtml(str) {
 
 
 /**
- * Student Dashboard: loadExams() - ✅ Works with existing exam_grades FK
+ * Student Dashboard: loadExams() - ✅ Works without FK embedding
  */
 async function loadExams() {
   const tableBody = document.getElementById('exams-table');
@@ -1965,8 +1965,10 @@ async function loadExams() {
   }
 
   try {
-    // Fetch exams
-    const { data: exams, error } = await sb
+    // -------------------------------
+    // 1️⃣ Fetch exams
+    // -------------------------------
+    const { data: exams, error: examsError } = await sb
       .from('exams_with_courses')
       .select(`
         id,
@@ -1976,28 +1978,47 @@ async function loadExams() {
         status,
         block_term,
         program_type,
-        exam_link,
-        exam_grades!left(
-            student_id, 
-            cat_1_score,      
-            cat_2_score,      
-            exam_score,       
-            total_score, 
-            result_status     
-        )
+        exam_link
       `)
       .or(`program_type.eq.${program},program_type.eq.General`)
       .or(`block_term.eq.${block},block_term.is.null,block_term.eq.General`)
       .eq('intake_year', intakeYear)
-      .eq('exam_grades.student_id', studentId)
       .order('exam_date', { ascending: true });
 
-    if (error) throw error;
+    if (examsError) throw examsError;
 
-    cachedExams = exams || [];
+    // -------------------------------
+    // 2️⃣ Fetch exam grades for this student
+    // -------------------------------
+    const { data: grades, error: gradesError } = await sb
+      .from('exam_grades')
+      .select(`
+        exam_id,
+        student_id,
+        cat_1_score,
+        cat_2_score,
+        exam_score,
+        total_score,
+        result_status
+      `)
+      .eq('student_id', studentId);
+
+    if (gradesError) throw gradesError;
+
+    // -------------------------------
+    // 3️⃣ Merge grades into exams
+    // -------------------------------
+    const examsWithGrades = exams.map(exam => {
+      const grade = grades.find(g => g.exam_id === exam.id);
+      return { ...exam, grade };
+    });
+
+    cachedExams = examsWithGrades;
     tableBody.innerHTML = '';
 
-    // Filter exams based on type
+    // -------------------------------
+    // 4️⃣ Apply exam type filter
+    // -------------------------------
     const filteredExams = cachedExams.filter(exam => {
       if (selectedFilter === 'all') return true;
       if (selectedFilter === 'CAT') {
@@ -2019,7 +2040,9 @@ async function loadExams() {
       return;
     }
 
-    // Render table
+    // -------------------------------
+    // 5️⃣ Render exams table
+    // -------------------------------
     filteredExams.forEach(exam => {
       const dateStr = exam.exam_date
         ? new Date(exam.exam_date).toLocaleDateString('en-US', {
@@ -2030,7 +2053,7 @@ async function loadExams() {
           })
         : 'N/A';
 
-      const gradeEntry = exam.exam_grades?.[0];
+      const gradeEntry = exam.grade;
 
       const cat1Score = gradeEntry?.cat_1_score ?? '-';
       const cat2Score = gradeEntry?.cat_2_score ?? '-';
@@ -2071,6 +2094,7 @@ async function loadExams() {
     loadDashboardMetrics(currentUserId);
   }
 }
+
 
 /**
  * viewResource() renders files in responsive iframe/canvas.
