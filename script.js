@@ -2163,34 +2163,45 @@ document.querySelector('#examEditModal .close').addEventListener('click', () => 
 document.getElementById('edit-exam-form').addEventListener('submit', saveEditedExam);
 
 
-// Grade Modal — simplified version
 async function openGradeModal(examId, examName) {
-  const { data: students, error } = await fetchData(
-    USER_PROFILE_TABLE, // Changed to match your consolidated table name
-    'user_id, full_name',
-    { role: 'student' }, // Filter for students
-    'full_name',
-    true
-  );
-  if (error) {
-    showFeedback('Error loading students for grading.', 'error');
-    return;
-  }
+  const { data: students, error } = await sb
+    .from('consolidated_user_profiles_table')
+    .select('user_id, full_name')
+    .eq('role', 'student')
+    .order('full_name');
+
+  if (error) return showFeedback('Error loading students for grading.', 'error');
 
   const modalHtml = `
     <div class="modal-content">
       <h3>Grade: ${escapeHtml(examName)}</h3>
       <table class="grade-table">
-        <thead><tr><th>Student</th><th>Score (%)</th></tr></thead>
+        <thead>
+          <tr>
+            <th>Student</th>
+            <th>CAT 1</th>
+            <th>CAT 2</th>
+            <th>Final Exam</th>
+            <th>Total</th>
+            <th>Status</th>
+          </tr>
+        </thead>
         <tbody>
-          ${students
-            .map(
-              s => `<tr>
-                      <td>${escapeHtml(s.full_name)}</td>
-                      <td><input type="number" min="0" max="100" id="score-${s.user_id}" placeholder="0-100"></td>
-                    </tr>`
-            )
-            .join('')}
+          ${students.map(s => `
+            <tr>
+              <td>${escapeHtml(s.full_name)}</td>
+              <td><input type="number" min="0" max="100" id="cat1-${s.user_id}" placeholder="0-100"></td>
+              <td><input type="number" min="0" max="100" id="cat2-${s.user_id}" placeholder="0-100"></td>
+              <td><input type="number" min="0" max="100" id="final-${s.user_id}" placeholder="0-100"></td>
+              <td><input type="number" min="0" max="100" id="total-${s.user_id}" placeholder="Auto"></td>
+              <td>
+                <select id="status-${s.user_id}">
+                  <option value="Scheduled">Scheduled</option>
+                  <option value="InProgress">InProgress</option>
+                  <option value="Final">Final</option>
+                </select>
+              </td>
+            </tr>`).join('')}
         </tbody>
       </table>
       <button class="btn-action" onclick="saveGrades('${examId}')">Save Grades</button>
@@ -2200,36 +2211,40 @@ async function openGradeModal(examId, examName) {
   showModal(modalHtml);
 }
 
-// Save Grades
 async function saveGrades(examId) {
   const rows = document.querySelectorAll('.grade-table tbody tr');
-  const grades = [];
+  const upserts = [];
 
   rows.forEach(row => {
-    const input = row.querySelector('input');
-    // Note: Assuming student ID is stored in the 'user_id' field of the student's profile.
-    const studentId = input.id.replace('score-', ''); 
-    const score = parseFloat(input.value);
-    // Only save valid scores between 0-100
-    if (!isNaN(score) && score >= 0 && score <= 100) grades.push({ exam_id: examId, student_id: studentId, score });
+    const studentId = row.querySelector('input[id^="cat1-"]').id.replace('cat1-', '');
+    const cat1 = parseFloat(row.querySelector(`#cat1-${studentId}`).value) || 0;
+    const cat2 = parseFloat(row.querySelector(`#cat2-${studentId}`).value) || 0;
+    const finalExam = parseFloat(row.querySelector(`#final-${studentId}`).value) || 0;
+    const total = parseFloat(row.querySelector(`#total-${studentId}`).value) || (cat1 + cat2 + finalExam);
+    const status = row.querySelector(`#status-${studentId}`).value || 'Scheduled';
+
+    upserts.push({
+      exam_id: examId,
+      student_id: studentId,
+      cat_1_score: cat1,
+      cat_2_score: cat2,
+      exam_score: finalExam,
+      total_score: total,
+      result_status: status,
+      graded_by: currentUserId,  // superadmin's user_id
+      question_id: '00000000-0000-0000-0000-000000000000', // placeholder if needed
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    });
   });
 
-  if (grades.length === 0) {
-    showFeedback('No valid scores entered (0-100).', 'error');
-    return;
-  }
+  const { error } = await sb.from('exam_grades').upsert(upserts, { onConflict: 'exam_id,student_id' });
+  if (error) return showFeedback(`Failed to save grades: ${error.message}`, 'error');
 
-  // Use upsert to handle new results or updates to existing ones
-  const { error } = await sb.from('exam_results').upsert(grades, { onConflict: 'exam_id, student_id' }); 
-  if (error) {
-    showFeedback(`Failed to save grades: ${error.message}`, 'error');
-    return;
-  }
-
+  showFeedback('Grades saved successfully!', 'success');
   closeModal();
-  showFeedback('Grades saved/updated successfully!', 'success');
-  await logAudit('EXAM_GRADE', `Saved grades for exam ${examId}.`, examId, 'SUCCESS');
 }
+
 
 // Generic Modal Function - Required for openGradeModal
 function showModal(contentHtml) {
