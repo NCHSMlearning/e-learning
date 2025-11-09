@@ -795,7 +795,6 @@ function setupEventListeners() {
     document.querySelector('#mapModal .close')?.addEventListener('click', () => { $('mapModal').style.display = 'none'; });
     document.querySelector('#courseEditModal .close')?.addEventListener('click', () => { $('courseEditModal').style.display = 'none'; });
 }
----
 // Global script execution start
 document.addEventListener('DOMContentLoaded', () => {
     // Check if Supabase client is defined before initializing
