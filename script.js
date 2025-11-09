@@ -2231,7 +2231,7 @@ async function saveGrades(examId) {
       exam_score: finalExam,
       total_score: total,
       result_status: status,
-      graded_by: currentUserId,  // superadmin's user_id
+      graded_by: '52fb3ac8-e35f-4a2a-b88f-16f52a0ae7d4', // superadmin's user_id
       question_id: '00000000-0000-0000-0000-000000000000', // placeholder if needed
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
