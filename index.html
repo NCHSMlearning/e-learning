@@ -1956,6 +1956,7 @@ async function loadExams() {
   const program = currentUserProfile?.program || currentUserProfile?.department;
   const block = currentUserProfile?.block;
   const intakeYear = currentUserProfile?.intake_year;
+  const studentId = currentUserId; // Get the ID of the current student
 
   if (!program || !intakeYear) {
     tableBody.innerHTML = `<tr><td colspan="9">Missing program or intake year info. Cannot load exams.</td></tr>`;
@@ -1964,6 +1965,11 @@ async function loadExams() {
   }
 
   try {
+    // -------------------------------------------------------------
+    // ⭐ FIX: Filtering the joined table by student_id directly in the select string
+    // Format: relation!join!foreignKey(columns).eq.value
+    // We use a custom join name (like 'grade_for_student') and filter it.
+    // -------------------------------------------------------------
     const { data: exams, error } = await sb
       .from('exams_with_courses')
       .select(`
@@ -1975,7 +1981,7 @@ async function loadExams() {
         block_term,
         program_type,
         exam_link,
-        exam_grades!left(
+        exam_grades!grade_for_student(
             student_id, 
             cat_1_score,      
             cat_2_score,      
@@ -1983,10 +1989,12 @@ async function loadExams() {
             total_score, 
             result_status     
         )
-      `) // 🏆 FIX: The comment has been removed from the select string
+      `)
       .or(`program_type.eq.${program},program_type.eq.General`)
       .or(`block_term.eq.${block},block_term.is.null,block_term.eq.General`)
       .eq('intake_year', intakeYear)
+      // ✅ NEW FILTER SYNTAX: Filter the aliased join (grade_for_student) by studentId
+      .eq('grade_for_student.student_id', studentId) 
       .order('exam_date', { ascending: true });
 
     if (error) throw error;
@@ -2030,7 +2038,9 @@ async function loadExams() {
           })
         : 'N/A';
 
-      const gradeEntry = exam.exam_grades?.[0]; // Get the grade entry, if it exists
+      // NOTE: Because we used the PostgREST join name alias, the data comes back
+      // under the name of the *original* foreign key relationship, 'exam_grades'.
+      const gradeEntry = exam.exam_grades?.[0]; 
       
       // 🏆 NEW: Extract CAT 1, CAT 2, and Final Exam scores
       const cat1Score = gradeEntry?.cat_1_score ?? '-';
