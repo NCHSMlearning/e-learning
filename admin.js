@@ -715,7 +715,6 @@ async function initSession() {
     setupEventListeners();
     loadSectionData('dashboard');
 }
----
 function setupEventListeners() {
     // Tab switching logic (Uses the global loadSectionData)
     const navLinks = document.querySelectorAll('.nav a');
