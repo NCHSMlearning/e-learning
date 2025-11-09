@@ -919,59 +919,54 @@ async function handleAddCourse(e) {
     setButtonLoading(submitButton, true, originalText);
 
     const unitCode = $('course-unit-code').value.trim().toUpperCase();
-    const unitName = $('course-name').value.trim();
-    const program = $('course-program').value;
-    const blockTerm = $('course-block').value;
-    const lecturerId = $('course-lecturer').value || null; 
+    const courseName = $('course-name').value.trim();
+    const description = $('course-description').value.trim();
+    const program = $('course-program').value.trim();
+    const intake = $('course-intake').value.trim();
+    const block = $('course-block').value.trim();
 
-    if (!unitCode || !unitName || !program || !blockTerm) {
-        showFeedback('Please fill out all required course fields (Code, Name, Program, Block/Term).', 'error');
+    if (!unitCode || !courseName || !program || !intake || !block) {
+        showFeedback('Please fill out all required fields.', 'error');
         setButtonLoading(submitButton, false, originalText);
         return;
     }
 
     const newCourseData = {
         unit_code: unitCode,
-        unit_name: unitName,
-        program: program,
-        block_term: blockTerm,
-        lecturer_id: lecturerId,
-        is_active: true
+        course_name: courseName,
+        description: description || null,
+        target_program: program,
+        intake_year: intake,
+        block: block,
+        status: 'Active'
     };
 
     try {
-        const { error } = await sb
-            .from('courses')
-            .insert([newCourseData]);
+        const { error } = await sb.from('courses').insert([newCourseData]);
 
         if (error) {
-            if (error.code === '23505') { 
+            if (error.code === '23505') {
                 throw new Error(`Unit Code ${unitCode} already exists.`);
             }
             throw error;
         }
-        
-        showFeedback(`Course ${unitCode} (${unitName}) added successfully!`, 'success');
-        await logAudit('COURSE_CREATE', `Created new course: ${unitCode} - ${unitName}`, unitCode, 'SUCCESS');
-        
-        e.target.reset(); 
+
+        showFeedback(`Course ${unitCode} (${courseName}) added successfully!`, 'success');
+        e.target.reset();
         loadCourses(); 
-        
     } catch (err) {
-        const errorMessage = `Failed to add course ${unitCode}. Reason: ${err.message}`;
-        await logAudit('COURSE_CREATE', errorMessage, unitCode, 'FAILURE');
-        showFeedback(errorMessage, 'error');
-        
+        showFeedback(`Failed to add course ${unitCode}. Reason: ${err.message}`, 'error');
     } finally {
         setButtonLoading(submitButton, false, originalText);
     }
 }
 
+
 async function loadCourses() {
-    const tbody = $('courses-table');
+    const tbody = $('courses-table').querySelector('tbody');
     tbody.innerHTML = '<tr><td colspan="6">Loading courses...</td></tr>';
-    
-    const { data: courses, error } = await fetchData('courses', '*', {}, 'unit_code', true); 
+
+    const { data: courses, error } = await fetchData('courses', '*', {}, 'unit_code', true);
 
     if (error) {
         tbody.innerHTML = `<tr><td colspan="6">Error loading courses: ${error.message}</td></tr>`;
@@ -985,15 +980,13 @@ async function loadCourses() {
 
     tbody.innerHTML = '';
     courses.forEach(course => {
-        const statusClass = course.status === 'Active' ? 'status-approved' : 'status-danger';
-
         tbody.innerHTML += `
             <tr>
-                <td>${escapeHtml(course.unit_code)}</td>
                 <td>${escapeHtml(course.course_name)}</td>
+                <td>${escapeHtml(course.unit_code)}</td>
                 <td>${escapeHtml(course.target_program)}</td>
+                <td>${escapeHtml(course.intake_year)}</td>
                 <td>${escapeHtml(course.block)}</td>
-                <td class="${statusClass}">${course.status}</td>
                 <td>
                     <button class="btn btn-sm btn-edit" onclick="openEditCourseModal('${course.unit_code}')">Edit</button>
                     <button class="btn btn-sm btn-danger" onclick="toggleCourseStatus('${course.unit_code}', '${course.status}')">${course.status === 'Active' ? 'Deactivate' : 'Activate'}</button>
