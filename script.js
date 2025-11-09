@@ -2200,8 +2200,8 @@ async function openGradeModal(examId, examName) {
             return `
               <tr>
                 <td>${escapeHtml(s.full_name)}</td>
-                <td><input type="number" min="0" max="100" id="cat1-${s.user_id}" value="${grade.cat_1_score ?? ''}" placeholder="0-100"></td>
-                <td><input type="number" min="0" max="100" id="cat2-${s.user_id}" value="${grade.cat_2_score ?? ''}" placeholder="0-100"></td>
+                <td><input type="number" min="0" max="30" id="cat1-${s.user_id}" value="${grade.cat_1_score ?? ''}" placeholder="0-100"></td>
+                <td><input type="number" min="0" max="30" id="cat2-${s.user_id}" value="${grade.cat_2_score ?? ''}" placeholder="0-100"></td>
                 <td><input type="number" min="0" max="100" id="final-${s.user_id}" value="${grade.exam_score ?? ''}" placeholder="0-100"></td>
                 <td><input type="number" min="0" max="100" id="total-${s.user_id}" value="${grade.total_score ?? ''}" placeholder="Auto" readonly></td>
                 <td>
@@ -2233,24 +2233,29 @@ async function saveGrades(examId) {
     const cat2 = parseFloat(row.querySelector(`#cat2-${studentId}`).value) || 0;
     const finalExam = parseFloat(row.querySelector(`#final-${studentId}`).value) || 0;
 
-    // Calculate total after entering all marks
-    const total = cat1 + cat2 + finalExam;
+  // Ensure each score does not exceed its max
+const cat1Score = Math.min(cat1, 30);
+const cat2Score = Math.min(cat2, 30);
+const finalScore = Math.min(finalExam, 100);
 
-    const status = row.querySelector(`#status-${studentId}`).value || 'Scheduled';
+// Calculate total capped at 100
+const total = Math.min(cat1Score + cat2Score + finalScore, 100);
 
-    upserts.push({
-      exam_id: examId,
-      student_id: studentId,
-      cat_1_score: cat1,
-      cat_2_score: cat2,
-      exam_score: finalExam,
-      total_score: total,
-      result_status: status,
-      graded_by: '52fb3ac8-e35f-4a2a-b88f-16f52a0ae7d4', // superadmin's user_id
-      question_id: '00000000-0000-0000-0000-000000000000', // placeholder
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    });
+const status = row.querySelector(`#status-${studentId}`).value || 'Scheduled';
+
+upserts.push({
+  exam_id: examId,
+  student_id: studentId,
+  cat_1_score: cat1Score,
+  cat_2_score: cat2Score,
+  exam_score: finalScore,
+  total_score: total,
+  result_status: status,
+  graded_by: '52fb3ac8-e35f-4a2a-b88f-16f52a0ae7d4', // superadmin's user_id
+  question_id: '00000000-0000-0000-0000-000000000000', // placeholder
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString()
+});
 
     // Update total in the UI
     row.querySelector(`#total-${studentId}`).value = total;
