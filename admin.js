@@ -117,7 +117,7 @@ async function loadSectionData(tabId) {
             updateBlockTermOptions('promote_intake', 'promote_from_block');
             updateBlockTermOptions('promote_intake', 'promote_to_block');
             break; 
-        case 'courses': loadCourses(); break;
+        case 'courses': loadCourses(); break; // <<< ADDED
         case 'sessions': loadScheduledSessions(); populateSessionCourseSelects(); break;
         case 'attendance': loadAttendance(); populateAttendanceSelects(); break;
         case 'cats': 
@@ -540,7 +540,6 @@ async function handleAddAccount(e) {
       showFeedback(`New ${role.toUpperCase()} account successfully enrolled!`, 'success');
       await logAudit('USER_ENROLL', `Enrolled new ${role} account: ${name} (${email})`, user.id);
       loadAllUsers();
-      // loadStudents(); // Assumed function for loading 'enroll' tab students
       loadDashboardData();
     }
   } catch (err) {
@@ -634,37 +633,246 @@ async function handleMassPromotion(e) {
 }
 
 
-// --- Placeholder Functions (These need specific table schemas to be fully implemented) ---
-async function loadAllUsers() { console.log("Fetching all users..."); /* ... implementation ... */ }
-async function loadPendingApprovals() { console.log("Fetching pending approvals..."); /* ... implementation ... */ }
-async function loadStudents() { console.log("Fetching students for enrollment tab..."); /* ... implementation ... */ }
-async function loadCourses() { console.log("Fetching courses..."); /* ... implementation ... */ }
-async function loadScheduledSessions() { console.log("Fetching sessions..."); /* ... implementation ... */ }
-async function populateSessionCourseSelects() { console.log("Populating session courses..."); /* ... implementation ... */ }
-async function loadAttendance() { console.log("Fetching attendance..."); /* ... implementation ... */ }
-async function populateAttendanceSelects() { console.log("Populating attendance selects..."); /* ... implementation ... */ }
-async function handleManualAttendance(e) { e.preventDefault(); console.log("Manual attendance handler..."); /* ... implementation ... */ }
-async function loadExams() { console.log("Fetching exams..."); /* ... implementation ... */ }
-async function populateExamCourseSelects() { console.log("Populating exam courses..."); /* ... implementation ... */ }
-async function handleAddExam(e) { e.preventDefault(); console.log("Add exam handler..."); /* ... implementation ... */ }
-async function loadAdminMessages() { console.log("Loading admin messages..."); /* ... implementation ... */ }
-async function handleSendMessage(e) { e.preventDefault(); console.log("Send message handler..."); /* ... implementation ... */ }
-async function renderFullCalendar() { console.log("Rendering calendar..."); /* ... implementation ... */ }
-async function loadResources() { console.log("Loading resources..."); /* ... implementation ... */ }
-async function loadSystemStatus() { console.log("Loading system status..."); /* ... implementation ... */ }
-async function loadBackupHistory() { console.log("Loading backup history..."); /* ... implementation ... */ }
-async function handleGlobalPasswordReset(e) { e.preventDefault(); console.log("Global password reset..."); /* ... implementation ... */ }
-async function handleAccountDeactivation(e) { e.preventDefault(); console.log("Account deactivation..."); /* ... implementation ... */ }
-async function handleEditUser(e) { e.preventDefault(); console.log("Edit user handler..."); /* ... implementation ... */ }
-async function handleEditCourse(e) { e.preventDefault(); console.log("Edit course handler..."); /* ... implementation ... */ }
-async function handleAddSession(e) { e.preventDefault(); console.log("Add session handler..."); /* ... implementation ... */ }
+/*******************************************************
+ * 4.5. COURSE MANAGEMENT (CREATE, READ, UPDATE STATUS, EDIT READ)
+ *******************************************************/
 
+/**
+ * Handles the creation of a new course/unit and inserts it into the 'courses' table.
+ */
+async function handleAddCourse(e) {
+    e.preventDefault();
+    const submitButton = e.submitter;
+    const originalText = submitButton.textContent;
+    setButtonLoading(submitButton, true, originalText);
+
+    const unitCode = $('course-unit-code').value.trim().toUpperCase();
+    const unitName = $('course-name').value.trim();
+    const program = $('course-program').value;
+    const blockTerm = $('course-block').value;
+    const lecturerId = $('course-lecturer').value || null; 
+
+    if (!unitCode || !unitName || !program || !blockTerm) {
+        showFeedback('Please fill out all required course fields (Code, Name, Program, Block/Term).', 'error');
+        setButtonLoading(submitButton, false, originalText);
+        return;
+    }
+
+    const newCourseData = {
+        unit_code: unitCode,
+        unit_name: unitName,
+        program: program,
+        block_term: blockTerm,
+        lecturer_id: lecturerId,
+        is_active: true
+    };
+
+    try {
+        const { error } = await sb
+            .from('courses')
+            .insert([newCourseData]);
+
+        if (error) {
+            if (error.code === '23505') { 
+                throw new Error(`Unit Code ${unitCode} already exists.`);
+            }
+            throw error;
+        }
+        
+        showFeedback(`Course ${unitCode} (${unitName}) added successfully!`, 'success');
+        await logAudit('COURSE_CREATE', `Created new course: ${unitCode} - ${unitName}`, unitCode, 'SUCCESS');
+        
+        e.target.reset(); 
+        loadCourses(); 
+        
+    } catch (err) {
+        const errorMessage = `Failed to add course ${unitCode}. Reason: ${err.message}`;
+        await logAudit('COURSE_CREATE', errorMessage, unitCode, 'FAILURE');
+        showFeedback(errorMessage, 'error');
+        
+    } finally {
+        setButtonLoading(submitButton, false, originalText);
+    }
+}
+
+
+/**
+ * Fetches all courses and renders them into the courses-table.
+ */
+async function loadCourses() {
+    const tbody = $('courses-table');
+    tbody.innerHTML = '<tr><td colspan="7">Loading courses...</td></tr>';
+    
+    // Select with inner join to get lecturer full name (assuming lecturer_id links to user_profiles)
+    const { data: courses, error } = await fetchData('courses', '*, lecturer:lecturer_id(full_name)', {}, 'unit_code', true); 
+
+    if (error) {
+        tbody.innerHTML = `<tr><td colspan="7">Error loading courses: ${error.message}</td></tr>`;
+        return;
+    }
+
+    if (!courses || courses.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7">No courses currently added.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = '';
+    courses.forEach(course => {
+        const lecturerName = course.lecturer ? escapeHtml(course.lecturer.full_name) : 'N/A';
+        const statusClass = course.is_active ? 'status-approved' : 'status-danger';
+
+        tbody.innerHTML += `
+            <tr>
+                <td>${escapeHtml(course.unit_code)}</td>
+                <td>${escapeHtml(course.unit_name)}</td>
+                <td>${escapeHtml(course.program)}</td>
+                <td>${escapeHtml(course.block_term)}</td>
+                <td>${lecturerName}</td>
+                <td class="${statusClass}">${course.is_active ? 'Active' : 'Inactive'}</td>
+                <td>
+                    <button class="btn btn-sm btn-edit" onclick="openEditCourseModal('${course.unit_code}')">Edit</button>
+                    <button class="btn btn-sm btn-danger" onclick="toggleCourseStatus('${course.unit_code}', ${course.is_active})">${course.is_active ? 'Deactivate' : 'Activate'}</button>
+                </td>
+            </tr>
+        `;
+    });
+}
+
+
+/**
+ * Toggles the 'is_active' status of a course.
+ */
+async function toggleCourseStatus(unitCode, currentStatus) {
+    const newStatus = !currentStatus;
+    const action = newStatus ? 'Activate' : 'Deactivate';
+
+    if (!confirm(`Are you sure you want to ${action} course ${unitCode}?`)) {
+        return;
+    }
+
+    try {
+        const { error } = await sb
+            .from('courses')
+            .update({ 
+                is_active: newStatus,
+                updated_at: new Date().toISOString()
+            })
+            .eq('unit_code', unitCode);
+
+        if (error) throw error;
+
+        showFeedback(`Course ${unitCode} successfully ${action}d.`, 'success');
+        await logAudit('COURSE_STATUS_UPDATE', `${action}d course: ${unitCode}`, unitCode, 'SUCCESS');
+        loadCourses();
+        
+    } catch (err) {
+        const errorMessage = `Failed to ${action} course ${unitCode}. Reason: ${err.message}`;
+        await logAudit('COURSE_STATUS_UPDATE', errorMessage, unitCode, 'FAILURE');
+        showFeedback(errorMessage, 'error');
+    }
+}
+
+
+/**
+ * Loads course data into the edit modal and displays it.
+ */
+async function openEditCourseModal(unitCode) {
+    const modal = $('courseEditModal');
+    const form = $('edit-course-form');
+    const title = $('edit-course-title');
+    
+    title.textContent = `Edit Course: ${unitCode}`;
+    form.reset();
+    
+    // Fetch data for the specific course
+    const { data: course, error } = await fetchData('courses', '*', { unit_code: unitCode }, null, null);
+
+    if (error || !course || course.length === 0) {
+        showFeedback(`Could not load course ${unitCode} for editing.`, 'error');
+        return;
+    }
+
+    const c = course[0];
+    
+    // Set hidden field for reference
+    $('edit_course_unit_code').value = c.unit_code; 
+
+    // Pre-fill fields
+    $('edit_course_name').value = c.unit_name;
+    $('edit_course_program').value = c.program;
+    $('edit_course_intake').value = c.intake_year || ''; 
+    
+    // Populate Block/Term options (needed for dropdowns)
+    updateBlockTermOptions('edit_course_program', 'edit_course_block');
+    
+    // Set the specific Block/Term for this course (must be done AFTER populating options)
+    $('edit_course_block').value = c.block_term; 
+    
+    // Set Lecturer (Assuming 'course-lecturer' dropdown exists in the modal)
+    // You would need a function to load lecturers into this select beforehand
+    // $('edit_course_lecturer').value = c.lecturer_id; 
+
+    modal.style.display = 'block';
+}
+
+/**
+ * Handles the submission of the course edit form to update the course in the database.
+ */
+async function handleEditCourse(e) {
+    e.preventDefault();
+    const submitButton = e.submitter;
+    const originalText = submitButton.textContent;
+    setButtonLoading(submitButton, true, originalText);
+    
+    const originalUnitCode = $('edit_course_unit_code').value; // Hidden field used for WHERE clause
+    const unitName = $('edit_course_name').value.trim();
+    const program = $('edit_course_program').value;
+    const blockTerm = $('edit_course_block').value;
+    const lecturerId = $('edit_course_lecturer').value || null; 
+
+    if (!unitName || !program || !blockTerm) {
+        showFeedback('Please ensure all required fields are filled.', 'error');
+        setButtonLoading(submitButton, false, originalText);
+        return;
+    }
+
+    const updatedData = {
+        unit_name: unitName,
+        program: program,
+        block_term: blockTerm,
+        lecturer_id: lecturerId,
+        updated_at: new Date().toISOString()
+    };
+
+    try {
+        const { error } = await sb
+            .from('courses')
+            .update(updatedData)
+            .eq('unit_code', originalUnitCode);
+
+        if (error) throw error;
+        
+        showFeedback(`Course ${originalUnitCode} successfully updated.`, 'success');
+        await logAudit('COURSE_UPDATE', `Updated details for course: ${originalUnitCode}`, originalUnitCode, 'SUCCESS');
+        
+        $('courseEditModal').style.display = 'none';
+        loadCourses(); 
+        
+    } catch (err) {
+        const errorMessage = `Failed to update course ${originalUnitCode}. Reason: ${err.message}`;
+        await logAudit('COURSE_UPDATE', errorMessage, originalUnitCode, 'FAILURE');
+        showFeedback(errorMessage, 'error');
+        
+    } finally {
+        setButtonLoading(submitButton, false, originalText);
+    }
+}
 
 /*******************************************************
  * 5. INITIALIZATION AND LISTENERS
  *******************************************************/
 
-// --- Session / Init ---
+// --- Session / Init (FIXED for instant logout) ---
 async function initSession() {
     // Hide the .html extension in the URL
     if (window.location.pathname.endsWith('.html')) {
@@ -683,19 +891,18 @@ async function initSession() {
     sb.auth.setSession(session);
     const user = session.user;
     
-    // 🎯 CRITICAL FIX APPLIED: Using the consolidated table and 'user_id'
-    const USER_PROFILE_TABLE = 'consolidated_user_profiles_table'; 
+    // CRITICAL FIX: Use the consolidated table and 'user_id'
     const { data: profile, error: profileError } = await sb
         .from(USER_PROFILE_TABLE) 
         .select('*')
-        .eq('user_id', user.id) // Assuming your FK is 'user_id'. Use 'id' if 'id' matches auth.users.id
+        .eq('user_id', user.id) // Use 'user_id' or 'id' based on your table's foreign key
         .single();
     
     if (profile && !profileError) {
         currentUserProfile = profile;
         currentUserId = user.id;
         
-        // Ensure the role matches the case in your DB (e.g., 'superadmin' vs 'SuperAdmin')
+        // Role Check
         if (currentUserProfile.role !== 'superadmin') { 
             console.warn(`User ${user.email} is not a Super Admin. Redirecting.`);
             window.location.href = "admin.html"; // Redirect to standard admin view
@@ -715,23 +922,30 @@ async function initSession() {
     setupEventListeners();
     loadSectionData('dashboard');
 }
+
 function setupEventListeners() {
     // Tab switching logic (Uses the global loadSectionData)
     const navLinks = document.querySelectorAll('.nav a');
-    const tabs = document.querySelectorAll('.tab-content'); // Added tabs query
+    const tabs = document.querySelectorAll('.tab-content'); 
     navLinks.forEach(link => {
         link.addEventListener('click', e => {
-            e.preventDefault();
+            e.preventDefault(); // Prevents full page refresh on tab click
             navLinks.forEach(l => l.classList.remove('active'));
             link.classList.add('active');
             
             const tabId = link.dataset.tab;
-            tabs.forEach(tab => tab.classList.remove('active')); // Use the queried list
+            tabs.forEach(tab => tab.classList.remove('active'));
             const targetTab = document.getElementById(tabId);
             if (targetTab) targetTab.classList.add('active');
             
             loadSectionData(tabId);
         });
+    });
+
+    // Logout listener
+    $('logout-link')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        logout();
     });
 
     // ATTENDANCE TAB
@@ -794,6 +1008,32 @@ function setupEventListeners() {
     document.querySelector('#mapModal .close')?.addEventListener('click', () => { $('mapModal').style.display = 'none'; });
     document.querySelector('#courseEditModal .close')?.addEventListener('click', () => { $('courseEditModal').style.display = 'none'; });
 }
+
+
+// --- Placeholder Functions (These need specific table schemas to be fully implemented) ---
+async function loadAllUsers() { console.log("Fetching all users..."); /* ... implementation ... */ }
+async function loadPendingApprovals() { console.log("Fetching pending approvals..."); /* ... implementation ... */ }
+async function loadStudents() { console.log("Fetching students for enrollment tab..."); /* ... implementation ... */ }
+async function loadScheduledSessions() { console.log("Fetching sessions..."); /* ... implementation ... */ }
+async function populateSessionCourseSelects() { console.log("Populating session courses..."); /* ... implementation ... */ }
+async function loadAttendance() { console.log("Fetching attendance..."); /* ... implementation ... */ }
+async function populateAttendanceSelects() { console.log("Populating attendance selects..."); /* ... implementation ... */ }
+async function handleManualAttendance(e) { e.preventDefault(); console.log("Manual attendance handler..."); /* ... implementation ... */ }
+async function loadExams() { console.log("Fetching exams..."); /* ... implementation ... */ }
+async function populateExamCourseSelects() { console.log("Populating exam courses..."); /* ... implementation ... */ }
+async function handleAddExam(e) { e.preventDefault(); console.log("Add exam handler..."); /* ... implementation ... */ }
+async function loadAdminMessages() { console.log("Loading admin messages..."); /* ... implementation ... */ }
+async function handleSendMessage(e) { e.preventDefault(); console.log("Send message handler..."); /* ... implementation ... */ }
+async function renderFullCalendar() { console.log("Rendering calendar..."); /* ... implementation ... */ }
+async function loadResources() { console.log("Loading resources..."); /* ... implementation ... */ }
+async function loadSystemStatus() { console.log("Loading system status..."); /* ... implementation ... */ }
+async function loadBackupHistory() { console.log("Loading backup history..."); /* ... implementation ... */ }
+async function handleGlobalPasswordReset(e) { e.preventDefault(); console.log("Global password reset..."); /* ... implementation ... */ }
+async function handleAccountDeactivation(e) { e.preventDefault(); console.log("Account deactivation..."); /* ... implementation ... */ }
+async function handleEditUser(e) { e.preventDefault(); console.log("Edit user handler..."); /* ... implementation ... */ }
+async function handleAddSession(e) { e.preventDefault(); console.log("Add session handler..."); /* ... implementation ... */ }
+
+
 // Global script execution start
 document.addEventListener('DOMContentLoaded', () => {
     // Check if Supabase client is defined before initializing
