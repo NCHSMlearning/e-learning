@@ -683,14 +683,20 @@ async function initSession() {
     sb.auth.setSession(session);
     const user = session.user;
     
-    // NOTE: Using 'profiles' table for initial check, as per your script
-    const { data: profile, error: profileError } = await sb.from('profiles').select('*').eq('id', user.id).single();
+    // 🎯 CRITICAL FIX APPLIED: Using the consolidated table and 'user_id'
+    const USER_PROFILE_TABLE = 'consolidated_user_profiles_table'; 
+    const { data: profile, error: profileError } = await sb
+        .from(USER_PROFILE_TABLE) 
+        .select('*')
+        .eq('user_id', user.id) // Assuming your FK is 'user_id'. Use 'id' if 'id' matches auth.users.id
+        .single();
     
     if (profile && !profileError) {
         currentUserProfile = profile;
         currentUserId = user.id;
         
-        if (currentUserProfile.role !== 'superadmin') {
+        // Ensure the role matches the case in your DB (e.g., 'superadmin' vs 'SuperAdmin')
+        if (currentUserProfile.role !== 'superadmin') { 
             console.warn(`User ${user.email} is not a Super Admin. Redirecting.`);
             window.location.href = "admin.html"; // Redirect to standard admin view
             return;
@@ -699,6 +705,8 @@ async function initSession() {
         document.querySelector('header h1').textContent = `Welcome, ${profile.full_name || 'Super Admin'}!`;
     } else {
         console.error("Profile not found or fetch error:", profileError?.message);
+        // Clean redirect on failure to find profile
+        await sb.auth.signOut(); 
         window.location.href = "login.html";
         return;
     }
@@ -707,10 +715,11 @@ async function initSession() {
     setupEventListeners();
     loadSectionData('dashboard');
 }
-
+---
 function setupEventListeners() {
     // Tab switching logic (Uses the global loadSectionData)
     const navLinks = document.querySelectorAll('.nav a');
+    const tabs = document.querySelectorAll('.tab-content'); // Added tabs query
     navLinks.forEach(link => {
         link.addEventListener('click', e => {
             e.preventDefault();
@@ -718,7 +727,7 @@ function setupEventListeners() {
             link.classList.add('active');
             
             const tabId = link.dataset.tab;
-            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+            tabs.forEach(tab => tab.classList.remove('active')); // Use the queried list
             const targetTab = document.getElementById(tabId);
             if (targetTab) targetTab.classList.add('active');
             
@@ -781,13 +790,12 @@ function setupEventListeners() {
     $('edit-user-form')?.addEventListener('submit', handleEditUser);
     $('edit-course-form')?.addEventListener('submit', handleEditCourse);
     
-    // Modal close listeners (assuming you have the correct HTML structure)
+    // Modal close listeners 
     document.querySelector('#userEditModal .close')?.addEventListener('click', () => { $('userEditModal').style.display = 'none'; });
     document.querySelector('#mapModal .close')?.addEventListener('click', () => { $('mapModal').style.display = 'none'; });
     document.querySelector('#courseEditModal .close')?.addEventListener('click', () => { $('courseEditModal').style.display = 'none'; });
 }
-
-
+---
 // Global script execution start
 document.addEventListener('DOMContentLoaded', () => {
     // Check if Supabase client is defined before initializing
