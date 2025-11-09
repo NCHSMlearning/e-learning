@@ -1941,7 +1941,7 @@ function escapeHtml(str) {
 
 
 /**
- * Student Dashboard: loadExams() - ✅ Works without FK embedding
+ * Student Dashboard: loadExams() – works with current exams_with_courses view
  */
 async function loadExams() {
   const tableBody = document.getElementById('exams-table');
@@ -1965,14 +1965,15 @@ async function loadExams() {
   }
 
   try {
-    // Fetch exams
+    // -------------------------------
+    // 1️⃣ Fetch exams from the view
+    // -------------------------------
     const { data: exams, error: examsError } = await sb
       .from('exams_with_courses')
       .select(`
         id,
         exam_name,
         exam_date,
-        exam_type,
         status,
         block_term,
         program_type,
@@ -1986,7 +1987,9 @@ async function loadExams() {
 
     if (examsError) throw examsError;
 
-    // Fetch grades
+    // -------------------------------
+    // 2️⃣ Fetch exam grades for this student
+    // -------------------------------
     const { data: grades, error: gradesError } = await sb
       .from('exam_grades')
       .select(`
@@ -2002,7 +2005,9 @@ async function loadExams() {
 
     if (gradesError) throw gradesError;
 
-    // Merge exams with grades
+    // -------------------------------
+    // 3️⃣ Merge exams with grades
+    // -------------------------------
     const examsWithGrades = exams.map(exam => {
       const grade = grades.find(g => g.exam_id === exam.id);
       return { ...exam, grade };
@@ -2011,23 +2016,27 @@ async function loadExams() {
     cachedExams = examsWithGrades;
     tableBody.innerHTML = '';
 
-    // Filter by exam type if needed
-    const filteredExams = cachedExams.filter(exam => {
-      if (selectedFilter === 'all') return true;
-      if (selectedFilter === 'CAT') return ['CAT', 'Cat 1', 'Cat 2'].includes(exam.exam_type);
-      if (selectedFilter === 'Final') return ['Final Exam', 'Exam'].includes(exam.exam_type);
-      return true;
-    });
+    // -------------------------------
+    // 4️⃣ No exam_type filtering (view doesn't have it)
+    // -------------------------------
+    const filteredExams = cachedExams; // show all exams
 
     if (!filteredExams.length) {
-      tableBody.innerHTML = `<tr><td colspan="9">No ${selectedFilter === 'all' ? '' : selectedFilter} exams scheduled.</td></tr>`;
+      tableBody.innerHTML = `<tr><td colspan="9">No exams scheduled.</td></tr>`;
       return;
     }
 
-    // Render table
+    // -------------------------------
+    // 5️⃣ Render exams table
+    // -------------------------------
     filteredExams.forEach(exam => {
       const dateStr = exam.exam_date
-        ? new Date(exam.exam_date).toLocaleDateString('en-US', { weekday:'short', year:'numeric', month:'short', day:'numeric' })
+        ? new Date(exam.exam_date).toLocaleDateString('en-US', {
+            weekday: 'short',
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+          })
         : 'N/A';
 
       const gradeEntry = exam.grade;
