@@ -1251,14 +1251,15 @@ async function loadScheduledSessions() {
  * 5. INITIALIZATION AND LISTENERS
  *******************************************************/
 
+/*******************************************************
+ * 5. INITIALIZATION AND LISTENERS (FIXED VERSION)
+ *******************************************************/
 async function initSession() {
-    if (window.location.pathname.endsWith('.html')) {
-        const cleanPath = window.location.pathname.replace(/\.html$/, '');
-        window.history.replaceState({}, '', cleanPath);
-    }
+    // ✅ Removed URL rewrite that caused auto-refresh
+    // (No need to clean .html path unless using SPA routing)
 
     const { data: { session }, error: sessionError } = await sb.auth.getSession();
-    
+
     if (sessionError || !session) {
         console.warn("Session check failed, redirecting to login.");
         window.location.href = "login.html";
@@ -1267,32 +1268,42 @@ async function initSession() {
 
     sb.auth.setSession(session);
     const user = session.user;
-    
+
     const { data: profile, error: profileError } = await sb
-        .from(USER_PROFILE_TABLE) 
+        .from(USER_PROFILE_TABLE)
         .select('*')
-        .eq('user_id', user.id) 
+        .eq('user_id', user.id)
         .single();
-    
+
     if (profile && !profileError) {
         currentUserProfile = profile;
         currentUserId = user.id;
-        
-        // Role Check - KEEPING SUPERADMIN CHECK AS PER ORIGINAL SCRIPT COMMENTS
-        if (currentUserProfile.role !== 'superadmin') { 
+
+        // ✅ Role-based access handling
+        const role = currentUserProfile.role?.toLowerCase() || 'student';
+
+        if (window.location.pathname.includes('superadmin.html') && role !== 'superadmin') {
             console.warn(`User ${user.email} is not a Super Admin. Redirecting.`);
-            window.location.href = "admin.html"; 
+            window.location.href = 'admin.html';
             return;
         }
-        
-        document.querySelector('header h1').textContent = `Welcome, ${profile.full_name || 'Super Admin'}!`;
+
+        if (window.location.pathname.includes('admin.html') && !['admin', 'superadmin'].includes(role)) {
+            console.warn(`User ${user.email} is not an Admin. Redirecting.`);
+            window.location.href = 'index.html';
+            return;
+        }
+
+        document.querySelector('header h1').textContent =
+            `Welcome, ${profile.full_name || role === 'superadmin' ? 'Super Admin' : 'Admin'}!`;
+
     } else {
         console.error("Profile not found or fetch error:", profileError?.message);
-        await sb.auth.signOut(); 
+        await sb.auth.signOut();
         window.location.href = "login.html";
         return;
     }
-    
+
     setupEventListeners();
     loadSectionData('dashboard');
 }
