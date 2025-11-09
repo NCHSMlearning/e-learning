@@ -969,41 +969,40 @@ async function handleAddCourse(e) {
 
 async function loadCourses() {
     const tbody = $('courses-table');
-    tbody.innerHTML = '<tr><td colspan="7">Loading courses...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6">Loading courses...</td></tr>';
     
-    // Fetch courses without joining lecturer
     const { data: courses, error } = await fetchData('courses', '*', {}, 'unit_code', true); 
 
     if (error) {
-        tbody.innerHTML = `<tr><td colspan="7">Error loading courses: ${error.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6">Error loading courses: ${error.message}</td></tr>`;
         return;
     }
 
     if (!courses || courses.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7">No courses currently added.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6">No courses currently added.</td></tr>';
         return;
     }
 
     tbody.innerHTML = '';
     courses.forEach(course => {
-        const statusClass = course.is_active ? 'status-approved' : 'status-danger';
+        const statusClass = course.status === 'Active' ? 'status-approved' : 'status-danger';
 
         tbody.innerHTML += `
             <tr>
                 <td>${escapeHtml(course.unit_code)}</td>
-                <td>${escapeHtml(course.unit_name)}</td>
-                <td>${escapeHtml(course.program)}</td>
-                <td>${escapeHtml(course.block_term)}</td>
-                <td>N/A</td>
-                <td class="${statusClass}">${course.is_active ? 'Active' : 'Inactive'}</td>
+                <td>${escapeHtml(course.course_name)}</td>
+                <td>${escapeHtml(course.target_program)}</td>
+                <td>${escapeHtml(course.block)}</td>
+                <td class="${statusClass}">${course.status}</td>
                 <td>
                     <button class="btn btn-sm btn-edit" onclick="openEditCourseModal('${course.unit_code}')">Edit</button>
-                    <button class="btn btn-sm btn-danger" onclick="toggleCourseStatus('${course.unit_code}', ${course.is_active})">${course.is_active ? 'Deactivate' : 'Activate'}</button>
+                    <button class="btn btn-sm btn-danger" onclick="toggleCourseStatus('${course.unit_code}', '${course.status}')">${course.status === 'Active' ? 'Deactivate' : 'Activate'}</button>
                 </td>
             </tr>
         `;
     });
 }
+
 
 
 async function toggleCourseStatus(unitCode, currentStatus) {
