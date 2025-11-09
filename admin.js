@@ -601,7 +601,6 @@ async function handleMassPromotion(e) {
         setButtonLoading(submitButton, false, originalText);
     }
 }
-
 /**
  * Fetches all user profiles (Students, Lecturers, Admins)
  * and renders them to the Users Management table.
@@ -632,11 +631,30 @@ async function loadAllUsers() {
 
     users.forEach(user => {
         const userIdShort = user.user_id ? user.user_id.substring(0, 8) : 'N/A';
-        const statusClass = user.status === 'approved'
-            ? 'status-approved'
-            : user.status === 'pending'
-            ? 'status-pending'
-            : 'status-danger';
+        const statusClass =
+            user.status === 'approved'
+                ? 'status-approved'
+                : user.status === 'pending'
+                ? 'status-pending'
+                : 'status-danger';
+
+        let actionButtons = '';
+
+        // ✅ Only Super Admin can manage users
+        if (currentUserProfile?.role === 'superadmin') {
+            actionButtons = `
+                <button class="btn btn-sm btn-edit" onclick="openEditUserModal('${user.user_id}')">Edit</button>
+                <button class="btn btn-sm btn-danger" onclick="toggleUserStatus('${user.user_id}', '${user.status}')">
+                    ${user.status === 'approved' ? 'Deactivate' : 'Activate'}
+                </button>
+            `;
+        } else {
+            // Regular admins/lecturers/students see disabled buttons
+            actionButtons = `
+                <button class="btn btn-sm btn-edit" disabled>Edit</button>
+                <button class="btn btn-sm btn-danger" disabled>Deactivate</button>
+            `;
+        }
 
         const row = `
             <tr>
@@ -646,17 +664,10 @@ async function loadAllUsers() {
                 <td>${escapeHtml(user.role)}</td>
                 <td>${escapeHtml(user.program || 'N/A')} ${user.intake_year ? `/ ${escapeHtml(user.intake_year)}` : ''} ${user.block ? `/ ${escapeHtml(user.block)}` : ''}</td>
                 <td class="${statusClass}">${escapeHtml(user.status)}</td>
-                <td>
-                    <button class="btn btn-sm btn-edit" onclick="openEditUserModal('${user.user_id}')">Edit</button>
-                    ${user.role !== 'superadmin'
-                        ? `<button class="btn btn-sm btn-danger" onclick="toggleUserStatus('${user.user_id}', '${user.status}')">
-                            ${user.status === 'approved' ? 'Deactivate' : 'Activate'}
-                          </button>`
-                        : ''
-                    }
-                </td>
+                <td>${actionButtons}</td>
             </tr>
         `;
+
         tbody.innerHTML += row;
     });
 }
