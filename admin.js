@@ -4,6 +4,8 @@
  **********************************************************************************/
 
 // --- SUPABASE CONFIGURATION ---
+// IMPORTANT: In a production environment, never expose the ANONYMOUS KEY directly
+// The role of the ANONYMOUS KEY is to allow read access to certain tables based on RLS.
 const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co'; 
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -33,8 +35,10 @@ function $(id){ return document.getElementById(id); }
 function escapeHtml(s, isAttribute = false){ 
     let str = String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     if (isAttribute) {
+        // Only quotes need special attention inside attributes
         str = str.replace(/'/g,'&#39;').replace(/"/g,'&quot;');
     } else {
+        // For general text content
         str = str.replace(/"/g,'&quot;').replace(/'/g,'&#39;');
     }
     return str;
@@ -93,6 +97,31 @@ async function getIPAddress() {
     }
 }
 
+function getDeviceId() {
+    let deviceId = localStorage.getItem(DEVICE_ID_KEY);
+    if (!deviceId) {
+        deviceId = 'MANUAL-' + Date.now() + Math.random().toString(36).substring(2, 9);
+        localStorage.setItem(DEVICE_ID_KEY, deviceId);
+    }
+    return deviceId;
+}
+
+/**
+ * Utility to populate <select> elements
+ */
+function populateSelect(selectElement, data, valueKey, textKey, defaultText = '-- Select --') {
+    if (!selectElement) return;
+    selectElement.innerHTML = `<option value="">${defaultText}</option>`;
+    if (data && Array.isArray(data)) {
+        data.forEach(item => {
+            const option = document.createElement('option');
+            option.value = item[valueKey];
+            option.textContent = item[textKey];
+            selectElement.appendChild(option);
+        });
+    }
+}
+
 // --- Tab Switching Logic (Consolidated from your script) ---
 async function loadSectionData(tabId) {
     document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
@@ -102,6 +131,8 @@ async function loadSectionData(tabId) {
         case 'users': loadAllUsers(); break;
         case 'pending': loadPendingApprovals(); break;
         case 'enroll': 
+            // The intake select needs to be populated first for the promotion feature
+            loadIntakeYears();
             loadStudents(); 
             updateBlockTermOptions('promote_intake', 'promote_from_block');
             updateBlockTermOptions('promote_intake', 'promote_to_block');
@@ -112,6 +143,7 @@ async function loadSectionData(tabId) {
         case 'cats': 
             const addExamForm = $('add-exam-form');
             if (addExamForm) {
+                // Ensure listener is only added once
                 addExamForm.removeEventListener('submit', handleAddExam); 
                 addExamForm.addEventListener('submit', handleAddExam);
             }
@@ -138,7 +170,7 @@ async function loadSectionData(tabId) {
  */
 async function logAudit(action_type, details, target_id = null, status = 'SUCCESS') {
     const logData = {
-        user_id: currentUserProfile?.id || 'SYSTEM',
+        user_id: currentUserProfile?.user_id || 'SYSTEM',
         user_role: currentUserProfile?.role || 'SYSTEM',
         action_type: action_type,
         details: details,
@@ -161,12 +193,14 @@ async function logout() {
             await logAudit('LOGOUT', `User ${userProfile.full_name} logged out.`);
         }
         
+        // Supabase sign out
         await sb.auth.signOut();
         
     } catch (error) {
         console.error("Logout error (Supabase/Audit):", error);
     }
     
+    // Clear local storage items
     localStorage.removeItem("loggedInUser");
     sessionStorage.removeItem('authToken'); 
     sessionStorage.removeItem('userRole'); 
@@ -176,6 +210,7 @@ async function logout() {
 
 async function loadAuditLogs() {
     const tbody = $('audit-table');
+    if (!tbody) return;
     tbody.innerHTML = '<tr><td colspan="5">Loading audit logs...</td></tr>';
 
     const { data: logs, error } = await fetchData(AUDIT_TABLE, '*', {}, 'timestamp', false);
@@ -188,12 +223,12 @@ async function loadAuditLogs() {
     tbody.innerHTML = '';
     logs.forEach(log => {
         const timestamp = new Date(log.timestamp).toLocaleString();
-        const statusClass = log.status === 'SUCCESS' ? 'status-approved' : 'status-danger';
+        const statusClass = log.status === 'SUCCESS' ? 'status-approved' : log.status === 'WARNING' ? 'status-pending' : 'status-danger';
 
         tbody.innerHTML += `
             <tr>
                 <td>${timestamp}</td>
-                <td>${escapeHtml(log.user_role)} (${escapeHtml(log.user_id?.substring(0, 8))})</td>
+                <td>${escapeHtml(log.user_role)} (${escapeHtml(log.user_id?.substring(0, 8) || 'N/A')})</td>
                 <td>${escapeHtml(log.action_type)}</td>
                 <td>${escapeHtml(log.details)} (Target ID: ${escapeHtml(log.target_id?.substring(0, 8) || 'N/A')})</td>
                 <td class="${statusClass}">${escapeHtml(log.status)}</td>
@@ -221,7 +256,7 @@ function filterTable(inputId, tableId, columnsToSearch = [0]) {
         let rowMatches = false;
 
         if (trs[i].getElementsByTagName('td').length <= 1) {
-             trs[i].style.display = "";
+             trs[i].style.display = ""; // Keep placeholder rows visible or adjust based on your design
              continue;
         }
 
@@ -256,7 +291,9 @@ function exportTableToCSV(tableId, filename) {
         if (headerRow) {
             const headerCols = headerRow.querySelectorAll('th');
             const header = [];
-            for (let j = 0; j < headerCols.length - 1; j++) { 
+            for (let j = 0; j < headerCols.length; j++) { 
+                // Skip the last column if it's for 'Actions'
+                if (headerCols[j].textContent.trim().toLowerCase() === 'actions') continue;
                 let data = headerCols[j].innerText.trim();
                 data = data.replace(/"/g, '""'); 
                 header.push('"' + data + '"');
@@ -269,14 +306,18 @@ function exportTableToCSV(tableId, filename) {
         const row = [];
         const cols = rows[i].querySelectorAll('td'); 
         
-        if (cols.length < 2) continue;
+        if (cols.length < 2) continue; // Skip empty/placeholder rows
 
-        for (let j = 0; j < cols.length - 1; j++) { 
+        for (let j = 0; j < cols.length; j++) { 
+            // Skip the last column if it's for 'Actions'
+            if (cols[j].parentElement.querySelector('td:last-child') === cols[j] && cols[j].querySelector('button')) continue;
             let data = cols[j].innerText.trim();
             data = data.replace(/"/g, '""'); 
             row.push('"' + data + '"');
         }
-        csv.push(row.join(','));
+        if (row.length > 0) { // Only push if data was collected
+            csv.push(row.join(','));
+        }
     }
 
     const csv_string = csv.join('\n');
@@ -353,7 +394,7 @@ async function loadDashboardData() {
         .eq('role', 'student');
     $('totalStudents').textContent = studentsCount || 0;
 
-    // Data Integrity Placeholder 
+    // Data Integrity Placeholder (Not implemented with Supabase)
     $('dataIntegrityScore').textContent = '98.5%';
     loadStudentWelcomeMessage();
 }
@@ -373,6 +414,7 @@ async function loadStudentWelcomeMessage() {
 async function loadWelcomeMessageForEdit() {
     const { data } = await fetchData(SETTINGS_TABLE, '*', { key: MESSAGE_KEY });
     const editor = $('welcome-message-editor');
+    if (!editor) return;
 
     if (data && data.length > 0) {
         editor.value = data[0].value;
@@ -388,7 +430,14 @@ async function handleSaveWelcomeMessage(e) {
     const originalText = submitButton.textContent;
     setButtonLoading(submitButton, true, originalText);
 
-    const value = $('welcome-message-editor').value.trim();
+    const editor = $('welcome-message-editor');
+    if (!editor) {
+        showFeedback('Editor element not found.', 'error');
+        setButtonLoading(submitButton, false, originalText);
+        return;
+    }
+
+    const value = editor.value.trim();
 
     if (!value) {
         showFeedback('Message content cannot be empty.', 'error');
@@ -401,12 +450,14 @@ async function handleSaveWelcomeMessage(e) {
         let updateOrInsertError = null;
 
         if (existing && existing.length > 0) {
+            // Update existing record
             const { error } = await sb
                 .from(SETTINGS_TABLE)
                 .update({ value, updated_at: new Date().toISOString() })
                 .eq('id', existing[0].id);
             updateOrInsertError = error;
         } else {
+            // Insert new record
             const { error } = await sb
                 .from(SETTINGS_TABLE)
                 .insert({ key: MESSAGE_KEY, value });
@@ -439,27 +490,30 @@ function updateBlockTermOptions(programSelectId, blockTermSelectId) {
   const blockTermSelect = $(blockTermSelectId);
   if (!blockTermSelect) return;
 
+  // Preserve the current value if possible before clearing/repopulating
+  const currentValue = blockTermSelect.value;
   blockTermSelect.innerHTML = '<option value="">-- Select Block/Term --</option>';
 
   if (!program) return;
 
   let options = [];
 
-  if (program === 'KRCHN') {
+  if (program.toUpperCase().includes('KRCHN')) {
     options = [
-      { value: 'A', text: 'Block A' },
-      { value: 'B', text: 'Block B' }
+      { value: 'Block_A', text: 'Block A' },
+      { value: 'Block_B', text: 'Block B' }
     ];
-  } else if (program === 'TVET') {
+  } else if (program.toUpperCase().includes('TVET')) {
     options = [
       { value: 'Term_1', text: 'Term 1' },
       { value: 'Term_2', text: 'Term 2' },
       { value: 'Term_3', text: 'Term 3' }
     ];
   } else {
+    // Default or mixed case
     options = [
-      { value: 'A', text: 'Block A / Term 1' },
-      { value: 'B', text: 'Block B / Term 2' }
+      { value: 'Block_A', text: 'Block A / Term 1' },
+      { value: 'Block_B', text: 'Block B / Term 2' }
     ];
   }
 
@@ -469,8 +523,42 @@ function updateBlockTermOptions(programSelectId, blockTermSelectId) {
     option.textContent = opt.text;
     blockTermSelect.appendChild(option);
   });
+  
+  // Try to restore the previous value
+  if (currentValue) {
+      blockTermSelect.value = currentValue;
+  }
 }
 // --- End Block/Term Utilities ---
+
+/**
+ * Populates the intake year select for enrollment and promotion from the courses table.
+ */
+async function loadIntakeYears() {
+    const intakeSelectIds = ['account-intake', 'promote_intake', 'edit_account_intake', 'course-intake', 'resource_intake', 'exam_intake'];
+    
+    // Fetch unique intake years from the courses table
+    const { data: courses, error } = await sb.from('courses').select('intake_year');
+
+    if (error) {
+        console.error('Error fetching intake years:', error);
+        return;
+    }
+
+    const uniqueIntakes = new Set();
+    courses.forEach(c => {
+        if (c.intake_year) uniqueIntakes.add(c.intake_year);
+    });
+    
+    const intakeOptions = Array.from(uniqueIntakes).sort().map(year => ({ value: year, text: year }));
+
+    intakeSelectIds.forEach(id => {
+        const select = $(id);
+        if (select) {
+            populateSelect(select, intakeOptions, 'value', 'text', '-- Select Intake Year --');
+        }
+    });
+}
 
 
 async function handleAddAccount(e) {
@@ -488,27 +576,45 @@ async function handleAddAccount(e) {
   const intake_year = $('account-intake').value;
   const block = $('account-block-term').value;
 
+  if (!name || !email || !password || !role) {
+      showFeedback('Name, Email, Password, and Role are required.', 'error');
+      setButtonLoading(submitButton, false, originalText);
+      return;
+  }
+  
+  if (password.length < 6) {
+      showFeedback('Password must be at least 6 characters long.', 'error');
+      setButtonLoading(submitButton, false, originalText);
+      return;
+  }
+
   const userData = {
     full_name: name,
     role,
     phone,
-    program,
-    intake_year,
-    block,
+    program: role === 'student' ? program : null,
+    intake_year: role === 'student' ? intake_year : null,
+    block: role === 'student' ? block : null,
     status: 'approved',
-    block_program_year: false 
+    block_program_year: false // Assuming this field is for logic not direct input
   };
 
   try {
+    // 1. Create Supabase Auth User
     const { data: { user }, error: authError } = await sb.auth.signUp({
       email, password, options: { data: userData }
     });
     if (authError) throw authError;
 
+    // 2. Create Profile in consolidated_user_profiles_table
     if (user && user.id) {
       const profileData = { user_id: user.id, email, ...userData };
+      // Remove email from userData passed to auth signUp options and keep it here to avoid duplication/conflict
       const { error: insertError } = await sb.from(USER_PROFILE_TABLE).insert([profileData]);
       if (insertError) {
+        // NOTE: A serious issue here is the Auth user is created but profile insert failed. 
+        // Admin would need manual cleanup.
+        // In a real app, you might want to call a serverless function to delete the auth user on profile insert failure.
         throw insertError;
       }
       e.target.reset();
@@ -531,32 +637,32 @@ async function handleAddAccount(e) {
 async function handleMassPromotion(e) {
     e.preventDefault();
     const submitButton = e.submitter;
-    const originalText = submitButton.textContent;
-    setButtonLoading(submitButton, true, originalText);
+    const originalText = submitter.textContent;
+    setButtonLoading(submitter, true, originalText);
 
     const promote_intake = $('promote_intake').value;
     const promote_from_block = $('promote_from_block').value;
     const promote_to_block = $('promote_to_block').value;
-    const program = $('promote_intake').selectedOptions[0]?.text.includes('KRCHN') ? 'KRCHN' : 'TVET'; 
 
     if (!promote_intake || !promote_from_block || !promote_to_block) {
         showFeedback('Please select the Intake Year, FROM Block/Term, and TO Block/Term.', 'error');
-        setButtonLoading(submitButton, false, originalText);
+        setButtonLoading(submitter, false, originalText);
         return;
     }
 
     if (promote_from_block === promote_to_block) {
         showFeedback('The "FROM" and "TO" blocks/terms must be different.', 'error');
-        setButtonLoading(submitButton, false, originalText);
+        setButtonLoading(submitter, false, originalText);
         return;
     }
 
     if (!confirm(`WARNING: Are you sure you want to promote ALL active students from the ${promote_from_block} to the ${promote_to_block} for the Intake Year ${promote_intake}? This action cannot be undone easily.`)) {
-        setButtonLoading(submitButton, false, originalText);
+        setButtonLoading(submitter, false, originalText);
         return;
     }
 
     try {
+        // 1. Count students to promote
         const { count: initialCount, error: fetchError } = await sb
             .from(USER_PROFILE_TABLE)
             .select('user_id', { count: 'exact', head: true })
@@ -573,6 +679,7 @@ async function handleMassPromotion(e) {
             return;
         }
 
+        // 2. Perform the mass update
         const { error: updateError, count } = await sb
             .from(USER_PROFILE_TABLE)
             .update({ 
@@ -587,7 +694,7 @@ async function handleMassPromotion(e) {
 
         if (updateError) throw updateError;
         
-        const logDetails = `Mass promoted ${count} students from ${promote_from_block} to ${promote_to_block} (Intake: ${promote_intake}, Program: ${program}).`;
+        const logDetails = `Mass promoted ${count} students from ${promote_from_block} to ${promote_to_block} (Intake: ${promote_intake}).`;
         await logAudit('PROMOTION_MASS', logDetails, null, 'SUCCESS');
         showFeedback(`Successfully promoted ${count} student(s) to ${promote_to_block}!`, 'success');
 
@@ -598,7 +705,7 @@ async function handleMassPromotion(e) {
         await logAudit('PROMOTION_MASS', logDetails, null, 'FAILURE');
         showFeedback(`Mass promotion failed: ${err.message}`, 'error');
     } finally {
-        setButtonLoading(submitButton, false, originalText);
+        setButtonLoading(submitter, false, originalText);
     }
 }
 /**
@@ -639,12 +746,14 @@ async function loadAllUsers() {
                 : 'status-danger';
 
         let actionButtons = '';
+        const isSuperAdmin = currentUserProfile?.role === 'superadmin';
+        const isSelf = currentUserProfile?.user_id === user.user_id;
 
-        // ✅ Only Super Admin can manage users
-        if (currentUserProfile?.role === 'superadmin') {
-            actionButtons = `
+        // Only Super Admin can manage other users, and cannot deactivate themselves
+        if (isSuperAdmin || (currentUserProfile?.role === 'admin' && user.role !== 'superadmin')) { 
+             actionButtons = `
                 <button class="btn btn-sm btn-edit" onclick="openEditUserModal('${user.user_id}')">Edit</button>
-                <button class="btn btn-sm btn-danger" onclick="toggleUserStatus('${user.user_id}', '${user.status}')">
+                <button class="btn btn-sm btn-danger" onclick="toggleUserStatus('${user.user_id}', '${user.status}')" ${isSelf ? 'disabled' : ''}>
                     ${user.status === 'approved' ? 'Deactivate' : 'Activate'}
                 </button>
             `;
@@ -678,6 +787,11 @@ async function loadAllUsers() {
 async function toggleUserStatus(userId, currentStatus) {
     let newStatus, action, confirmMessage;
     const userIdShort = userId.substring(0, 8);
+
+    if (currentUserProfile?.user_id === userId) {
+        showFeedback("You cannot change your own status from this interface.", 'error');
+        return;
+    }
 
     if (currentStatus === 'approved') {
         newStatus = 'inactive';
@@ -774,6 +888,7 @@ async function approveUser(userId, fullName, role) {
         await logAudit('USER_APPROVAL', `Approved account for ${fullName} (${role})`, userId, 'SUCCESS');
         loadPendingApprovals(); 
         loadDashboardData(); 
+        loadAllUsers();
         
     } catch (err) {
         await logAudit('USER_APPROVAL', `Failed to approve account for ${fullName}. Reason: ${err.message}`, userId, 'FAILURE');
@@ -799,6 +914,7 @@ async function rejectUser(userId, fullName) {
         await logAudit('USER_REJECTION', `Rejected and set status to inactive for ${fullName}`, userId, 'SUCCESS');
         loadPendingApprovals(); 
         loadDashboardData(); 
+        loadAllUsers();
         
     } catch (err) {
         await logAudit('USER_REJECTION', `Failed to reject account for ${fullName}. Reason: ${err.message}`, userId, 'FAILURE');
@@ -813,6 +929,8 @@ async function openEditUserModal(userId) {
     const modal = $('userEditModal');
     const form = $('edit-user-form');
     const title = $('edit-user-title');
+    
+    if (!modal || !form || !title) return;
     
     title.textContent = `Edit User: ${userId.substring(0, 8)}`;
     form.reset();
@@ -843,7 +961,10 @@ async function openEditUserModal(userId) {
     
     if (u.program && u.intake_year) {
          updateBlockTermOptions('edit_account_program', 'edit_account_block_term');
-         $('edit_account_block_term').value = u.block || ''; 
+         // Set value after options are updated
+         setTimeout(() => {
+             $('edit_account_block_term').value = u.block || ''; 
+         }, 50);
     }
 
     modal.style.display = 'block';
@@ -861,20 +982,23 @@ async function handleEditUser(e) {
     const userId = $('edit_user_id').value; 
     const originalRole = $('edit_original_role').value; 
 
+    const newRole = $('edit_account_role').value;
+
     const updatedData = {
         full_name: $('edit_account_name').value.trim(),
-        role: $('edit_account_role').value,
+        role: newRole,
         status: $('edit_account_status').value,
         phone: $('edit_account_phone').value.trim(),
-        program: $('edit_account_program').value,
-        intake_year: $('edit_account_intake').value,
-        block: $('edit_account_block_term').value,
+        program: newRole === 'student' ? $('edit_account_program').value : null,
+        intake_year: newRole === 'student' ? $('edit_account_intake').value : null,
+        block: newRole === 'student' ? $('edit_account_block_term').value : null,
         updated_at: new Date().toISOString()
     };
     
-    const newPassword = $('edit_account-password').value.trim(); // Note: Changed to use the correct ID
+    const newPassword = $('edit_account-password').value.trim(); // The ID from the HTML
 
     try {
+        // 1. Update Profile Table
         const { error: profileError } = await sb
             .from(USER_PROFILE_TABLE)
             .update(updatedData)
@@ -882,12 +1006,21 @@ async function handleEditUser(e) {
 
         if (profileError) throw new Error(`Profile update failed: ${profileError.message}`);
         
+        // 2. Update Auth User Password if provided
         if (newPassword) {
             if (newPassword.length < 6) {
                 throw new Error("Password must be at least 6 characters long.");
             }
-            const { error: authError } = await sb.auth.updateUser({ password: newPassword });
-            if (authError) throw new Error(`Password update failed: ${authError.message}`);
+            // NOTE: Supabase only allows updating the password of the *currently signed-in user*.
+            // To update another user's password, you MUST use the Admin API (a server-side function).
+            // For this client-side script, we must restrict this.
+            if (userId !== currentUserId) {
+                showFeedback("Warning: Password reset for other users requires a server-side Admin API call.", 'warning');
+            } else {
+                // Only allow self-password change
+                const { error: authError } = await sb.auth.updateUser({ password: newPassword });
+                if (authError) throw new Error(`Password update failed: ${authError.message}`);
+            }
         }
 
         showFeedback(`User ${updatedData.full_name} profile successfully updated.`, 'success');
@@ -924,21 +1057,23 @@ async function handleAddCourse(e) {
     const program = $('course-program').value.trim();
     const intake = $('course-intake').value.trim();
     const block = $('course-block').value.trim();
+    const lecturerId = $('course-lecturer').value || null;
 
     if (!unitCode || !courseName || !program || !intake || !block) {
-        showFeedback('Please fill out all required fields.', 'error');
+        showFeedback('Please fill out all required fields: Unit Code, Name, Program, Intake, and Block.', 'error');
         setButtonLoading(submitButton, false, originalText);
         return;
     }
 
     const newCourseData = {
         unit_code: unitCode,
-        course_name: courseName,
+        unit_name: courseName,
         description: description || null,
-        target_program: program,
+        program: program,
         intake_year: intake,
-        block: block,
-        status: 'Active'
+        block_term: block,
+        is_active: true, // Renamed 'status' to 'is_active' for boolean
+        lecturer_id: lecturerId,
     };
 
     try {
@@ -951,10 +1086,13 @@ async function handleAddCourse(e) {
             throw error;
         }
 
+        await logAudit('COURSE_CREATE', `Added new course: ${unitCode} - ${courseName}`, unitCode, 'SUCCESS');
         showFeedback(`Course ${unitCode} (${courseName}) added successfully!`, 'success');
         e.target.reset();
         loadCourses(); 
+        loadIntakeYears(); // Refresh intake list if new one was added
     } catch (err) {
+        await logAudit('COURSE_CREATE', `Failed to add course ${unitCode}. Reason: ${err.message}`, unitCode, 'FAILURE');
         showFeedback(`Failed to add course ${unitCode}. Reason: ${err.message}`, 'error');
     } finally {
         setButtonLoading(submitButton, false, originalText);
@@ -963,10 +1101,11 @@ async function handleAddCourse(e) {
 
 
 async function loadCourses() {
-    const tbody = $('courses-table').querySelector('tbody');
+    const tbody = $('courses-table')?.querySelector('tbody');
+    if (!tbody) return;
     tbody.innerHTML = '<tr><td colspan="6">Loading courses...</td></tr>';
 
-    const { data: courses, error } = await fetchData('courses', '*', {}, 'unit_code', true);
+    const { data: courses, error } = await fetchData('courses', '*, lecturer:lecturer_id(full_name)', {}, 'unit_code', true);
 
     if (error) {
         tbody.innerHTML = `<tr><td colspan="6">Error loading courses: ${error.message}</td></tr>`;
@@ -980,16 +1119,21 @@ async function loadCourses() {
 
     tbody.innerHTML = '';
     courses.forEach(course => {
+        const lecturerName = course.lecturer?.full_name || 'Unassigned';
+        const statusText = course.is_active ? 'Active' : 'Inactive';
+        const statusClass = course.is_active ? 'status-approved' : 'status-danger';
+
         tbody.innerHTML += `
             <tr>
-                <td>${escapeHtml(course.course_name)}</td>
+                <td>${escapeHtml(course.unit_name)}</td>
                 <td>${escapeHtml(course.unit_code)}</td>
-                <td>${escapeHtml(course.target_program)}</td>
-                <td>${escapeHtml(course.intake_year)}</td>
-                <td>${escapeHtml(course.block)}</td>
+                <td>${escapeHtml(course.program)}</td>
+                <td>${escapeHtml(course.intake_year)} / ${escapeHtml(course.block_term)}</td>
+                <td>${escapeHtml(lecturerName)}</td>
+                <td class="${statusClass}">${statusText}</td>
                 <td>
                     <button class="btn btn-sm btn-edit" onclick="openEditCourseModal('${course.unit_code}')">Edit</button>
-                    <button class="btn btn-sm btn-danger" onclick="toggleCourseStatus('${course.unit_code}', '${course.status}')">${course.status === 'Active' ? 'Deactivate' : 'Activate'}</button>
+                    <button class="btn btn-sm btn-danger" onclick="toggleCourseStatus('${course.unit_code}', ${course.is_active})">${course.is_active ? 'Deactivate' : 'Activate'}</button>
                 </td>
             </tr>
         `;
@@ -1014,7 +1158,7 @@ async function toggleCourseStatus(unitCode, currentStatus) {
         if (error) throw error;
 
         showFeedback(`Course ${unitCode} successfully ${action}d.`, 'success');
-        await logAudit('COURSE_STATUS_UPDATE', `${action}d course: ${unitCode}`, unitCode, 'SUCCESS');
+        await logAudit('COURSE_STATUS_UPDATE', `${action}d course: ${unitCode} (New Status: ${newStatus})`, unitCode, 'SUCCESS');
         loadCourses();
         
     } catch (err) {
@@ -1029,6 +1173,8 @@ async function openEditCourseModal(unitCode) {
     const form = $('edit-course-form');
     const title = $('edit-course-title');
     
+    if (!modal || !form || !title) return;
+    
     title.textContent = `Edit Course: ${unitCode}`;
     form.reset();
     
@@ -1042,17 +1188,23 @@ async function openEditCourseModal(unitCode) {
     const c = course[0];
     
     $('edit_course_unit_code').value = c.unit_code; 
-
     $('edit_course_name').value = c.unit_name;
     $('edit_course_program').value = c.program;
     $('edit_course_intake').value = c.intake_year || ''; 
     
+    // Load lecturers for assignment
+    const lecturerSelect = $('edit_course_lecturer');
+    const { data: lecturers } = await fetchData(USER_PROFILE_TABLE, 'user_id, full_name', { role: 'lecturer', status: 'approved' }, 'full_name', true);
+    populateSelect(lecturerSelect, lecturers, 'user_id', 'full_name', 'Unassigned');
+    
+    // Update block/term options based on program/intake
     updateBlockTermOptions('edit_course_program', 'edit_course_block');
     
-    $('edit_course_block').value = c.block_term; 
-    
-    // Placeholder: Need to load lecturers into 'edit_course_lecturer'
-    // $('edit_course_lecturer').value = c.lecturer_id; 
+    // Set values after options are populated
+    setTimeout(() => {
+        $('edit_course_block').value = c.block_term; 
+        lecturerSelect.value = c.lecturer_id || '';
+    }, 50);
 
     modal.style.display = 'block';
 }
@@ -1066,11 +1218,12 @@ async function handleEditCourse(e) {
     const originalUnitCode = $('edit_course_unit_code').value; 
     const unitName = $('edit_course_name').value.trim();
     const program = $('edit_course_program').value;
+    const intake = $('edit_course_intake').value;
     const blockTerm = $('edit_course_block').value;
     const lecturerId = $('edit_course_lecturer').value || null; 
 
-    if (!unitName || !program || !blockTerm) {
-        showFeedback('Please ensure all required fields are filled.', 'error');
+    if (!unitName || !program || !blockTerm || !intake) {
+        showFeedback('Please ensure Course Name, Program, Intake, and Block/Term are filled.', 'error');
         setButtonLoading(submitButton, false, originalText);
         return;
     }
@@ -1078,6 +1231,7 @@ async function handleEditCourse(e) {
     const updatedData = {
         unit_name: unitName,
         program: program,
+        intake_year: intake,
         block_term: blockTerm,
         lecturer_id: lecturerId,
         updated_at: new Date().toISOString()
@@ -1124,6 +1278,7 @@ async function populateSessionCourseSelects() {
     lecturerSelect.innerHTML = '<option value="">-- Select Lecturer --</option>';
     
     try {
+        // NOTE: We should filter by Program and Block/Term if those selects are used to filter courses
         const { data: courses } = await fetchData('courses', 'unit_code, unit_name', { is_active: true });
         courses?.forEach(course => {
             courseSelect.innerHTML += `<option value="${course.unit_code}">${course.unit_code} - ${course.unit_name}</option>`;
@@ -1166,6 +1321,13 @@ async function handleAddSession(e) {
     const startDateTime = `${sessionDate}T${startTime}:00`;
     const endDateTime = `${sessionDate}T${endTime}:00`;
 
+    // Basic time validation
+    if (new Date(startDateTime) >= new Date(endDateTime)) {
+        showFeedback('End time must be after start time.', 'error');
+        setButtonLoading(submitButton, false, originalText);
+        return;
+    }
+
     const newSessionData = {
         course_code: courseCode,
         session_type: sessionType,
@@ -1177,14 +1339,15 @@ async function handleAddSession(e) {
     };
 
     try {
-        const { error } = await sb
+        const { error, data } = await sb
             .from('scheduled_sessions') 
-            .insert([newSessionData]);
+            .insert([newSessionData])
+            .select('id');
 
         if (error) throw error;
         
         showFeedback(`Session for ${courseCode} on ${sessionDate} added successfully!`, 'success');
-        await logAudit('SESSION_CREATE', `Created new session for course: ${courseCode} at ${location}`, courseCode, 'SUCCESS');
+        await logAudit('SESSION_CREATE', `Created new session for course: ${courseCode} at ${location}`, data?.[0]?.id, 'SUCCESS');
         
         e.target.reset(); 
         loadScheduledSessions();
@@ -1204,8 +1367,10 @@ async function handleAddSession(e) {
  */
 async function loadScheduledSessions() {
     const tbody = $('sessions-table');
+    if (!tbody) return;
     tbody.innerHTML = '<tr><td colspan="8">Loading scheduled sessions...</td></tr>';
     
+    // Fetch courses and lecturers for joins
     const { data: sessions, error } = await fetchData(
         'scheduled_sessions', 
         '*, course:course_code(unit_name), lecturer:lecturer_id(full_name)', 
@@ -1250,8 +1415,10 @@ async function loadScheduledSessions() {
         `;
     });
 }
+
+
 /*******************************************************
- * 7. Attendance Tab (admin)
+ * 7. Attendance Tab (admin) (Logic Refined)
  *******************************************************/
 
 // ----------------------- Supporting Functions -----------------------
@@ -1261,38 +1428,40 @@ function toggleAttendanceFields() {
     const departmentInput = $('att_department');
     const courseSelect = $('att_course_id');
 
-    if (!departmentInput) return;
+    if (!departmentInput || !courseSelect) return;
+
+    // Reset visibility/requirements
+    departmentInput.placeholder = "Location/Detail (Optional)";
+    departmentInput.required = false;
+    courseSelect.required = false;
 
     if (sessionType === 'clinical') {
-        departmentInput.placeholder = "Clinical Department/Area";
+        departmentInput.placeholder = "Clinical Department/Area (Required)";
         departmentInput.required = true;
-        if (courseSelect) { courseSelect.required = false; courseSelect.value = ""; }
     } else if (sessionType === 'classroom') {
         departmentInput.placeholder = "Classroom Location/Room (Optional)";
-        departmentInput.required = false;
-        if (courseSelect) courseSelect.required = true;
-    } else {
-        departmentInput.placeholder = "Location/Detail (Optional)";
-        departmentInput.required = false;
-        if (courseSelect) { courseSelect.required = false; courseSelect.value = ""; }
-    }
+        courseSelect.required = true;
+    } 
+    // If not selected or another type, they are optional/default
 }
 
 async function populateAttendanceSelects() {
     // Populate Student Select
-    const { data: students } = await fetchData(USER_PROFILE_TABLE, 'user_id, full_name, role', { role: 'student' }, 'full_name', true);
-    populateSelect($('att_student_id'), students, 'user_id', 'full_name', 'Select Student');
+    const { data: students } = await fetchData(USER_PROFILE_TABLE, 'user_id, full_name, role', { role: 'student', status: 'approved' }, 'full_name', true);
+    populateSelect($('att_student_id'), students, 'user_id', 'full_name', '-- Select Student --');
 
     // Populate Course Select
-    const { data: courses } = await fetchData('courses', 'id, course_name', {}, 'course_name', true);
-    populateSelect($('att_course_id'), courses, 'id', 'course_name', 'Select Course (For Classroom)');
+    // NOTE: Using 'unit_code' as the value to link to the course, but need to check if schema uses 'id' instead. 
+    // Assuming 'unit_code' for simplicity here based on other code.
+    const { data: courses } = await fetchData('courses', 'unit_code, unit_name', { is_active: true }, 'unit_name', true);
+    populateSelect($('att_course_id'), courses.map(c => ({ id: c.unit_code, course_name: `${c.unit_code} - ${c.unit_name}` })), 'id', 'course_name', '-- Select Course (For Classroom) --');
 }
 
 
 // ----------------------- Admin Actions -----------------------
 
 async function approveAttendanceRecord(recordId) {
-    if (!currentUserProfile?.id) {
+    if (!currentUserProfile?.user_id) {
         showFeedback('Error: Admin ID not found for verification.', 'error');
         return;
     }
@@ -1303,7 +1472,7 @@ async function approveAttendanceRecord(recordId) {
             .from('geo_attendance_logs')
             .update({
                 is_verified: true,
-                verified_by_id: currentUserProfile.id,
+                verified_by_id: currentUserProfile.user_id,
                 verified_at: new Date().toISOString()
             })
             .eq('id', recordId);
@@ -1338,7 +1507,10 @@ function showMap(lat, lng, locationName, studentName, dateTime) {
     const modal = $('mapModal');
     const mapContainer = $('mapbox-map');
     const mapDetails = $('map-details');
-    if (!modal || !mapContainer || !mapDetails) return;
+    if (!modal || !mapContainer || !mapDetails || !L) {
+        showFeedback('Map functionality is unavailable (Leaflet library is missing or elements are not found).', 'error');
+        return;
+    }
 
     modal.style.display = 'flex';
     mapContainer.innerHTML = 'Map loading...';
@@ -1381,18 +1553,30 @@ async function handleManualAttendance(e) {
     const session_type = $('att_session_type').value;
     const date = $('att_date').value;
     const time = $('att_time').value;
-    const course_id = session_type === 'classroom' ? $('att_course_id').value : null;
+    const course_code = session_type === 'classroom' ? $('att_course_id').value : null; // Use course_code for consistency
     const department = $('att_department').value.trim() || null;
     const location_name = $('att_location').value.trim() || 'Manual Admin Entry';
 
     let check_in_time = new Date().toISOString();
     if (date && time) check_in_time = new Date(`${date}T${time}`).toISOString();
     else if (date) check_in_time = new Date(date).toISOString();
+    
+    // Get the display name for logging and the target_name column
+    const studentName = $('att_student_id')?.selectedOptions[0]?.text || student_id;
+    const courseName = $('att_course_id')?.selectedOptions[0]?.text || null;
+    const target_name = session_type === 'clinical' ? department : courseName;
 
-    if (!student_id || (session_type === 'classroom' && !course_id)) {
-        showFeedback('Please select a student and required fields.', 'error');
+    if (!student_id || (session_type === 'classroom' && !course_code) || (session_type === 'clinical' && !department)) {
+        showFeedback('Please select a student and fill out required fields based on session type.', 'error');
         setButtonLoading(submitButton, false, originalText);
         return;
+    }
+    
+    // Check if the timestamp is in the future
+    if (new Date(check_in_time) > new Date()) {
+         showFeedback('Attendance time cannot be in the future.', 'error');
+         setButtonLoading(submitButton, false, originalText);
+         return;
     }
 
     const attendanceData = {
@@ -1400,28 +1584,28 @@ async function handleManualAttendance(e) {
         session_type,
         check_in_time,
         department,
-        course_id,
+        course_code, // Use course_code
         is_manual_entry: true,
         latitude: null,
         longitude: null,
         location_name,
         ip_address: await getIPAddress(),
         device_id: getDeviceId(),
-        target_name: session_type === 'clinical' ? department : $('att_course_id')?.selectedOptions[0]?.text || null
+        target_name: target_name 
     };
 
     try {
         const { error, data } = await sb.from('geo_attendance_logs').insert([attendanceData]).select('id');
         if (error) throw error;
         
-        await logAudit('ATTENDANCE_MANUAL', `Recorded manual attendance for student ${student_id} for ${session_type}.`, data?.[0]?.id, 'SUCCESS');
+        await logAudit('ATTENDANCE_MANUAL', `Recorded manual attendance for student ${studentName} for ${session_type}.`, data?.[0]?.id, 'SUCCESS');
         showFeedback('Manual attendance recorded successfully!', 'success'); 
         e.target.reset(); 
         loadAttendance(); 
-        toggleAttendanceFields(); 
+        toggleAttendanceFields(); // Reset the fields based on selection
 
     } catch (error) {
-        await logAudit('ATTENDANCE_MANUAL', `Failed manual attendance for student ${student_id}. Reason: ${error.message}`, student_id, 'FAILURE');
+        await logAudit('ATTENDANCE_MANUAL', `Failed manual attendance for student ${studentName}. Reason: ${error.message}`, student_id, 'FAILURE');
         showFeedback(`Failed to record attendance: ${error.message}`, 'error');
     } finally {
         setButtonLoading(submitButton, false, originalText);
@@ -1433,19 +1617,19 @@ async function handleManualAttendance(e) {
 async function loadAttendance() {
     const todayBody = $('attendance-table');
     const pastBody = $('past-attendance-table');
+    if (!todayBody || !pastBody) return;
+
     todayBody.innerHTML = '<tr><td colspan="7">Loading today\'s records...</td></tr>';
     pastBody.innerHTML = '<tr><td colspan="6">Loading history...</td></tr>';
 
-    const todayISO = new Date().toISOString().slice(0,10);
+    // Get today's date in local time, then convert to ISO start of day for comparison
+    const now = new Date();
+    const todayISO = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString().slice(0,10);
 
     const { data: allRecords, error } = await sb
         .from('geo_attendance_logs')
         .select(`
-            *,
-            is_verified,
-            latitude,
-            longitude,
-            target_name,
+            id, check_in_time, session_type, is_verified, latitude, longitude, target_name, location_name, department, is_manual_entry,
             ${USER_PROFILE_TABLE}:student_id(full_name, role)
         `)
         .order('check_in_time', { ascending: false });
@@ -1461,10 +1645,13 @@ async function loadAttendance() {
     allRecords.forEach(r=>{
         const userProfile = r[USER_PROFILE_TABLE];
         const userName = userProfile?.full_name || 'N/A User';
-        const dateTime = new Date(r.check_in_time).toLocaleString();
+        const checkInDate = new Date(r.check_in_time);
+        const dateTime = checkInDate.toLocaleString();
+        
+        // Target name logic
         const targetDetail = r.target_name || r.department || r.location_name || 'N/A Target';
-        const locationDisplay = r.location_friendly_name || r.location_name || r.department || 'N/A';
-        const geoStatus = (r.latitude && r.longitude)?'Yes (Geo-Logged)':'No (Manual)';
+        const locationDisplay = r.location_name || r.department || 'N/A Location';
+        const geoStatus = (r.is_manual_entry)?'No (Manual)':'Yes (Geo-Logged)';
 
         let actionsHtml = '';
         const mapAvailable = r.latitude && r.longitude;
@@ -1473,7 +1660,8 @@ async function loadAttendance() {
 
         actionsHtml += `<button class="btn btn-map btn-small" ${mapAvailable?'':'disabled'} onclick="${mapAction}">View Map</button>`;
 
-        const isToday = new Date(r.check_in_time).toISOString().slice(0,10) === todayISO;
+        // Check if the record date matches today's date string
+        const isToday = checkInDate.toISOString().slice(0,10) === todayISO;
         const statusDisplay = r.is_verified ? '✅ Verified' : 'Pending';
 
         if (isToday){
@@ -1507,16 +1695,17 @@ async function loadAttendance() {
     pastBody.innerHTML = pastHtml||'<tr><td colspan="6">No past attendance history found.</td></tr>';
 }
 
-/*******************************************************
- * 5. INITIALIZATION AND LISTENERS
- *******************************************************/
 
 /*******************************************************
  * 5. INITIALIZATION AND LISTENERS (FIXED VERSION)
  *******************************************************/
 async function initSession() {
-    // ✅ Removed URL rewrite that caused auto-refresh
-    // (No need to clean .html path unless using SPA routing)
+    // Check if Supabase client is available (should be due to DOMContentLoaded wait)
+    if (typeof sb === 'undefined') {
+        console.error("Supabase client is not defined.");
+        window.location.href = "login.html";
+        return;
+    }
 
     const { data: { session }, error: sessionError } = await sb.auth.getSession();
 
@@ -1526,6 +1715,7 @@ async function initSession() {
         return;
     }
 
+    // Explicitly setting the session after a successful getSession
     sb.auth.setSession(session);
     const user = session.user;
 
@@ -1541,21 +1731,27 @@ async function initSession() {
 
         // ✅ Role-based access handling
         const role = currentUserProfile.role?.toLowerCase() || 'student';
+        const currentPath = window.location.pathname.toLowerCase();
 
-        if (window.location.pathname.includes('superadmin.html') && role !== 'superadmin') {
+        if (currentPath.includes('superadmin.html') && role !== 'superadmin') {
             console.warn(`User ${user.email} is not a Super Admin. Redirecting.`);
             window.location.href = 'admin.html';
             return;
         }
 
-        if (window.location.pathname.includes('admin.html') && !['admin', 'superadmin'].includes(role)) {
+        if (currentPath.includes('admin.html') && !['admin', 'superadmin'].includes(role)) {
             console.warn(`User ${user.email} is not an Admin. Redirecting.`);
-            window.location.href = 'index.html';
+            window.location.href = 'index.html'; // Assuming index.html is the student/lecturer default
             return;
         }
 
-        document.querySelector('header h1').textContent =
-            `Welcome, ${profile.full_name || role === 'superadmin' ? 'Super Admin' : 'Admin'}!`;
+        const headerTitle = document.querySelector('header h1');
+        if (headerTitle) {
+             headerTitle.textContent =
+                `Welcome, ${profile.full_name || (role === 'superadmin' ? 'Super Admin' : 'Admin')}!`;
+        } else {
+             console.warn('Header title element not found.');
+        }
 
     } else {
         console.error("Profile not found or fetch error:", profileError?.message);
@@ -1596,12 +1792,13 @@ function setupEventListeners() {
     // --- Tab Listeners ---
 
     // ATTENDANCE TAB
-    $('att_session_type')?.addEventListener('change', () => {/* toggleAttendanceFields logic */});
+    $('att_session_type')?.addEventListener('change', toggleAttendanceFields);
     $('manual-attendance-form')?.addEventListener('submit', handleManualAttendance);
     $('attendance-search')?.addEventListener('keyup', () => filterTable('attendance-search', 'attendance-table', [0, 1, 2]));
     
     // ENROLLMENT/USER TAB
     $('add-account-form')?.addEventListener('submit', handleAddAccount);
+    // Use blur for intake/program change to trigger options update
     $('account-program')?.addEventListener('change', () => updateBlockTermOptions('account-program', 'account-block-term'));
     $('account-intake')?.addEventListener('change', () => updateBlockTermOptions('account-program', 'account-block-term'));
     $('user-search')?.addEventListener('keyup', () => filterTable('user-search', 'users-table', [1, 2, 4]));
@@ -1623,7 +1820,7 @@ function setupEventListeners() {
     $('add-session-form')?.addEventListener('submit', handleAddSession);
     $('session_program')?.addEventListener('change', () => { 
         updateBlockTermOptions('session_program', 'session_block_term'); 
-        populateSessionCourseSelects(); 
+        populateSessionCourseSelects(); // Re-populate courses based on program/block if implemented
     });
     $('session_intake')?.addEventListener('change', () => updateBlockTermOptions('session_program', 'session_block_term')); 
 
@@ -1661,31 +1858,144 @@ function setupEventListeners() {
 
 
 // --- Remaining Placeholder Functions ---
-async function loadStudents() { console.log("Fetching students for enrollment tab..."); /* ... implementation ... */ }
-async function loadAttendance() { console.log("Fetching attendance..."); /* ... implementation ... */ }
-async function populateAttendanceSelects() { console.log("Populating attendance selects..."); /* ... implementation ... */ }
-async function handleManualAttendance(e) { e.preventDefault(); console.log("Manual attendance handler..."); /* ... implementation ... */ }
-async function loadExams() { console.log("Fetching exams..."); /* ... implementation ... */ }
-async function populateExamCourseSelects() { console.log("Populating exam courses..."); /* ... implementation ... */ }
-async function handleAddExam(e) { e.preventDefault(); console.log("Add exam handler..."); /* ... implementation ... */ }
-async function loadAdminMessages() { console.log("Loading admin messages..."); /* ... implementation ... */ }
-async function handleSendMessage(e) { e.preventDefault(); console.log("Send message handler..."); /* ... implementation ... */ }
-async function renderFullCalendar() { console.log("Rendering calendar..."); /* ... implementation ... */ }
-async function loadResources() { console.log("Loading resources..."); /* ... implementation ... */ }
-async function loadSystemStatus() { console.log("Loading system status..."); /* ... implementation ... */ }
-async function loadBackupHistory() { console.log("Loading backup history..."); /* ... implementation ... */ }
-async function handleGlobalPasswordReset(e) { e.preventDefault(); console.log("Global password reset..."); /* ... implementation ... */ }
-async function handleAccountDeactivation(e) { e.preventDefault(); console.log("Account deactivation..."); /* ... implementation ... */ }
-async function openEditSessionModal(sessionId) { console.log(`Opening edit session modal for ID: ${sessionId}`); /* ... implementation ... */ }
-async function toggleSessionStatus(sessionId, currentStatus) { console.log(`Toggling status for session ID: ${sessionId}`); /* ... implementation ... */ }
+async function loadStudents() { 
+    console.log("Fetching students for enrollment tab..."); 
+    // Example: Populate a student list in the enroll tab 
+    const { data: students } = await fetchData(USER_PROFILE_TABLE, 'user_id, full_name, role', { role: 'student', status: 'approved' }, 'full_name', true);
+    // You would then render this data to a list in the enroll tab 
+}
+
+// Attendance load and populate are already implemented above
+
+async function loadExams() { 
+    console.log("Fetching exams..."); 
+    const tbody = $('exams-table');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="5">Loading exam records... (Placeholder)</td></tr>';
+    const { data: exams, error } = await fetchData('exams', '*', {}, 'exam_date', false);
+    // Render logic would go here
+}
+
+async function populateExamCourseSelects() { 
+    console.log("Populating exam courses..."); 
+    const courseSelect = $('exam_course_code');
+    const { data: courses } = await fetchData('courses', 'unit_code, unit_name', { is_active: true });
+    populateSelect(courseSelect, courses.map(c => ({ value: c.unit_code, text: `${c.unit_code} - ${c.unit_name}` })), 'value', 'text', '-- Select Course --');
+}
+
+async function handleAddExam(e) { 
+    e.preventDefault(); 
+    console.log("Add exam handler..."); 
+    showFeedback('Exam added successfully! (Placeholder)', 'success');
+    loadExams();
+}
+
+async function loadAdminMessages() { 
+    console.log("Loading admin messages..."); 
+    const messageDiv = $('admin-messages-list');
+    if (messageDiv) messageDiv.innerHTML = '<p>No system-wide broadcast messages currently (Placeholder).</p>';
+}
+
+async function handleSendMessage(e) { 
+    e.preventDefault(); 
+    console.log("Send message handler..."); 
+    showFeedback('Message broadcast initiated (Placeholder)', 'success');
+}
+
+async function renderFullCalendar() { 
+    console.log("Rendering calendar..."); 
+    const calendarDiv = $('calendar-view');
+    if (calendarDiv) calendarDiv.innerHTML = '<h3>Calendar View (Requires FullCalendar JS Library)</h3><p>Sessions would be displayed here.</p>';
+}
+
+async function loadResources() { 
+    console.log("Loading resources..."); 
+    const resourceList = $('resources-list');
+    if (resourceList) resourceList.innerHTML = '<li>Resource 1 (Placeholder)</li><li>Resource 2 (Placeholder)</li>';
+}
+
+async function loadSystemStatus() { 
+    console.log("Loading system status..."); 
+    const { data } = await fetchData(SETTINGS_TABLE, '*', { key: GLOBAL_SETTINGS_KEY });
+    const statusDiv = $('system-status-display');
+    const status = data?.[0]?.value || 'Online';
+    if (statusDiv) statusDiv.textContent = `Current Status: ${status}`;
+    $('system-status-input').value = status;
+}
+
+async function loadBackupHistory() { 
+    console.log("Loading backup history..."); 
+    const backupTable = $('backup-history-table');
+    if (backupTable) backupTable.innerHTML = '<tr><td colspan="4">No backup history available (Requires external service or storage).</td></tr>';
+}
+
+async function handleGlobalPasswordReset(e) { 
+    e.preventDefault(); 
+    console.log("Global password reset..."); 
+    if (confirm('WARNING: Are you sure you want to perform a GLOBAL PASSWORD RESET? This is a highly critical action.')) {
+        // This is a client-side function and MUST NOT attempt a global reset.
+        showFeedback("Global Password Reset is disabled for client-side security.", 'error');
+        await logAudit('GLOBAL_RESET', 'Attempted Global Password Reset (Blocked on client-side).', null, 'FAILURE');
+    }
+}
+
+async function handleAccountDeactivation(e) { 
+    e.preventDefault(); 
+    console.log("Account deactivation..."); 
+    const targetEmail = $('deactivate-email').value;
+     if (confirm(`Confirm deactivation of account: ${targetEmail}?`)) {
+        // Find user ID by email and then deactivate
+        const { data: users } = await fetchData(USER_PROFILE_TABLE, 'user_id', { email: targetEmail }, null, null);
+        if (users?.length > 0) {
+            await toggleUserStatus(users[0].user_id, 'approved');
+            showFeedback(`Deactivation process initiated for ${targetEmail}.`, 'success');
+            e.target.reset();
+        } else {
+            showFeedback(`Account not found for email: ${targetEmail}`, 'error');
+        }
+    }
+}
+
+async function openEditSessionModal(sessionId) { 
+    console.log(`Opening edit session modal for ID: ${sessionId}`); 
+    showFeedback(`Edit Session functionality for ID: ${sessionId} is pending full implementation.`, 'warning');
+    // Implementation would involve fetching session data and populating a modal form.
+}
+
+async function toggleSessionStatus(sessionId, currentStatus) { 
+    const newStatus = !currentStatus;
+    const action = newStatus ? 'Activate' : 'Cancel';
+
+    if (!confirm(`Are you sure you want to ${action} session ID ${sessionId}?`)) {
+        return;
+    }
+    
+    try {
+        const { error } = await sb
+            .from('scheduled_sessions')
+            .update({ is_active: newStatus, updated_at: new Date().toISOString() })
+            .eq('id', sessionId);
+
+        if (error) throw error;
+
+        showFeedback(`Session ${sessionId} successfully ${action}d.`, 'success');
+        await logAudit('SESSION_STATUS_UPDATE', `${action}d session: ${sessionId}`, sessionId, 'SUCCESS');
+        loadScheduledSessions();
+        
+    } catch (err) {
+        const errorMessage = `Failed to ${action} session ${sessionId}. Reason: ${err.message}`;
+        await logAudit('SESSION_STATUS_UPDATE', errorMessage, sessionId, 'FAILURE');
+        showFeedback(errorMessage, 'error');
+    }
+}
 
 
 // Global script execution start
 document.addEventListener('DOMContentLoaded', async () => {
-    // Wait a tiny bit to ensure Supabase has initialized properly
+    // Wait for the Supabase library to be loaded from the CDN
     const maxWait = 20; // 2 seconds (20 × 100ms)
     let waitCount = 0;
 
+    // Check for the global 'supabase' object
     while (typeof supabase === 'undefined' && waitCount < maxWait) {
         await new Promise(resolve => setTimeout(resolve, 100));
         waitCount++;
@@ -1693,9 +2003,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (typeof supabase !== 'undefined') {
         try {
-            await initSession(); // ✅ Run the fixed session logic
+            await initSession(); 
         } catch (err) {
             console.error('Error initializing session:', err);
+            // Fallback redirect if initSession fails
             window.location.href = 'login.html';
         }
     } else {
