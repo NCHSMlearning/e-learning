@@ -532,24 +532,25 @@
                         <p>Your profile is incomplete. Please upload your passport photo immediately.</p>
                         <button class="profile-button" onclick="showTab('profile')">Go to Profile</button>
                     </div>
+                    
                     <div class="card" style="flex-basis: 300px; border-left-color: var(--color-warning); cursor: default;">
                         <h3>Review New Course Material</h3>
                         <p>New study materials have been posted for this block.</p>
                         <button class="profile-button" onclick="showTab('resources')" style="background-color: var(--color-warning);">View Resources</button>
                     </div>
+                    
+                    <div id="latest-announcement-card" class="card" style="flex-basis: 300px; border-left-color: var(--color-success); display: none; cursor: pointer;">
+                        <h4><span id="announcement-title" style="color: var(--color-primary);">Loading...</span></h4>
+                        <p id="announcement-body" style="margin-bottom: 10px;">Loading message body...</p>
+                        <div style="font-size: 0.8em; margin-top: 5px; opacity: 0.9;">
+                            <span id="announcement-date"></span> | 
+                            <span id="announcement-status" style="font-weight: bold;"></span>
+                        </div>
+                        <button onclick="showTab('messages')" class="profile-button" style="background-color: var(--color-primary); margin-top: 15px;">Go to Messages Tab</button>
+                    </div>
+                    
                 </div>
             </section>
-            <div id="latest-announcement-card" class="card" style="flex-basis: 300px; border-left-color: var(--color-success); display: none; cursor: pointer;">
-        <h4><span id="announcement-title" style="color: var(--color-primary);">Loading...</span></h4>
-        <p id="announcement-body" style="margin-bottom: 10px;">Loading message body...</p>
-        <div style="font-size: 0.8em; margin-top: 5px; opacity: 0.9;">
-            <span id="announcement-date"></span> | 
-            <span id="announcement-status" style="font-weight: bold;"></span>
-        </div>
-        <button onclick="showTab('messages')" class="profile-button" style="background-color: var(--color-primary); margin-top: 15px;">Go to Messages Tab</button>
-    </div>
-
-
             <section id="profile" class="tab-content">
                 <h2 style="color: var(--color-primary);">My Profile & Account</h2>
                 <form id="profile-form">
@@ -1326,7 +1327,7 @@ async function loadProfile(userId) {
     if (currentUserProfile.passport_url) {
         const publicUrlResponse = sb.storage.from('passports').getPublicUrl(currentUserProfile.passport_url);
         if (publicUrlResponse.data) {
-            // ** FIX: Add cache-buster to force refresh of the image after upload **
+            // ** FIX: Add cache-buster to force refresh of the image after upload (Critical Fix) **
             photoUrl = `${publicUrlResponse.data.publicUrl}?t=${new Date().getTime()}`;
         }
     }
@@ -1465,7 +1466,7 @@ if (uploadButton) {
             if (uploadButton) uploadButton.style.display = 'none';
             if (uploadLabel) uploadLabel.style.display = 'none';
             
-            // ** CRITICAL FIX: Reload profile and dashboard to reflect change **
+            // ** CRITICAL FIX: Reload profile and dashboard to reflect change (Photo display fix) **
             await loadProfile(currentUserId);
             loadDashboardMetrics(currentUserId);
             
@@ -1656,7 +1657,7 @@ function updateTargetSelect() {
         }));
         label = 'Department/Area:';
     } else if (sessionType === 'Class') {
-        // Store the name as the value along with the ID for the check-in function
+        // Store the ID|NAME for the check-in function
         targetList = cachedCourses.map(c => ({
             id: c.id,
             name: c.name,
