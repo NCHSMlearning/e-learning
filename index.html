@@ -1941,12 +1941,12 @@ function escapeHtml(str) {
 
 
 /**
- * Student Dashboard: loadExams() - 🏆 FINAL VERSION with CAT 1, CAT 2, and Filtering
+ * Student Dashboard: loadExams() - ✅ Works with existing exam_grades FK
  */
 async function loadExams() {
   const tableBody = document.getElementById('exams-table');
   const examTypeFilter = document.getElementById('exam-type-filter');
-  const selectedFilter = examTypeFilter ? examTypeFilter.value : 'all'; // Get filter value
+  const selectedFilter = examTypeFilter ? examTypeFilter.value : 'all';
 
   if (!tableBody) return;
 
@@ -1956,7 +1956,7 @@ async function loadExams() {
   const program = currentUserProfile?.program || currentUserProfile?.department;
   const block = currentUserProfile?.block;
   const intakeYear = currentUserProfile?.intake_year;
-  const studentId = currentUserId; // Get the ID of the current student
+  const studentId = currentUserId;
 
   if (!program || !intakeYear) {
     tableBody.innerHTML = `<tr><td colspan="9">Missing program or intake year info. Cannot load exams.</td></tr>`;
@@ -1965,11 +1965,7 @@ async function loadExams() {
   }
 
   try {
-    // -------------------------------------------------------------
-    // ⭐ FIX: Filtering the joined table by student_id directly in the select string
-    // Format: relation!join!foreignKey(columns).eq.value
-    // We use a custom join name (like 'grade_for_student') and filter it.
-    // -------------------------------------------------------------
+    // Fetch exams
     const { data: exams, error } = await sb
       .from('exams_with_courses')
       .select(`
@@ -1981,7 +1977,7 @@ async function loadExams() {
         block_term,
         program_type,
         exam_link,
-        exam_grades!grade_for_student(
+        exam_grades!left(
             student_id, 
             cat_1_score,      
             cat_2_score,      
@@ -1993,28 +1989,24 @@ async function loadExams() {
       .or(`program_type.eq.${program},program_type.eq.General`)
       .or(`block_term.eq.${block},block_term.is.null,block_term.eq.General`)
       .eq('intake_year', intakeYear)
-      // ✅ NEW FILTER SYNTAX: Filter the aliased join (grade_for_student) by studentId
-      .eq('grade_for_student.student_id', studentId) 
+      .eq('exam_grades.student_id', studentId)
       .order('exam_date', { ascending: true });
 
     if (error) throw error;
 
     cachedExams = exams || [];
     tableBody.innerHTML = '';
-    
-    // -------------------------------------------------------------
-    // Filtering Logic
-    // -------------------------------------------------------------
+
+    // Filter exams based on type
     const filteredExams = cachedExams.filter(exam => {
-        if (selectedFilter === 'all') return true;
-        // Filter based on the exam_type column in your database
-        if (selectedFilter === 'CAT') {
-            return exam.exam_type === 'CAT' || exam.exam_type === 'Cat 1' || exam.exam_type === 'Cat 2';
-        }
-        if (selectedFilter === 'Final') {
-            return exam.exam_type === 'Final Exam' || exam.exam_type === 'Exam';
-        }
-        return true;
+      if (selectedFilter === 'all') return true;
+      if (selectedFilter === 'CAT') {
+        return ['CAT', 'Cat 1', 'Cat 2'].includes(exam.exam_type);
+      }
+      if (selectedFilter === 'Final') {
+        return ['Final Exam', 'Exam'].includes(exam.exam_type);
+      }
+      return true;
     });
 
     if (filteredExams.length === 0) {
@@ -2026,8 +2018,8 @@ async function loadExams() {
         </tr>`;
       return;
     }
-    // -------------------------------------------------------------
 
+    // Render table
     filteredExams.forEach(exam => {
       const dateStr = exam.exam_date
         ? new Date(exam.exam_date).toLocaleDateString('en-US', {
@@ -2038,23 +2030,18 @@ async function loadExams() {
           })
         : 'N/A';
 
-      // NOTE: Because we used the PostgREST join name alias, the data comes back
-      // under the name of the *original* foreign key relationship, 'exam_grades'.
-      const gradeEntry = exam.exam_grades?.[0]; 
-      
-      // 🏆 NEW: Extract CAT 1, CAT 2, and Final Exam scores
+      const gradeEntry = exam.exam_grades?.[0];
+
       const cat1Score = gradeEntry?.cat_1_score ?? '-';
       const cat2Score = gradeEntry?.cat_2_score ?? '-';
-      const finalExamScore = gradeEntry?.exam_score ?? '-'; // Using exam_score for Final Exam
+      const finalExamScore = gradeEntry?.exam_score ?? '-';
       const totalScore = gradeEntry?.total_score ?? '-';
-      
-      // Extract Status
-      const resultStatus = gradeEntry?.result_status ?? 'Scheduled'; 
-      
+      const resultStatus = gradeEntry?.result_status ?? 'Scheduled';
+
       const statusDisplay = resultStatus === 'Final' 
         ? `<span style="color:var(--color-success); font-weight:700;">Final</span>`
         : `<span style="color:var(--color-warning); font-weight:700;">${resultStatus}</span>`;
-      
+
       const actionBtn = exam.exam_link
         ? `<a href="${exam.exam_link}" target="_blank" class="profile-button" style="background-color: var(--color-success); padding: 8px 12px; font-size: 0.9em; margin-top: 0;">Start Exam</a>`
         : `<span style="color:gray;">No Link</span>`;
@@ -2084,6 +2071,7 @@ async function loadExams() {
     loadDashboardMetrics(currentUserId);
   }
 }
+
 /**
  * viewResource() renders files in responsive iframe/canvas.
  */
