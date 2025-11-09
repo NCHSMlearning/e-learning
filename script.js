@@ -2165,7 +2165,7 @@ document.getElementById('edit-exam-form').addEventListener('submit', saveEditedE
 
 // Open Grade Modal
 async function openGradeModal(examId) {
-  // 1. Fetch exam details
+  // Fetch exam details
   const { data: exam, error: examError } = await sb
     .from('exams_with_courses')
     .select('*')
@@ -2174,10 +2174,10 @@ async function openGradeModal(examId) {
 
   if (examError || !exam) return showFeedback('Error loading exam details.', 'error');
 
-  // 2. Fetch students matching exam's block, intake year, and program
+  // Fetch students matching exam block, intake, and program
   const { data: students, error: studentError } = await sb
     .from('consolidated_user_profiles_table')
-    .select('user_id, full_name')
+    .select('user_id, full_name, email')
     .eq('block', exam.block_term)
     .eq('intake_year', exam.intake_year)
     .eq('program', exam.program_type)
@@ -2185,37 +2185,40 @@ async function openGradeModal(examId) {
 
   if (studentError) return showFeedback('Error loading students for grading.', 'error');
 
-  // 3. Fetch existing grades for this exam
+  // Fetch existing grades
   const { data: existingGrades } = await sb
     .from('exam_grades')
     .select('*')
     .eq('exam_id', examId);
 
-  // 4. Build modal HTML
+  // Build modal HTML
   const modalHtml = `
-    <div class="modal-content" style="width:90%; max-width:900px; overflow-x:auto;">
+    <div style="width:95%; max-width:1000px;">
       <h3>Grade: ${escapeHtml(exam.exam_name)}</h3>
+      <input type="text" id="gradeSearch" placeholder="Search by name, email or ID" style="margin-bottom:10px; padding:5px; width:100%;" oninput="filterStudents()">
       <table class="grade-table" style="width:100%; border-collapse: collapse;">
         <thead>
           <tr>
-            <th style="border-bottom:1px solid #ccc;">Student</th>
+            <th style="border-bottom:1px solid #ccc;">Student Name</th>
+            <th style="border-bottom:1px solid #ccc;">Email</th>
             <th style="border-bottom:1px solid #ccc;">CAT 1 (max 30)</th>
             <th style="border-bottom:1px solid #ccc;">CAT 2 (max 30)</th>
             <th style="border-bottom:1px solid #ccc;">Final Exam (max 100)</th>
-            <th style="border-bottom:1px solid #ccc;">Total (capped 100)</th>
+            <th style="border-bottom:1px solid #ccc;">Total (scaled 100)</th>
             <th style="border-bottom:1px solid #ccc;">Status</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody id="gradeTableBody">
           ${students.map(s => {
             const grade = existingGrades?.find(g => g.student_id === s.user_id) || {};
             return `
-              <tr>
+              <tr data-name="${s.full_name.toLowerCase()}" data-email="${(s.email||'').toLowerCase()}" data-id="${s.user_id}">
                 <td>${escapeHtml(s.full_name)}</td>
+                <td>${escapeHtml(s.email ?? '')}</td>
                 <td><input type="number" min="0" max="30" id="cat1-${s.user_id}" value="${grade.cat_1_score ?? ''}" placeholder="0-30" oninput="updateTotal('${s.user_id}')"></td>
                 <td><input type="number" min="0" max="30" id="cat2-${s.user_id}" value="${grade.cat_2_score ?? ''}" placeholder="0-30" oninput="updateTotal('${s.user_id}')"></td>
                 <td><input type="number" min="0" max="100" id="final-${s.user_id}" value="${grade.exam_score ?? ''}" placeholder="0-100" oninput="updateTotal('${s.user_id}')"></td>
-                <td><input type="number" min="0" max="100" id="total-${s.user_id}" value="${grade.total_score ?? ''}" placeholder="Auto" readonly></td>
+                <td><input type="number" min="0" max="100" id="total-${s.user_id}" value="" placeholder="Auto" readonly></td>
                 <td>
                   <select id="status-${s.user_id}">
                     <option value="Scheduled" ${grade.result_status === 'Scheduled' ? 'selected' : ''}>Scheduled</option>
@@ -2234,22 +2237,26 @@ async function openGradeModal(examId) {
     </div>`;
 
   showModal(modalHtml);
+
+  // Populate totals immediately
+  students.forEach(s => updateTotal(s.user_id));
 }
 
-// Auto-update total when marks are typed
+// Auto-update total with proportional scaling
 function updateTotal(studentId) {
-  let cat1 = parseFloat(document.querySelector(`#cat1-${studentId}`).value) || 0;
-  let cat2 = parseFloat(document.querySelector(`#cat2-${studentId}`).value) || 0;
-  let finalExam = parseFloat(document.querySelector(`#final-${studentId}`).value) || 0;
+  const cat1Input = document.querySelector(`#cat1-${studentId}`);
+  const cat2Input = document.querySelector(`#cat2-${studentId}`);
+  const finalInput = document.querySelector(`#final-${studentId}`);
+  const totalInput = document.querySelector(`#total-${studentId}`);
+  if (!cat1Input || !cat2Input || !finalInput || !totalInput) return;
 
-  // Enforce max scores
-  cat1 = Math.min(cat1, 30);
-  cat2 = Math.min(cat2, 30);
-  finalExam = Math.min(finalExam, 100);
+  let cat1 = Math.min(parseFloat(cat1Input.value) || 0, 30);
+  let cat2 = Math.min(parseFloat(cat2Input.value) || 0, 30);
+  let finalExam = Math.min(parseFloat(finalInput.value) || 0, 100);
 
-  const total = Math.min(cat1 + cat2 + finalExam, 100);
-
-  document.querySelector(`#total-${studentId}`).value = total;
+  const rawTotal = cat1 + cat2 + finalExam;
+  const scaledTotal = (rawTotal / 160) * 100; // 30+30+100 max
+  totalInput.value = scaledTotal.toFixed(2);
 }
 
 // Save Grades
@@ -2259,17 +2266,10 @@ async function saveGrades(examId) {
 
   rows.forEach(row => {
     const studentId = row.querySelector('input[id^="cat1-"]').id.replace('cat1-', '');
-    let cat1 = parseFloat(row.querySelector(`#cat1-${studentId}`).value) || 0;
-    let cat2 = parseFloat(row.querySelector(`#cat2-${studentId}`).value) || 0;
-    let finalExam = parseFloat(row.querySelector(`#final-${studentId}`).value) || 0;
-
-    // Enforce max scores
-    cat1 = Math.min(cat1, 30);
-    cat2 = Math.min(cat2, 30);
-    finalExam = Math.min(finalExam, 100);
-
-    const total = Math.min(cat1 + cat2 + finalExam, 100);
-    const status = row.querySelector(`#status-${studentId}`).value || 'Scheduled';
+    let cat1 = Math.min(parseFloat(row.querySelector(`#cat1-${studentId}`).value) || 0, 30);
+    let cat2 = Math.min(parseFloat(row.querySelector(`#cat2-${studentId}`).value) || 0, 30);
+    let finalExam = Math.min(parseFloat(row.querySelector(`#final-${studentId}`).value) || 0, 100);
+    const scaledTotal = ((cat1 + cat2 + finalExam) / 160) * 100;
 
     upserts.push({
       exam_id: examId,
@@ -2277,13 +2277,15 @@ async function saveGrades(examId) {
       cat_1_score: cat1,
       cat_2_score: cat2,
       exam_score: finalExam,
-      total_score: total,
-      result_status: status,
+      total_score: scaledTotal.toFixed(2),
+      result_status: row.querySelector(`#status-${studentId}`).value || 'Scheduled',
       graded_by: '52fb3ac8-e35f-4a2a-b88f-16f52a0ae7d4',
       question_id: '00000000-0000-0000-0000-000000000000',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     });
+
+    row.querySelector(`#total-${studentId}`).value = scaledTotal.toFixed(2);
   });
 
   const { error } = await sb.from('exam_grades').upsert(upserts, { onConflict: 'exam_id,student_id' });
@@ -2291,6 +2293,21 @@ async function saveGrades(examId) {
 
   showFeedback('Grades saved successfully!', 'success');
   closeModal();
+}
+
+// Filter students live
+function filterStudents() {
+  const searchTerm = document.querySelector('#gradeSearch').value.toLowerCase();
+  document.querySelectorAll('#gradeTableBody tr').forEach(row => {
+    const name = row.dataset.name || '';
+    const email = row.dataset.email || '';
+    const id = row.dataset.id || '';
+    if (name.includes(searchTerm) || email.includes(searchTerm) || id.includes(searchTerm)) {
+      row.style.display = '';
+    } else {
+      row.style.display = 'none';
+    }
+  });
 }
 
 // Generic modal functions
@@ -2320,8 +2337,6 @@ function closeModal() {
   const modal = document.getElementById('tempModal');
   if (modal) modal.remove();
 }
-
-
 
 /*******************************************************
  * 9. Calendar Tab (FullCalendar Integration)
