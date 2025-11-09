@@ -971,7 +971,8 @@ async function loadCourses() {
     const tbody = $('courses-table');
     tbody.innerHTML = '<tr><td colspan="7">Loading courses...</td></tr>';
     
-    const { data: courses, error } = await fetchData('courses', '*, lecturer:lecturer_id(full_name)', {}, 'unit_code', true); 
+    // Fetch courses without joining lecturer
+    const { data: courses, error } = await fetchData('courses', '*', {}, 'unit_code', true); 
 
     if (error) {
         tbody.innerHTML = `<tr><td colspan="7">Error loading courses: ${error.message}</td></tr>`;
@@ -985,7 +986,6 @@ async function loadCourses() {
 
     tbody.innerHTML = '';
     courses.forEach(course => {
-        const lecturerName = course.lecturer ? escapeHtml(course.lecturer.full_name) : 'N/A';
         const statusClass = course.is_active ? 'status-approved' : 'status-danger';
 
         tbody.innerHTML += `
@@ -994,7 +994,7 @@ async function loadCourses() {
                 <td>${escapeHtml(course.unit_name)}</td>
                 <td>${escapeHtml(course.program)}</td>
                 <td>${escapeHtml(course.block_term)}</td>
-                <td>${lecturerName}</td>
+                <td>N/A</td>
                 <td class="${statusClass}">${course.is_active ? 'Active' : 'Inactive'}</td>
                 <td>
                     <button class="btn btn-sm btn-edit" onclick="openEditCourseModal('${course.unit_code}')">Edit</button>
@@ -1004,6 +1004,7 @@ async function loadCourses() {
         `;
     });
 }
+
 
 async function toggleCourseStatus(unitCode, currentStatus) {
     const newStatus = !currentStatus;
