@@ -2163,17 +2163,22 @@ document.querySelector('#examEditModal .close').addEventListener('click', () => 
 document.getElementById('edit-exam-form').addEventListener('submit', saveEditedExam);
 
 
+// Open Grade Modal
 async function openGradeModal(examId, examName) {
-  // 1. Fetch students
+  // 1. Fetch only students assigned to this exam
   const { data: students, error: studentError } = await sb
     .from('consolidated_user_profiles_table')
     .select('user_id, full_name')
-    .eq('role', 'student')
+    .in('user_id',
+        sb.from('exam_students')
+          .select('student_id')
+          .eq('exam_id', examId)
+    )
     .order('full_name');
 
   if (studentError) return showFeedback('Error loading students for grading.', 'error');
 
-  // 2. Fetch existing grades
+  // 2. Fetch existing grades for these students and this exam
   const { data: existingGrades } = await sb
     .from('exam_grades')
     .select('*')
@@ -2187,10 +2192,10 @@ async function openGradeModal(examId, examName) {
         <thead>
           <tr>
             <th>Student</th>
-            <th>CAT 1</th>
-            <th>CAT 2</th>
-            <th>Final Exam</th>
-            <th>Total</th>
+            <th>CAT 1 (max 30)</th>
+            <th>CAT 2 (max 30)</th>
+            <th>Final Exam (max 100)</th>
+            <th>Total (capped 100)</th>
             <th>Status</th>
           </tr>
         </thead>
@@ -2200,8 +2205,8 @@ async function openGradeModal(examId, examName) {
             return `
               <tr>
                 <td>${escapeHtml(s.full_name)}</td>
-                <td><input type="number" min="0" max="30" id="cat1-${s.user_id}" value="${grade.cat_1_score ?? ''}" placeholder="0-100"></td>
-                <td><input type="number" min="0" max="30" id="cat2-${s.user_id}" value="${grade.cat_2_score ?? ''}" placeholder="0-100"></td>
+                <td><input type="number" min="0" max="30" id="cat1-${s.user_id}" value="${grade.cat_1_score ?? ''}" placeholder="0-30"></td>
+                <td><input type="number" min="0" max="30" id="cat2-${s.user_id}" value="${grade.cat_2_score ?? ''}" placeholder="0-30"></td>
                 <td><input type="number" min="0" max="100" id="final-${s.user_id}" value="${grade.exam_score ?? ''}" placeholder="0-100"></td>
                 <td><input type="number" min="0" max="100" id="total-${s.user_id}" value="${grade.total_score ?? ''}" placeholder="Auto" readonly></td>
                 <td>
@@ -2222,40 +2227,40 @@ async function openGradeModal(examId, examName) {
   showModal(modalHtml);
 }
 
-// Save grades and calculate totals only after all inputs are filled
+// Save Grades
 async function saveGrades(examId) {
   const rows = document.querySelectorAll('.grade-table tbody tr');
   const upserts = [];
 
   rows.forEach(row => {
     const studentId = row.querySelector('input[id^="cat1-"]').id.replace('cat1-', '');
-    const cat1 = parseFloat(row.querySelector(`#cat1-${studentId}`).value) || 0;
-    const cat2 = parseFloat(row.querySelector(`#cat2-${studentId}`).value) || 0;
-    const finalExam = parseFloat(row.querySelector(`#final-${studentId}`).value) || 0;
+    let cat1 = parseFloat(row.querySelector(`#cat1-${studentId}`).value) || 0;
+    let cat2 = parseFloat(row.querySelector(`#cat2-${studentId}`).value) || 0;
+    let finalExam = parseFloat(row.querySelector(`#final-${studentId}`).value) || 0;
 
-  // Ensure each score does not exceed its max
-const cat1Score = Math.min(cat1, 30);
-const cat2Score = Math.min(cat2, 30);
-const finalScore = Math.min(finalExam, 100);
+    // Enforce max scores
+    cat1 = Math.min(cat1, 30);
+    cat2 = Math.min(cat2, 30);
+    finalExam = Math.min(finalExam, 100);
 
-// Calculate total capped at 100
-const total = Math.min(cat1Score + cat2Score + finalScore, 100);
+    // Total capped at 100
+    const total = Math.min(cat1 + cat2 + finalExam, 100);
 
-const status = row.querySelector(`#status-${studentId}`).value || 'Scheduled';
+    const status = row.querySelector(`#status-${studentId}`).value || 'Scheduled';
 
-upserts.push({
-  exam_id: examId,
-  student_id: studentId,
-  cat_1_score: cat1Score,
-  cat_2_score: cat2Score,
-  exam_score: finalScore,
-  total_score: total,
-  result_status: status,
-  graded_by: '52fb3ac8-e35f-4a2a-b88f-16f52a0ae7d4', // superadmin's user_id
-  question_id: '00000000-0000-0000-0000-000000000000', // placeholder
-  created_at: new Date().toISOString(),
-  updated_at: new Date().toISOString()
-});
+    upserts.push({
+      exam_id: examId,
+      student_id: studentId,
+      cat_1_score: cat1,
+      cat_2_score: cat2,
+      exam_score: finalExam,
+      total_score: total,
+      result_status: status,
+      graded_by: '52fb3ac8-e35f-4a2a-b88f-16f52a0ae7d4', // superadmin's user_id
+      question_id: '00000000-0000-0000-0000-000000000000',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    });
 
     // Update total in the UI
     row.querySelector(`#total-${studentId}`).value = total;
@@ -2290,6 +2295,7 @@ function closeModal() {
     modal.remove();
   }
 }
+
 
 
 /*******************************************************
