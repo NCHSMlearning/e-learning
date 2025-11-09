@@ -2164,14 +2164,22 @@ document.getElementById('edit-exam-form').addEventListener('submit', saveEditedE
 
 
 async function openGradeModal(examId, examName) {
-  const { data: students, error } = await sb
+  // 1. Fetch students
+  const { data: students, error: studentError } = await sb
     .from('consolidated_user_profiles_table')
     .select('user_id, full_name')
     .eq('role', 'student')
     .order('full_name');
 
-  if (error) return showFeedback('Error loading students for grading.', 'error');
+  if (studentError) return showFeedback('Error loading students for grading.', 'error');
 
+  // 2. Fetch existing grades
+  const { data: existingGrades } = await sb
+    .from('exam_grades')
+    .select('*')
+    .eq('exam_id', examId);
+
+  // 3. Build modal HTML
   const modalHtml = `
     <div class="modal-content">
       <h3>Grade: ${escapeHtml(examName)}</h3>
@@ -2187,21 +2195,24 @@ async function openGradeModal(examId, examName) {
           </tr>
         </thead>
         <tbody>
-          ${students.map(s => `
-            <tr>
-              <td>${escapeHtml(s.full_name)}</td>
-              <td><input type="number" min="0" max="100" id="cat1-${s.user_id}" placeholder="0-100"></td>
-              <td><input type="number" min="0" max="100" id="cat2-${s.user_id}" placeholder="0-100"></td>
-              <td><input type="number" min="0" max="100" id="final-${s.user_id}" placeholder="0-100"></td>
-              <td><input type="number" min="0" max="100" id="total-${s.user_id}" placeholder="Auto"></td>
-              <td>
-                <select id="status-${s.user_id}">
-                  <option value="Scheduled">Scheduled</option>
-                  <option value="InProgress">InProgress</option>
-                  <option value="Final">Final</option>
-                </select>
-              </td>
-            </tr>`).join('')}
+          ${students.map(s => {
+            const grade = existingGrades?.find(g => g.student_id === s.user_id) || {};
+            return `
+              <tr>
+                <td>${escapeHtml(s.full_name)}</td>
+                <td><input type="number" min="0" max="100" id="cat1-${s.user_id}" value="${grade.cat_1_score ?? ''}" placeholder="0-100"></td>
+                <td><input type="number" min="0" max="100" id="cat2-${s.user_id}" value="${grade.cat_2_score ?? ''}" placeholder="0-100"></td>
+                <td><input type="number" min="0" max="100" id="final-${s.user_id}" value="${grade.exam_score ?? ''}" placeholder="0-100"></td>
+                <td><input type="number" min="0" max="100" id="total-${s.user_id}" value="${grade.total_score ?? ''}" placeholder="Auto" readonly></td>
+                <td>
+                  <select id="status-${s.user_id}">
+                    <option value="Scheduled" ${grade.result_status === 'Scheduled' ? 'selected' : ''}>Scheduled</option>
+                    <option value="InProgress" ${grade.result_status === 'InProgress' ? 'selected' : ''}>InProgress</option>
+                    <option value="Final" ${grade.result_status === 'Final' ? 'selected' : ''}>Final</option>
+                  </select>
+                </td>
+              </tr>`;
+          }).join('')}
         </tbody>
       </table>
       <button class="btn-action" onclick="saveGrades('${examId}')">Save Grades</button>
@@ -2211,6 +2222,7 @@ async function openGradeModal(examId, examName) {
   showModal(modalHtml);
 }
 
+// Save grades and calculate totals only after all inputs are filled
 async function saveGrades(examId) {
   const rows = document.querySelectorAll('.grade-table tbody tr');
   const upserts = [];
@@ -2220,7 +2232,10 @@ async function saveGrades(examId) {
     const cat1 = parseFloat(row.querySelector(`#cat1-${studentId}`).value) || 0;
     const cat2 = parseFloat(row.querySelector(`#cat2-${studentId}`).value) || 0;
     const finalExam = parseFloat(row.querySelector(`#final-${studentId}`).value) || 0;
-    const total = parseFloat(row.querySelector(`#total-${studentId}`).value) || (cat1 + cat2 + finalExam);
+
+    // Calculate total after entering all marks
+    const total = cat1 + cat2 + finalExam;
+
     const status = row.querySelector(`#status-${studentId}`).value || 'Scheduled';
 
     upserts.push({
@@ -2232,10 +2247,13 @@ async function saveGrades(examId) {
       total_score: total,
       result_status: status,
       graded_by: '52fb3ac8-e35f-4a2a-b88f-16f52a0ae7d4', // superadmin's user_id
-      question_id: '00000000-0000-0000-0000-000000000000', // placeholder if needed
+      question_id: '00000000-0000-0000-0000-000000000000', // placeholder
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     });
+
+    // Update total in the UI
+    row.querySelector(`#total-${studentId}`).value = total;
   });
 
   const { error } = await sb.from('exam_grades').upsert(upserts, { onConflict: 'exam_id,student_id' });
@@ -2245,63 +2263,27 @@ async function saveGrades(examId) {
   closeModal();
 }
 
-
-// Generic Modal Function - Required for openGradeModal
+// Generic modal functions
 function showModal(contentHtml) {
-    const modal = document.createElement('div');
-    modal.className = 'modal';
-    modal.id = 'tempModal'; // Temporary ID for easy cleanup
-    modal.innerHTML = `
-        <div class="modal-content">
-            <span class="close" onclick="closeModal()">&times;</span>
-            ${contentHtml}
-        </div>
-    `;
-    document.body.appendChild(modal);
-    modal.style.display = 'flex';
+  const modal = document.createElement('div');
+  modal.className = 'modal';
+  modal.id = 'tempModal';
+  modal.innerHTML = `
+      <div class="modal-content">
+          <span class="close" onclick="closeModal()">&times;</span>
+          ${contentHtml}
+      </div>
+  `;
+  document.body.appendChild(modal);
+  modal.style.display = 'flex';
 }
 
 function closeModal() {
-    const modal = $('tempModal');
-    if (modal) {
-        modal.style.display = 'none';
-        modal.remove();
-    }
-}
-
-// Student view
-function populateStudentExams(exams) {
-  const container = $('student-exams');
-  if (!container) return; // Check if the element exists (only in student view)
-  container.innerHTML = '';
-
-  if (!exams || exams.length === 0) {
-    container.innerHTML = '<p>No available assessments at the moment.</p>';
-    return;
+  const modal = document.getElementById('tempModal');
+  if (modal) {
+    modal.style.display = 'none';
+    modal.remove();
   }
-
-  exams.forEach(e => {
-    if (e.status !== 'Upcoming') return;
-
-    const startDateTime = new Date(`${e.exam_date}T${e.exam_start_time || '00:00:00'}`);
-    const formattedDate = startDateTime.toLocaleDateString();
-    const formattedTime = startDateTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-    const examCard = document.createElement('div');
-    examCard.className = 'exam-card';
-    examCard.innerHTML = `
-      <h4>${escapeHtml(e.exam_type)}: ${escapeHtml(e.exam_name)}</h4>
-      <p><strong>Course:</strong> ${escapeHtml(e.course?.course_name || 'N/A')}</p>
-      <p><strong>Scheduled:</strong> ${formattedDate} at ${formattedTime}</p>
-      <p><strong>Duration:</strong> ${e.duration_minutes} minutes</p>
-      ${
-        e.online_link
-          ? `<a href="${escapeHtml(e.online_link)}" target="_blank" class="btn-action">Start Online Assessment</a>`
-          : '<p class="info-text">Link will be provided closer to exam time.</p>'
-      }
-    `;
-    container.appendChild(examCard);
-  });
 }
 
 
