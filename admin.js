@@ -1004,7 +1004,6 @@ async function loadCourses() {
 }
 
 
-
 async function toggleCourseStatus(unitCode, currentStatus) {
     const newStatus = !currentStatus;
     const action = newStatus ? 'Activate' : 'Deactivate';
