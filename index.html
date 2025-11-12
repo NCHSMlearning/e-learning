@@ -2128,7 +2128,7 @@ async function loadExams() {
 // Load exams on page load
 window.onload = loadExams;
 /**
- * viewResource() renders files in responsive iframe/canvas.
+ * 📄 viewResource() — Display any uploaded resource in a responsive inline viewer.
  */
 window.viewResource = function(resourceId) {
     const resourceViewer = document.getElementById('resource-viewer');
@@ -2142,107 +2142,86 @@ window.viewResource = function(resourceId) {
     const fileUrl = resource.file_url;
     const ext = (resource.file_path || '').split('.').pop().toLowerCase();
 
+    // Header info
     resourceViewer.innerHTML = `
-        <h3 style="color: var(--color-primary); margin-bottom: 5px;">${escapeHtml(resource.title)}</h3>
+        <h3 style="color: var(--color-primary); margin-bottom: 5px;">
+            ${escapeHtml(resource.title)}
+        </h3>
         <p style="font-size: 0.9em; color: #6B7280; margin-bottom: 15px;">
-            Uploaded by: ${escapeHtml(resource.uploaded_by_name || 'Admin')} 
+            Uploaded by: ${escapeHtml(resource.uploaded_by_name || 'Admin')}
             on ${new Date(resource.created_at).toLocaleDateString()}
         </p>
+        <div id="viewer-container" 
+            style="width:100%; min-height:400px; max-height:85vh; overflow:auto; border-radius:6px; position:relative; background:#f9fafb; display:flex; align-items:center; justify-content:center;">
+            <div id="loading-spinner" style="text-align:center; color:#6B7280;">
+                <span>Loading preview...</span>
+            </div>
+        </div>
     `;
+
+    const viewer = document.getElementById('viewer-container');
 
     // -------------------- PDF VIEWER --------------------
     if (ext === 'pdf') {
-        resourceViewer.innerHTML += `
-            <div id="pdf-container" style="width:100%; max-height:80vh; overflow:auto;">
-                <canvas id="pdf-canvas" style="width:100%; height:auto; border: 1px solid #ddd; border-radius:6px;"></canvas>
-            </div>
-            <div id="pdf-controls" style="margin-top:15px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:center;">
-                <button id="prev-page" class="profile-button" style="padding:8px 15px; font-size:0.9em;">Prev</button>
-                <button id="next-page" class="profile-button" style="padding:8px 15px; font-size:0.9em;">Next</button>
-                <span style="font-weight:600;">Page: <span id="page-num"></span> / <span id="page-count"></span></span>
-            </div>
-        `;
-
-        const canvas = document.getElementById('pdf-canvas');
-        const ctx = canvas.getContext('2d');
-        let pdfDoc = null;
-        let pageNum = 1;
-
-        // ✅ Fix PDF.js worker warning
-        pdfjsLib.GlobalWorkerOptions.workerSrc =
-            'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
-        // Load the PDF file
-        pdfjsLib.getDocument(fileUrl).promise
-            .then(pdf => {
-                pdfDoc = pdf;
-                document.getElementById('page-count').textContent = pdf.numPages;
-                renderPage(pageNum);
-            })
-            .catch(err => {
-                resourceViewer.innerHTML += `<p style="color:#EF4444;">Failed to load PDF: ${err.message}</p>`;
-            });
-
-        // ✅ High-quality, responsive rendering
-        function renderPage(num) {
-            pdfDoc.getPage(num).then(page => {
-                const containerWidth = document.getElementById('pdf-container').clientWidth;
-                const baseViewport = page.getViewport({ scale: 1 });
-
-                // Use device pixel ratio for sharper rendering
-                const pixelRatio = window.devicePixelRatio || 1;
-                const scale = (containerWidth / baseViewport.width) * pixelRatio;
-                const viewport = page.getViewport({ scale });
-
-                canvas.width = viewport.width;
-                canvas.height = viewport.height;
-                canvas.style.width = `${viewport.width / pixelRatio}px`;
-                canvas.style.height = `${viewport.height / pixelRatio}px`;
-
-                const renderContext = {
-                    canvasContext: ctx,
-                    viewport
-                };
-
-                page.render(renderContext).promise.then(() => {
-                    document.getElementById('page-num').textContent = num;
-                });
-            });
-        }
-
-        // Navigation buttons
-        document.getElementById('prev-page').onclick = () => {
-            if (pageNum <= 1) return;
-            pageNum--;
-            renderPage(pageNum);
-        };
-
-        document.getElementById('next-page').onclick = () => {
-            if (pageNum >= pdfDoc.numPages) return;
-            pageNum++;
-            renderPage(pageNum);
-        };
+        viewer.innerHTML = `
+            <iframe src="${fileUrl}" 
+                width="100%" height="85vh"
+                style="border:none; border-radius:6px; background:white;">
+            </iframe>`;
     }
 
     // -------------------- OFFICE FILES --------------------
     else if (['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'].includes(ext)) {
         const encoded = encodeURIComponent(fileUrl);
-        resourceViewer.innerHTML += `
+        viewer.innerHTML = `
             <iframe 
                 src="https://view.officeapps.live.com/op/embed.aspx?src=${encoded}" 
-                width="100%" height="70vh" 
-                style="border:none; min-height:500px; border-radius:6px;">
-            </iframe>`;
+                width="100%" height="85vh"
+                style="border:none; border-radius:6px; background:white;">
+            </iframe>
+            <p style="text-align:center; margin-top:8px; color:#6B7280;">
+                If the document doesn’t appear, 
+                <a href="${fileUrl}" target="_blank" style="color:var(--color-primary);">open it directly</a>.
+            </p>`;
+    }
+
+    // -------------------- IMAGE FILES --------------------
+    else if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(ext)) {
+        viewer.innerHTML = `
+            <img src="${fileUrl}" 
+                alt="${escapeHtml(resource.title)}"
+                style="max-width:100%; max-height:85vh; border-radius:6px; display:block; margin:auto;">
+        `;
+    }
+
+    // -------------------- VIDEO FILES --------------------
+    else if (['mp4', 'webm', 'ogg', 'mov'].includes(ext)) {
+        viewer.innerHTML = `
+            <video controls 
+                style="width:100%; max-height:85vh; border-radius:6px;">
+                <source src="${fileUrl}">
+                Your browser does not support video playback.
+            </video>`;
+    }
+
+    // -------------------- AUDIO FILES --------------------
+    else if (['mp3', 'wav', 'm4a', 'ogg'].includes(ext)) {
+        viewer.innerHTML = `
+            <audio controls style="width:100%; margin-top:10px;">
+                <source src="${fileUrl}">
+                Your browser does not support audio playback.
+            </audio>`;
     }
 
     // -------------------- UNSUPPORTED FILES --------------------
     else {
-        resourceViewer.innerHTML += `
-            <p>This file type (<strong>.${ext}</strong>) cannot be previewed directly.</p>`;
+        viewer.innerHTML = `
+            <p style="text-align:center; color:#6B7280;">
+                This file type (<strong>.${ext}</strong>) cannot be previewed directly.<br>
+                <a href="${fileUrl}" target="_blank" style="color:var(--color-primary);">Open or download manually</a>.
+            </p>`;
     }
 };
-
-
 
 /**
  * loadResources() fetches and displays student-specific resources.
