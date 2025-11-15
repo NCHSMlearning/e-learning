@@ -2718,23 +2718,43 @@ $('upload-resource-form')?.addEventListener('submit', async e => {
         return;
     }
 
-    const file = fileInput.files[0];
-    const safeFileName = `${title.replace(/\s+/g, '_')}_${file.name.replace(/\s+/g, '_')}`;
-    const filePath = `${program}/${intake}/${block}/${safeFileName}`;
+    let file = fileInput.files[0];
+    let uploadFile = file;
+    let originalName = file.name;
+
+    // Sanitize filename
+    const safeFileName = `${title.replace(/[^\w\-]+/g, '_')}_${originalName.replace(/[^\w\-]+/g, '_')}`;
+    let filePath = `${program}/${intake}/${block}/${safeFileName}`;
 
     try {
-        // 1️⃣ Upload to Supabase Storage
+        // Convert Word or PPT to PDF
+        if (/\.(docx?|pptx?)$/i.test(file.name)) {
+            uploadFile = await convertToPDF(file); // Implement server-side or client-side conversion
+            const pdfName = safeFileName.replace(/\.[^.]+$/, '.pdf');
+            filePath = `${program}/${intake}/${block}/${pdfName}`;
+            originalName = pdfName;
+        }
+
+        // Upload to Supabase Storage
         const { error: uploadError } = await sb.storage
             .from(RESOURCES_BUCKET)
-            .upload(filePath, file, { cacheControl: '3600', upsert: true, contentType: file.type });
+            .upload(filePath, uploadFile, {
+                cacheControl: '3600',
+                upsert: true,
+                contentType: uploadFile.type,
+                onUploadProgress: (progressEvent) => {
+                    const percent = Math.round((progressEvent.loaded / progressEvent.total) * 100);
+                    console.log(`Upload progress: ${percent}%`);
+                }
+            });
         if (uploadError) throw uploadError;
 
-        // 2️⃣ Get public URL
+        // Get public URL
         const { data: { publicUrl } } = sb.storage
             .from(RESOURCES_BUCKET)
             .getPublicUrl(filePath);
 
-        // 3️⃣ Insert metadata into 'resources' table
+        // Insert metadata into resources table
         const { error: dbError, data } = await sb
             .from('resources')
             .insert({
@@ -2743,17 +2763,16 @@ $('upload-resource-form')?.addEventListener('submit', async e => {
                 intake: intake,
                 block: block,
                 file_path: filePath,
-                file_name: file.name,
+                file_name: originalName,
                 file_url: publicUrl,
                 uploaded_by: currentUserProfile?.id,
                 uploaded_by_name: currentUserProfile?.full_name,
                 created_at: new Date().toISOString()
             }).select('id');
-
         if (dbError) throw dbError;
 
         await logAudit('RESOURCE_UPLOAD', `Uploaded resource: ${title} to ${program}/${intake}/${block}.`, data?.[0]?.id, 'SUCCESS');
-        showFeedback(`✅ File "${file.name}" uploaded successfully!`, 'success');
+        showFeedback(`✅ File "${originalName}" uploaded successfully!`, 'success');
         e.target.reset();
         loadResources();
     } catch (err) {
@@ -2764,6 +2783,7 @@ $('upload-resource-form')?.addEventListener('submit', async e => {
         setButtonLoading(submitButton, false, originalText);
     }
 });
+
 // -------------------- Load Resources Table --------------------
 async function loadResources() {
     const tableBody = $('resources-list');
