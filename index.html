@@ -2130,10 +2130,10 @@ async function loadExams() {
 // Load exams on page load
 window.onload = loadExams;
 /**
- **
- * viewResource() renders files in responsive iframe/canvas.
+ /**
+ * viewResource() renders files in a clean, responsive viewer.
  */
-window.viewResource = function(resourceId) {
+window.viewResource = async function(resourceId) {
     const resourceViewer = document.getElementById('resource-viewer');
     const resource = cachedResources.find(r => r.id == resourceId);
 
@@ -2143,22 +2143,29 @@ window.viewResource = function(resourceId) {
     }
 
     const fileUrl = resource.file_url;
-    const ext = (resource.file_path || '').split('.').pop().toLowerCase();
+    const filePath = resource.file_path;
+    const ext = (filePath || '').split('.').pop().toLowerCase();
 
+    // Clear viewer and add header
     resourceViewer.innerHTML = `
-        <h3 style="color: var(--color-primary); margin-bottom: 5px;">${escapeHtml(resource.title)}</h3>
+        <h3 style="color: var(--color-primary); margin-bottom: 5px;">
+            ${escapeHtml(resource.title)}
+        </h3>
         <p style="font-size: 0.9em; color: #6B7280; margin-bottom: 15px;">
-            Uploaded by: ${escapeHtml(resource.uploaded_by_name || 'Admin')} 
+            Uploaded by: ${escapeHtml(resource.uploaded_by_name || 'Admin')}
             on ${new Date(resource.created_at).toLocaleDateString()}
         </p>
     `;
 
-    // -------------------- PDF VIEWER --------------------
+    // --------------------------------
+    // 📌 PDF FILES
+    // --------------------------------
     if (ext === 'pdf') {
         resourceViewer.innerHTML += `
             <div id="pdf-container" style="width:100%; max-height:80vh; overflow:auto;">
-                <canvas id="pdf-canvas" style="width:100%; height:auto; border: 1px solid #ddd; border-radius:6px;"></canvas>
+                <canvas id="pdf-canvas" style="width:100%; height:auto; border:1px solid #ddd; border-radius:6px;"></canvas>
             </div>
+
             <div id="pdf-controls" style="margin-top:15px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:center;">
                 <button id="prev-page" class="profile-button" style="padding:8px 15px; font-size:0.9em;">Prev</button>
                 <button id="next-page" class="profile-button" style="padding:8px 15px; font-size:0.9em;">Next</button>
@@ -2171,11 +2178,10 @@ window.viewResource = function(resourceId) {
         let pdfDoc = null;
         let pageNum = 1;
 
-        // ✅ Fix PDF.js worker warning
+        // PDF.js worker
         pdfjsLib.GlobalWorkerOptions.workerSrc =
             'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-        // Load the PDF file
         pdfjsLib.getDocument(fileUrl).promise
             .then(pdf => {
                 pdfDoc = pdf;
@@ -2186,13 +2192,10 @@ window.viewResource = function(resourceId) {
                 resourceViewer.innerHTML += `<p style="color:#EF4444;">Failed to load PDF: ${err.message}</p>`;
             });
 
-        // ✅ High-quality, responsive rendering
         function renderPage(num) {
             pdfDoc.getPage(num).then(page => {
                 const containerWidth = document.getElementById('pdf-container').clientWidth;
                 const baseViewport = page.getViewport({ scale: 1 });
-
-                // Use device pixel ratio for sharper rendering
                 const pixelRatio = window.devicePixelRatio || 1;
                 const scale = (containerWidth / baseViewport.width) * pixelRatio;
                 const viewport = page.getViewport({ scale });
@@ -2202,48 +2205,73 @@ window.viewResource = function(resourceId) {
                 canvas.style.width = `${viewport.width / pixelRatio}px`;
                 canvas.style.height = `${viewport.height / pixelRatio}px`;
 
-                const renderContext = {
-                    canvasContext: ctx,
-                    viewport
-                };
-
+                const renderContext = { canvasContext: ctx, viewport };
                 page.render(renderContext).promise.then(() => {
                     document.getElementById('page-num').textContent = num;
                 });
             });
         }
 
-        // Navigation buttons
         document.getElementById('prev-page').onclick = () => {
-            if (pageNum <= 1) return;
-            pageNum--;
-            renderPage(pageNum);
+            if (pageNum > 1) {
+                pageNum--;
+                renderPage(pageNum);
+            }
         };
 
         document.getElementById('next-page').onclick = () => {
-            if (pageNum >= pdfDoc.numPages) return;
-            pageNum++;
-            renderPage(pageNum);
+            if (pageNum < pdfDoc.numPages) {
+                pageNum++;
+                renderPage(pageNum);
+            }
         };
+
+        return;
     }
 
-    // -------------------- OFFICE FILES --------------------
-    else if (['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'].includes(ext)) {
-        const encoded = encodeURIComponent(fileUrl);
-        resourceViewer.innerHTML += `
-            <iframe 
-                src="https://view.officeapps.live.com/op/embed.aspx?src=${encoded}" 
-                width="100%" height="70vh" 
-                style="border:none; min-height:500px; border-radius:6px;">
-            </iframe>`;
+    // --------------------------------
+    // 📌 OFFICE FILES (PPTX, DOCX, XLSX…)
+    // --------------------------------
+    if (['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'].includes(ext)) {
+
+        try {
+            // Generate a signed URL (1 hour)
+            const { data: signed } = await sb.storage
+                .from(RESOURCES_BUCKET)
+                .createSignedUrl(filePath, 3600);
+
+            if (!signed?.signedUrl) {
+                resourceViewer.innerHTML += `<p style="color:#EF4444;">Unable to load file.</p>`;
+                return;
+            }
+
+            const encoded = encodeURIComponent(signed.signedUrl);
+
+            resourceViewer.innerHTML += `
+                <iframe 
+                    src="https://view.officeapps.live.com/op/embed.aspx?src=${encoded}"
+                    width="100%"
+                    height="75vh"
+                    style="border:none; min-height:500px; border-radius:6px;">
+                </iframe>`;
+        } catch (err) {
+            resourceViewer.innerHTML += `<p style="color:#EF4444;">Failed to load file: ${err.message}</p>`;
+        }
+
+        return;
     }
 
-    // -------------------- UNSUPPORTED FILES --------------------
-    else {
-        resourceViewer.innerHTML += `
-            <p>This file type (<strong>.${ext}</strong>) cannot be previewed directly.</p>`;
-    }
+    // --------------------------------
+    // 📌 UNSUPPORTED FILES
+    // --------------------------------
+    resourceViewer.innerHTML += `
+        <p>This file type (<strong>.${ext}</strong>) cannot be previewed.</p>
+        <a href="${fileUrl}" download class="profile-button" style="margin-top:10px; display:inline-block;">
+            Download File
+        </a>
+    `;
 };
+
 
 
 /**
