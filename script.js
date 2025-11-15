@@ -2699,6 +2699,27 @@ document.addEventListener('DOMContentLoaded', initMessagesSection);
  * 11. Resources Tab (Fully Corrected)
  *******************************************************/
  
+// -------------------- Convert to PDF --------------------
+async function convertToPDF(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch('/convert-to-pdf', {
+        method: 'POST',
+        body: formData
+    });
+
+    if (!response.ok) {
+        throw new Error('Conversion to PDF failed');
+    }
+
+    const blob = await response.blob();
+
+    return new File([blob], file.name.replace(/\.[^.]+$/, '.pdf'), {
+        type: 'application/pdf'
+    });
+}
+
 // -------------------- Handle Upload Form --------------------
 $('upload-resource-form')?.addEventListener('submit', async e => {
     e.preventDefault();
@@ -2720,19 +2741,21 @@ $('upload-resource-form')?.addEventListener('submit', async e => {
 
     let file = fileInput.files[0];
     let uploadFile = file;
-    let originalName = file.name;
 
-    // Sanitize filename
-    const safeFileName = `${title.replace(/[^\w\-]+/g, '_')}_${originalName.replace(/[^\w\-]+/g, '_')}`;
-    let filePath = `${program}/${intake}/${block}/${safeFileName}`;
+    // Extract original extension
+    const originalExt = file.name.split('.').pop();
+    // Sanitize base filename without extension
+    const baseName = title.replace(/[^\w\-]+/g, '_') + '_' + file.name.replace(/\.[^.]+$/, '').replace(/[^\w\-]+/g, '_');
+
+    let originalName = `${baseName}.${originalExt}`;
+    let filePath = `${program}/${intake}/${block}/${originalName}`;
 
     try {
         // Convert Word or PPT to PDF
         if (/\.(docx?|pptx?)$/i.test(file.name)) {
-            uploadFile = await convertToPDF(file); // Implement server-side or client-side conversion
-            const pdfName = safeFileName.replace(/\.[^.]+$/, '.pdf');
-            filePath = `${program}/${intake}/${block}/${pdfName}`;
-            originalName = pdfName;
+            uploadFile = await convertToPDF(file); 
+            originalName = `${baseName}.pdf`;
+            filePath = `${program}/${intake}/${block}/${baseName}.pdf`;
         }
 
         // Upload to Supabase Storage
@@ -2783,6 +2806,7 @@ $('upload-resource-form')?.addEventListener('submit', async e => {
         setButtonLoading(submitButton, false, originalText);
     }
 });
+
 
 // -------------------- Load Resources Table --------------------
 async function loadResources() {
