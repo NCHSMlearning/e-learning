@@ -2687,12 +2687,6 @@ async function initMessagesSection() {
 
 document.addEventListener('DOMContentLoaded', initMessagesSection);
 
-
-
-
-/*******************************************************
- * 11. Resources Tab (Fully Corrected)
- *******************************************************/
  
 // -------------------- Handle Upload Form --------------------
 /*******************************************************
@@ -2704,21 +2698,20 @@ async function convertToPDF(file) {
     const formData = new FormData();
     formData.append('file', file);
 
-    const response = await fetch('/convert-to-pdf', {
-        method: 'POST',
-        body: formData
-    });
+    const response = await fetch('/convert-to-pdf', { method: 'POST', body: formData });
+
+    console.log('Convert response status:', response.status);
+    const text = await response.text();
+    console.log('Server response text:', text);
 
     if (!response.ok) {
         throw new Error('Conversion to PDF failed');
     }
 
     const blob = await response.blob();
-
-    return new File([blob], file.name.replace(/\.[^.]+$/, '.pdf'), {
-        type: 'application/pdf'
-    });
+    return new File([blob], file.name.replace(/\.[^.]+$/, '.pdf'), { type: 'application/pdf' });
 }
+
 
 // -------------------- Handle Upload Form --------------------
 $('upload-resource-form')?.addEventListener('submit', async e => {
