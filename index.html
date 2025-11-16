@@ -334,7 +334,7 @@
         /* MOBILE NAV HEADER & TOGGLE */
         /* -------------------------------------- */
         .mobile-header {
-            display: none;
+            display: flex; /* Ensure it's always displayed for consistency */
             background-color: var(--color-primary);
             color: white;
             padding: 10px 15px;
@@ -352,6 +352,22 @@
             color: white;
             font-size: 24px;
             cursor: pointer;
+        }
+
+        /* NEW STYLE: Profile photo in the header */
+        .header-profile-photo {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid var(--color-secondary); /* Accent color border */
+            margin-left: 10px;
+        }
+        /* Style for the text container */
+        .header-title-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
         
         /* -------------------------------------- */
@@ -424,38 +440,48 @@
             .form-field.full-width { grid-column: 1 / 2; }
 
             /* Improve PowerPoint and Office file viewing */
-#resource-viewer iframe {
-    width: 100%;
-    height: 85vh; /* fills most of the screen height */
-    min-height: 600px;
-    border: none;
-    border-radius: 8px;
-    background: #fff;
-    display: block;
-}
+            #resource-viewer iframe {
+                width: 100%;
+                height: 85vh; /* fills most of the screen height */
+                min-height: 600px;
+                border: none;
+                border-radius: 8px;
+                background: #fff;
+                display: block;
+            }
 
-/* Ensure container allows enough space */
-#resource-viewer {
-    width: 100% !important;
-    min-height: 85vh !important;
-    overflow: visible !important;
-    display: block;
-}
+            /* Ensure container allows enough space */
+            #resource-viewer {
+                width: 100% !important;
+                min-height: 85vh !important;
+                overflow: visible !important;
+                display: block;
+            }
 
-/* On smaller screens, keep it scrollable but readable */
-@media (max-width: 768px) {
-    #resource-viewer iframe {
-        height: 70vh;
-        min-height: 400px;
-    }
+            /* On smaller screens, keep it scrollable but readable */
+            @media (max-width: 768px) {
+                #resource-viewer iframe {
+                    height: 70vh;
+                    min-height: 400px;
+                }
+            }
+        }
     </style>
 </head>
 <body>
     
     <div class="mobile-header">
         <button class="menu-toggle" onclick="toggleMenu()">☰</button>
-        <span>NCHSM Digital Student Portal</span>
-    </div>
+        <div class="header-title-container">
+            <span>NCHSM Digital Student Portal</span>
+             <img 
+                id="header-passport-preview" 
+                src="https://dummyimage.com/150x150/cccccc/000000.png&text=NO+PHOTO" 
+                alt="Profile Photo" 
+                class="header-profile-photo"
+            />
+        </div>
+        </div>
     
     <div class="overlay" onclick="closeMenu()"></div>
 
@@ -749,7 +775,6 @@
   </div>
 </section>
 
-<!-- Provisional Transcript Modal -->
 <div id="transcript-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); justify-content:center; align-items:center; z-index:1000;">
   <div style="background:white; padding:20px; border-radius:8px; max-width:400px; width:90%; position:relative; box-shadow:0 4px 12px rgba(0,0,0,0.2);">
     <button onclick="closeTranscriptModal()" style="position:absolute; top:10px; right:10px; background:none; border:none; font-size:1.2em; cursor:pointer;">✖</button>
@@ -867,7 +892,7 @@
 
     // ** SUPABASE CONFIGURATION **
     const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co'; // <--- Update with your actual Supabase URL
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk'; // <--- Update with your actual Anon Key
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Ppk'; // <--- Update with your actual Anon Key
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
       
     // ** LOCATIONIQ CONFIGURATION (Geocoding API) **
@@ -1044,9 +1069,11 @@ async function loadStudentMessage(key, elementId) {
 
 /**
  * Load the student's profile photo.
+ * MODIFIED to also update the header photo.
  */
 function loadProfilePhoto() {
     const passportImg = document.getElementById('passport-preview');
+    const headerPassportImg = document.getElementById('header-passport-preview'); // NEW ELEMENT
     const passportCard = document.getElementById('action-passport');
 
     const photoUrl = currentUserProfile?.passport_url;
@@ -1056,13 +1083,28 @@ function loadProfilePhoto() {
         passportCard.style.display = photoUrl ? 'block' : 'none'; 
     }
 
+    // Determine the photo source (URL or fallback)
+    const finalPhotoSrc = currentUserProfile?.passport_url
+        ? `${SUPABASE_URL}/storage/v1/object/public/passports/${currentUserProfile.passport_url}?t=${new Date().getTime()}`
+        : 'https://dummyimage.com/150x150/cccccc/000000.png&text=NO+PHOTO';
+
+
+    // Set the main profile image or fallback
     if (passportImg) {
-        // Set the image or fallback
-        passportImg.src = photoUrl || 'https://dummyimage.com/150x150/cccccc/000000.png&text=NO+PHOTO';
+        passportImg.src = finalPhotoSrc;
 
         // If image fails to load (404), switch to fallback
         passportImg.onerror = function() {
             this.onerror = null; // prevent infinite loop
+            this.src = 'https://dummyimage.com/150x150/cccccc/000000.png&text=NO+PHOTO';
+        };
+    }
+
+    // Set the NEW header image or fallback
+    if (headerPassportImg) {
+        headerPassportImg.src = finalPhotoSrc;
+        headerPassportImg.onerror = function() {
+            this.onerror = null; 
             this.src = 'https://dummyimage.com/150x150/cccccc/000000.png&text=NO+PHOTO';
         };
     }
@@ -1259,6 +1301,7 @@ async function loadDashboardMetrics(userId) {
     // --- PROFILE COMPLETION CHECK ---
     const passportCard = document.getElementById('action-passport');
     const passportImg = document.getElementById('passport-preview');
+    const headerPassportImg = document.getElementById('header-passport-preview'); // New Element
 
     let profileIncomplete = !(currentUserProfile && currentUserProfile.passport_url);
 
@@ -1266,14 +1309,23 @@ async function loadDashboardMetrics(userId) {
     if (passportCard) passportCard.style.display = profileIncomplete ? 'block' : 'none';
 
     // Set the profile photo (or fallback)
+    const finalPhotoSrc = currentUserProfile?.passport_url
+        ? `${SUPABASE_URL}/storage/v1/object/public/passports/${currentUserProfile.passport_url}?t=${new Date().getTime()}`
+        : 'https://dummyimage.com/150x150/cccccc/000000.png&text=NO+PHOTO';
+
+
+    // Update Main Profile Image
     if (passportImg) {
-        if (currentUserProfile && currentUserProfile.passport_url) {
-            // Append timestamp to force reload
-            passportImg.src = currentUserProfile.passport_url + '?t=' + new Date().getTime();
-        } else {
-            passportImg.src = 'https://dummyimage.com/150x150/cccccc/000000.png&text=NO+PHOTO'; // fallback image
-        }
+        passportImg.src = finalPhotoSrc;
+        passportImg.onerror = () => passportImg.src = 'https://dummyimage.com/150x150/cccccc/000000.png&text=NO+PHOTO';
     }
+    
+    // Update Header Image
+    if (headerPassportImg) {
+        headerPassportImg.src = finalPhotoSrc;
+        headerPassportImg.onerror = () => headerPassportImg.src = 'https://dummyimage.com/150x150/cccccc/000000.png&text=NO+PHOTO';
+    }
+
 
     // --- NEW: Load System Message Card ---
     if (currentUserProfile && currentUserProfile.program) {
@@ -1359,14 +1411,22 @@ async function loadProfile(userId) {
 
 
     let photoUrl = 'https://dummyimage.com/150x150/cccccc/000000.png&text=NO+PHOTO';
+    let publicUrl = null;
     if (currentUserProfile.passport_url) {
-        const publicUrlResponse = sb.storage.from('passports').getPublicUrl(currentUserProfile.passport_url);
-        if (publicUrlResponse.data) {
+        // Use the new, correct method to construct the public URL for a public bucket
+        publicUrl = `${SUPABASE_URL}/storage/v1/object/public/passports/${currentUserProfile.passport_url}`;
+        if (publicUrl) {
             // ** FIX: Add cache-buster to force refresh of the image after upload (Critical Fix) **
-            photoUrl = `${publicUrlResponse.data.publicUrl}?t=${new Date().getTime()}`;
+            photoUrl = `${publicUrl}?t=${new Date().getTime()}`;
         }
     }
-    if (document.getElementById('passport-preview')) document.getElementById('passport-preview').src = photoUrl;
+
+    // Update BOTH the profile photo and the header photo
+    const mainPreview = document.getElementById('passport-preview');
+    const headerPreview = document.getElementById('header-passport-preview');
+
+    if (mainPreview) mainPreview.src = photoUrl;
+    if (headerPreview) headerPreview.src = photoUrl;
 
 
     toggleProfileEdit(false);
@@ -1448,7 +1508,10 @@ if (passportFileInput) {
         const file = passportFileInput.files[0];
         if (file) {
             // ** FIX: Display temporary object URL for preview **
-            if (passportPreview) passportPreview.src = URL.createObjectURL(file);
+            const tempUrl = URL.createObjectURL(file);
+            if (passportPreview) passportPreview.src = tempUrl;
+            if (document.getElementById('header-passport-preview')) document.getElementById('header-passport-preview').src = tempUrl; // Update header preview
+            
             if (uploadButton) uploadButton.style.display = 'block';
             if (uploadLabel) uploadLabel.style.display = 'none';
         }
