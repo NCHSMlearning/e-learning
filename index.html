@@ -1298,34 +1298,11 @@ async function loadDashboardMetrics(userId) {
     const newResourcesCount = cachedResources.filter(r => r.created_at >= oneWeekAgo).length;
     document.getElementById('dashboard-new-resources').textContent = newResourcesCount;
 
-    // --- PROFILE COMPLETION CHECK ---
-    const passportCard = document.getElementById('action-passport');
-    const passportImg = document.getElementById('passport-preview');
-    const headerPassportImg = document.getElementById('header-passport-preview'); // New Element
-
-    let profileIncomplete = !(currentUserProfile && currentUserProfile.passport_url);
-
-    // Show/hide the card
-    if (passportCard) passportCard.style.display = profileIncomplete ? 'block' : 'none';
-
-    // Set the profile photo (or fallback)
-    const finalPhotoSrc = currentUserProfile?.passport_url
-        ? `${SUPABASE_URL}/storage/v1/object/public/passports/${currentUserProfile.passport_url}?t=${new Date().getTime()}`
-        : 'https://dummyimage.com/150x150/cccccc/000000.png&text=NO+PHOTO';
-
-
-    // Update Main Profile Image
-    if (passportImg) {
-        passportImg.src = finalPhotoSrc;
-        passportImg.onerror = () => passportImg.src = 'https://dummyimage.com/150x150/cccccc/000000.png&text=NO+PHOTO';
-    }
+    // --- PROFILE COMPLETION CHECK & PHOTO UPDATE ---
     
-    // Update Header Image
-    if (headerPassportImg) {
-        headerPassportImg.src = finalPhotoSrc;
-        headerPassportImg.onerror = () => headerPassportImg.src = 'https://dummyimage.com/150x150/cccccc/000000.png&text=NO+PHOTO';
-    }
-
+    // Calls the function that updates both main and header images
+    loadProfilePhoto(); 
+    
 
     // --- NEW: Load System Message Card ---
     if (currentUserProfile && currentUserProfile.program) {
@@ -1354,7 +1331,7 @@ async function checkAuthAndLoad() {
          return;
     }
 
-    // ** CRITICAL: Load all necessary data FIRST **
+    // ** CRITICAL: Load all necessary data FIRST (Ensuring currentUserProfile is populated) **
     await loadProfile(currentUserId);
     await loadClinicalTargets(); 
     await loadClassTargets(); 
@@ -1364,7 +1341,7 @@ async function checkAuthAndLoad() {
 
     // ** THEN, load UI elements and metrics **
     await loadWelcomeDetails();
-    showTab('dashboard');
+    showTab('dashboard'); // This also calls loadDashboardMetrics internally for the first load
     loadDashboardMetrics(currentUserId);
 }
 
@@ -2579,15 +2556,26 @@ async function loadStudentMessagesAndAnnouncements() {
 } // ✅ closes loadStudentMessagesAndAnnouncements function
 
 document.addEventListener('DOMContentLoaded', async () => {
-   
-    // 2️⃣ Load official announcement banner immediately
-    await loadLatestOfficialAnnouncement();
-
-    // 3️⃣ Load profile photo
-    loadProfilePhoto();
-
-    // 4️⃣ Load messages list if needed
-    if (currentUserId) await loadStudentMessagesAndAnnouncements();
+    // ⚠️ NOTE: The core loading logic is handled by enforceAuth() -> checkAuthAndLoad().
+    // We only attach global handlers here.
+    
+    // Attach event listener for the Exam Type Filter to reload exams when changed
+    const examFilter = document.getElementById('exam-type-filter');
+    if (examFilter) {
+        examFilter.addEventListener('change', loadExams);
+    }
+    
+    // Attach event listener for the Session Type to update attendance targets
+    const sessionType = document.getElementById('session-type');
+    if (sessionType) {
+        sessionType.addEventListener('change', updateTargetSelect);
+    }
+    
+    // Attach event listener for the Calendar filter
+    const calendarFilter = document.getElementById('calendar-filter');
+    if (calendarFilter) {
+        calendarFilter.addEventListener('change', loadAcademicCalendar);
+    }
 });
 
 </script>
