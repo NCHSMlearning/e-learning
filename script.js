@@ -202,6 +202,35 @@ async function loadSectionData(tabId) {
         case 'backup': loadBackupHistory(); break;
     }
 }
+
+/**
+ * Tab switching function (referenced in dashboard cards)
+ */
+function showTab(tabId) {
+    // Remove active class from all tabs and nav links
+    document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+    document.querySelectorAll('.nav a').forEach(link => link.classList.remove('active'));
+    
+    // Add active class to target tab
+    const targetTab = document.getElementById(tabId);
+    if (targetTab) targetTab.classList.add('active');
+    
+    // Find and activate corresponding nav link
+    const navLink = document.querySelector(`.nav a[data-tab="${tabId}"]`);
+    if (navLink) navLink.classList.add('active');
+    
+    // Load section data
+    loadSectionData(tabId);
+}
+
+/**
+ * Generic modal close function
+ */
+function closeModal(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) modal.style.display = 'none';
+}
+
 // --- Session / Init ---
 async function initSession() {
     const { data: { session }, error: sessionError } = await sb.auth.getSession();
@@ -588,6 +617,12 @@ async function loadDashboardData() {
     // Data Integrity Placeholder (NEW)
     // This would typically query a complex view or stored procedure.
     $('dataIntegrityScore').textContent = '98.5%';
+
+    // Overall check-in count
+    const { count: overallCheckIns } = await sb
+        .from('geo_attendance_logs')
+        .select('*', { count: 'exact', head: true });
+    $('overallCheckInCount').textContent = overallCheckIns || 0;
 
     loadStudentWelcomeMessage();
 }
@@ -1425,6 +1460,61 @@ async function handleEditCourse(e) {
  * 6. Manage Sessions & Clinical Rotations
  *******************************************************/
 
+/**
+ * Handle session scheduling form submission
+ */
+async function handleAddSession(e) {
+    e.preventDefault();
+    const submitButton = e.submitter;
+    const originalText = submitButton.textContent;
+    setButtonLoading(submitButton, true, originalText);
+
+    try {
+        const sessionData = {
+            session_type: $('new_session_type').value,
+            session_title: $('new_session_title').value.trim(),
+            session_date: $('new_session_date').value,
+            session_time: $('new_session_start_time').value,
+            session_end_time: $('new_session_end_time').value || null,
+            target_program: $('new_session_program').value,
+            intake_year: $('new_session_intake_year').value,
+            block_term: $('new_session_block_term').value,
+            course_id: $('new_session_course').value || null
+        };
+
+        const { error } = await sb.from('scheduled_sessions').insert([sessionData]);
+        if (error) throw error;
+
+        await logAudit('SESSION_ADD', `Added ${sessionData.session_type} session: ${sessionData.session_title}`, null, 'SUCCESS');
+        showFeedback('Session scheduled successfully!', 'success');
+        e.target.reset();
+        loadScheduledSessions();
+        renderFullCalendar();
+    } catch (error) {
+        await logAudit('SESSION_ADD', `Failed to add session: ${error.message}`, null, 'FAILURE');
+        showFeedback(`Failed to schedule session: ${error.message}`, 'error');
+    } finally {
+        setButtonLoading(submitButton, false, originalText);
+    }
+}
+
+async function deleteSession(sessionId, sessionTitle) {
+    if (!confirm(`Delete session: ${sessionTitle}?`)) return;
+    
+    try {
+        const { error } = await sb.from('scheduled_sessions').delete().eq('id', sessionId);
+        if (error) throw error;
+        
+        await logAudit('SESSION_DELETE', `Deleted session: ${sessionTitle}`, sessionId, 'SUCCESS');
+        showFeedback('Session deleted successfully!', 'success');
+        loadScheduledSessions();
+        renderFullCalendar();
+    } catch (error) {
+        await logAudit('SESSION_DELETE', `Failed to delete session: ${sessionTitle}`, sessionId, 'FAILURE');
+        showFeedback(`Failed to delete session: ${error.message}`, 'error');
+    }
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
 
   // --- Elements ---
@@ -1751,6 +1841,44 @@ function showMap(lat, lng, locationName, studentName, dateTime) {
     }, 300); 
 }
 
+/**
+ * Admin/Lecturer self check-in function
+ */
+async function adminCheckIn() {
+    if (!navigator.geolocation) {
+        showFeedback('Geolocation is not supported by this browser.', 'error');
+        return;
+    }
+
+    try {
+        const position = await new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject);
+        });
+
+        const checkInData = {
+            user_id: currentUserProfile?.id,
+            session_type: 'admin',
+            check_in_time: new Date().toISOString(),
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            location_name: 'Admin Self Check-in',
+            ip_address: await getIPAddress(),
+            device_id: getDeviceId(),
+            is_manual_entry: false
+        };
+
+        const { error } = await sb.from('geo_attendance_logs').insert([checkInData]);
+        if (error) throw error;
+
+        await logAudit('ADMIN_CHECKIN', `Admin self check-in at ${checkInData.location_name}`, null, 'SUCCESS');
+        showFeedback('Admin check-in recorded successfully!', 'success');
+        loadAttendance();
+    } catch (error) {
+        await logAudit('ADMIN_CHECKIN', `Failed admin check-in: ${error.message}`, null, 'FAILURE');
+        showFeedback(`Check-in failed: ${error.message}`, 'error');
+    }
+}
+
 // ----------------------- Manual Attendance -----------------------
 
 async function handleManualAttendance(e) {
@@ -1891,7 +2019,7 @@ async function loadAttendance() {
 
 /********************************
  * 8. CATS / Exams
- ********************************/
+ ********************************
 
 // Populate course dropdown based on selected program
 async function populateExamCourseSelects(courses = null) {
