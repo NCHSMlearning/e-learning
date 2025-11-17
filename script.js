@@ -2166,6 +2166,41 @@ async function loadExams() {
   filterTable('exam-search', 'exams-table', [3, 2, 0]);
   populateStudentExams(exams);
 }
+// ======== ADD THIS FUNCTION RIGHT HERE ========
+async function populateStudentExams(exams) {
+  const studentExamsContainer = $('student-exams');
+  if (!studentExamsContainer) return;
+
+  if (!exams || exams.length === 0) {
+    studentExamsContainer.innerHTML = '<p>No assessments available at the moment.</p>';
+    return;
+  }
+
+  let html = '<div class="student-exams-grid">';
+  
+  exams.forEach(exam => {
+    const courseName = exam.course?.course_name || 'General Assessment';
+    const dateTime = new Date(exam.exam_date).toLocaleDateString() + (exam.exam_start_time ? ` at ${exam.exam_start_time}` : '');
+    const statusClass = exam.status === 'Upcoming' ? 'upcoming' : 
+                       exam.status === 'InProgress' ? 'in-progress' : 'completed';
+
+    html += `
+      <div class="exam-card ${statusClass}">
+        <h4>${escapeHtml(exam.exam_name)}</h4>
+        <p><strong>Type:</strong> ${escapeHtml(exam.exam_type)}</p>
+        <p><strong>Course:</strong> ${escapeHtml(courseName)}</p>
+        <p><strong>Date:</strong> ${dateTime}</p>
+        <p><strong>Duration:</strong> ${exam.duration_minutes} minutes</p>
+        <p><strong>Status:</strong> <span class="status-${statusClass}">${escapeHtml(exam.status)}</span></p>
+        ${exam.online_link ? `<a href="${escapeHtml(exam.online_link)}" target="_blank" class="btn-action">Take Exam</a>` : ''}
+      </div>
+    `;
+  });
+
+  html += '</div>';
+  studentExamsContainer.innerHTML = html;
+}
+// ======== END OF FUNCTION TO ADD ========
 
 // Delete Exam
 async function deleteExam(examId, examName) {
