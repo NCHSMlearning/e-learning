@@ -2019,7 +2019,7 @@ async function loadAttendance() {
 
 /********************************
  * 8. CATS / Exams
- ********************************
+ ********************************/
 
 // Populate course dropdown based on selected program
 async function populateExamCourseSelects(courses = null) {
@@ -2289,7 +2289,6 @@ document.querySelector('#examEditModal .close').addEventListener('click', () => 
 
 // Hook up form submit
 document.getElementById('edit-exam-form').addEventListener('submit', saveEditedExam);
-
 
 // Open Grade Modal
 async function openGradeModal(examId) {
