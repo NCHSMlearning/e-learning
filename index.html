@@ -7,7 +7,7 @@
     <link rel="icon" type="image/png" href="https://raw.githubusercontent.com/NCHSMlearning/e-learning/main/images/Logo_NCHSM.png" sizes="32x32">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-   <style>
+    <style>
         /* -------------------------------------- */
         /* BASE & TYPOGRAPHY */
         /* -------------------------------------- */
@@ -21,6 +21,18 @@
             --color-text-light: #E5E7EB;
             --color-background: #F8F8F8;
             --color-card-bg: #FFFFFF;
+            
+            /* Spacing scale */
+            --space-xs: 0.25rem;
+            --space-sm: 0.5rem;
+            --space-md: 1rem;
+            --space-lg: 1.5rem;
+            --space-xl: 2rem;
+            
+            /* Border radius */
+            --border-radius: 8px;
+            --shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            --transition: all 0.3s ease;
         }
 
         body {
@@ -368,7 +380,50 @@
             display: flex;
             align-items: center;
             gap: 10px;
+            flex: 1;
+            justify-content: flex-end;
         }
+        
+        /* -------------------------------------- */
+        /* LOADING AND ERROR STATES */
+        /* -------------------------------------- */
+        .loading-state {
+            color: #6B7280;
+            font-style: italic;
+        }
+
+        .error-state {
+            background-color: #FEF2F2;
+            border: 1px solid #FECACA;
+            border-radius: 6px;
+            padding: 10px;
+            color: var(--color-alert);
+            text-align: center;
+        }
+
+        /* Skeleton loading */
+        .skeleton {
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: loading 1.5s infinite;
+            border-radius: 4px;
+        }
+
+        @keyframes loading {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        /* Utility classes */
+        .text-center { text-align: center; }
+        .flex { display: flex; }
+        .flex-center { 
+            display: flex; 
+            align-items: center; 
+            justify-content: center;
+        }
+        .mb-1 { margin-bottom: var(--space-sm); }
+        .mb-2 { margin-bottom: var(--space-md); }
         
         /* -------------------------------------- */
         /* RESPONSIVE ADJUSTMENTS */
@@ -458,12 +513,32 @@
                 display: block;
             }
 
-            /* On smaller screens, keep it scrollable but readable */
-            @media (max-width: 768px) {
-                #resource-viewer iframe {
-                    height: 70vh;
-                    min-height: 400px;
-                }
+            /* Mobile header adjustments */
+            .mobile-header span {
+                font-size: 0.9rem;
+                font-weight: 600;
+            }
+
+            .header-title-container {
+                justify-content: flex-end;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .mobile-header span {
+                font-size: 0.8rem;
+            }
+            
+            .header-profile-photo {
+                width: 35px;
+                height: 35px;
+            }
+            
+            .cards { grid-template-columns: 1fr; }
+            
+            #resource-viewer iframe {
+                height: 70vh;
+                min-height: 400px;
             }
         }
     </style>
@@ -841,6 +916,64 @@
     pdfjsLib.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     
     // *************************************************************************
+    // *** UTILITY FUNCTIONS FOR BETTER ERROR HANDLING ***
+    // *************************************************************************
+    const AppUtils = {
+        // Show loading state
+        showLoading(element, message = 'Loading...') {
+            if (element) {
+                element.innerHTML = `<div class="loading-state">${message}</div>`;
+            }
+        },
+
+        // Show error state
+        showError(element, message) {
+            if (element) {
+                element.innerHTML = `<div class="error-state">${message}</div>`;
+            }
+        },
+
+        // Safe API call wrapper
+        async safeApiCall(apiCall, errorMessage = 'Operation failed') {
+            try {
+                return await apiCall();
+            } catch (error) {
+                console.error(errorMessage, error);
+                this.showToast(errorMessage, 'error');
+                return null;
+            }
+        },
+
+        // Toast notification
+        showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                padding: 12px 20px;
+                border-radius: 6px;
+                color: white;
+                z-index: 10000;
+                font-weight: 500;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                transition: all 0.3s ease;
+            `;
+            
+            toast.style.backgroundColor = type === 'error' ? 'var(--color-alert)' : 
+                                        type === 'success' ? 'var(--color-success)' : 
+                                        'var(--color-primary)';
+            
+            toast.textContent = message;
+            document.body.appendChild(toast);
+
+            setTimeout(() => {
+                toast.remove();
+            }, 4000);
+        }
+    };
+
+    // *************************************************************************
     // *** ✅ FIXED MOBILE MENU LOGIC (CRITICAL) ***
     // *************************************************************************
     const sidebar = document.getElementById('sidebar');
@@ -891,8 +1024,8 @@
 
 
     // ** SUPABASE CONFIGURATION **
-    const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co'; // <--- Update with your actual Supabase URL
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk'; // <--- Update with your actual Anon Key
+    const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
       
     // ** LOCATIONIQ CONFIGURATION (Geocoding API) **
@@ -922,7 +1055,7 @@
     const FALLBACK_LON = 0.00;
     const FALLBACK_ACCURACY = 9999;
 
-    const RESOURCES_BUCKET = 'resources';  // ← add this
+    const RESOURCES_BUCKET = 'resources';
     
     // ** GEO-ATTENDANCE CONSTANTS **
     const MAX_ALLOWED_ACCURACY = 30;
@@ -1045,7 +1178,7 @@ async function loadStudentMessage(key, elementId) {
     const element = document.getElementById(elementId);
     if (!element) return;
 
-    element.textContent = 'Loading...';
+    AppUtils.showLoading(element, 'Loading...');
 
     try {
         const { data, error } = await sb
@@ -1063,31 +1196,46 @@ async function loadStudentMessage(key, elementId) {
         }
     } catch (err) {
         console.error(`❌ Failed to load ${key}:`, err);
-        element.textContent = 'Failed to load message. Please refresh.';
+        AppUtils.showError(element, 'Failed to load message. Please refresh.');
     }
 }
 
 /**
  * Load the student's profile photo.
+ * FIXED: Now properly updates both main profile and header photos
  */
 function loadProfilePhoto() {
     const passportImg = document.getElementById('passport-preview');
+    const headerPassportImg = document.getElementById('header-passport-preview');
     const passportCard = document.getElementById('action-passport');
 
     const photoUrl = currentUserProfile?.passport_url;
 
     if (passportCard) {
-        // Hides or shows the "Missing Photo" action card
-        passportCard.style.display = photoUrl ? 'block' : 'none'; 
+        passportCard.style.display = photoUrl ? 'none' : 'block'; // Fixed logic
     }
 
-    if (passportImg) {
-        // Set the image or fallback
-        passportImg.src = photoUrl || 'https://dummyimage.com/150x150/cccccc/000000.png&text=NO+PHOTO';
+    // Determine the photo source (URL or fallback)
+    let finalPhotoSrc = 'https://dummyimage.com/150x150/cccccc/000000.png&text=NO+PHOTO';
+    
+    if (photoUrl) {
+        // Construct proper Supabase URL
+        finalPhotoSrc = `${SUPABASE_URL}/storage/v1/object/public/passports/${photoUrl}?t=${new Date().getTime()}`;
+    }
 
-        // If image fails to load (404), switch to fallback
+    // Update both profile and header images
+    if (passportImg) {
+        passportImg.src = finalPhotoSrc;
         passportImg.onerror = function() {
-            this.onerror = null; // prevent infinite loop
+            this.onerror = null;
+            this.src = 'https://dummyimage.com/150x150/cccccc/000000.png&text=NO+PHOTO';
+        };
+    }
+
+    if (headerPassportImg) {
+        headerPassportImg.src = finalPhotoSrc;
+        headerPassportImg.onerror = function() {
+            this.onerror = null;
             this.src = 'https://dummyimage.com/150x150/cccccc/000000.png&text=NO+PHOTO';
         };
     }
@@ -1124,15 +1272,16 @@ async function loadWelcomeDetails() {
   setInterval(updateHeader, 1000);
 
   // ---------------- Load other messages ----------------
-await loadStudentMessage('student_welcome', 'student-welcome-message'); // keep this if you want the welcome message
-await loadLatestOfficialAnnouncement(); // loads the announcement for the TOP BANNER
+  await loadStudentMessage('student_welcome', 'student-welcome-message');
+  await loadLatestOfficialAnnouncement();
 }
+
 /** * Load the latest official announcement from notifications for the dashboard banner. */
 async function loadLatestOfficialAnnouncement() {
   const element = document.getElementById('student-announcement');
   if (!element) return;
 
-  element.textContent = 'Loading latest announcement...';
+  AppUtils.showLoading(element, 'Loading latest announcement...');
 
   try {
     const { data, error } = await sb
@@ -1152,7 +1301,7 @@ async function loadLatestOfficialAnnouncement() {
     }
   } catch (err) {
     console.error('Failed to load official announcement:', err);
-    element.textContent = 'Failed to load announcement. Please refresh.';
+    AppUtils.showError(element, 'Failed to load announcement. Please refresh.');
   }
 }
 
@@ -1204,115 +1353,104 @@ async function loadSystemMessages(studentProgram) {
     }
 }
 
+// Helper functions for metrics
+async function loadAttendanceMetrics(userId) {
+    const { data: logs, error } = await sb
+        .from('geo_attendance_logs')
+        .select('is_verified')
+        .eq('student_id', userId);
 
-/**
- * Calculates and updates all dashboard metrics.
- */
-async function loadDashboardMetrics(userId) {
-    // --- ACTIVE COURSES ---
-    document.getElementById('dashboard-active-courses').textContent = cachedCourses.length;
+    if (error) throw error;
 
-    
-    // --- OVERALL ATTENDANCE RATE ---
-    let attendanceRate = 0;
-    try {
-        const { data: logs, error: attendanceError } = await sb
-            .from('geo_attendance_logs')
-            .select('is_verified')
-            .eq('student_id', userId); 
+    const totalLogs = logs.length;
+    const verifiedCount = logs.filter(l => l.is_verified === true).length;
+    const pendingCount = logs.filter(l => !l.is_verified).length;
+    const attendanceRate = totalLogs > 0 ? Math.round((verifiedCount / totalLogs) * 100) : 0;
 
-        if (attendanceError) throw attendanceError;
+    return { attendanceRate, verifiedCount, totalLogs, pendingCount };
+}
 
-        const totalLogs = logs.length;
-        const verifiedCount = logs.filter(l => l.is_verified === true).length;
-        const pendingCount = logs.filter(l => l.is_verified === null || l.is_verified === false).length; 
+async function loadCoursesMetrics() {
+    return { count: cachedCourses.length };
+}
 
-        attendanceRate = totalLogs > 0 ? Math.round((verifiedCount / totalLogs) * 100) : 0;
+async function loadExamsMetrics() {
+    const upcomingExams = cachedExams
+        .filter(exam => new Date(exam.exam_date) > new Date())
+        .sort((a, b) => new Date(a.exam_date) - new Date(b.exam_date));
 
-        document.getElementById('dashboard-attendance-rate').textContent = attendanceRate + '%';
-        document.getElementById('dashboard-verified-count').textContent = verifiedCount;
-        document.getElementById('dashboard-total-count').textContent = totalLogs;
-        document.getElementById('dashboard-pending-count').textContent = pendingCount;
-        
-        // Add alert class if attendance is low (e.g., under 80%)
-        const attendanceCard = document.querySelector('.card.alert-card');
-        if (attendanceCard) {
-            if (attendanceRate < 80) { // Example threshold
-                attendanceCard.classList.add('alert-card');
-            } else {
-                attendanceCard.classList.remove('alert-card');
-            }
-        }
+    return { upcomingExam: upcomingExams[0] };
+}
 
-
-    } catch (err) {
-        console.error("Failed to load overall attendance metrics:", err);
-        document.getElementById('dashboard-attendance-rate').textContent = 'N/A';
-        document.getElementById('dashboard-verified-count').textContent = '0';
-        document.getElementById('dashboard-total-count').textContent = '0';
-        document.getElementById('dashboard-pending-count').textContent = '0';
-    }
-
-
-    // --- UPCOMING EXAM ---
-    let nextExamText = 'No Exams Scheduled'; 
-
-    if (cachedExams.length > 0) {
-        const now = new Date(); 
-        const upcomingExams = cachedExams
-            .filter(exam => new Date(exam.exam_date) > now)
-            .sort((a, b) => new Date(a.exam_date) - new Date(b.exam_date));
-
-
-        if (upcomingExams.length > 0) {
-            const upcomingExam = upcomingExams[0];
-            const examDate = new Date(upcomingExam.exam_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-            nextExamText = `${upcomingExam.exam_name || 'Exam'} on ${examDate}`;
-        } else {
-            nextExamText = 'Semester Completed'; 
-        }
-    } 
-
-    document.getElementById('dashboard-upcoming-exam').textContent = nextExamText;
-
-
-    // --- NEW RESOURCES ---
+async function loadResourcesMetrics() {
     const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const newResourcesCount = cachedResources.filter(r => r.created_at >= oneWeekAgo).length;
-    document.getElementById('dashboard-new-resources').textContent = newResourcesCount;
+    return { newResourcesCount };
+}
 
-    // --- PROFILE COMPLETION CHECK ---
-    const passportCard = document.getElementById('action-passport');
-    const passportImg = document.getElementById('passport-preview');
+function updateDashboardUI(attendance, courses, exams, resources) {
+    // Update attendance
+    if (attendance) {
+        document.getElementById('dashboard-attendance-rate').textContent = attendance.attendanceRate + '%';
+        document.getElementById('dashboard-verified-count').textContent = attendance.verifiedCount;
+        document.getElementById('dashboard-total-count').textContent = attendance.totalLogs;
+        document.getElementById('dashboard-pending-count').textContent = attendance.pendingCount;
+    }
 
-    let profileIncomplete = !(currentUserProfile && currentUserProfile.passport_url);
+    // Update courses
+    if (courses) {
+        document.getElementById('dashboard-active-courses').textContent = courses.count;
+    }
 
-    // Show/hide the card
-    if (passportCard) passportCard.style.display = profileIncomplete ? 'block' : 'none';
+    // Update exams
+    if (exams?.upcomingExam) {
+        const examDate = new Date(exams.upcomingExam.exam_date).toLocaleDateString('en-US', { 
+            month: 'short', day: 'numeric' 
+        });
+        document.getElementById('dashboard-upcoming-exam').textContent = 
+            `${exams.upcomingExam.exam_name || 'Exam'} on ${examDate}`;
+    } else {
+        document.getElementById('dashboard-upcoming-exam').textContent = 'No Exams Scheduled';
+    }
 
-    // Set the profile photo (or fallback)
-    if (passportImg) {
-        if (currentUserProfile && currentUserProfile.passport_url) {
-            // Append timestamp to force reload
-            passportImg.src = currentUserProfile.passport_url + '?t=' + new Date().getTime();
-        } else {
-            passportImg.src = 'https://dummyimage.com/150x150/cccccc/000000.png&text=NO+PHOTO'; // fallback image
+    // Update resources
+    if (resources) {
+        document.getElementById('dashboard-new-resources').textContent = resources.newResourcesCount;
+    }
+}
+
+/**
+ * Calculates and updates all dashboard metrics with better error handling
+ */
+async function loadDashboardMetrics(userId) {
+    try {
+        // Show loading states
+        AppUtils.showLoading(document.getElementById('dashboard-attendance-rate'), '--%');
+        AppUtils.showLoading(document.getElementById('dashboard-active-courses'), '0');
+        AppUtils.showLoading(document.getElementById('dashboard-upcoming-exam'), 'Loading...');
+
+        // Load data in parallel for better performance
+        const [attendanceData, coursesData, examsData, resourcesData] = await Promise.all([
+            AppUtils.safeApiCall(() => loadAttendanceMetrics(userId)),
+            AppUtils.safeApiCall(() => loadCoursesMetrics()),
+            AppUtils.safeApiCall(() => loadExamsMetrics()),
+            AppUtils.safeApiCall(() => loadResourcesMetrics())
+        ]);
+
+        // Update UI with actual data
+        updateDashboardUI(attendanceData, coursesData, examsData, resourcesData);
+        
+        // Load profile photo
+        loadProfilePhoto();
+        
+        // Load system messages
+        if (currentUserProfile?.program) {
+            loadSystemMessages(currentUserProfile.program);
         }
-    }
 
-    // --- NEW: Load System Message Card ---
-    if (currentUserProfile && currentUserProfile.program) {
-        loadSystemMessages(currentUserProfile.program);
-    }
-
-    const actionsContainer = document.getElementById('dashboard-actions');
-    const actionTitle = document.getElementById('actions-title');
-
-
-    if (actionTitle && actionsContainer) {
-        // Count visible children
-        const visibleActions = Array.from(actionsContainer.children).filter(child => child.style.display !== 'none').length;
-        actionTitle.style.display = visibleActions === 0 ? 'none' : 'block';
+    } catch (error) {
+        console.error('Dashboard metrics loading failed:', error);
+        AppUtils.showToast('Failed to load dashboard data', 'error');
     }
 }
 
@@ -1385,13 +1523,16 @@ async function loadProfile(userId) {
 
     let photoUrl = 'https://dummyimage.com/150x150/cccccc/000000.png&text=NO+PHOTO';
     if (currentUserProfile.passport_url) {
-        const publicUrlResponse = sb.storage.from('passports').getPublicUrl(currentUserProfile.passport_url);
-        if (publicUrlResponse.data) {
-            // ** FIX: Add cache-buster to force refresh of the image after upload (Critical Fix) **
-            photoUrl = `${publicUrlResponse.data.publicUrl}?t=${new Date().getTime()}`;
-        }
+        // Use direct URL construction for public bucket
+        photoUrl = `${SUPABASE_URL}/storage/v1/object/public/passports/${currentUserProfile.passport_url}?t=${new Date().getTime()}`;
     }
-    if (document.getElementById('passport-preview')) document.getElementById('passport-preview').src = photoUrl;
+
+    // Update both images
+    const passportImg = document.getElementById('passport-preview');
+    const headerImg = document.getElementById('header-passport-preview');
+
+    if (passportImg) passportImg.src = photoUrl;
+    if (headerImg) headerImg.src = photoUrl;
 
 
     toggleProfileEdit(false);
@@ -1925,7 +2066,7 @@ window.geoCheckIn = geoCheckIn;
 async function loadCourses() {
     const tableBody = document.getElementById('courses-table');
     if (!tableBody) return;
-    tableBody.innerHTML = '<tr><td colspan="4">Loading courses...</td></tr>';
+    AppUtils.showLoading(tableBody, 'Loading courses...');
 
     if (!currentUserProfile) await loadProfile(currentUserId); 
     const program = currentUserProfile?.program || currentUserProfile?.department; 
@@ -1971,7 +2112,7 @@ async function loadCourses() {
 
     } catch (error) {
         console.error("❌ Failed to load courses:", error);
-        tableBody.innerHTML = `<tr><td colspan="4" style="color:#EF4444;">Error loading courses: ${error.message}</td></tr>`;
+        AppUtils.showError(tableBody, `Error loading courses: ${error.message}`);
         cachedCourses = [];
     }
 
@@ -2042,7 +2183,7 @@ async function loadExams() {
   const tableBody = document.getElementById('exams-table');
   if (!tableBody) return;
 
-  tableBody.innerHTML = '<tr><td colspan="9">Loading your exams and grades...</td></tr>';
+  AppUtils.showLoading(tableBody, 'Loading your exams and grades...');
 
   if (!currentUserProfile) await loadProfile(currentUserId);
   const program = currentUserProfile?.program || currentUserProfile?.department;
@@ -2147,7 +2288,7 @@ async function loadExams() {
 
   } catch (error) {
     console.error('❌ Failed to load exams:', error);
-    tableBody.innerHTML = `<tr><td colspan="9" style="color:#EF4444;">Error loading exams: ${error.message}</td></tr>`;
+    AppUtils.showError(tableBody, `Error loading exams: ${error.message}`);
     cachedExams = [];
   }
 
@@ -2309,7 +2450,7 @@ async function loadResources() {
 
     const resourceListContainer = document.getElementById('resources-list');
     if (!resourceListContainer) return;
-    resourceListContainer.innerHTML = 'Loading resources...';
+    AppUtils.showLoading(resourceListContainer, 'Loading resources...');
     cachedResources = [];
 
     try {
@@ -2360,7 +2501,7 @@ async function loadResources() {
 
     } catch (err) {
         console.error("Error loading resources:", err);
-        resourceListContainer.innerHTML = `<p style="color:#EF4444;">Error loading resources: ${err.message}</p>`;
+        AppUtils.showError(resourceListContainer, `Error loading resources: ${err.message}`);
     }
 
     if (typeof loadDashboardMetrics === 'function') {
@@ -2421,7 +2562,7 @@ async function fetchAllScheduleData() {
 async function loadAcademicCalendar() {
     const tableBody = document.getElementById('calendar-table');
     if (!tableBody) return;
-    tableBody.innerHTML = '<tr><td colspan="3">Loading academic schedule...</td></tr>';
+    AppUtils.showLoading(tableBody, 'Loading academic schedule...');
 
 
     try {
@@ -2458,7 +2599,7 @@ async function loadAcademicCalendar() {
 
     } catch (error) {
         console.error("Failed to load academic calendar:", error);
-        tableBody.innerHTML = '<tr><td colspan="3" style="color:#EF4444;">Error loading calendar data.</td></tr>';
+        AppUtils.showError(tableBody, 'Error loading calendar data.');
     }
 }
 
@@ -2479,7 +2620,7 @@ async function loadStudentMessagesAndAnnouncements() {
     const messageContainer = document.getElementById('messages-list');
     if (!messageContainer) return;
 
-    messageContainer.innerHTML = 'Loading messages...';
+    AppUtils.showLoading(messageContainer, 'Loading messages...');
 
     try {
         // 1️⃣ Load personal messages
@@ -2536,20 +2677,37 @@ async function loadStudentMessagesAndAnnouncements() {
 
    } catch (error) {
     console.error("Failed to load student messages and announcements:", error);
-    messageContainer.innerHTML = '<p style="color:#EF4444;">Error loading messages and announcements.</p>';
+    AppUtils.showError(messageContainer, 'Error loading messages and announcements.');
 } // closes catch
 } // ✅ closes loadStudentMessagesAndAnnouncements function
 
 document.addEventListener('DOMContentLoaded', async () => {
-   
-    // 2️⃣ Load official announcement banner immediately
-    await loadLatestOfficialAnnouncement();
+    // Setup global error handlers
+    window.addEventListener('error', (event) => {
+        console.error('Global error:', event.error);
+        AppUtils.showToast('An unexpected error occurred', 'error');
+    });
 
-    // 3️⃣ Load profile photo
-    loadProfilePhoto();
+    window.addEventListener('unhandledrejection', (event) => {
+        console.error('Unhandled promise rejection:', event.reason);
+        AppUtils.showToast('An operation failed', 'error');
+    });
 
-    // 4️⃣ Load messages list if needed
-    if (currentUserId) await loadStudentMessagesAndAnnouncements();
+    // Setup event listeners for filters
+    const examFilter = document.getElementById('exam-type-filter');
+    if (examFilter) {
+        examFilter.addEventListener('change', loadExams);
+    }
+    
+    const sessionType = document.getElementById('session-type');
+    if (sessionType) {
+        sessionType.addEventListener('change', updateTargetSelect);
+    }
+    
+    const calendarFilter = document.getElementById('calendar-filter');
+    if (calendarFilter) {
+        calendarFilter.addEventListener('change', loadAcademicCalendar);
+    }
 });
 
 </script>
