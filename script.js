@@ -1460,6 +1460,84 @@ async function handleEditCourse(e) {
  * 6. Manage Sessions & Clinical Rotations
  *******************************************************/
 
+// Global function to load scheduled sessions
+async function loadScheduledSessions() {
+    const tbody = document.getElementById('scheduledSessionsTableBody');
+    if (!tbody) return;
+
+    tbody.innerHTML = '<tr><td colspan="6">Loading scheduled sessions...</td></tr>';
+    const { data: sessions, error } = await fetchData(
+      'scheduled_sessions',
+      '*, course:course_id(course_name)',
+      {},
+      'session_date',
+      false
+    );
+
+    if (error) {
+      tbody.innerHTML = `<tr><td colspan="6">Error loading sessions: ${error.message}</td></tr>`;
+      return;
+    }
+
+    if (!sessions || sessions.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6">No scheduled sessions found.</td></tr>`;
+      return;
+    }
+
+    const fragment = document.createDocumentFragment();
+    sessions.forEach(s => {
+      const tr = document.createElement('tr');
+      const dateTime = new Date(s.session_date).toLocaleDateString() + ' ' + (s.session_time || 'N/A');
+      const courseName = s.course?.course_name || 'N/A';
+      let detail = s.session_title;
+      if (s.session_type === 'class' && courseName !== 'N/A') {
+        detail += ` (${courseName})`;
+      }
+      tr.innerHTML = `
+        <td>${escapeHtml(s.session_type)}</td>
+        <td>${escapeHtml(detail)}</td>
+        <td>${dateTime}</td>
+        <td>${escapeHtml(s.target_program || 'N/A')}</td>
+        <td>${escapeHtml(s.block_term || 'N/A')}</td>
+        <td>
+          <button class="btn btn-delete" onclick="deleteSession('${s.id}', '${escapeHtml(s.session_title, true)}')">Delete</button>
+        </td>
+      `;
+      fragment.appendChild(tr);
+    });
+    tbody.innerHTML = '';
+    tbody.appendChild(fragment);
+}
+
+// Global function to populate session course selects
+async function populateSessionCourseSelects() {
+    const program = $('new_session_program')?.value;
+    const courseSelect = $('new_session_course');
+    
+    if (!courseSelect) return;
+    
+    courseSelect.innerHTML = '<option value="">-- Select Course (Optional) --</option>';
+    
+    if (!program) return;
+    
+    const { data: courses } = await fetchData(
+        'courses', 
+        'id, course_name, target_program', 
+        { target_program: program }, 
+        'course_name', 
+        true
+    );
+    
+    if (courses && courses.length > 0) {
+        courses.forEach(c => {
+            const option = document.createElement('option');
+            option.value = c.id;
+            option.textContent = c.course_name;
+            courseSelect.appendChild(option);
+        });
+    }
+}
+
 /**
  * Handle session scheduling form submission
  */
@@ -1612,55 +1690,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // --- Scheduled Sessions ---
-  async function loadScheduledSessions() {
-    const tbody = document.getElementById('scheduledSessionsTableBody');
-    if (!tbody) return;
-
-    tbody.innerHTML = '<tr><td colspan="6">Loading scheduled sessions...</td></tr>';
-    const { data: sessions, error } = await fetchData(
-      'scheduled_sessions',
-      '*, course:course_id(course_name)',
-      {},
-      'session_date',
-      false
-    );
-
-    if (error) {
-      tbody.innerHTML = `<tr><td colspan="6">Error loading sessions: ${error.message}</td></tr>`;
-      return;
-    }
-
-    if (!sessions || sessions.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="6">No scheduled sessions found.</td></tr>`;
-      return;
-    }
-
-    const fragment = document.createDocumentFragment();
-    sessions.forEach(s => {
-      const tr = document.createElement('tr');
-      const dateTime = new Date(s.session_date).toLocaleDateString() + ' ' + (s.session_time || 'N/A');
-      const courseName = s.course?.course_name || 'N/A';
-      let detail = s.session_title;
-      if (s.session_type === 'class' && courseName !== 'N/A') {
-        detail += ` (${courseName})`;
-      }
-      tr.innerHTML = `
-        <td>${escapeHtml(s.session_type)}</td>
-        <td>${escapeHtml(detail)}</td>
-        <td>${dateTime}</td>
-        <td>${escapeHtml(s.target_program || 'N/A')}</td>
-        <td>${escapeHtml(s.block_term || 'N/A')}</td>
-        <td>
-          <button class="btn btn-delete" onclick="deleteSession('${s.id}', '${escapeHtml(s.session_title, true)}')">Delete</button>
-        </td>
-      `;
-      fragment.appendChild(tr);
-    });
-    tbody.innerHTML = '';
-    tbody.appendChild(fragment);
-  }
-
   // --- Clinical Save ---
   async function saveClinical() {
     if (!clinicalProgram || !clinicalIntake || !clinicalBlock) return;
@@ -1721,7 +1750,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadScheduledSessions();
   }
 });
-
 /*******************************************************
  * 7. Attendance Tab (Super Admin)
  *******************************************************/
