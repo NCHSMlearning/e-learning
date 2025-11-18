@@ -2574,9 +2574,9 @@ form button:hover {
             populateSelect($('att_course_id'), filteredCourses, 'unit_code', 'course_name', 'Select Course (Optional)');
         }
 
-     async function lecturerCheckIn() {
+    async function lecturerCheckIn() {
     const button = $('lecturer-checkin-btn');
-    setButtonLoading(button, true, 'Mark My Attendance Now');
+    setButtonLoading(button, true, 'Marking Attendance...');
 
     if (!navigator.geolocation) {
         showFeedback('Geolocation is not supported by your browser.', 'error');
@@ -2590,14 +2590,14 @@ form button:hover {
         const locationDetails = `Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)}`;
 
         try {
-            // 1️⃣ Check if lecturer exists in consolidated_user_profiles_table
+            // 1️⃣ Ensure lecturer exists in consolidated_user_profiles_table
             const { data: lecturerData, error: checkError } = await sb
                 .from('consolidated_user_profiles_table')
                 .select('user_id')
                 .eq('user_id', currentUserProfile.user_id)
                 .single();
 
-            if (checkError && checkError.code !== 'PGRST116') { // PGRST116 = no rows found
+            if (checkError && checkError.code !== 'PGRST116') {
                 throw checkError;
             }
 
@@ -2609,9 +2609,9 @@ form button:hover {
                 return;
             }
 
-            // 2️⃣ Insert attendance
+            // 2️⃣ Insert attendance into geo_attendance_logs
             const { error } = await sb.from('geo_attendance_logs').insert({
-                user_id: currentUserProfile.user_id,
+                user_id: currentUserProfile.user_id,         // Must match the existing UUID
                 user_role: currentUserProfile.role || 'lecturer',
                 session_type: 'Lecturer Check-in',
                 check_in_time: checkinTime,
@@ -2632,6 +2632,7 @@ form button:hover {
         } finally {
             setButtonLoading(button, false);
         }
+
     }, (error) => {
         console.error('Geolocation Error:', error);
         showFeedback(`Geolocation failed: ${error.message}. Please enable location services.`, 'error');
