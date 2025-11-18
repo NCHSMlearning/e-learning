@@ -3,12 +3,14 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     
     steps:
     - name: Checkout code
@@ -16,28 +18,22 @@ jobs:
 
     - name: Create config file
       run: |
-        # Create the public directory if it doesn't exist
-        mkdir -p public
-        
-        # Create config.js with secrets
-        cat > public/config.js << EOF
-        // Auto-generated configuration file
-        // This file is created during deployment
+        # Create config.js in the root directory
+        cat > config.js << EOF
         window.APP_CONFIG = {
           SUPABASE_URL: "${{ secrets.SUPABASE_URL }}",
           SUPABASE_ANON_KEY: "${{ secrets.SUPABASE_ANON_KEY }}",
           LOCATIONIQ_API_KEY: "${{ secrets.LOCATIONIQ_API_KEY }}",
           BUILD_TIME: "${{ github.run_number }}",
-          COMMIT_SHA: "${{ github.sha }}"
+          COMMIT_SHA: "${{ github.sha }}",
+          ENVIRONMENT: "production"
         };
         EOF
         
-        # Copy your main HTML file to public directory
-        cp index.html public/
-        
-        # List files to verify
-        echo "Files in public directory:"
-        ls -la public/
+        # Verify the file was created
+        echo "✅ Config file created:"
+        ls -la config.js
+        cat config.js
 
     - name: Setup Pages
       uses: actions/configure-pages@v4
@@ -45,16 +41,17 @@ jobs:
     - name: Upload artifact
       uses: actions/upload-pages-artifact@v3
       with:
-        path: './public'
+        path: '.'
+        # Remove any exclude patterns to ensure all files are included
 
   deploy:
-    needs: build
+    needs: build-and-deploy
     permissions:
       pages: write
       id-token: write
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: \${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
       - name: Deploy to GitHub Pages
