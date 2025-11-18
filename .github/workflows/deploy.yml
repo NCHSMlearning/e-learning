@@ -1,0 +1,62 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Create config file
+      run: |
+        # Create the public directory if it doesn't exist
+        mkdir -p public
+        
+        # Create config.js with secrets
+        cat > public/config.js << EOF
+        // Auto-generated configuration file
+        // This file is created during deployment
+        window.APP_CONFIG = {
+          SUPABASE_URL: "${{ secrets.SUPABASE_URL }}",
+          SUPABASE_ANON_KEY: "${{ secrets.SUPABASE_ANON_KEY }}",
+          LOCATIONIQ_API_KEY: "${{ secrets.LOCATIONIQ_API_KEY }}",
+          BUILD_TIME: "${{ github.run_number }}",
+          COMMIT_SHA: "${{ github.sha }}"
+        };
+        EOF
+        
+        # Copy your main HTML file to public directory
+        cp index.html public/
+        
+        # List files to verify
+        echo "Files in public directory:"
+        ls -la public/
+
+    - name: Setup Pages
+      uses: actions/configure-pages@v4
+
+    - name: Upload artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: './public'
+
+  deploy:
+    needs: build
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
