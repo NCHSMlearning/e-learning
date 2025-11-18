@@ -2919,73 +2919,78 @@ form button:hover {
             }
         }
 
-        async function handleUploadResource(e) {
-            e.preventDefault();
-            const button = e.submitter;
-            setButtonLoading(button, true, 'Upload Resource');
+     async function handleUploadResource(e) {
+    e.preventDefault();
+    const button = e.submitter;
+    setButtonLoading(button, true, 'Upload Resource');
 
-            const fileInput = $('resource_file');
-            const file = fileInput.files[0];
-            
-            if (!file) {
-                showFeedback('Please select a file to upload.', 'error');
-                setButtonLoading(button, false);
-                return;
-            }
+    const fileInput = $('resource_file');
+    const file = fileInput.files[0];
+    
+    if (!file) {
+        showFeedback('Please select a file to upload.', 'error');
+        setButtonLoading(button, false);
+        return;
+    }
 
-            const formData = {
-                title: $('resource_title').value,
-                program: $('resource_program').value,
-                intake: $('resource_intake').value,
-                block: $('resource_block').value
-            };
+    const formData = {
+        title: $('resource_title').value,
+        program: $('resource_program').value,
+        intake: $('resource_intake').value,
+        block: $('resource_block').value
+    };
 
-            if (Object.values(formData).some(v => !v)) {
-                showFeedback('Please fill in all resource details.', 'error');
-                setButtonLoading(button, false);
-                return;
-            }
+    if (Object.values(formData).some(v => !v)) {
+        showFeedback('Please fill in all resource details.', 'error');
+        setButtonLoading(button, false);
+        return;
+    }
 
-            try {
-                // Upload file to storage
-                const fileExt = file.name.split('.').pop();
-                const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
-                const filePath = `resources/${fileName}`;
+    try {
+        // Get authenticated user
+        const { data: { user }, error: authError } = await sb.auth.getUser();
+        if (authError) throw authError;
 
-                const { error: uploadError } = await sb.storage
-                    .from(RESOURCES_BUCKET)
-                    .upload(filePath, file);
+        // Upload file to storage
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
+        const filePath = `resources/${fileName}`;
 
-                if (uploadError) throw uploadError;
+        const { error: uploadError } = await sb.storage
+            .from(RESOURCES_BUCKET)
+            .upload(filePath, file);
 
-                // Get public URL
-                const { data: urlData } = sb.storage.from(RESOURCES_BUCKET).getPublicUrl(filePath);
+        if (uploadError) throw uploadError;
 
-                // Save resource metadata to database
-                const { error: dbError } = await sb.from(RESOURCES_TABLE).insert({
-                    title: formData.title,
-                    file_name: file.name,
-                    file_url: urlData.publicUrl,
-                    file_path: filePath,
-                    target_program: formData.program,
-                    intake_year: formData.intake,
-                    block_term: formData.block,
-                    uploaded_by: currentUserProfile.user_id,
-                    uploaded_by_name: currentUserProfile.full_name
-                });
+        // Get public URL
+        const { data: urlData } = sb.storage.from(RESOURCES_BUCKET).getPublicUrl(filePath);
 
-                if (dbError) throw dbError;
+        // Save resource metadata to database
+        const { error: dbError } = await sb.from(RESOURCES_TABLE).insert({
+            title: formData.title,
+            file_name: file.name,
+            file_url: urlData.publicUrl,
+            file_path: filePath,
+            target_program: formData.program,
+            intake_year: formData.intake,
+            block_term: formData.block,
+            uploaded_by: user.id,               // Use auth.uid()
+            uploaded_by_name: currentUserProfile.full_name
+        });
 
-                showFeedback(`✅ Resource "${formData.title}" uploaded successfully!`, 'success');
-                e.target.reset();
-                loadLecturerResources();
-            } catch (error) {
-                console.error('Resource upload failed:', error);
-                showFeedback(`Upload failed: ${error.message}`, 'error');
-            } finally {
-                setButtonLoading(button, false);
-            }
-        }
+        if (dbError) throw dbError;
+
+        showFeedback(`✅ Resource "${formData.title}" uploaded successfully!`, 'success');
+        e.target.reset();
+        loadLecturerResources();
+
+    } catch (error) {
+        console.error('Resource upload failed:', error);
+        showFeedback(`Upload failed: ${error.message}`, 'error');
+    } finally {
+        setButtonLoading(button, false);
+    }
+}
 
         async function loadLecturerResources() {
             const tbody = $('resources-list');
