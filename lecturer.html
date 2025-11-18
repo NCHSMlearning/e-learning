@@ -2712,9 +2712,10 @@ form button:hover {
 
      let attendanceMap = null;
 
-// Load today's attendance records
+let attendanceMap = null;
+
 async function loadTodaysAttendanceRecords() {
-    const tbody = document.getElementById('attendance-table-body');
+    const tbody = document.getElementById('attendance-table'); // match HTML ID
     if (!tbody) return;
 
     tbody.innerHTML = '<tr><td colspan="8">Loading today\'s records...</td></tr>';
@@ -2739,6 +2740,9 @@ async function loadTodaysAttendanceRecords() {
         return;
     }
 
+    // Optional: latest check-ins first
+    logs.sort((a, b) => new Date(b.check_in_time) - new Date(a.check_in_time));
+
     tbody.innerHTML = '';
     logs.forEach(l => {
         const student = allStudents?.find(s => s.user_id === l.user_id);
@@ -2751,7 +2755,7 @@ async function loadTodaysAttendanceRecords() {
         const locationText = l.location_details || 'N/A';
         const geoId = `geo-${l.id}`;
 
-        const rowHtml = `
+        tbody.innerHTML += `
             <tr>
                 <td>${userName}</td>
                 <td>${regNo}</td>
@@ -2762,7 +2766,7 @@ async function loadTodaysAttendanceRecords() {
                 <td><span class="status status-${(l.status || 'N/A').toLowerCase()}">${l.status}</span></td>
                 <td>
                     <button
-                        onclick="viewCheckInMap(${l.latitude}, ${l.longitude}, '${userName}', '${geoId}')"
+                        onclick="viewCheckInMap(${l.latitude}, ${l.longitude}, '${encodeURIComponent(userName)}', '${geoId}')"
                         class="btn-action"
                         ${(!l.latitude || !l.longitude) ? 'disabled title="No Geo-location recorded"' : ''}>
                         View Map
@@ -2770,13 +2774,11 @@ async function loadTodaysAttendanceRecords() {
                 </td>
             </tr>
         `;
-
-        tbody.innerHTML += rowHtml;
     });
 }
 
-// Open Leaflet map modal
-function viewCheckInMap(lat, lng, name, locationElementId) {
+function viewCheckInMap(lat, lng, nameEncoded, locationElementId) {
+    const name = decodeURIComponent(nameEncoded);
     const mapModal = $('mapModal');
     mapModal.classList.add('active');
 
@@ -2804,7 +2806,6 @@ function viewCheckInMap(lat, lng, name, locationElementId) {
     setTimeout(() => attendanceMap.invalidateSize(), 300);
 }
 
-// Close map modal
 function closeMapModal() {
     const mapModal = $('mapModal');
     mapModal.classList.remove('active');
