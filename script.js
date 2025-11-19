@@ -1803,44 +1803,64 @@ async function openEditExamModal(examId) {
       return;
     }
 
-    // Prefill modal inputs
-    $('edit_exam_id').value = exam.id;
-    $('edit_exam_title').value = exam.exam_name || '';
-    $('edit_exam_date').value = exam.exam_date || '';
-    $('edit_exam_status').value = exam.status || 'Upcoming';
+    // Wait for modal to be ready and check if elements exist
+    const modal = document.getElementById('examEditModal');
+    if (!modal) {
+      showFeedback('Exam edit modal not found in HTML.', 'error');
+      return;
+    }
+
+    // Safely set values only if elements exist
+    const examIdInput = document.getElementById('edit_exam_id');
+    const titleInput = document.getElementById('edit_exam_title');
+    const dateInput = document.getElementById('edit_exam_date');
+    const statusInput = document.getElementById('edit_exam_status');
+
+    if (examIdInput) examIdInput.value = exam.id;
+    if (titleInput) titleInput.value = exam.exam_name || '';
+    if (dateInput) dateInput.value = exam.exam_date || '';
+    if (statusInput) statusInput.value = exam.status || 'Upcoming';
 
     // Add optional editable fields dynamically if not in HTML
     let form = document.getElementById('edit-exam-form');
+    if (form) {
+      if (!document.getElementById('edit_exam_type')) {
+        form.insertAdjacentHTML('beforeend', `
+          <div class="form-group">
+            <label>Type</label>
+            <select id="edit_exam_type" class="form-input">
+              <option value="CAT" ${exam.exam_type === 'CAT' ? 'selected' : ''}>CAT</option>
+              <option value="Exam" ${exam.exam_type === 'Exam' ? 'selected' : ''}>Exam</option>
+              <option value="Practical" ${exam.exam_type === 'Practical' ? 'selected' : ''}>Practical</option>
+            </select>
+          </div>
+        `);
+      }
 
-    if (!document.getElementById('edit_exam_type')) {
-      form.insertAdjacentHTML('beforeend', `
-        <label>Type</label>
-        <select id="edit_exam_type">
-          <option value="CAT" ${exam.exam_type === 'CAT' ? 'selected' : ''}>CAT</option>
-          <option value="Exam" ${exam.exam_type === 'Exam' ? 'selected' : ''}>Exam</option>
-          <option value="Practical" ${exam.exam_type === 'Practical' ? 'selected' : ''}>Practical</option>
-        </select>
-      `);
-    }
+      if (!document.getElementById('edit_exam_duration')) {
+        form.insertAdjacentHTML('beforeend', `
+          <div class="form-group">
+            <label>Duration (minutes)</label>
+            <input type="number" id="edit_exam_duration" min="1" value="${exam.duration_minutes || 60}" class="form-input">
+          </div>
+        `);
+      }
 
-    if (!document.getElementById('edit_exam_duration')) {
-      form.insertAdjacentHTML('beforeend', `
-        <label>Duration (minutes)</label>
-        <input type="number" id="edit_exam_duration" min="1" value="${exam.duration_minutes || 60}">
-      `);
-    }
-
-    if (!document.getElementById('edit_exam_link')) {
-      form.insertAdjacentHTML('beforeend', `
-        <label>Online Link (optional)</label>
-        <input type="url" id="edit_exam_link" value="${exam.online_link || ''}">
-      `);
+      if (!document.getElementById('edit_exam_link')) {
+        form.insertAdjacentHTML('beforeend', `
+          <div class="form-group">
+            <label>Online Link (optional)</label>
+            <input type="url" id="edit_exam_link" value="${exam.online_link || ''}" class="form-input">
+          </div>
+        `);
+      }
     }
 
     // Open modal
-    document.getElementById('examEditModal').style.display = 'block';
+    modal.style.display = 'block';
 
   } catch (err) {
+    console.error('Error in openEditExamModal:', err);
     showFeedback(`Unexpected error: ${err.message}`, 'error');
   }
 }
@@ -1849,13 +1869,27 @@ async function openEditExamModal(examId) {
 async function saveEditedExam(e) {
   e.preventDefault();
 
-  const examId = $('edit_exam_id').value.trim();
-  const title = $('edit_exam_title').value.trim();
-  const date = $('edit_exam_date').value;
-  const duration = parseInt($('edit_exam_duration')?.value || 0);
-  const status = $('edit_exam_status').value;
-  const type = $('edit_exam_type')?.value || null;
-  const link = $('edit_exam_link')?.value.trim() || null;
+  // Safely get values with null checks
+  const examIdInput = document.getElementById('edit_exam_id');
+  const titleInput = document.getElementById('edit_exam_title');
+  const dateInput = document.getElementById('edit_exam_date');
+  const durationInput = document.getElementById('edit_exam_duration');
+  const statusInput = document.getElementById('edit_exam_status');
+  const typeInput = document.getElementById('edit_exam_type');
+  const linkInput = document.getElementById('edit_exam_link');
+
+  if (!examIdInput || !titleInput || !dateInput) {
+    showFeedback('❌ Required form elements not found.', 'error');
+    return;
+  }
+
+  const examId = examIdInput.value.trim();
+  const title = titleInput.value.trim();
+  const date = dateInput.value;
+  const duration = durationInput ? parseInt(durationInput.value) || 0 : 0;
+  const status = statusInput ? statusInput.value : 'Upcoming';
+  const type = typeInput ? typeInput.value : null;
+  const link = linkInput ? linkInput.value.trim() : null;
 
   if (!title || !date || !duration) {
     showFeedback('❌ Title, Date, and Duration are required.', 'error');
@@ -1863,16 +1897,20 @@ async function saveEditedExam(e) {
   }
 
   try {
+    const updateData = {
+      exam_name: title,
+      exam_date: date,
+      duration_minutes: duration,
+      status: status
+    };
+
+    // Only add optional fields if they exist
+    if (type) updateData.exam_type = type;
+    if (link) updateData.online_link = link;
+
     const { error } = await sb
       .from('exams')
-      .update({
-        exam_name: title,
-        exam_date: date,
-        exam_type: type,
-        duration_minutes: duration,
-        online_link: link,
-        status: status,
-      })
+      .update(updateData)
       .eq('id', examId);
 
     if (error) throw error;
@@ -1881,21 +1919,48 @@ async function saveEditedExam(e) {
 
     // Refresh data + close modal
     await loadExams();
-    try { renderFullCalendar(); } catch (e) {}
+    try { 
+      if (typeof renderFullCalendar === 'function') {
+        renderFullCalendar(); 
+      }
+    } catch (e) {
+      console.log('Calendar refresh skipped:', e.message);
+    }
 
     document.getElementById('examEditModal').style.display = 'none';
   } catch (err) {
+    console.error('Error saving exam:', err);
     showFeedback(`Failed to update exam: ${err.message}`, 'error');
   }
 }
 
-// Close modal on X click
-document.querySelector('#examEditModal .close')?.addEventListener('click', () => {
-  document.getElementById('examEditModal').style.display = 'none';
+// Initialize event listeners when DOM is ready
+document.addEventListener('DOMContentLoaded', function() {
+  // Close modal on X click
+  const closeBtn = document.querySelector('#examEditModal .close');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', () => {
+      document.getElementById('examEditModal').style.display = 'none';
+    });
+  }
+
+  // Hook up form submit
+  const editForm = document.getElementById('edit-exam-form');
+  if (editForm) {
+    editForm.addEventListener('submit', saveEditedExam);
+  } else {
+    console.warn('edit-exam-form not found in HTML');
+  }
 });
 
-// Hook up form submit
-document.getElementById('edit-exam-form')?.addEventListener('submit', saveEditedExam);
+// Alternative: Safe element getter with fallback
+function getSafeElement(id) {
+  const element = document.getElementById(id);
+  if (!element) {
+    console.warn(`Element with id '${id}' not found`);
+  }
+  return element;
+}
 
 // Open Grade Modal - Complete Implementation
 async function openGradeModal(examId, examName = '') {
