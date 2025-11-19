@@ -1436,7 +1436,7 @@ async function adminCheckIn() {
     }
 
     try {
-        const position = await new Promise((resolve, reject) => {
+        const position = await new Promise((resolve, reject) {
             navigator.geolocation.getCurrentPosition(resolve, reject);
         });
 
@@ -1617,10 +1617,9 @@ async function populateExamCourseSelects(courses = null) {
                 'course_name',
                 true
             );
-            filteredCourses = data || [];
-        } else {
-            filteredCourses = courses.filter(c => c.target_program === program);
+            courses = data || [];
         }
+        filteredCourses = courses.filter(c => c.target_program === program);
     }
 
     populateSelect(courseSelect, filteredCourses, 'id', 'course_name', 'Select Course');
@@ -1720,7 +1719,7 @@ async function loadExams() {
         if (e.online_link) {
             actionsHtml += `<a href="${escapeHtml(e.online_link)}" target="_blank" class="btn btn-map" style="margin-left: 5px;">Link</a>`;
         }
-        actionsHtml += `<button class="btn-action" onclick="openGradeModal('${e.id}', '${escapeHtml(e.exam_name, true)}')">Grade</button>`;
+        actionsHtml += `<button class="btn-action" onclick="openGradeModal('${e.id}')">Grade</button>`;
         actionsHtml += `<button class="btn btn-delete" onclick="deleteExam('${e.id}', '${escapeHtml(e.exam_name, true)}')">Delete</button>`;
 
         tbody.innerHTML += `
@@ -1789,7 +1788,6 @@ async function deleteExam(examId, examName) {
 }
 
 // Exam Modal Functions - Complete Implementation
-// Open Exam Edit Modal (Admin Editable)
 async function openEditExamModal(examId) {
   try {
     const { data: exam, error } = await sb
@@ -1934,41 +1932,28 @@ async function saveEditedExam(e) {
   }
 }
 
-// Initialize event listeners when DOM is ready
-document.addEventListener('DOMContentLoaded', function() {
-  // Close modal on X click
-  const closeBtn = document.querySelector('#examEditModal .close');
-  if (closeBtn) {
-    closeBtn.addEventListener('click', () => {
-      document.getElementById('examEditModal').style.display = 'none';
-    });
-  }
-
-  // Hook up form submit
-  const editForm = document.getElementById('edit-exam-form');
-  if (editForm) {
-    editForm.addEventListener('submit', saveEditedExam);
-  } else {
-    console.warn('edit-exam-form not found in HTML');
-  }
-});
-
-// Alternative: Safe element getter with fallback
-function getSafeElement(id) {
-  const element = document.getElementById(id);
-  if (!element) {
-    console.warn(`Element with id '${id}' not found`);
-  }
-  return element;
-}
-
-// Open Grade Modal - Complete Implementation
+/*******************************************************
+ * FIXED GRADE MODAL FUNCTIONS
+ *******************************************************/
 async function openGradeModal(examId, examName = '') {
     try {
-        // Fetch exam details
+        console.log('Opening grade modal for exam:', examId);
+        
+        // Show loading state
+        const modalBody = document.querySelector('#gradeModal .modal-body');
+        if (modalBody) {
+            modalBody.innerHTML = `
+                <div class="loading-state">
+                    <div class="spinner"></div>
+                    <p>Loading grading interface...</p>
+                </div>
+            `;
+        }
+
+        // Fetch exam details with course information
         const { data: exam, error: examError } = await sb
-            .from('exams_with_courses')
-            .select('*')
+            .from('exams')
+            .select('*, course:course_id(course_name, course_code)')
             .eq('id', examId)
             .single();
 
@@ -1977,125 +1962,272 @@ async function openGradeModal(examId, examName = '') {
             return;
         }
 
-        // Fetch students matching exam block, intake, and program
+        // Fetch students matching exam criteria
         const { data: students, error: studentError } = await sb
             .from('consolidated_user_profiles_table')
-            .select('user_id, full_name, email')
+            .select('user_id, full_name, email, student_id')
+            .eq('role', 'student')
             .eq('block', exam.block_term)
             .eq('intake_year', exam.intake_year)
-            .eq('program', exam.program_type)
+            .eq('program', exam.target_program)
             .order('full_name');
 
         if (studentError) {
+            console.error('Error loading students:', studentError);
             showFeedback('Error loading students for grading.', 'error');
             return;
         }
 
         // Fetch existing grades
-        const { data: existingGrades } = await sb
+        const { data: existingGrades, error: gradesError } = await sb
             .from('exam_grades')
             .select('*')
             .eq('exam_id', examId);
 
+        if (gradesError) {
+            console.error('Error loading existing grades:', gradesError);
+            // Continue with empty grades
+        }
+
         // Build modal HTML
         const modalHtml = `
-        <div class="modal-content" style="width:95%; max-width:1000px;">
-            <div class="modal-header">
-                <h3>Grade: ${escapeHtml(exam.exam_name)}</h3>
-                <span class="close" onclick="closeModal()">&times;</span>
+            <div class="grading-header">
+                <h4>${escapeHtml(exam.exam_name)} - Grading</h4>
+                <div class="exam-info">
+                    <span><strong>Course:</strong> ${escapeHtml(exam.course?.course_name || 'N/A')}</span>
+                    <span><strong>Type:</strong> ${escapeHtml(exam.exam_type)}</span>
+                    <span><strong>Program:</strong> ${escapeHtml(exam.target_program)}</span>
+                    <span><strong>Students:</strong> ${students?.length || 0}</span>
+                </div>
             </div>
-            <div class="modal-body">
-                <input type="text" id="gradeSearch" placeholder="Search by name, email or ID" class="search-input" oninput="filterGradeStudents()">
-                <div class="table-container">
-                    <table class="data-table grade-table">
-                        <thead>
+
+            <div class="grading-controls">
+                <div class="control-group">
+                    <label for="gradeSearch">Search Students:</label>
+                    <input type="text" id="gradeSearch" placeholder="Search by name, email or ID" 
+                           class="search-input" oninput="filterGradeStudents()">
+                </div>
+                <div class="control-group">
+                    <button class="btn-action" onclick="saveGrades('${examId}')">
+                        Save All Grades
+                    </button>
+                    <button class="btn btn-delete" onclick="closeGradeModal()">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+
+            <div class="table-container" style="max-height: 60vh; overflow-y: auto;">
+                <table class="data-table grade-table">
+                    <thead>
+                        <tr>
+                            <th>Student Name</th>
+                            <th>Student ID</th>
+                            <th>CAT 1<br><small>(max 30)</small></th>
+                            <th>CAT 2<br><small>(max 30)</small></th>
+                            <th>Final Exam<br><small>(max 100)</small></th>
+                            <th>Total<br><small>(scaled 100)</small></th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="gradeTableBody">
+                        ${students && students.length > 0 ? students.map(student => {
+                            const grade = existingGrades?.find(g => g.student_id === student.user_id) || {};
+                            const studentName = escapeHtml(student.full_name);
+                            const studentEmail = escapeHtml(student.email || '');
+                            const studentId = escapeHtml(student.student_id || student.user_id.substring(0, 8));
+                            
+                            return `
+                                <tr data-name="${studentName.toLowerCase()}" 
+                                    data-email="${studentEmail.toLowerCase()}" 
+                                    data-id="${studentId.toLowerCase()}">
+                                    <td>${studentName}</td>
+                                    <td>${studentId}</td>
+                                    <td>
+                                        <input type="number" min="0" max="30" step="0.1" 
+                                               id="cat1-${student.user_id}" 
+                                               value="${grade.cat_1_score ?? ''}" 
+                                               placeholder="0-30" 
+                                               oninput="updateGradeTotal('${student.user_id}')" 
+                                               class="grade-input">
+                                    </td>
+                                    <td>
+                                        <input type="number" min="0" max="30" step="0.1" 
+                                               id="cat2-${student.user_id}" 
+                                               value="${grade.cat_2_score ?? ''}" 
+                                               placeholder="0-30" 
+                                               oninput="updateGradeTotal('${student.user_id}')" 
+                                               class="grade-input">
+                                    </td>
+                                    <td>
+                                        <input type="number" min="0" max="100" step="0.1" 
+                                               id="final-${student.user_id}" 
+                                               value="${grade.exam_score ?? ''}" 
+                                               placeholder="0-100" 
+                                               oninput="updateGradeTotal('${student.user_id}')" 
+                                               class="grade-input">
+                                    </td>
+                                    <td>
+                                        <input type="number" min="0" max="100" step="0.1" 
+                                               id="total-${student.user_id}" 
+                                               value="" 
+                                               placeholder="Auto" 
+                                               readonly 
+                                               class="total-input">
+                                    </td>
+                                    <td>
+                                        <select id="status-${student.user_id}" class="status-select">
+                                            <option value="Scheduled" ${grade.result_status === 'Scheduled' ? 'selected' : ''}>Scheduled</option>
+                                            <option value="InProgress" ${grade.result_status === 'InProgress' ? 'selected' : ''}>In Progress</option>
+                                            <option value="Graded" ${grade.result_status === 'Graded' ? 'selected' : ''}>Graded</option>
+                                            <option value="Final" ${grade.result_status === 'Final' ? 'selected' : ''}>Final</option>
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <button class="btn-action btn-small" 
+                                                onclick="saveSingleGrade('${examId}', '${student.user_id}')">
+                                            Save
+                                        </button>
+                                    </td>
+                                </tr>`;
+                        }).join('') : `
                             <tr>
-                                <th>Student Name</th>
-                                <th>Email</th>
-                                <th>CAT 1 (max 30)</th>
-                                <th>CAT 2 (max 30)</th>
-                                <th>Final Exam (max 100)</th>
-                                <th>Total (scaled 100)</th>
-                                <th>Status</th>
+                                <td colspan="8" class="no-data">No students found for this exam criteria.</td>
                             </tr>
-                        </thead>
-                        <tbody id="gradeTableBody">
-                            ${students.map(s => {
-                                const grade = existingGrades?.find(g => g.student_id === s.user_id) || {};
-                                return `
-                                    <tr data-name="${s.full_name.toLowerCase()}" data-email="${(s.email||'').toLowerCase()}" data-id="${s.user_id}">
-                                        <td>${escapeHtml(s.full_name)}</td>
-                                        <td>${escapeHtml(s.email ?? '')}</td>
-                                        <td><input type="number" min="0" max="30" id="cat1-${s.user_id}" value="${grade.cat_1_score ?? ''}" placeholder="0-30" oninput="updateGradeTotal('${s.user_id}')" class="grade-input"></td>
-                                        <td><input type="number" min="0" max="30" id="cat2-${s.user_id}" value="${grade.cat_2_score ?? ''}" placeholder="0-30" oninput="updateGradeTotal('${s.user_id}')" class="grade-input"></td>
-                                        <td><input type="number" min="0" max="100" id="final-${s.user_id}" value="${grade.exam_score ?? ''}" placeholder="0-100" oninput="updateGradeTotal('${s.user_id}')" class="grade-input"></td>
-                                        <td><input type="number" min="0" max="100" id="total-${s.user_id}" value="" placeholder="Auto" readonly class="total-input"></td>
-                                        <td>
-                                            <select id="status-${s.user_id}" class="status-select">
-                                                <option value="Scheduled" ${grade.result_status === 'Scheduled' ? 'selected' : ''}>Scheduled</option>
-                                                <option value="InProgress" ${grade.result_status === 'InProgress' ? 'selected' : ''}>InProgress</option>
-                                                <option value="Final" ${grade.result_status === 'Final' ? 'selected' : ''}>Final</option>
-                                            </select>
-                                        </td>
-                                    </tr>`;
-                            }).join('')}
-                        </tbody>
-                    </table>
-                </div>
-                <div class="modal-actions">
-                    <button class="btn-action" onclick="saveGrades('${examId}')">Save Grades</button>
-                    <button class="btn btn-delete" onclick="closeModal()">Cancel</button>
-                </div>
+                        `}
+                    </tbody>
+                </table>
             </div>
-        </div>`;
+        `;
 
-        showGradeModal(modalHtml);
+        // Update modal content
+        if (modalBody) {
+            modalBody.innerHTML = modalHtml;
+        }
 
-        // Populate totals immediately
-        students.forEach(s => updateGradeTotal(s.user_id));
+        // Show the modal
+        document.getElementById('gradeModal').style.display = 'block';
+
+        // Initialize totals for all students
+        if (students && students.length > 0) {
+            students.forEach(student => updateGradeTotal(student.user_id));
+        }
+
     } catch (error) {
         console.error('Error opening grade modal:', error);
         showFeedback('Failed to load grading interface.', 'error');
+        closeGradeModal();
+    }
+}
+
+function closeGradeModal() {
+    const modal = document.getElementById('gradeModal');
+    if (modal) {
+        modal.style.display = 'none';
+        // Clear modal content when closing
+        const modalBody = modal.querySelector('.modal-body');
+        if (modalBody) {
+            modalBody.innerHTML = '';
+        }
     }
 }
 
 // Auto-update total with proportional scaling
 function updateGradeTotal(studentId) {
-    const cat1Input = document.querySelector(`#cat1-${studentId}`);
-    const cat2Input = document.querySelector(`#cat2-${studentId}`);
-    const finalInput = document.querySelector(`#final-${studentId}`);
-    const totalInput = document.querySelector(`#total-${studentId}`);
+    const cat1Input = document.getElementById(`cat1-${studentId}`);
+    const cat2Input = document.getElementById(`cat2-${studentId}`);
+    const finalInput = document.getElementById(`final-${studentId}`);
+    const totalInput = document.getElementById(`total-${studentId}`);
     
     if (!cat1Input || !cat2Input || !finalInput || !totalInput) return;
 
-    let cat1 = Math.min(parseFloat(cat1Input.value) || 0, 30);
-    let cat2 = Math.min(parseFloat(cat2Input.value) || 0, 30);
-    let finalExam = Math.min(parseFloat(finalInput.value) || 0, 100);
+    const cat1 = Math.min(parseFloat(cat1Input.value) || 0, 30);
+    const cat2 = Math.min(parseFloat(cat2Input.value) || 0, 30);
+    const finalExam = Math.min(parseFloat(finalInput.value) || 0, 100);
 
     const rawTotal = cat1 + cat2 + finalExam;
-    const scaledTotal = (rawTotal / 160) * 100; // 30+30+100 max
-    totalInput.value = scaledTotal.toFixed(2);
+    const scaledTotal = (rawTotal / 160) * 100; // 30+30+100 max = 160
+    totalInput.value = scaledTotal.toFixed(1);
 }
 
-// Save Grades - FIXED FOR CONSOLIDATED PROFILES TABLE
+// Filter students in grade table
+function filterGradeStudents() {
+    const searchTerm = document.getElementById('gradeSearch')?.value.toLowerCase() || '';
+    const rows = document.querySelectorAll('#gradeTableBody tr');
+    
+    rows.forEach(row => {
+        const name = row.getAttribute('data-name') || '';
+        const email = row.getAttribute('data-email') || '';
+        const id = row.getAttribute('data-id') || '';
+        
+        const matches = name.includes(searchTerm) || 
+                       email.includes(searchTerm) || 
+                       id.includes(searchTerm);
+        
+        row.style.display = matches ? '' : 'none';
+    });
+}
+
+// Save single student grade
+async function saveSingleGrade(examId, studentId) {
+    try {
+        const cat1Input = document.getElementById(`cat1-${studentId}`);
+        const cat2Input = document.getElementById(`cat2-${studentId}`);
+        const finalInput = document.getElementById(`final-${studentId}`);
+        const statusSelect = document.getElementById(`status-${studentId}`);
+        
+        if (!cat1Input || !cat2Input || !finalInput || !statusSelect) {
+            showFeedback('Error: Could not find grade inputs for this student.', 'error');
+            return;
+        }
+
+        const cat1 = Math.min(parseFloat(cat1Input.value) || 0, 30);
+        const cat2 = Math.min(parseFloat(cat2Input.value) || 0, 30);
+        const finalExam = Math.min(parseFloat(finalInput.value) || 0, 100);
+        const scaledTotal = ((cat1 + cat2 + finalExam) / 160) * 100;
+
+        const gradeData = {
+            exam_id: examId,
+            student_id: studentId,
+            cat_1_score: cat1,
+            cat_2_score: cat2,
+            exam_score: finalExam,
+            total_score: parseFloat(scaledTotal.toFixed(2)),
+            result_status: statusSelect.value || 'Graded',
+            graded_by: currentUserProfile?.user_id,
+            graded_at: new Date().toISOString()
+        };
+
+        const { error } = await sb.from('exam_grades').upsert([gradeData], {
+            onConflict: 'exam_id,student_id'
+        });
+
+        if (error) throw error;
+
+        showFeedback(`Grade saved for student!`, 'success');
+        await logAudit('GRADE_SAVE_SINGLE', `Saved grade for student ${studentId} in exam ${examId}`, examId, 'SUCCESS');
+        
+    } catch (error) {
+        console.error('Error saving single grade:', error);
+        showFeedback(`Failed to save grade: ${error.message}`, 'error');
+        await logAudit('GRADE_SAVE_SINGLE', `Failed to save grade for student ${studentId}: ${error.message}`, examId, 'FAILURE');
+    }
+}
+
+// Save all grades - FIXED VERSION
 async function saveGrades(examId) {
     try {
-        const rows = document.querySelectorAll('.grade-table tbody tr');
+        const rows = document.querySelectorAll('#gradeTableBody tr');
         const upserts = [];
-
-        // ✅ The foreign key points to consolidated_user_profiles_table.user_id
-        // So we need to use currentUserProfile.user_id
         const graderUserId = currentUserProfile?.user_id;
-        
-        console.log('🔍 DEBUG: Using grader user_id:', graderUserId);
-        console.log('🔍 DEBUG: Full currentUserProfile:', currentUserProfile);
 
         if (!graderUserId) {
             showFeedback('Error: Cannot identify grader. Please ensure you are logged in.', 'error');
             return;
         }
 
-        // Validate that this user exists in consolidated_user_profiles_table
+        // Validate grader exists in consolidated profiles
         const { data: graderExists, error: checkError } = await sb
             .from('consolidated_user_profiles_table')
             .select('user_id')
@@ -2108,21 +2240,21 @@ async function saveGrades(examId) {
         }
 
         for (const row of rows) {
-            if (row.style.display === 'none') continue; // Skip hidden rows
+            if (row.style.display === 'none') continue;
             
             const studentId = row.querySelector('input[id^="cat1-"]')?.id.replace('cat1-', '');
             if (!studentId) continue;
 
-            const cat1Input = row.querySelector(`#cat1-${studentId}`);
-            const cat2Input = row.querySelector(`#cat2-${studentId}`);
-            const finalInput = row.querySelector(`#final-${studentId}`);
-            const statusSelect = row.querySelector(`#status-${studentId}`);
+            const cat1Input = document.getElementById(`cat1-${studentId}`);
+            const cat2Input = document.getElementById(`cat2-${studentId}`);
+            const finalInput = document.getElementById(`final-${studentId}`);
+            const statusSelect = document.getElementById(`status-${studentId}`);
 
             if (!cat1Input || !cat2Input || !finalInput || !statusSelect) continue;
 
-            let cat1 = Math.min(parseFloat(cat1Input.value) || 0, 30);
-            let cat2 = Math.min(parseFloat(cat2Input.value) || 0, 30);
-            let finalExam = Math.min(parseFloat(finalInput.value) || 0, 100);
+            const cat1 = Math.min(parseFloat(cat1Input.value) || 0, 30);
+            const cat2 = Math.min(parseFloat(cat2Input.value) || 0, 30);
+            const finalExam = Math.min(parseFloat(finalInput.value) || 0, 100);
             const scaledTotal = ((cat1 + cat2 + finalExam) / 160) * 100;
 
             upserts.push({
@@ -2132,17 +2264,10 @@ async function saveGrades(examId) {
                 cat_2_score: cat2,
                 exam_score: finalExam,
                 total_score: parseFloat(scaledTotal.toFixed(2)),
-                result_status: statusSelect.value || 'Scheduled',
-                graded_by: graderUserId, // ✅ This must match consolidated_user_profiles_table.user_id
-                question_id: null,
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString()
+                result_status: statusSelect.value || 'Graded',
+                graded_by: graderUserId,
+                graded_at: new Date().toISOString()
             });
-
-            const totalInput = row.querySelector(`#total-${studentId}`);
-            if (totalInput) {
-                totalInput.value = scaledTotal.toFixed(2);
-            }
         }
 
         if (upserts.length === 0) {
@@ -2150,23 +2275,21 @@ async function saveGrades(examId) {
             return;
         }
 
-        console.log('🔍 DEBUG: Final upserts to save:', upserts);
-
         const { error } = await sb.from('exam_grades').upsert(upserts, { 
             onConflict: 'exam_id,student_id' 
         });
         
         if (error) {
-            console.error('🔍 DEBUG: Database error details:', error);
+            console.error('Database error:', error);
             throw new Error(error.message);
         }
 
-        await logAudit('GRADES_SAVE', `Saved grades for exam ${examId}`, examId, 'SUCCESS');
+        await logAudit('GRADES_SAVE_ALL', `Saved grades for ${upserts.length} students in exam ${examId}`, examId, 'SUCCESS');
         showFeedback(`✅ Successfully saved grades for ${upserts.length} students!`, 'success');
-        closeModal();
+        
     } catch (error) {
         console.error('Error saving grades:', error);
-        await logAudit('GRADES_SAVE', `Failed to save grades for exam ${examId}: ${error.message}`, examId, 'FAILURE');
+        await logAudit('GRADES_SAVE_ALL', `Failed to save grades for exam ${examId}: ${error.message}`, examId, 'FAILURE');
         showFeedback(`Failed to save grades: ${error.message}`, 'error');
     }
 }
@@ -2935,6 +3058,20 @@ function setupEventListeners() {
         });
         updateSelectedCount();
     });
+
+    // EXAM EDIT MODAL
+    const editExamForm = document.getElementById('edit-exam-form');
+    if (editExamForm) {
+        editExamForm.addEventListener('submit', saveEditedExam);
+    }
+
+    // GRADE MODAL CLOSE
+    document.addEventListener('click', function(event) {
+        const modal = document.getElementById('gradeModal');
+        if (event.target === modal) {
+            closeGradeModal();
+        }
+    });
 }
 
 function initializeModals() {
@@ -3017,6 +3154,11 @@ window.updateUserRole = updateUserRole;
 window.openEditCourseModal = openEditCourseModal;
 window.deleteCourse = deleteCourse;
 window.openGradeModal = openGradeModal;
+window.closeGradeModal = closeGradeModal;
+window.filterGradeStudents = filterGradeStudents;
+window.updateGradeTotal = updateGradeTotal;
+window.saveSingleGrade = saveSingleGrade;
+window.saveGrades = saveGrades;
 window.deleteExam = deleteExam;
 window.editNotification = editNotification;
 window.deleteNotification = deleteNotification;
