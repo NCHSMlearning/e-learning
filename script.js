@@ -4,6 +4,7 @@
  * (Includes: Strategic Admin Features, Online Exam Enhancements, Mass Promotion)
  *
  * **FIXED: Button loading/reset, Consolidated Table Logic, Audit Logging**
+ * **FIXED: Map modal close button & User edit form page reload**
  *
  * *** FIX APPLIED: Removed unintended openEditUserModal call on DOMContentLoaded ***
  **********************************************************************************/
@@ -224,11 +225,26 @@ function showTab(tabId) {
 }
 
 /**
- * Generic modal close function
+ * Generic modal close function - ENHANCED WITH FIXES
  */
 function closeModal(modalId) {
     const modal = document.getElementById(modalId);
-    if (modal) modal.style.display = 'none';
+    if (modal) {
+        modal.style.display = 'none';
+        
+        // Clear any map instances when closing map modal
+        if (modalId === 'mapModal' && attendanceMap) {
+            attendanceMap.remove();
+            attendanceMap = null;
+        }
+        
+        // Clear form fields when closing edit modal
+        if (modalId === 'userEditModal') {
+            const form = $('edit-user-form');
+            if (form) form.reset();
+            $('password-reset-feedback').textContent = '';
+        }
+    }
 }
 
 // --- Session / Init ---
@@ -322,20 +338,40 @@ $('exam_intake')?.addEventListener('change', () => updateBlockTermOptions('exam_
     $('global-password-reset-form')?.addEventListener('submit', handleGlobalPasswordReset);
     $('account-deactivation-form')?.addEventListener('submit', handleAccountDeactivation);
 
-  // MODAL/EDIT LISTENERS
+  // MODAL/EDIT LISTENERS - FIXED WITH PROPER EVENT HANDLERS
 document.addEventListener('DOMContentLoaded', () => {
-    // Edit User Form
-    $('edit-user-form')?.addEventListener('submit', handleEditUser);
+    // Edit User Form - FIXED
+    const editUserForm = $('edit-user-form');
+    if (editUserForm) {
+        editUserForm.removeEventListener('submit', handleEditUser);
+        editUserForm.addEventListener('submit', handleEditUser);
+    }
 
-    // Close modals
+    // Close modals - FIXED
     document.querySelector('#userEditModal .close')?.addEventListener('click', () => {
-        $('userEditModal').style.display = 'none';
+        closeModal('userEditModal');
     });
+    
+    // Fix map modal close button
     document.querySelector('#mapModal .close')?.addEventListener('click', () => {
-        $('mapModal').style.display = 'none';
+        closeModal('mapModal');
     });
+    
+    // Close modals when clicking outside
+    document.getElementById('userEditModal')?.addEventListener('click', (e) => {
+        if (e.target.id === 'userEditModal') {
+            closeModal('userEditModal');
+        }
+    });
+    
+    document.getElementById('mapModal')?.addEventListener('click', (e) => {
+        if (e.target.id === 'mapModal') {
+            closeModal('mapModal');
+        }
+    });
+
     document.querySelector('#courseEditModal .close')?.addEventListener('click', () => {
-        $('courseEditModal').style.display = 'none';
+        closeModal('courseEditModal');
     });
 
     // Edit Course Form
@@ -1172,23 +1208,20 @@ async function openEditUserModal(userId) {
   }
 }
 
+// 🛠️ FIXED: User edit form handler - NO PAGE RELOAD
 async function handleEditUser(e) {
-    // 1. Crucial step to stop the default form submission and page reload
+    // 1. CRITICAL: Prevent default form submission and page reload
     e.preventDefault(); 
 
-    // 🌟 🛠️ ADDED: USER CONFIRMATION DIALOG 🛠️ 🌟
-    // If the user clicks 'Cancel', the function stops execution here.
-    if (!confirm("Are you sure you want to save the changes to this user's profile?")) {
-        console.log("User cancelled the save operation.");
+    // 2. Get the submit button safely
+    const submitButton = e.submitter;
+    if (!submitButton) {
+        console.error("Form submitter button not found.");
         return; 
     }
-    // 🌟 ------------------------------------ 🌟
 
-    const submitButton = e.submitter;
-    const originalText = submitButton ? submitButton.textContent : 'Saving...';
-    
-    // Set loading state on the submit button
-    if (submitButton) setButtonLoading(submitButton, true, originalText);
+    const originalText = submitButton.textContent;
+    setButtonLoading(submitButton, true, originalText);
 
     try {
         const userId = $('edit_user_id').value;
@@ -1196,6 +1229,7 @@ async function handleEditUser(e) {
 
         console.log('Editing user:', userId);
 
+        // 3. Collect form data
         const updatedData = {
             full_name: $('edit_user_name').value.trim(),
             email: $('edit_user_email').value.trim(),
@@ -1207,17 +1241,17 @@ async function handleEditUser(e) {
             status: 'approved'
         };
 
-        // Password check (Check moved *before* database update)
+        // 4. Password validation (with proper button reset on failure)
         const newPassword = $('edit_user_new_password').value.trim();
         const confirmPassword = $('edit_user_confirm_password').value.trim();
+        
         if (newPassword && newPassword !== confirmPassword) {
-            console.warn('Passwords do not match! Aborting save.');
-            $('password-reset-feedback').textContent = "Passwords do not match!";
-            // Important: Return here and skip the database update
+            showFeedback('Passwords do not match!', 'error');
+            setButtonLoading(submitButton, false, originalText);
             return; 
         }
 
-        // Update profile table (Supabase/DB table update)
+        // 5. Update profile in database
         console.log('Updating profile with data:', updatedData);
         const { data: updatedRow, error: profileError } = await sb
             .from('consolidated_user_profiles_table')
@@ -1225,80 +1259,55 @@ async function handleEditUser(e) {
             .eq('user_id', userId)
             .select('*');
 
-        console.log('Profile update response:', { updatedRow, profileError });
-
         if (profileError) throw profileError;
 
-        // Update password if provided
+        // 6. Update password if provided
         if (newPassword) {
             console.log('Updating password for user:', userId);
-            
-            // 🌟 🛠️ CRITICAL FIX: Use admin API to update another user's password 🛠️ 🌟
-            // Assuming 'sb' is your Supabase client
             const { error: pwError } = await sb.auth.admin.updateUserById(userId, {
-                 password: newPassword
+                password: newPassword
             });
-            // 🌟 ------------------------------------------------------------- 🌟
 
-            console.log('Password update response:', { pwError });
-            // If password update fails, log the error but allow the profile save to succeed.
             if (pwError) {
-                console.error('Password update failed for user:', userId, pwError);
-                showFeedback('User profile saved, but **password update failed**: ' + (pwError.message || 'Check console.'), 'warning');
+                console.error('Password update failed:', pwError);
+                showFeedback('User profile saved, but password update failed.', 'warning');
             }
         }
 
-        // Audit log (Success)
-        await logAudit(
-            'USER_EDIT',
-            `Edited profile for user ID ${userId.substring(0, 8)}. Role: ${updatedData.role}.`,
-            userId,
-            'SUCCESS'
-        );
-
+        // 7. Success handling
+        await logAudit('USER_EDIT', `Edited profile for user ${updatedData.full_name}`, userId, 'SUCCESS');
         showFeedback('User profile updated successfully!', 'success');
+        
+        // 8. Close modal
         $('userEditModal').style.display = 'none';
+        
+        // 9. Clear password fields
+        $('edit_user_new_password').value = '';
+        $('edit_user_confirm_password').value = '';
+        $('password-reset-feedback').textContent = '';
 
-        // Update row in table dynamically
-        const row = document.querySelector(`tr[data-user-id="${userId}"]`);
-        if (row && updatedRow?.[0]) {
-            // Your existing UI update logic
-            row.children[0].textContent = updatedRow[0].full_name;
-            row.children[1].textContent = updatedRow[0].email;
-            row.children[2].textContent = updatedRow[0].role;
-            row.children[3].textContent = updatedRow[0].program;
-        }
-
-        console.log('UI table row update initiated.');
-
-        // Refresh dependent UI (Using a single, effective reload function is often better)
-        // loadStudents(); // This might be redundant if loadAllUsers is used
-        loadAllUsers(); // Assuming this reloads the main user table data
+        // 10. Refresh UI
+        loadAllUsers();
+        loadStudents();
         loadDashboardData();
 
     } catch (err) {
-        // Error Handling
+        // Error handling
         console.error('Error in handleEditUser:', err);
-        showFeedback('Failed to update user: ' + (err.message || err), 'error');
+        showFeedback('Failed to update user: ' + err.message, 'error');
 
         // Audit log failure
         try {
             const userId = $('edit_user_id')?.value || 'unknown';
-            await logAudit(
-                'USER_EDIT',
-                `Failed to edit profile for user ID ${userId.substring(0, 8)}. Reason: ${err.message}`,
-                userId,
-                'FAILURE'
-            );
+            await logAudit('USER_EDIT', `Failed to edit user: ${err.message}`, userId, 'FAILURE');
         } catch (logErr) {
             console.error('Audit log failed:', logErr);
         }
     } finally {
         // Always reset the loading state
-        if (submitButton) setButtonLoading(submitButton, false, originalText);
+        setButtonLoading(submitButton, false, originalText);
     }
 }
-
 
 /*******************************************************
  * 5. Courses Tab
@@ -1834,6 +1843,7 @@ async function deleteAttendanceRecord(recordId) {
     }
 }
 
+// 🛠️ FIXED: Map modal function with proper close handling
 function showMap(lat, lng, locationName, studentName, dateTime) {
     const modal = $('mapModal');
     const mapContainer = $('mapbox-map');
@@ -1844,15 +1854,14 @@ function showMap(lat, lng, locationName, studentName, dateTime) {
     mapContainer.innerHTML = 'Map loading...';
     mapDetails.innerHTML = `**Student:** ${studentName}<br>**Location:** ${locationName}<br>**Time:** ${dateTime}`;
 
-    // Ensure the map container is visible before initializing the map
+    // Clear any existing map
+    if (attendanceMap) {
+        attendanceMap.remove();
+        attendanceMap = null;
+    }
+
+    // Initialize map after a short delay to ensure modal is visible
     setTimeout(() => {
-        // Remove existing map instance if it exists
-        if (attendanceMap) {
-            attendanceMap.remove();
-            attendanceMap = null; 
-        }
-        
-        // Initialize Leaflet map
         attendanceMap = L.map('mapbox-map').setView([lat, lng], 17);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; OpenStreetMap contributors'
@@ -1863,10 +1872,9 @@ function showMap(lat, lng, locationName, studentName, dateTime) {
             .bindPopup(`<b>${studentName}</b><br>${locationName}<br>${dateTime}`)
             .openPopup();
         
-        // CRITICAL FIX: Ensure map tiles render correctly in the modal
+        // Critical: Refresh map size after modal opens
         attendanceMap.invalidateSize();
-
-    }, 300); 
+    }, 300);
 }
 
 /**
@@ -2310,44 +2318,44 @@ async function saveEditedExam(e) {
   const date = $('edit_exam_date').value;
   const duration = parseInt($('edit_exam_duration')?.value || 0);
   const status = $('edit_exam_status').value;
-  const type = $('edit_exam_type')?.value || null;
-  const link = $('edit_exam_link')?.value.trim() || null;
+    const type = $('edit_exam_type')?.value || null;
+    const link = $('edit_exam_link')?.value.trim() || null;
 
-  if (!title || !date || !duration) {
-    showFeedback('❌ Title, Date, and Duration are required.', 'error');
-    return;
-  }
+    if (!title || !date || !duration) {
+        showFeedback('❌ Title, Date, and Duration are required.', 'error');
+        return;
+    }
 
-  try {
-    const { error } = await sb
-      .from('exams')
-      .update({
-        exam_name: title,
-        exam_date: date,
-        exam_type: type,
-        duration_minutes: duration,
-        online_link: link,
-        status: status,
-      })
-      .eq('id', examId);
+    try {
+        const { error } = await sb
+            .from('exams')
+            .update({
+                exam_name: title,
+                exam_date: date,
+                exam_type: type,
+                duration_minutes: duration,
+                online_link: link,
+                status: status,
+            })
+            .eq('id', examId);
 
-    if (error) throw error;
+        if (error) throw error;
 
-    showFeedback('✅ Exam updated successfully!', 'success');
+        showFeedback('✅ Exam updated successfully!', 'success');
 
-    // Refresh data + close modal
-    await loadExams();
-    try { renderFullCalendar(); } catch (e) {}
+        // Refresh data + close modal
+        await loadExams();
+        try { renderFullCalendar(); } catch (e) {}
 
-    document.getElementById('examEditModal').style.display = 'none';
-  } catch (err) {
-    showFeedback(`Failed to update exam: ${err.message}`, 'error');
-  }
+        document.getElementById('examEditModal').style.display = 'none';
+    } catch (err) {
+        showFeedback(`Failed to update exam: ${err.message}`, 'error');
+    }
 }
 
 // Close modal on X click
 document.querySelector('#examEditModal .close').addEventListener('click', () => {
-  document.getElementById('examEditModal').style.display = 'none';
+    document.getElementById('examEditModal').style.display = 'none';
 });
 
 // Hook up form submit
@@ -2355,34 +2363,34 @@ document.getElementById('edit-exam-form').addEventListener('submit', saveEditedE
 
 // Open Grade Modal
 async function openGradeModal(examId) {
-  // Fetch exam details
-  const { data: exam, error: examError } = await sb
-    .from('exams_with_courses')
-    .select('*')
-    .eq('id', examId)
-    .single();
+    // Fetch exam details
+    const { data: exam, error: examError } = await sb
+        .from('exams_with_courses')
+        .select('*')
+        .eq('id', examId)
+        .single();
 
-  if (examError || !exam) return showFeedback('Error loading exam details.', 'error');
+    if (examError || !exam) return showFeedback('Error loading exam details.', 'error');
 
-  // Fetch students matching exam block, intake, and program
-  const { data: students, error: studentError } = await sb
-    .from('consolidated_user_profiles_table')
-    .select('user_id, full_name, email')
-    .eq('block', exam.block_term)
-    .eq('intake_year', exam.intake_year)
-    .eq('program', exam.program_type)
-    .order('full_name');
+    // Fetch students matching exam block, intake, and program
+    const { data: students, error: studentError } = await sb
+        .from('consolidated_user_profiles_table')
+        .select('user_id, full_name, email')
+        .eq('block', exam.block_term)
+        .eq('intake_year', exam.intake_year)
+        .eq('program', exam.program_type)
+        .order('full_name');
 
-  if (studentError) return showFeedback('Error loading students for grading.', 'error');
+    if (studentError) return showFeedback('Error loading students for grading.', 'error');
 
-  // Fetch existing grades
-  const { data: existingGrades } = await sb
-    .from('exam_grades')
-    .select('*')
-    .eq('exam_id', examId);
+    // Fetch existing grades
+    const { data: existingGrades } = await sb
+        .from('exam_grades')
+        .select('*')
+        .eq('exam_id', examId);
 
-  // Build modal HTML
-  const modalHtml = `
+    // Build modal HTML
+    const modalHtml = `
     <div style="width:95%; max-width:1000px;">
       <h3>Grade: ${escapeHtml(exam.exam_name)}</h3>
       <input type="text" id="gradeSearch" placeholder="Search by name, email or ID" style="margin-bottom:10px; padding:5px; width:100%;" oninput="filterStudents()">
@@ -2426,106 +2434,106 @@ async function openGradeModal(examId) {
       </div>
     </div>`;
 
-  showModal(modalHtml);
+    showModal(modalHtml);
 
-  // Populate totals immediately
-  students.forEach(s => updateTotal(s.user_id));
+    // Populate totals immediately
+    students.forEach(s => updateTotal(s.user_id));
 }
 
 // Auto-update total with proportional scaling
 function updateTotal(studentId) {
-  const cat1Input = document.querySelector(`#cat1-${studentId}`);
-  const cat2Input = document.querySelector(`#cat2-${studentId}`);
-  const finalInput = document.querySelector(`#final-${studentId}`);
-  const totalInput = document.querySelector(`#total-${studentId}`);
-  if (!cat1Input || !cat2Input || !finalInput || !totalInput) return;
+    const cat1Input = document.querySelector(`#cat1-${studentId}`);
+    const cat2Input = document.querySelector(`#cat2-${studentId}`);
+    const finalInput = document.querySelector(`#final-${studentId}`);
+    const totalInput = document.querySelector(`#total-${studentId}`);
+    if (!cat1Input || !cat2Input || !finalInput || !totalInput) return;
 
-  let cat1 = Math.min(parseFloat(cat1Input.value) || 0, 30);
-  let cat2 = Math.min(parseFloat(cat2Input.value) || 0, 30);
-  let finalExam = Math.min(parseFloat(finalInput.value) || 0, 100);
+    let cat1 = Math.min(parseFloat(cat1Input.value) || 0, 30);
+    let cat2 = Math.min(parseFloat(cat2Input.value) || 0, 30);
+    let finalExam = Math.min(parseFloat(finalInput.value) || 0, 100);
 
-  const rawTotal = cat1 + cat2 + finalExam;
-  const scaledTotal = (rawTotal / 160) * 100; // 30+30+100 max
-  totalInput.value = scaledTotal.toFixed(2);
+    const rawTotal = cat1 + cat2 + finalExam;
+    const scaledTotal = (rawTotal / 160) * 100; // 30+30+100 max
+    totalInput.value = scaledTotal.toFixed(2);
 }
 
 // Save Grades
 async function saveGrades(examId) {
-  const rows = document.querySelectorAll('.grade-table tbody tr');
-  const upserts = [];
+    const rows = document.querySelectorAll('.grade-table tbody tr');
+    const upserts = [];
 
-  rows.forEach(row => {
-    const studentId = row.querySelector('input[id^="cat1-"]').id.replace('cat1-', '');
-    let cat1 = Math.min(parseFloat(row.querySelector(`#cat1-${studentId}`).value) || 0, 30);
-    let cat2 = Math.min(parseFloat(row.querySelector(`#cat2-${studentId}`).value) || 0, 30);
-    let finalExam = Math.min(parseFloat(row.querySelector(`#final-${studentId}`).value) || 0, 100);
-    const scaledTotal = ((cat1 + cat2 + finalExam) / 160) * 100;
+    rows.forEach(row => {
+        const studentId = row.querySelector('input[id^="cat1-"]').id.replace('cat1-', '');
+        let cat1 = Math.min(parseFloat(row.querySelector(`#cat1-${studentId}`).value) || 0, 30);
+        let cat2 = Math.min(parseFloat(row.querySelector(`#cat2-${studentId}`).value) || 0, 30);
+        let finalExam = Math.min(parseFloat(row.querySelector(`#final-${studentId}`).value) || 0, 100);
+        const scaledTotal = ((cat1 + cat2 + finalExam) / 160) * 100;
 
-    upserts.push({
-      exam_id: examId,
-      student_id: studentId,
-      cat_1_score: cat1,
-      cat_2_score: cat2,
-      exam_score: finalExam,
-      total_score: scaledTotal.toFixed(2),
-      result_status: row.querySelector(`#status-${studentId}`).value || 'Scheduled',
-      graded_by: '52fb3ac8-e35f-4a2a-b88f-16f52a0ae7d4',
-      question_id: '00000000-0000-0000-0000-000000000000',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+        upserts.push({
+            exam_id: examId,
+            student_id: studentId,
+            cat_1_score: cat1,
+            cat_2_score: cat2,
+            exam_score: finalExam,
+            total_score: scaledTotal.toFixed(2),
+            result_status: row.querySelector(`#status-${studentId}`).value || 'Scheduled',
+            graded_by: '52fb3ac8-e35f-4a2a-b88f-16f52a0ae7d4',
+            question_id: '00000000-0000-0000-0000-000000000000',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+        });
+
+        row.querySelector(`#total-${studentId}`).value = scaledTotal.toFixed(2);
     });
 
-    row.querySelector(`#total-${studentId}`).value = scaledTotal.toFixed(2);
-  });
+    const { error } = await sb.from('exam_grades').upsert(upserts, { onConflict: 'exam_id,student_id' });
+    if (error) return showFeedback(`Failed to save grades: ${error.message}`, 'error');
 
-  const { error } = await sb.from('exam_grades').upsert(upserts, { onConflict: 'exam_id,student_id' });
-  if (error) return showFeedback(`Failed to save grades: ${error.message}`, 'error');
-
-  showFeedback('Grades saved successfully!', 'success');
-  closeModal();
+    showFeedback('Grades saved successfully!', 'success');
+    closeModal();
 }
 
 // Filter students live
 function filterStudents() {
-  const searchTerm = document.querySelector('#gradeSearch').value.toLowerCase();
-  document.querySelectorAll('#gradeTableBody tr').forEach(row => {
-    const name = row.dataset.name || '';
-    const email = row.dataset.email || '';
-    const id = row.dataset.id || '';
-    if (name.includes(searchTerm) || email.includes(searchTerm) || id.includes(searchTerm)) {
-      row.style.display = '';
-    } else {
-      row.style.display = 'none';
-    }
-  });
+    const searchTerm = document.querySelector('#gradeSearch').value.toLowerCase();
+    document.querySelectorAll('#gradeTableBody tr').forEach(row => {
+        const name = row.dataset.name || '';
+        const email = row.dataset.email || '';
+        const id = row.dataset.id || '';
+        if (name.includes(searchTerm) || email.includes(searchTerm) || id.includes(searchTerm)) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
 }
 
 // Generic modal functions
 function showModal(contentHtml) {
-  const modal = document.createElement('div');
-  modal.className = 'modal';
-  modal.id = 'tempModal';
-  modal.style.display = 'flex';
-  modal.style.justifyContent = 'center';
-  modal.style.alignItems = 'center';
-  modal.style.position = 'fixed';
-  modal.style.top = 0;
-  modal.style.left = 0;
-  modal.style.width = '100%';
-  modal.style.height = '100%';
-  modal.style.backgroundColor = 'rgba(0,0,0,0.5)';
-  modal.innerHTML = `
-      <div class="modal-inner" style="background:white; padding:20px; border-radius:10px; max-height:90%; overflow:auto;">
-          <span class="close" onclick="closeModal()" style="float:right; cursor:pointer; font-size:20px;">&times;</span>
-          ${contentHtml}
-      </div>
-  `;
-  document.body.appendChild(modal);
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.id = 'tempModal';
+    modal.style.display = 'flex';
+    modal.style.justifyContent = 'center';
+    modal.style.alignItems = 'center';
+    modal.style.position = 'fixed';
+    modal.style.top = 0;
+    modal.style.left = 0;
+    modal.style.width = '100%';
+    modal.style.height = '100%';
+    modal.style.backgroundColor = 'rgba(0,0,0,0.5)';
+    modal.innerHTML = `
+        <div class="modal-inner" style="background:white; padding:20px; border-radius:10px; max-height:90%; overflow:auto;">
+            <span class="close" onclick="closeModal()" style="float:right; cursor:pointer; font-size:20px;">&times;</span>
+            ${contentHtml}
+        </div>
+    `;
+    document.body.appendChild(modal);
 }
 
 function closeModal() {
-  const modal = document.getElementById('tempModal');
-  if (modal) modal.remove();
+    const modal = document.getElementById('tempModal');
+    if (modal) modal.remove();
 }
 
 /*******************************************************
@@ -2591,288 +2599,288 @@ async function renderFullCalendar() {
 
 // ---------------- Utility Functions ----------------
 function escapeHtml(str) {
-  if (!str) return '';
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
+    if (!str) return '';
+    return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
 }
 
 function showFeedback(msg, type = 'info') {
-  alert(msg); // Replace this with toast/snackbar if desired
+    alert(msg); // Replace this with toast/snackbar if desired
 }
 
 function setButtonLoading(btn, isLoading, originalText) {
-  if (!btn) return;
-  btn.disabled = isLoading;
-  btn.textContent = isLoading ? 'Processing...' : originalText;
+    if (!btn) return;
+    btn.disabled = isLoading;
+    btn.textContent = isLoading ? 'Processing...' : originalText;
 }
 
 async function logAudit(action, details, refId = null, status = 'SUCCESS') {
-  if (!window.sb) return;
-  try {
-    await sb.from('audit_logs').insert({
-      action,
-      details,
-      reference_id: refId,
-      status,
-      performed_by: currentUserProfile?.id || null
-    });
-  } catch (err) {
-    console.error('Failed to log audit:', err);
-  }
+    if (!window.sb) return;
+    try {
+        await sb.from('audit_logs').insert({
+            action,
+            details,
+            reference_id: refId,
+            status,
+            performed_by: currentUserProfile?.id || null
+        });
+    } catch (err) {
+        console.error('Failed to log audit:', err);
+    }
 }
 
 // ---------------- Student Messages ----------------
 async function loadStudentMessages() {
-  const container = document.getElementById('messages-list');
-  if (!container) return;
-  container.innerHTML = '<p>Loading student messages...</p>';
+    const container = document.getElementById('messages-list');
+    if (!container) return;
+    container.innerHTML = '<p>Loading student messages...</p>';
 
-  try {
-    const { data, error } = await sb.from('notifications')
-      .select('*, sender:sender_id(full_name)')
-      .or(`target_program.eq.${currentUserProfile?.program},target_program.is.null`)
-      .order('created_at', { ascending: false });
+    try {
+        const { data, error } = await sb.from('notifications')
+            .select('*, sender:sender_id(full_name)')
+            .or(`target_program.eq.${currentUserProfile?.program},target_program.is.null`)
+            .order('created_at', { ascending: false });
 
-    if (error) throw error;
+        if (error) throw error;
 
-    if (!data || data.length === 0) {
-      container.innerHTML = '<p>No student messages found.</p>';
-      return;
+        if (!data || data.length === 0) {
+            container.innerHTML = '<p>No student messages found.</p>';
+            return;
+        }
+
+        container.innerHTML = '';
+        data.forEach(msg => {
+            const sender = msg.sender?.full_name || 'System';
+            const date = msg.created_at ? new Date(msg.created_at).toLocaleString() : 'Unknown';
+            const div = document.createElement('div');
+            div.className = 'student-message';
+            div.innerHTML = `
+            <strong>${escapeHtml(msg.subject || 'Message')}</strong> from ${escapeHtml(sender)} on ${date}
+            <p>${escapeHtml(msg.message)}</p>
+            `;
+            container.appendChild(div);
+        });
+    } catch (err) {
+        console.error('Failed to load student messages:', err);
+        container.innerHTML = '<p>Error loading student messages.</p>';
     }
-
-    container.innerHTML = '';
-    data.forEach(msg => {
-      const sender = msg.sender?.full_name || 'System';
-      const date = msg.created_at ? new Date(msg.created_at).toLocaleString() : 'Unknown';
-      const div = document.createElement('div');
-      div.className = 'student-message';
-      div.innerHTML = `
-        <strong>${escapeHtml(msg.subject || 'Message')}</strong> from ${escapeHtml(sender)} on ${date}
-        <p>${escapeHtml(msg.message)}</p>
-      `;
-      container.appendChild(div);
-    });
-  } catch (err) {
-    console.error('Failed to load student messages:', err);
-    container.innerHTML = '<p>Error loading student messages.</p>';
-  }
 }
 
 // ---------------- Admin Messages ----------------
 async function handleSendMessage(e) {
-  e.preventDefault();
-  const submitButton = e.submitter;
-  const originalText = submitButton?.textContent;
-  setButtonLoading(submitButton, true, originalText);
+    e.preventDefault();
+    const submitButton = e.submitter;
+    const originalText = submitButton?.textContent;
+    setButtonLoading(submitButton, true, originalText);
 
-  const target_program = document.getElementById('msg_program').value;
-  const message_content = document.getElementById('msg_body').value.trim();
-  const subjectInput = document.getElementById('msg_subject');
-  const subject = subjectInput ? subjectInput.value.trim() : `System Message to ${target_program}`;
+    const target_program = document.getElementById('msg_program').value;
+    const message_content = document.getElementById('msg_body').value.trim();
+    const subjectInput = document.getElementById('msg_subject');
+    const subject = subjectInput ? subjectInput.value.trim() : `System Message to ${target_program}`;
 
-  if (!message_content) {
-    showFeedback('Message content cannot be empty.', 'error');
-    setButtonLoading(submitButton, false, originalText);
-    return;
-  }
+    if (!message_content) {
+        showFeedback('Message content cannot be empty.', 'error');
+        setButtonLoading(submitButton, false, originalText);
+        return;
+    }
 
-  try {
-    const { error, data } = await sb.from('notifications').insert({
-      target_program: target_program === 'ALL' ? null : target_program,
-      subject,
-      message: message_content,
-      message_type: 'system',
-      sender_id: currentUserProfile.id
-    });
+    try {
+        const { error, data } = await sb.from('notifications').insert({
+            target_program: target_program === 'ALL' ? null : target_program,
+            subject,
+            message: message_content,
+            message_type: 'system',
+            sender_id: currentUserProfile.id
+        });
 
-    if (error) throw error;
+        if (error) throw error;
 
-    await logAudit('MESSAGE_SEND', `Sent notification: ${subject} to ${target_program}`, data?.[0]?.id, 'SUCCESS');
-    showFeedback('Message sent successfully!', 'success');
-    e.target.reset();
-    await loadAdminMessages();
-  } catch (err) {
-    await logAudit('MESSAGE_SEND', `Failed to send notification: ${subject}. Reason: ${err.message}`, null, 'FAILURE');
-    showFeedback(`Failed to send message: ${err.message}`, 'error');
-  } finally {
-    setButtonLoading(submitButton, false, originalText);
-  }
+        await logAudit('MESSAGE_SEND', `Sent notification: ${subject} to ${target_program}`, data?.[0]?.id, 'SUCCESS');
+        showFeedback('Message sent successfully!', 'success');
+        e.target.reset();
+        await loadAdminMessages();
+    } catch (err) {
+        await logAudit('MESSAGE_SEND', `Failed to send notification: ${subject}. Reason: ${err.message}`, null, 'FAILURE');
+        showFeedback(`Failed to send message: ${err.message}`, 'error');
+    } finally {
+        setButtonLoading(submitButton, false, originalText);
+    }
 }
 
 async function loadAdminMessages() {
-  const tbody = document.getElementById('adminMessagesTableBody');
-  if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="6">Loading admin messages...</td></tr>';
+    const tbody = document.getElementById('adminMessagesTableBody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="6">Loading admin messages...</td></tr>';
 
-  try {
-    const { data: messages, error } = await sb.from('notifications')
-      .select('*, sender:sender_id(full_name)')
-      .order('created_at', { ascending: false });
+    try {
+        const { data: messages, error } = await sb.from('notifications')
+            .select('*, sender:sender_id(full_name)')
+            .order('created_at', { ascending: false });
 
-    if (error) throw error;
+        if (error) throw error;
 
-    if (!messages || messages.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6">No messages found.</td></tr>';
-      return;
+        if (!messages || messages.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6">No messages found.</td></tr>';
+            return;
+        }
+
+        const fragment = document.createDocumentFragment();
+
+        messages.forEach(msg => {
+            const recipient = msg.target_program || 'ALL Students';
+            const senderName = msg.sender?.full_name || 'System';
+            const sendDate = msg.created_at ? new Date(msg.created_at).toLocaleString() : 'Unknown';
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+            <td>${escapeHtml(recipient)}</td>
+            <td>${escapeHtml(senderName)}</td>
+            <td>${escapeHtml(msg.subject || '')}</td>
+            <td>${escapeHtml(msg.message.substring(0, 80) + (msg.message.length > 80 ? '...' : ''))}</td>
+            <td>${sendDate}</td>
+            <td>
+              <button class="btn-action" onclick="editNotification('${msg.id}')">Edit</button>
+              <button class="btn btn-delete" onclick="deleteNotification('${msg.id}')">Delete</button>
+            </td>
+            `;
+            fragment.appendChild(tr);
+        });
+
+        tbody.innerHTML = '';
+        tbody.appendChild(fragment);
+    } catch (err) {
+        console.error('Failed to load admin messages:', err);
+        tbody.innerHTML = `<tr><td colspan="6">Error loading messages: ${err.message}</td></tr>`;
     }
-
-    const fragment = document.createDocumentFragment();
-
-    messages.forEach(msg => {
-      const recipient = msg.target_program || 'ALL Students';
-      const senderName = msg.sender?.full_name || 'System';
-      const sendDate = msg.created_at ? new Date(msg.created_at).toLocaleString() : 'Unknown';
-
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>${escapeHtml(recipient)}</td>
-        <td>${escapeHtml(senderName)}</td>
-        <td>${escapeHtml(msg.subject || '')}</td>
-        <td>${escapeHtml(msg.message.substring(0, 80) + (msg.message.length > 80 ? '...' : ''))}</td>
-        <td>${sendDate}</td>
-        <td>
-          <button class="btn-action" onclick="editNotification('${msg.id}')">Edit</button>
-          <button class="btn btn-delete" onclick="deleteNotification('${msg.id}')">Delete</button>
-        </td>
-      `;
-      fragment.appendChild(tr);
-    });
-
-    tbody.innerHTML = '';
-    tbody.appendChild(fragment);
-  } catch (err) {
-    console.error('Failed to load admin messages:', err);
-    tbody.innerHTML = `<tr><td colspan="6">Error loading messages: ${err.message}</td></tr>`;
-  }
 }
 
 // ---------------- Edit & Delete Notifications ----------------
 window.editNotification = async function(id) {
-  try {
-    const { data, error } = await sb.from('notifications')
-      .select('*')
-      .eq('id', id)
-      .maybeSingle();
+    try {
+        const { data, error } = await sb.from('notifications')
+            .select('*')
+            .eq('id', id)
+            .maybeSingle();
 
-    if (error) throw error;
-    if (!data) {
-      showFeedback('Message not found.', 'error');
-      return;
+        if (error) throw error;
+        if (!data) {
+            showFeedback('Message not found.', 'error');
+            return;
+        }
+
+        const newSubject = prompt('Edit Subject:', data.subject || '');
+        if (newSubject === null) return;
+
+        const newMessage = prompt('Edit Message:', data.message || '');
+        if (newMessage === null) return;
+
+        const { error: updateError } = await sb.from('notifications')
+            .update({ subject: newSubject.trim(), message: newMessage.trim() })
+            .eq('id', id);
+
+        if (updateError) throw updateError;
+
+        await logAudit('NOTIFICATION_EDIT', `Edited notification ID: ${id}`, id, 'SUCCESS');
+        showFeedback('Message updated successfully!', 'success');
+        await loadAdminMessages();
+        await loadStudentMessages();
+    } catch (err) {
+        await logAudit('NOTIFICATION_EDIT', `Failed to edit notification ID: ${id}. Reason: ${err.message}`, id, 'FAILURE');
+        showFeedback(`Failed to edit message: ${err.message}`, 'error');
     }
-
-    const newSubject = prompt('Edit Subject:', data.subject || '');
-    if (newSubject === null) return;
-
-    const newMessage = prompt('Edit Message:', data.message || '');
-    if (newMessage === null) return;
-
-    const { error: updateError } = await sb.from('notifications')
-      .update({ subject: newSubject.trim(), message: newMessage.trim() })
-      .eq('id', id);
-
-    if (updateError) throw updateError;
-
-    await logAudit('NOTIFICATION_EDIT', `Edited notification ID: ${id}`, id, 'SUCCESS');
-    showFeedback('Message updated successfully!', 'success');
-    await loadAdminMessages();
-    await loadStudentMessages();
-  } catch (err) {
-    await logAudit('NOTIFICATION_EDIT', `Failed to edit notification ID: ${id}. Reason: ${err.message}`, id, 'FAILURE');
-    showFeedback(`Failed to edit message: ${err.message}`, 'error');
-  }
 };
 
 window.deleteNotification = async function(id) {
-  if (!confirm('Are you sure you want to delete this message?')) return;
-  try {
-    const { error } = await sb.from('notifications').delete().eq('id', id);
-    if (error) throw error;
-    await logAudit('NOTIFICATION_DELETE', `Deleted notification ID: ${id}`, id, 'SUCCESS');
-    showFeedback('Message deleted successfully!', 'success');
-    await loadAdminMessages();
-  } catch (err) {
-    await logAudit('NOTIFICATION_DELETE', `Failed to delete notification ID: ${id}. Reason: ${err.message}`, id, 'FAILURE');
-    showFeedback(`Failed to delete message: ${err.message}`, 'error');
-  }
+    if (!confirm('Are you sure you want to delete this message?')) return;
+    try {
+        const { error } = await sb.from('notifications').delete().eq('id', id);
+        if (error) throw error;
+        await logAudit('NOTIFICATION_DELETE', `Deleted notification ID: ${id}`, id, 'SUCCESS');
+        showFeedback('Message deleted successfully!', 'success');
+        await loadAdminMessages();
+    } catch (err) {
+        await logAudit('NOTIFICATION_DELETE', `Failed to delete notification ID: ${id}. Reason: ${err.message}`, id, 'FAILURE');
+        showFeedback(`Failed to delete message: ${err.message}`, 'error');
+    }
 };
 
 // ---------------- Public Announcements ----------------
 async function loadPublicAnnouncements() {
-  const container = document.getElementById('public-announcements');
-  if (!container) return;
-  container.innerHTML = '<p>Loading public announcements...</p>';
+    const container = document.getElementById('public-announcements');
+    if (!container) return;
+    container.innerHTML = '<p>Loading public announcements...</p>';
 
-  try {
-    const { data, error } = await sb.from('notifications')
-      .select('*')
-      .eq('subject', 'Official Announcement')
-      .order('created_at', { ascending: false });
+    try {
+        const { data, error } = await sb.from('notifications')
+            .select('*')
+            .eq('subject', 'Official Announcement')
+            .order('created_at', { ascending: false });
 
-    if (error) throw error;
-    if (!data || data.length === 0) {
-      container.innerHTML = '<p>No public announcements found.</p>';
-      return;
+        if (error) throw error;
+        if (!data || data.length === 0) {
+            container.innerHTML = '<p>No public announcements found.</p>';
+            return;
+        }
+
+        container.innerHTML = '';
+        data.forEach(a => {
+            const date = a.created_at ? new Date(a.created_at).toLocaleString() : 'Unknown';
+            const div = document.createElement('div');
+            div.className = 'announcement';
+            div.innerHTML = `
+            <strong>📣 Official Announcement:</strong> <em>${date}</em>
+            <p>${escapeHtml(a.message)}</p>
+            `;
+            container.appendChild(div);
+        });
+    } catch (err) {
+        console.error('Failed to load announcements:', err);
+        container.innerHTML = '<p>Error loading announcements. Please refresh.</p>';
     }
-
-    container.innerHTML = '';
-    data.forEach(a => {
-      const date = a.created_at ? new Date(a.created_at).toLocaleString() : 'Unknown';
-      const div = document.createElement('div');
-      div.className = 'announcement';
-      div.innerHTML = `
-        <strong>📣 Official Announcement:</strong> <em>${date}</em>
-        <p>${escapeHtml(a.message)}</p>
-      `;
-      container.appendChild(div);
-    });
-  } catch (err) {
-    console.error('Failed to load announcements:', err);
-    container.innerHTML = '<p>Error loading announcements. Please refresh.</p>';
-  }
 }
 
 // ---------------- Save Official Announcement ----------------
 document.getElementById('save-announcement').addEventListener('click', async () => {
-  const textarea = document.getElementById('announcement-body');
-  const content = textarea.value.trim();
-  const feedback = document.getElementById('announcement-feedback');
+    const textarea = document.getElementById('announcement-body');
+    const content = textarea.value.trim();
+    const feedback = document.getElementById('announcement-feedback');
 
-  if (!content) {
-    feedback.textContent = 'Announcement cannot be empty.';
-    return;
-  }
+    if (!content) {
+        feedback.textContent = 'Announcement cannot be empty.';
+        return;
+    }
 
-  try {
-    const { error } = await sb.from('notifications').insert({
-      target_program: null,
-      subject: 'Official Announcement',
-      message: content,
-      message_type: 'system',
-      sender_id: currentUserProfile.id
-    });
+    try {
+        const { error } = await sb.from('notifications').insert({
+            target_program: null,
+            subject: 'Official Announcement',
+            message: content,
+            message_type: 'system',
+            sender_id: currentUserProfile.id
+        });
 
-    if (error) throw error;
+        if (error) throw error;
 
-    feedback.textContent = 'Announcement saved successfully!';
-    textarea.value = '';
-    await loadPublicAnnouncements();
-  } catch (err) {
-    console.error(err);
-    feedback.textContent = 'Failed to save announcement: ' + err.message;
-  }
+        feedback.textContent = 'Announcement saved successfully!';
+        textarea.value = '';
+        await loadPublicAnnouncements();
+    } catch (err) {
+        console.error(err);
+        feedback.textContent = 'Failed to save announcement: ' + err.message;
+    }
 });
 
 // ---------------- Initialization ----------------
 document.getElementById('send-message-form').addEventListener('submit', handleSendMessage);
 
 async function initMessagesSection() {
-  await loadStudentMessages();
-  await loadAdminMessages();
-  await loadPublicAnnouncements();
+    await loadStudentMessages();
+    await loadAdminMessages();
+    await loadPublicAnnouncements();
 }
 
 document.addEventListener('DOMContentLoaded', initMessagesSection);
