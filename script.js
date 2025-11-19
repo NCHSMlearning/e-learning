@@ -2077,224 +2077,97 @@ function updateGradeTotal(studentId) {
     totalInput.value = scaledTotal.toFixed(2);
 }
 
-// Save Grades - SAFE & NESTED VERSION
+// Save Grades - FIXED FOR CONSOLIDATED PROFILES TABLE
 async function saveGrades(examId) {
     try {
-        // ✅ 1. PRE-VALIDATION CHECKS
-        const validationResult = validateSavePrerequisites(examId);
-        if (!validationResult.isValid) {
-            showFeedback(validationResult.message, validationResult.type);
-            return;
-        }
+        const rows = document.querySelectorAll('.grade-table tbody tr');
+        const upserts = [];
 
-        // ✅ 2. COLLECT AND VALIDATE GRADE DATA
-        const gradeData = collectGradeData();
-        if (!gradeData.isValid) {
-            showFeedback(gradeData.message, 'warning');
-            return;
-        }
-
-        // ✅ 3. SAVE TO DATABASE
-        const saveResult = await saveToDatabase(examId, gradeData.upserts);
-        if (!saveResult.success) {
-            handleSaveError(saveResult.error, examId);
-            return;
-        }
-
-        // ✅ 4. SUCCESS HANDLING
-        await handleSaveSuccess(examId, gradeData.upserts.length);
+        // ✅ The foreign key points to consolidated_user_profiles_table.user_id
+        // So we need to use currentUserProfile.user_id
+        const graderUserId = currentUserProfile?.user_id;
         
-    } catch (error) {
-        // ✅ 5. UNEXPECTED ERROR HANDLING
-        handleUnexpectedError(error, examId);
-    }
-}
+        console.log('🔍 DEBUG: Using grader user_id:', graderUserId);
+        console.log('🔍 DEBUG: Full currentUserProfile:', currentUserProfile);
 
-// ✅ HELPER FUNCTIONS
-function validateSavePrerequisites(examId) {
-    // Check exam ID
-    if (!examId) {
-        return { isValid: false, message: 'No exam selected.', type: 'error' };
-    }
-
-    // Check user authentication
-    if (!currentUserProfile?.id) {
-        return { isValid: false, message: 'Authentication required. Please refresh the page.', type: 'error' };
-    }
-
-    // Check if there are visible rows
-    const visibleRows = document.querySelectorAll('.grade-table tbody tr:not([style*="display: none"])');
-    if (visibleRows.length === 0) {
-        return { isValid: false, message: 'No students visible to grade. Check your search filter.', type: 'warning' };
-    }
-
-    return { isValid: true };
-}
-
-function collectGradeData() {
-    const upserts = [];
-    const rows = document.querySelectorAll('.grade-table tbody tr:not([style*="display: none"])');
-    let validRecords = 0;
-
-    rows.forEach(row => {
-        try {
-            const gradeRecord = extractSingleGrade(row);
-            if (gradeRecord) {
-                upserts.push(gradeRecord);
-                validRecords++;
-            }
-        } catch (error) {
-            console.warn('Error processing row:', error);
+        if (!graderUserId) {
+            showFeedback('Error: Cannot identify grader. Please ensure you are logged in.', 'error');
+            return;
         }
-    });
 
-    return {
-        isValid: validRecords > 0,
-        upserts: upserts,
-        message: validRecords === 0 ? 'No valid grade data found in visible rows.' : ''
-    };
-}
+        // Validate that this user exists in consolidated_user_profiles_table
+        const { data: graderExists, error: checkError } = await sb
+            .from('consolidated_user_profiles_table')
+            .select('user_id')
+            .eq('user_id', graderUserId)
+            .single();
 
-function extractSingleGrade(row) {
-    const studentId = row.querySelector('input[id^="cat1-"]')?.id.replace('cat1-', '');
-    if (!studentId) return null;
+        if (checkError || !graderExists) {
+            showFeedback('Error: Grader profile not found in system.', 'error');
+            return;
+        }
 
-    // Get all inputs safely
-    const inputs = {
-        cat1: row.querySelector(`#cat1-${studentId}`),
-        cat2: row.querySelector(`#cat2-${studentId}`),
-        final: row.querySelector(`#final-${studentId}`),
-        status: row.querySelector(`#status-${studentId}`),
-        total: row.querySelector(`#total-${studentId}`)
-    };
+        for (const row of rows) {
+            if (row.style.display === 'none') continue; // Skip hidden rows
+            
+            const studentId = row.querySelector('input[id^="cat1-"]')?.id.replace('cat1-', '');
+            if (!studentId) continue;
 
-    // Validate all required inputs exist
-    if (!inputs.cat1 || !inputs.cat2 || !inputs.final || !inputs.status) {
-        return null;
-    }
+            const cat1Input = row.querySelector(`#cat1-${studentId}`);
+            const cat2Input = row.querySelector(`#cat2-${studentId}`);
+            const finalInput = row.querySelector(`#final-${studentId}`);
+            const statusSelect = row.querySelector(`#status-${studentId}`);
 
-    // Parse and validate scores
-    const scores = {
-        cat1: Math.min(parseFloat(inputs.cat1.value) || 0, 30),
-        cat2: Math.min(parseFloat(inputs.cat2.value) || 0, 30),
-        final: Math.min(parseFloat(inputs.final.value) || 0, 100)
-    };
+            if (!cat1Input || !cat2Input || !finalInput || !statusSelect) continue;
 
-    // Calculate total
-    const scaledTotal = parseFloat((((scores.cat1 + scores.cat2 + scores.final) / 160) * 100).toFixed(2));
+            let cat1 = Math.min(parseFloat(cat1Input.value) || 0, 30);
+            let cat2 = Math.min(parseFloat(cat2Input.value) || 0, 30);
+            let finalExam = Math.min(parseFloat(finalInput.value) || 0, 100);
+            const scaledTotal = ((cat1 + cat2 + finalExam) / 160) * 100;
 
-    // Update UI
-    if (inputs.total) {
-        inputs.total.value = scaledTotal.toFixed(2);
-    }
+            upserts.push({
+                exam_id: examId,
+                student_id: studentId,
+                cat_1_score: cat1,
+                cat_2_score: cat2,
+                exam_score: finalExam,
+                total_score: parseFloat(scaledTotal.toFixed(2)),
+                result_status: statusSelect.value || 'Scheduled',
+                graded_by: graderUserId, // ✅ This must match consolidated_user_profiles_table.user_id
+                question_id: null,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            });
 
-    return {
-        exam_id: examId,
-        student_id: studentId,
-        cat_1_score: scores.cat1,
-        cat_2_score: scores.cat2,
-        exam_score: scores.final,
-        total_score: scaledTotal,
-        result_status: inputs.status.value || 'Scheduled',
-        graded_by: currentUserProfile.id, // ✅ Use actual user ID
-        question_id: null, // ✅ Use null instead of dummy UUID
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-    };
-}
+            const totalInput = row.querySelector(`#total-${studentId}`);
+            if (totalInput) {
+                totalInput.value = scaledTotal.toFixed(2);
+            }
+        }
 
-async function saveToDatabase(examId, upserts) {
-    try {
+        if (upserts.length === 0) {
+            showFeedback('No grade data to save.', 'warning');
+            return;
+        }
+
+        console.log('🔍 DEBUG: Final upserts to save:', upserts);
+
         const { error } = await sb.from('exam_grades').upsert(upserts, { 
             onConflict: 'exam_id,student_id' 
         });
-
-        if (error) {
-            return { success: false, error: error };
-        }
-
-        return { success: true };
-    } catch (error) {
-        return { success: false, error: error };
-    }
-}
-
-function handleSaveError(error, examId) {
-    console.error('Save grades error:', error);
-    
-    let userMessage = 'Failed to save grades. ';
-    
-    if (error.message.includes('foreign key constraint')) {
-        userMessage += 'Database reference error. Please contact administrator.';
-    } else if (error.message.includes('network') || error.message.includes('fetch')) {
-        userMessage += 'Network connection issue. Please check your internet.';
-    } else {
-        userMessage += error.message;
-    }
-
-    showFeedback(userMessage, 'error');
-    logAudit('GRADES_SAVE', `Failed: ${error.message}`, examId, 'FAILURE');
-}
-
-async function handleSaveSuccess(examId, recordCount) {
-    await logAudit('GRADES_SAVE', `Saved ${recordCount} grade records for exam ${examId}`, examId, 'SUCCESS');
-    showFeedback(`✅ Successfully saved grades for ${recordCount} students!`, 'success');
-    
-    // Close modal after short delay
-    setTimeout(() => {
-        closeModal();
-    }, 1500);
-}
-
-function handleUnexpectedError(error, examId) {
-    console.error('Unexpected error in saveGrades:', error);
-    logAudit('GRADES_SAVE', `Critical error: ${error.message}`, examId, 'FAILURE');
-    showFeedback('An unexpected system error occurred. Please try again.', 'error');
-}
-
-// Filter students live in grade modal
-function filterGradeStudents() {
-    const searchTerm = document.querySelector('#gradeSearch')?.value.toLowerCase() || '';
-    const rows = document.querySelectorAll('#gradeTableBody tr');
-    
-    rows.forEach(row => {
-        const name = row.dataset.name || '';
-        const email = row.dataset.email || '';
-        const id = row.dataset.id || '';
         
-        const isVisible = name.includes(searchTerm) || email.includes(searchTerm) || id.includes(searchTerm);
-        row.style.display = isVisible ? '' : 'none';
-    });
-}
-
-// Grade-specific modal functions
-function showGradeModal(contentHtml) {
-    // Close any existing modal first
-    closeModal();
-    
-    const modal = document.createElement('div');
-    modal.className = 'modal active';
-    modal.id = 'gradeModal';
-    modal.style.display = 'flex';
-    modal.innerHTML = contentHtml;
-    document.body.appendChild(modal);
-
-    // Add escape key listener
-    const escapeHandler = (e) => {
-        if (e.key === 'Escape') closeModal();
-    };
-    modal._escapeHandler = escapeHandler;
-    document.addEventListener('keydown', escapeHandler);
-}
-
-function closeModal() {
-    const modal = document.getElementById('gradeModal');
-    if (modal) {
-        // Remove escape key listener
-        if (modal._escapeHandler) {
-            document.removeEventListener('keydown', modal._escapeHandler);
+        if (error) {
+            console.error('🔍 DEBUG: Database error details:', error);
+            throw new Error(error.message);
         }
-        modal.remove();
+
+        await logAudit('GRADES_SAVE', `Saved grades for exam ${examId}`, examId, 'SUCCESS');
+        showFeedback(`✅ Successfully saved grades for ${upserts.length} students!`, 'success');
+        closeModal();
+    } catch (error) {
+        console.error('Error saving grades:', error);
+        await logAudit('GRADES_SAVE', `Failed to save grades for exam ${examId}: ${error.message}`, examId, 'FAILURE');
+        showFeedback(`Failed to save grades: ${error.message}`, 'error');
     }
 }
 
