@@ -1789,10 +1789,113 @@ async function deleteExam(examId, examName) {
 }
 
 // Exam Modal Functions - Complete Implementation
-function openEditExamModal(examId) {
-    // For now, show feedback - you can expand this later
-    showFeedback('Exam edit functionality coming soon!', 'info');
+// Open Exam Edit Modal (Admin Editable)
+async function openEditExamModal(examId) {
+  try {
+    const { data: exam, error } = await sb
+      .from('exams')
+      .select('*, course:course_id(course_name)')
+      .eq('id', examId)
+      .single();
+
+    if (error || !exam) {
+      showFeedback(`Error loading exam details: ${error?.message || 'Not found.'}`, 'error');
+      return;
+    }
+
+    // Prefill modal inputs
+    $('edit_exam_id').value = exam.id;
+    $('edit_exam_title').value = exam.exam_name || '';
+    $('edit_exam_date').value = exam.exam_date || '';
+    $('edit_exam_status').value = exam.status || 'Upcoming';
+
+    // Add optional editable fields dynamically if not in HTML
+    let form = document.getElementById('edit-exam-form');
+
+    if (!document.getElementById('edit_exam_type')) {
+      form.insertAdjacentHTML('beforeend', `
+        <label>Type</label>
+        <select id="edit_exam_type">
+          <option value="CAT" ${exam.exam_type === 'CAT' ? 'selected' : ''}>CAT</option>
+          <option value="Exam" ${exam.exam_type === 'Exam' ? 'selected' : ''}>Exam</option>
+          <option value="Practical" ${exam.exam_type === 'Practical' ? 'selected' : ''}>Practical</option>
+        </select>
+      `);
+    }
+
+    if (!document.getElementById('edit_exam_duration')) {
+      form.insertAdjacentHTML('beforeend', `
+        <label>Duration (minutes)</label>
+        <input type="number" id="edit_exam_duration" min="1" value="${exam.duration_minutes || 60}">
+      `);
+    }
+
+    if (!document.getElementById('edit_exam_link')) {
+      form.insertAdjacentHTML('beforeend', `
+        <label>Online Link (optional)</label>
+        <input type="url" id="edit_exam_link" value="${exam.online_link || ''}">
+      `);
+    }
+
+    // Open modal
+    document.getElementById('examEditModal').style.display = 'block';
+
+  } catch (err) {
+    showFeedback(`Unexpected error: ${err.message}`, 'error');
+  }
 }
+
+// Save Edited Exam
+async function saveEditedExam(e) {
+  e.preventDefault();
+
+  const examId = $('edit_exam_id').value.trim();
+  const title = $('edit_exam_title').value.trim();
+  const date = $('edit_exam_date').value;
+  const duration = parseInt($('edit_exam_duration')?.value || 0);
+  const status = $('edit_exam_status').value;
+  const type = $('edit_exam_type')?.value || null;
+  const link = $('edit_exam_link')?.value.trim() || null;
+
+  if (!title || !date || !duration) {
+    showFeedback('❌ Title, Date, and Duration are required.', 'error');
+    return;
+  }
+
+  try {
+    const { error } = await sb
+      .from('exams')
+      .update({
+        exam_name: title,
+        exam_date: date,
+        exam_type: type,
+        duration_minutes: duration,
+        online_link: link,
+        status: status,
+      })
+      .eq('id', examId);
+
+    if (error) throw error;
+
+    showFeedback('✅ Exam updated successfully!', 'success');
+
+    // Refresh data + close modal
+    await loadExams();
+    try { renderFullCalendar(); } catch (e) {}
+
+    document.getElementById('examEditModal').style.display = 'none';
+  } catch (err) {
+    showFeedback(`Failed to update exam: ${err.message}`, 'error');
+  }
+}
+
+// Close modal on X click
+document.querySelector('#examEditModal .close')?.addEventListener('click', () => {
+  document.getElementById('examEditModal').style.display = 'none';
+});
+
+// Hook up form submit
+document.getElementById('edit-exam-form')?.addEventListener('submit', saveEditedExam);
 
 // Open Grade Modal - Complete Implementation
 async function openGradeModal(examId, examName = '') {
