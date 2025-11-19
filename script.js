@@ -1283,7 +1283,7 @@ async function handleAddSession(e) {
             session_title: $('new_session_title').value.trim(),
             session_date: $('new_session_date').value,
             session_time: $('new_session_start_time').value,
-            session_end_time: $('new_session_end_time').value || null,
+            session_end_date: $('new_session_end_date').value || null,
             target_program: $('new_session_program').value,
             intake_year: $('new_session_intake_year').value,
             block_term: $('new_session_block_term').value,
