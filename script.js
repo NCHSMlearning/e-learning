@@ -1940,7 +1940,7 @@ async function saveGrades(examId) {
                 exam_score: finalExam,
                 total_score: parseFloat(scaledTotal.toFixed(2)),
                 result_status: statusSelect.value || 'Scheduled',
-                graded_by: currentUserProfile?.id || '52fb3ac8-e35f-4a2a-b88f-16f52a0ae7d4',
+                graded_by: currentUserProfile?.id || '5ce2d893-99a1-42bf-85e4-66f35e5711fd',
                 question_id: '00000000-0000-0000-0000-000000000000',
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString()
