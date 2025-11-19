@@ -1190,9 +1190,6 @@
             // *** CONFIGURATION AND INITIALIZATION ***
             // *************************************************************************
             
-            // Note: SUPABASE_URL, SUPABASE_ANON_KEY, and LOCATIONIQ_API_KEY are now parameters
-            // passed from the secure configuration above
-            
             // Global State
             let currentUserId = null;
             let currentUserProfile = null;
@@ -1361,9 +1358,14 @@
             
             // Logout function
             async function logout() {
-                sb.realtime.channels.forEach(channel => sb.removeChannel(channel));
-                await sb.auth.signOut();
-                window.location.href = "login.html";
+                try {
+                    sb.realtime.channels.forEach(channel => sb.removeChannel(channel));
+                    await sb.auth.signOut();
+                    window.location.href = "login.html";
+                } catch (error) {
+                    console.error("Logout error:", error);
+                    window.location.href = "login.html";
+                }
             }
             
             // *************************************************************************
@@ -2039,7 +2041,7 @@
             
                     logs.forEach(log => {
                         const timeStr = new Date(log.check_in_time).toLocaleString();
-                        const verifiedText = log.is_verified ? '✅ Verified' : '⏳ Pending Review';
+                        const verifiedText = log.is_verified ? '✅ Verified' : '⏳ Pending verification';
             
                         const row = `
                             <tr>
@@ -2125,7 +2127,7 @@
                 return deviceId;
             }
             
-            // Geo check-in function
+            // Geo check-in function - UPDATED WITH SIMPLIFIED MESSAGE
             async function geoCheckIn() {
                 const button = document.getElementById('check-in-button');
                 const geoMessage = document.getElementById('geo-message');
@@ -2248,7 +2250,8 @@
                         console.error('Check-in failed:', error);
                         if (geoMessage) geoMessage.textContent = `Check-in failed: ${error.message}`;
                     } else {
-                        if (geoMessage) geoMessage.innerHTML = `✅ Check-in successful at ${new Date(checkInTime).toLocaleTimeString()} near <strong>${location.friendly}</strong>. Verification: ${isVerified ? 'SUCCESS' : 'PENDING'}.`;
+                        // ✅ UPDATED: Simplified success message
+                        if (geoMessage) geoMessage.innerHTML = `✅ Check-in complete! ${isVerified ? 'Verified successfully' : 'Pending verification'}`;
                         loadGeoAttendanceHistory(currentUserId);
                     }
             
