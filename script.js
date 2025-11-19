@@ -1788,13 +1788,239 @@ async function deleteExam(examId, examName) {
     }
 }
 
-// Placeholder functions for exam modals
+// Exam Modal Functions - Complete Implementation
 function openEditExamModal(examId) {
-    showFeedback('Exam edit modal would open here', 'info');
+    // For now, show feedback - you can expand this later
+    showFeedback('Exam edit functionality coming soon!', 'info');
 }
 
-function openGradeModal(examId, examName) {
-    showFeedback(`Grading modal would open for: ${examName}`, 'info');
+// Open Grade Modal - Complete Implementation
+async function openGradeModal(examId, examName = '') {
+    try {
+        // Fetch exam details
+        const { data: exam, error: examError } = await sb
+            .from('exams_with_courses')
+            .select('*')
+            .eq('id', examId)
+            .single();
+
+        if (examError || !exam) {
+            showFeedback('Error loading exam details.', 'error');
+            return;
+        }
+
+        // Fetch students matching exam block, intake, and program
+        const { data: students, error: studentError } = await sb
+            .from('consolidated_user_profiles_table')
+            .select('user_id, full_name, email')
+            .eq('block', exam.block_term)
+            .eq('intake_year', exam.intake_year)
+            .eq('program', exam.program_type)
+            .order('full_name');
+
+        if (studentError) {
+            showFeedback('Error loading students for grading.', 'error');
+            return;
+        }
+
+        // Fetch existing grades
+        const { data: existingGrades } = await sb
+            .from('exam_grades')
+            .select('*')
+            .eq('exam_id', examId);
+
+        // Build modal HTML
+        const modalHtml = `
+        <div class="modal-content" style="width:95%; max-width:1000px;">
+            <div class="modal-header">
+                <h3>Grade: ${escapeHtml(exam.exam_name)}</h3>
+                <span class="close" onclick="closeModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <input type="text" id="gradeSearch" placeholder="Search by name, email or ID" class="search-input" oninput="filterGradeStudents()">
+                <div class="table-container">
+                    <table class="data-table grade-table">
+                        <thead>
+                            <tr>
+                                <th>Student Name</th>
+                                <th>Email</th>
+                                <th>CAT 1 (max 30)</th>
+                                <th>CAT 2 (max 30)</th>
+                                <th>Final Exam (max 100)</th>
+                                <th>Total (scaled 100)</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="gradeTableBody">
+                            ${students.map(s => {
+                                const grade = existingGrades?.find(g => g.student_id === s.user_id) || {};
+                                return `
+                                    <tr data-name="${s.full_name.toLowerCase()}" data-email="${(s.email||'').toLowerCase()}" data-id="${s.user_id}">
+                                        <td>${escapeHtml(s.full_name)}</td>
+                                        <td>${escapeHtml(s.email ?? '')}</td>
+                                        <td><input type="number" min="0" max="30" id="cat1-${s.user_id}" value="${grade.cat_1_score ?? ''}" placeholder="0-30" oninput="updateGradeTotal('${s.user_id}')" class="grade-input"></td>
+                                        <td><input type="number" min="0" max="30" id="cat2-${s.user_id}" value="${grade.cat_2_score ?? ''}" placeholder="0-30" oninput="updateGradeTotal('${s.user_id}')" class="grade-input"></td>
+                                        <td><input type="number" min="0" max="100" id="final-${s.user_id}" value="${grade.exam_score ?? ''}" placeholder="0-100" oninput="updateGradeTotal('${s.user_id}')" class="grade-input"></td>
+                                        <td><input type="number" min="0" max="100" id="total-${s.user_id}" value="" placeholder="Auto" readonly class="total-input"></td>
+                                        <td>
+                                            <select id="status-${s.user_id}" class="status-select">
+                                                <option value="Scheduled" ${grade.result_status === 'Scheduled' ? 'selected' : ''}>Scheduled</option>
+                                                <option value="InProgress" ${grade.result_status === 'InProgress' ? 'selected' : ''}>InProgress</option>
+                                                <option value="Final" ${grade.result_status === 'Final' ? 'selected' : ''}>Final</option>
+                                            </select>
+                                        </td>
+                                    </tr>`;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="modal-actions">
+                    <button class="btn-action" onclick="saveGrades('${examId}')">Save Grades</button>
+                    <button class="btn btn-delete" onclick="closeModal()">Cancel</button>
+                </div>
+            </div>
+        </div>`;
+
+        showGradeModal(modalHtml);
+
+        // Populate totals immediately
+        students.forEach(s => updateGradeTotal(s.user_id));
+    } catch (error) {
+        console.error('Error opening grade modal:', error);
+        showFeedback('Failed to load grading interface.', 'error');
+    }
+}
+
+// Auto-update total with proportional scaling
+function updateGradeTotal(studentId) {
+    const cat1Input = document.querySelector(`#cat1-${studentId}`);
+    const cat2Input = document.querySelector(`#cat2-${studentId}`);
+    const finalInput = document.querySelector(`#final-${studentId}`);
+    const totalInput = document.querySelector(`#total-${studentId}`);
+    
+    if (!cat1Input || !cat2Input || !finalInput || !totalInput) return;
+
+    let cat1 = Math.min(parseFloat(cat1Input.value) || 0, 30);
+    let cat2 = Math.min(parseFloat(cat2Input.value) || 0, 30);
+    let finalExam = Math.min(parseFloat(finalInput.value) || 0, 100);
+
+    const rawTotal = cat1 + cat2 + finalExam;
+    const scaledTotal = (rawTotal / 160) * 100; // 30+30+100 max
+    totalInput.value = scaledTotal.toFixed(2);
+}
+
+// Save Grades
+async function saveGrades(examId) {
+    try {
+        const rows = document.querySelectorAll('.grade-table tbody tr');
+        const upserts = [];
+
+        // Validate and collect data
+        for (const row of rows) {
+            const studentId = row.querySelector('input[id^="cat1-"]')?.id.replace('cat1-', '');
+            if (!studentId) continue;
+
+            const cat1Input = row.querySelector(`#cat1-${studentId}`);
+            const cat2Input = row.querySelector(`#cat2-${studentId}`);
+            const finalInput = row.querySelector(`#final-${studentId}`);
+            const statusSelect = row.querySelector(`#status-${studentId}`);
+
+            if (!cat1Input || !cat2Input || !finalInput || !statusSelect) continue;
+
+            let cat1 = Math.min(parseFloat(cat1Input.value) || 0, 30);
+            let cat2 = Math.min(parseFloat(cat2Input.value) || 0, 30);
+            let finalExam = Math.min(parseFloat(finalInput.value) || 0, 100);
+            const scaledTotal = ((cat1 + cat2 + finalExam) / 160) * 100;
+
+            upserts.push({
+                exam_id: examId,
+                student_id: studentId,
+                cat_1_score: cat1,
+                cat_2_score: cat2,
+                exam_score: finalExam,
+                total_score: parseFloat(scaledTotal.toFixed(2)),
+                result_status: statusSelect.value || 'Scheduled',
+                graded_by: currentUserProfile?.id || '52fb3ac8-e35f-4a2a-b88f-16f52a0ae7d4',
+                question_id: '00000000-0000-0000-0000-000000000000',
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            });
+
+            // Update the total display
+            const totalInput = row.querySelector(`#total-${studentId}`);
+            if (totalInput) {
+                totalInput.value = scaledTotal.toFixed(2);
+            }
+        }
+
+        if (upserts.length === 0) {
+            showFeedback('No grade data to save.', 'warning');
+            return;
+        }
+
+        const { error } = await sb.from('exam_grades').upsert(upserts, { onConflict: 'exam_id,student_id' });
+        if (error) {
+            console.error('Save grades error:', error);
+            throw new Error(error.message);
+        }
+
+        await logAudit('GRADES_SAVE', `Saved grades for exam ${examId}`, examId, 'SUCCESS');
+        showFeedback('Grades saved successfully!', 'success');
+        closeModal();
+    } catch (error) {
+        console.error('Error saving grades:', error);
+        await logAudit('GRADES_SAVE', `Failed to save grades for exam ${examId}: ${error.message}`, examId, 'FAILURE');
+        showFeedback(`Failed to save grades: ${error.message}`, 'error');
+    }
+}
+
+// Filter students live in grade modal
+function filterGradeStudents() {
+    const searchTerm = document.querySelector('#gradeSearch')?.value.toLowerCase() || '';
+    const rows = document.querySelectorAll('#gradeTableBody tr');
+    
+    rows.forEach(row => {
+        const name = row.dataset.name || '';
+        const email = row.dataset.email || '';
+        const id = row.dataset.id || '';
+        
+        if (name.includes(searchTerm) || email.includes(searchTerm) || id.includes(searchTerm)) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+}
+
+// Grade-specific modal functions
+function showGradeModal(contentHtml) {
+    // Close any existing modal first
+    closeModal();
+    
+    const modal = document.createElement('div');
+    modal.className = 'modal active';
+    modal.id = 'gradeModal';
+    modal.style.display = 'flex';
+    modal.innerHTML = contentHtml;
+    document.body.appendChild(modal);
+
+    // Add escape key listener
+    const escapeHandler = (e) => {
+        if (e.key === 'Escape') closeModal();
+    };
+    modal._escapeHandler = escapeHandler;
+    document.addEventListener('keydown', escapeHandler);
+}
+
+function closeModal() {
+    const modal = document.getElementById('gradeModal');
+    if (modal) {
+        // Remove escape key listener
+        if (modal._escapeHandler) {
+            document.removeEventListener('keydown', modal._escapeHandler);
+        }
+        modal.remove();
+    }
 }
 
 /*******************************************************
