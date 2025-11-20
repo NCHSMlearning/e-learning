@@ -7,6 +7,7 @@
     <link rel="icon" type="image/png" href="https://raw.githubusercontent.com/NCHSMlearning/e-learning/main/images/Logo_NCHSM.png" sizes="32x32">
     
     <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="preload" href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap"></noscript>
     
@@ -684,6 +685,16 @@
             });
         }
 
+        // Remove .html from URL
+        if (window.location.pathname.endsWith('.html')) {
+            const cleanPath = window.location.pathname.replace(/\.html$/, '');
+            window.history.replaceState({}, '', cleanPath);
+        }
+
+        const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
         const errorMsg = document.getElementById('errorMsg');
         const loginForm = document.getElementById('loginForm');
         const loginButton = document.getElementById('loginButton');
@@ -693,40 +704,85 @@
 
         loginForm.addEventListener('submit', async e => {
             e.preventDefault();
-            
-            // Hide error message when form is submitted
-            errorMsg.classList.remove('show');
             errorMsg.innerText = '';
-            
+            errorMsg.classList.remove('show');
             loginButton.disabled = true;
             buttonText.innerHTML = '<div class="btn-loading"></div> Signing In...';
 
             const email = document.getElementById('email').value.trim();
             const password = document.getElementById('password').value;
 
-            // Simple validation
-            if (!email || !password) {
-                errorMsg.innerText = 'Please enter both email and password';
+            try {
+                const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+                if (authError || !authData.user) {
+                    errorMsg.innerText = authError?.message || 'Login failed. Check your email and password.';
+                    errorMsg.classList.add('show');
+                    loginButton.disabled = false;
+                    buttonText.textContent = 'Log In';
+                    return;
+                }
+
+                const { data: refreshedData, error: refreshError } = await supabase.auth.refreshSession();
+                if (refreshError) console.warn('Session refresh failed', refreshError);
+                const sessionUser = refreshedData?.session?.user ?? authData.user;
+
+                let role = sessionUser.user_metadata?.role?.toLowerCase() ?? 'student';
+
+                if (role === 'superadmin') {
+                    window.location.href = 'superadmin.html';
+                    return;
+                } else if (role === 'admin') {
+                    window.location.href = 'admin.html';
+                    return;
+                }
+
+                const { data: profileData, error: profileError } = await supabase
+                    .from('consolidated_user_profiles_table')
+                    .select('*')
+                    .eq('user_id', sessionUser.id)
+                    .maybeSingle();
+
+                if (profileError || !profileData) {
+                    errorMsg.innerText = 'Login failed: Profile access issue.';
+                    errorMsg.classList.add('show');
+                    await supabase.auth.signOut();
+                    loginButton.disabled = false;
+                    buttonText.textContent = 'Log In';
+                    return;
+                }
+
+                const currentStatus = profileData.status?.toLowerCase() ?? 'pending';
+                if (currentStatus !== 'approved') {
+                    errorMsg.innerText = 'Login failed: Your account is pending approval.';
+                    errorMsg.classList.add('show');
+                    await supabase.auth.signOut();
+                    loginButton.disabled = false;
+                    buttonText.textContent = 'Log In';
+                    return;
+                }
+
+                localStorage.setItem('currentUserProfile', JSON.stringify(profileData));
+
+                const profileRole = profileData.role?.toLowerCase() ?? 'student';
+                if (profileRole === 'student') {
+                    window.location.href = 'index.html';
+                } else if (profileRole === 'lecturer') {
+                    window.location.href = 'lecturer.html';
+                } else if (profileRole === 'admin') {
+                    window.location.href = 'admin.html';
+                } else if (profileRole === 'superadmin') {
+                    window.location.href = 'superadmin.html';
+                } else {
+                    window.location.href = 'index.html';
+                }
+
+            } catch (err) {
+                console.error('Unexpected system error:', err);
+                errorMsg.innerText = 'A critical system error occurred. Please try again later.';
                 errorMsg.classList.add('show');
                 loginButton.disabled = false;
                 buttonText.textContent = 'Log In';
-                return;
             }
-
-            // Simulate login process
-            setTimeout(() => {
-                // For demo purposes, show an error if password is less than 6 characters
-                if (password.length < 6) {
-                    errorMsg.innerText = 'Password must be at least 6 characters long';
-                    errorMsg.classList.add('show');
-                } else {
-                    // Successful login - redirect would happen here
-                    alert('Login successful! In a real application, you would be redirected to the dashboard.');
-                }
-                
-                loginButton.disabled = false;
-                buttonText.textContent = 'Log In';
-            }, 1500);
         });
     });
     </script>
