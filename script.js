@@ -2031,9 +2031,64 @@ function filterGradeStudents() {
     });
 }
 
+// Get current user with proper error handling
+async function getCurrentUser() {
+    try {
+        // Try multiple methods to get current user
+        let user = null;
+        
+        // Method 1: Check if currentUserProfile exists globally
+        if (typeof currentUserProfile !== 'undefined' && currentUserProfile) {
+            console.log('🔍 Using global currentUserProfile:', currentUserProfile);
+            return currentUserProfile;
+        }
+        
+        // Method 2: Get from Supabase auth
+        const { data: { user: authUser }, error: authError } = await sb.auth.getUser();
+        if (!authError && authUser) {
+            console.log('🔍 Using Supabase auth user:', authUser);
+            
+            // Fetch user profile from consolidated table
+            const { data: profile, error: profileError } = await sb
+                .from('consolidated_user_profiles_table')
+                .select('*')
+                .eq('user_id', authUser.id)
+                .single();
+                
+            if (!profileError && profile) {
+                return profile;
+            }
+            return { user_id: authUser.id, email: authUser.email };
+        }
+        
+        // Method 3: Get from session storage
+        const storedUser = sessionStorage.getItem('currentUser');
+        if (storedUser) {
+            console.log('🔍 Using stored user from sessionStorage');
+            return JSON.parse(storedUser);
+        }
+        
+        console.error('❌ No user authentication method worked');
+        return null;
+        
+    } catch (error) {
+        console.error('❌ Error getting current user:', error);
+        return null;
+    }
+}
+
 // Open Grade Modal - Complete Implementation
 async function openGradeModal(examId, examName = '') {
     try {
+        // Check authentication first
+        const currentUser = await getCurrentUser();
+        if (!currentUser || !currentUser.user_id) {
+            showFeedback('Error: You must be logged in to grade exams.', 'error');
+            return;
+        }
+
+        console.log('🔍 Current user for grading:', currentUser);
+
         // Fetch exam details
         const { data: exam, error: examError } = await sb
             .from('exams_with_courses')
@@ -2060,6 +2115,11 @@ async function openGradeModal(examId, examName = '') {
             return;
         }
 
+        if (!students || students.length === 0) {
+            showFeedback('No students found for this exam criteria.', 'warning');
+            return;
+        }
+
         // Fetch existing grades
         const { data: existingGrades } = await sb
             .from('exam_grades')
@@ -2074,6 +2134,9 @@ async function openGradeModal(examId, examName = '') {
                 <span class="close" onclick="closeModal()">&times;</span>
             </div>
             <div class="modal-body">
+                <div class="exam-info" style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                    <strong>Exam Details:</strong> ${escapeHtml(exam.course_name)} | ${escapeHtml(exam.program_type)} | Block ${escapeHtml(exam.block_term)} | ${escapeHtml(exam.intake_year)}
+                </div>
                 <input type="text" id="gradeSearch" placeholder="Search by name, email or ID" class="search-input" oninput="filterGradeStudents()">
                 <div class="table-container">
                     <table class="data-table grade-table">
@@ -2102,7 +2165,7 @@ async function openGradeModal(examId, examName = '') {
                                         <td>
                                             <select id="status-${s.user_id}" class="status-select">
                                                 <option value="Scheduled" ${grade.result_status === 'Scheduled' ? 'selected' : ''}>Scheduled</option>
-                                                <option value="InProgress" ${grade.result_status === 'InProgress' ? 'selected' : ''}>InProgress</option>
+                                                <option value="InProgress" ${grade.result_status === 'InProgress' ? 'selected' : ''}>In Progress</option>
                                                 <option value="Final" ${grade.result_status === 'Final' ? 'selected' : ''}>Final</option>
                                             </select>
                                         </td>
@@ -2143,26 +2206,37 @@ function updateGradeTotal(studentId) {
 
     const rawTotal = cat1 + cat2 + finalExam;
     const scaledTotal = (rawTotal / 160) * 100; // 30+30+100 max
+    
     totalInput.value = scaledTotal.toFixed(2);
+    
+    // Add visual feedback based on score
+    totalInput.classList.remove('high-score', 'medium-score', 'low-score');
+    if (scaledTotal >= 70) {
+        totalInput.classList.add('high-score');
+    } else if (scaledTotal >= 50) {
+        totalInput.classList.add('medium-score');
+    } else {
+        totalInput.classList.add('low-score');
+    }
 }
 
-// Save Grades - FIXED FOR CONSOLIDATED PROFILES TABLE
+// Save Grades - FIXED AUTHENTICATION
 async function saveGrades(examId) {
     try {
         const rows = document.querySelectorAll('.grade-table tbody tr');
         const upserts = [];
 
-        // ✅ The foreign key points to consolidated_user_profiles_table.user_id
-        // So we need to use currentUserProfile.user_id
-        const graderUserId = currentUserProfile?.user_id;
+        // Get current user with proper authentication
+        const currentUser = await getCurrentUser();
         
-        console.log('🔍 DEBUG: Using grader user_id:', graderUserId);
-        console.log('🔍 DEBUG: Full currentUserProfile:', currentUserProfile);
+        console.log('🔍 DEBUG: Current user for grading:', currentUser);
 
-        if (!graderUserId) {
-            showFeedback('Error: Cannot identify grader. Please ensure you are logged in.', 'error');
+        if (!currentUser || !currentUser.user_id) {
+            showFeedback('Error: Cannot identify grader. Please ensure you are logged in and have a valid user profile.', 'error');
             return;
         }
+
+        const graderUserId = currentUser.user_id;
 
         // Validate that this user exists in consolidated_user_profiles_table
         const { data: graderExists, error: checkError } = await sb
@@ -2171,10 +2245,12 @@ async function saveGrades(examId) {
             .eq('user_id', graderUserId)
             .single();
 
-        if (checkError || !graderExists) {
-            showFeedback('Error: Grader profile not found in system.', 'error');
-            return;
+        if (checkError) {
+            console.warn('⚠️ Grader not found in consolidated table, but proceeding with auth user ID');
+            // Continue anyway with the authenticated user ID
         }
+
+        let hasValidData = false;
 
         for (const row of rows) {
             if (row.style.display === 'none') continue; // Skip hidden rows
@@ -2189,12 +2265,23 @@ async function saveGrades(examId) {
 
             if (!cat1Input || !cat2Input || !finalInput || !statusSelect) continue;
 
-            let cat1 = Math.min(parseFloat(cat1Input.value) || 0, 30);
-            let cat2 = Math.min(parseFloat(cat2Input.value) || 0, 30);
-            let finalExam = Math.min(parseFloat(finalInput.value) || 0, 100);
+            // Only include rows that have at least one grade entered
+            const cat1Value = cat1Input.value.trim();
+            const cat2Value = cat2Input.value.trim();
+            const finalValue = finalInput.value.trim();
+
+            if (!cat1Value && !cat2Value && !finalValue) {
+                continue; // Skip completely empty rows
+            }
+
+            hasValidData = true;
+
+            let cat1 = Math.min(parseFloat(cat1Value) || 0, 30);
+            let cat2 = Math.min(parseFloat(cat2Value) || 0, 30);
+            let finalExam = Math.min(parseFloat(finalValue) || 0, 100);
             const scaledTotal = ((cat1 + cat2 + finalExam) / 160) * 100;
 
-            upserts.push({
+            const gradeData = {
                 exam_id: examId,
                 student_id: studentId,
                 cat_1_score: cat1,
@@ -2202,16 +2289,39 @@ async function saveGrades(examId) {
                 exam_score: finalExam,
                 total_score: parseFloat(scaledTotal.toFixed(2)),
                 result_status: statusSelect.value || 'Scheduled',
-                graded_by: graderUserId, // ✅ This must match consolidated_user_profiles_table.user_id
+                graded_by: graderUserId,
                 question_id: null,
-                created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString()
-            });
+            };
 
+            // Only include created_at for new records
+            const existingGrade = Array.from(rows).find(r => 
+                !r.style.display && 
+                r.querySelector(`input[id^="cat1-${studentId}"]`)
+            );
+            
+            if (existingGrade) {
+                const cat1Val = existingGrade.querySelector(`#cat1-${studentId}`).value;
+                const cat2Val = existingGrade.querySelector(`#cat2-${studentId}`).value;
+                const finalVal = existingGrade.querySelector(`#final-${studentId}`).value;
+                
+                if (!cat1Val && !cat2Val && !finalVal) {
+                    gradeData.created_at = new Date().toISOString();
+                }
+            }
+
+            upserts.push(gradeData);
+
+            // Update the total display
             const totalInput = row.querySelector(`#total-${studentId}`);
             if (totalInput) {
                 totalInput.value = scaledTotal.toFixed(2);
             }
+        }
+
+        if (!hasValidData) {
+            showFeedback('No grade data entered to save. Please enter at least one grade.', 'warning');
+            return;
         }
 
         if (upserts.length === 0) {
@@ -2221,6 +2331,7 @@ async function saveGrades(examId) {
 
         console.log('🔍 DEBUG: Final upserts to save:', upserts);
 
+        // Save grades
         const { error } = await sb.from('exam_grades').upsert(upserts, { 
             onConflict: 'exam_id,student_id' 
         });
@@ -2230,15 +2341,50 @@ async function saveGrades(examId) {
             throw new Error(error.message);
         }
 
-        await logAudit('GRADES_SAVE', `Saved grades for exam ${examId}`, examId, 'SUCCESS');
+        // Show success feedback with visual animation
+        rows.forEach(row => {
+            if (row.style.display !== 'none') {
+                row.classList.add('saved');
+                setTimeout(() => row.classList.remove('saved'), 1000);
+            }
+        });
+
+        // Log audit and show success
+        if (typeof logAudit === 'function') {
+            await logAudit('GRADES_SAVE', `Saved grades for exam ${examId}`, examId, 'SUCCESS');
+        }
+        
         showFeedback(`✅ Successfully saved grades for ${upserts.length} students!`, 'success');
-        closeModal();
+        
+        // Close modal after short delay
+        setTimeout(() => {
+            closeModal();
+        }, 1500);
+        
     } catch (error) {
         console.error('Error saving grades:', error);
-        await logAudit('GRADES_SAVE', `Failed to save grades for exam ${examId}: ${error.message}`, examId, 'FAILURE');
+        
+        // Log audit failure
+        if (typeof logAudit === 'function') {
+            await logAudit('GRADES_SAVE', `Failed to save grades for exam ${examId}: ${error.message}`, examId, 'FAILURE');
+        }
+        
         showFeedback(`Failed to save grades: ${error.message}`, 'error');
     }
 }
+
+// Initialize authentication when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    // Set up global currentUserProfile if not already set
+    if (typeof currentUserProfile === 'undefined') {
+        getCurrentUser().then(user => {
+            if (user) {
+                window.currentUserProfile = user;
+                console.log('🔍 Global currentUserProfile initialized:', user);
+            }
+        });
+    }
+});
 /*******************************************************
  * 12. MESSAGES & ANNOUNCEMENTS
  *******************************************************/
