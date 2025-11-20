@@ -2959,7 +2959,7 @@ function closeMapModal() {
             }
         }
 
-     async function handleUploadResource(e) {
+   async function handleUploadResource(e) {
     e.preventDefault();
     const button = e.submitter;
     setButtonLoading(button, true, 'Upload Resource');
@@ -3005,17 +3005,22 @@ function closeMapModal() {
         // Get public URL
         const { data: urlData } = sb.storage.from(RESOURCES_BUCKET).getPublicUrl(filePath);
 
-        // Save resource metadata to database
+        // Save resource metadata to database - FIXED FIELDS
         const { error: dbError } = await sb.from(RESOURCES_TABLE).insert({
             title: formData.title,
+            description: formData.title, // Using title as description if no separate field
             file_name: file.name,
             file_url: urlData.publicUrl,
             file_path: filePath,
             target_program: formData.program,
             intake_year: formData.intake,
             block_term: formData.block,
-            uploaded_by: user.id,               // Use auth.uid()
-            uploaded_by_name: currentUserProfile.full_name
+            course_name: formData.program, // Add course_name field
+            uploaded_by: user.id,
+            uploaded_by_name: currentUserProfile.full_name,
+            // Add these fields to match your display
+            category: 'Academic', // Or get from form if available
+            lecturer_name: currentUserProfile.full_name
         });
 
         if (dbError) throw dbError;
