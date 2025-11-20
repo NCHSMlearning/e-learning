@@ -2295,7 +2295,7 @@ function updateGradeTotal(studentId) {
     }
 }
 
-// Save Grades - With robust authentication
+// Save Grades - Fixed for your database schema
 async function saveGrades(examId) {
     try {
         const rows = document.querySelectorAll('.grade-table tbody tr');
@@ -2306,12 +2306,12 @@ async function saveGrades(examId) {
         
         console.log('🔍 DEBUG: Current user for saving:', currentUser);
 
-        if (!currentUser || !currentUser.user_id) {
+        if (!currentUser || (!currentUser.user_id && !currentUser.id)) {
             showFeedback('Error: Cannot identify grader. Please ensure you are logged in.', 'error');
             return;
         }
 
-        const graderUserId = currentUser.user_id;
+        const graderUserId = currentUser.user_id || currentUser.id;
         let hasValidData = false;
 
         for (const row of rows) {
@@ -2343,8 +2343,9 @@ async function saveGrades(examId) {
             let finalExam = Math.min(parseFloat(finalValue) || 0, 100);
             const scaledTotal = ((cat1 + cat2 + finalExam) / 160) * 100;
 
+            // FIX: Use proper values for your database schema
             upserts.push({
-                exam_id: examId,
+                exam_id: parseInt(examId), // Convert to integer
                 student_id: studentId,
                 cat_1_score: cat1,
                 cat_2_score: cat2,
@@ -2352,7 +2353,7 @@ async function saveGrades(examId) {
                 total_score: parseFloat(scaledTotal.toFixed(2)),
                 result_status: statusSelect.value || 'Scheduled',
                 graded_by: graderUserId,
-                question_id: null,
+                question_id: '00000000-0000-0000-0000-000000000000', // Required UUID - cannot be null
                 updated_at: new Date().toISOString()
             });
 
@@ -2370,8 +2371,9 @@ async function saveGrades(examId) {
 
         console.log('💾 Saving grades:', upserts);
 
+        // FIX: Update onConflict to include question_id since it's part of the unique constraint
         const { error } = await sb.from('exam_grades').upsert(upserts, { 
-            onConflict: 'exam_id,student_id' 
+            onConflict: 'exam_id,student_id,question_id' 
         });
         
         if (error) {
