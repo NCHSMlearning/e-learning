@@ -2295,7 +2295,7 @@ function updateGradeTotal(studentId) {
     }
 }
 
-// Save Grades - Fixed for your database schema
+// Save Grades - Fixed foreign key constraint with validation
 async function saveGrades(examId) {
     try {
         const rows = document.querySelectorAll('.grade-table tbody tr');
@@ -2312,6 +2312,36 @@ async function saveGrades(examId) {
         }
 
         const graderUserId = currentUser.user_id || currentUser.id;
+        
+        // VALIDATE FOREIGN KEY: Check if grader exists in the referenced table
+        console.log('🔍 Validating grader foreign key...');
+        
+        // Try to find the grader in consolidated_user_profiles_table
+        const { data: graderExists, error: graderError } = await sb
+            .from('consolidated_user_profiles_table')
+            .select('user_id')
+            .eq('user_id', graderUserId)
+            .single();
+
+        if (graderError || !graderExists) {
+            console.error('❌ Grader not found in consolidated_user_profiles_table:', graderError);
+            
+            // Try auth.users as fallback
+            const { data: authUser, error: authError } = await sb
+                .from('auth.users')
+                .select('id')
+                .eq('id', graderUserId)
+                .single();
+                
+            if (authError || !authUser) {
+                showFeedback('Error: Your user account is not properly set up for grading. Please contact administrator.', 'error');
+                return;
+            }
+            console.log('✅ Grader found in auth.users');
+        } else {
+            console.log('✅ Grader found in consolidated_user_profiles_table');
+        }
+
         let hasValidData = false;
 
         for (const row of rows) {
@@ -2343,9 +2373,8 @@ async function saveGrades(examId) {
             let finalExam = Math.min(parseFloat(finalValue) || 0, 100);
             const scaledTotal = ((cat1 + cat2 + finalExam) / 160) * 100;
 
-            // FIX: Use proper values for your database schema
             upserts.push({
-                exam_id: parseInt(examId), // Convert to integer
+                exam_id: parseInt(examId),
                 student_id: studentId,
                 cat_1_score: cat1,
                 cat_2_score: cat2,
@@ -2353,7 +2382,7 @@ async function saveGrades(examId) {
                 total_score: parseFloat(scaledTotal.toFixed(2)),
                 result_status: statusSelect.value || 'Scheduled',
                 graded_by: graderUserId,
-                question_id: '00000000-0000-0000-0000-000000000000', // Required UUID - cannot be null
+                question_id: '00000000-0000-0000-0000-000000000000',
                 updated_at: new Date().toISOString()
             });
 
@@ -2371,13 +2400,31 @@ async function saveGrades(examId) {
 
         console.log('💾 Saving grades:', upserts);
 
-        // FIX: Update onConflict to include question_id since it's part of the unique constraint
+        // Show loading state
+        const saveBtn = document.querySelector('.btn-action');
+        const originalText = saveBtn.textContent;
+        saveBtn.innerHTML = '<div class="btn-loading"></div> Saving...';
+        saveBtn.disabled = true;
+
         const { error } = await sb.from('exam_grades').upsert(upserts, { 
             onConflict: 'exam_id,student_id,question_id' 
         });
         
+        // Restore button
+        saveBtn.textContent = originalText;
+        saveBtn.disabled = false;
+
         if (error) {
-            throw new Error(error.message);
+            console.error('🔍 Database error details:', error);
+            
+            // Provide more specific error messages
+            if (error.message.includes('foreign key constraint')) {
+                throw new Error('Grading permission issue: Your user account cannot save grades. Please contact administrator.');
+            } else if (error.message.includes('null value')) {
+                throw new Error('Database validation error: Required fields are missing.');
+            } else {
+                throw new Error(error.message);
+            }
         }
 
         // Show success feedback
@@ -2391,26 +2438,55 @@ async function saveGrades(examId) {
     } catch (error) {
         console.error('Error saving grades:', error);
         showFeedback(`Failed to save grades: ${error.message}`, 'error');
+        
+        // Restore button in case of error
+        const saveBtn = document.querySelector('.btn-action');
+        if (saveBtn) {
+            saveBtn.textContent = 'Save Grades';
+            saveBtn.disabled = false;
+        }
     }
 }
 
-// Debug function to check authentication state
-function debugAuth() {
-    console.log('🔍 Authentication Debug Info:', {
-        'typeof currentUserProfile': typeof currentUserProfile,
-        'currentUserProfile value': currentUserProfile,
-        'window.currentUserProfile': window.currentUserProfile,
-        'sessionStorage currentUserProfile': sessionStorage.getItem('currentUserProfile'),
-        'sessionStorage currentUser': sessionStorage.getItem('currentUser'),
-        'localStorage currentUserProfile': localStorage.getItem('currentUserProfile'),
-        'localStorage currentUser': localStorage.getItem('currentUser')
-    });
+// Debug function to check foreign key issues
+async function debugForeignKey() {
+    const currentUser = await getCurrentUser();
+    console.log('🔍 Debugging foreign key constraints...');
+    console.log('Current User:', currentUser);
+    
+    if (!currentUser) return;
+    
+    const graderUserId = currentUser.user_id || currentUser.id;
+    
+    // Check consolidated_user_profiles_table
+    const { data: consolidated, error: consolidatedError } = await sb
+        .from('consolidated_user_profiles_table')
+        .select('user_id, full_name, role')
+        .eq('user_id', graderUserId)
+        .single();
+    console.log('In consolidated_user_profiles_table:', consolidated, consolidatedError);
+    
+    // Check auth.users
+    const { data: authUser, error: authError } = await sb
+        .from('auth.users')
+        .select('id, email, role')
+        .eq('id', graderUserId)
+        .single();
+    console.log('In auth.users:', authUser, authError);
+    
+    // Check exam_grades table structure
+    const { data: examGradesSample, error: sampleError } = await sb
+        .from('exam_grades')
+        .select('*')
+        .limit(1)
+        .single();
+    console.log('exam_grades sample structure:', examGradesSample, sampleError);
 }
 
-// Initialize on page load
+// Add this to your DOMContentLoaded for debugging
 document.addEventListener('DOMContentLoaded', function() {
     console.log('🚀 Page loaded, initializing authentication...');
-    debugAuth(); // Log initial auth state
+    debugAuth();
     
     // Pre-load user data
     getCurrentUser().then(user => {
@@ -2419,6 +2495,18 @@ document.addEventListener('DOMContentLoaded', function() {
             window.currentUserProfile = user;
         }
     });
+    
+    // Add debug button to test foreign key
+    setTimeout(() => {
+        if (document.querySelector('.toolbar')) {
+            const debugBtn = document.createElement('button');
+            debugBtn.textContent = 'Debug Foreign Key';
+            debugBtn.className = 'btn btn-small';
+            debugBtn.style.marginLeft = '10px';
+            debugBtn.onclick = debugForeignKey;
+            document.querySelector('.toolbar').appendChild(debugBtn);
+        }
+    }, 1000);
 });
 /*******************************************************
  * 12. MESSAGES & ANNOUNCEMENTS
