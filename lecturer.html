@@ -1424,57 +1424,79 @@ form button:hover {
                 </table>
             </section>
 
-            <section id="resources-content" class="tab-content">
-                <h2><i class="fas fa-file-upload"></i> Upload New Resource</h2>
-                <form id="upload-resource-form" class="check-in-controls">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="resource_title">Resource Title</label>
-                            <input type="text" id="resource_title" placeholder="Resource Title" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="resource_file">File</label>
-                            <input type="file" id="resource_file" required>
-                        </div>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="resource_program">Program</label>
-                            <select id="resource_program" required></select>
-                        </div>
-                        <div class="form-group">
-                            <label for="resource_intake">Intake</label>
-                            <select id="resource_intake" required></select>
-                        </div>
-                        <div class="form-group">
-                            <label for="resource_block">Block</label>
-                            <select id="resource_block" required></select>
-                        </div>
-                    </div>
-                    <button type="submit"><i class="fas fa-upload"></i> Upload Resource</button>
-                </form>
+        <section id="resources-content" class="tab-content">
+    <h2><i class="fas fa-file-upload"></i> Upload New Resource</h2>
+    <form id="upload-resource-form" class="check-in-controls">
+        <div class="form-row">
+            <div class="form-group">
+                <label for="resource_title">Resource Title *</label>
+                <input type="text" id="resource_title" placeholder="Resource Title" required>
+            </div>
+            <div class="form-group">
+                <label for="resource_description">Description</label>
+                <textarea id="resource_description" placeholder="Resource description (optional)"></textarea>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="resource_category">Category *</label>
+                <select id="resource_category" required>
+                    <option value="">Select Category</option>
+                    <option value="Academic">Academic</option>
+                    <option value="Mental Health">Mental Health</option>
+                    <option value="General">General</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="resource_program">Program *</label>
+                <select id="resource_program" required>
+                    <option value="">Select Program</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="resource_intake">Intake *</label>
+                <select id="resource_intake" required>
+                    <option value="">Select Intake</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="resource_block">Block *</label>
+                <select id="resource_block" required>
+                    <option value="">Select Block</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="resource_file">File *</label>
+                <input type="file" id="resource_file" required>
+            </div>
+        </div>
+        <button type="submit"><i class="fas fa-upload"></i> Upload Resource</button>
+    </form>
 
-                <h3>Shared Resources List</h3>
-                <div class="search-container">
-                    <input type="text" id="resource-search" placeholder="Filter resources...">
-                    <button><i class="fas fa-search"></i> Search</button>
-                </div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Title</th>
-                            <th>Course</th>
-                            <th>Program/Block</th>
-                            <th>Date Uploaded</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="resources-list">
-                        <tr><td colspan="5">Loading resources...</td></tr>
-                    </tbody>
-                </table>
-            </section>
-            
+    <h3>Shared Resources List</h3>
+    <div class="search-container">
+        <input type="text" id="resource-search" placeholder="Filter resources...">
+        <button><i class="fas fa-search"></i> Search</button>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Description</th>
+                <th>Category</th>
+                <th>Program/Block</th>
+                <th>Uploaded By</th>
+                <th>Date Uploaded</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="resources-list">
+            <tr><td colspan="7">Loading resources...</td></tr>
+        </tbody>
+    </table>
+</section>
             <section id="reports-content" class="tab-content">
                 <h2><i class="fas fa-chart-bar"></i> Academic Reports & Analytics</h2>
                 <p>Use this section to generate and view comprehensive reports.</p>
@@ -2936,170 +2958,213 @@ function closeMapModal() {
         }
 
         // =================================================================
-        // === 9. RESOURCES MANAGEMENT ===
-        // =================================================================
+// === 9. RESOURCES MANAGEMENT ===
+// =================================================================
 
-        function populateResourceFormSelects() {
-            const targetProgram = lecturerTargetProgram;
-            const programs = targetProgram ? [{ id: targetProgram, name: targetProgram }] : [];
-            
-            populateSelect($('resource_program'), programs, 'id', 'name', 'Select Program');
-            if (targetProgram) {
-                $('resource_program').value = targetProgram;
-            }
-
-            populateSelect($('resource_intake'), allIntakes, 'id', 'name', 'Select Intake Year');
-            
-            const blockSelect = $('resource_block');
-            if (targetProgram && ACADEMIC_STRUCTURE[targetProgram]) {
-                const blocks = ACADEMIC_STRUCTURE[targetProgram].map(name => ({ id: name, name: name }));
-                populateSelect(blockSelect, blocks, 'id', 'name', `Select ${targetProgram} Block/Term`);
-            } else {
-                blockSelect.innerHTML = '<option value="">-- Select Program First --</option>';
-            }
-        }
-
-   async function handleUploadResource(e) {
-    e.preventDefault();
-    const button = e.submitter;
-    setButtonLoading(button, true, 'Upload Resource');
-
-    const fileInput = $('resource_file');
-    const file = fileInput.files[0];
+function populateResourceFormSelects() {
+    const targetProgram = lecturerTargetProgram;
+    const programs = targetProgram ? [{ id: targetProgram, name: targetProgram }] : [];
     
-    if (!file) {
-        showFeedback('Please select a file to upload.', 'error');
-        setButtonLoading(button, false);
-        return;
+    populateSelect($('resource_program'), programs, 'id', 'name', 'Select Program');
+    if (targetProgram) {
+        $('resource_program').value = targetProgram;
     }
 
-    const formData = {
-        title: $('resource_title').value,
-        program: $('resource_program').value,
-        intake: $('resource_intake').value,
-        block: $('resource_block').value
-    };
-
-    if (Object.values(formData).some(v => !v)) {
-        showFeedback('Please fill in all resource details.', 'error');
-        setButtonLoading(button, false);
-        return;
-    }
-
-    try {
-        // Get authenticated user
-        const { data: { user }, error: authError } = await sb.auth.getUser();
-        if (authError) throw authError;
-
-        // Upload file to storage
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
-        const filePath = `resources/${fileName}`;
-
-        const { error: uploadError } = await sb.storage
-            .from(RESOURCES_BUCKET)
-            .upload(filePath, file);
-
-        if (uploadError) throw uploadError;
-
-        // Get public URL
-        const { data: urlData } = sb.storage.from(RESOURCES_BUCKET).getPublicUrl(filePath);
-
-        // Save resource metadata to database - FIXED FIELDS
-        const { error: dbError } = await sb.from(RESOURCES_TABLE).insert({
-            title: formData.title,
-            description: formData.title, // Using title as description if no separate field
-            file_name: file.name,
-            file_url: urlData.publicUrl,
-            file_path: filePath,
-            target_program: formData.program,
-            intake_year: formData.intake,
-            block_term: formData.block,
-            course_name: formData.program, // Add course_name field
-            uploaded_by: user.id,
-            uploaded_by_name: currentUserProfile.full_name,
-            // Add these fields to match your display
-            category: 'Academic', // Or get from form if available
-            lecturer_name: currentUserProfile.full_name
-        });
-
-        if (dbError) throw dbError;
-
-        showFeedback(`✅ Resource "${formData.title}" uploaded successfully!`, 'success');
-        e.target.reset();
-        loadLecturerResources();
-
-    } catch (error) {
-        console.error('Resource upload failed:', error);
-        showFeedback(`Upload failed: ${error.message}`, 'error');
-    } finally {
-        setButtonLoading(button, false);
+    populateSelect($('resource_intake'), allIntakes, 'id', 'name', 'Select Intake Year');
+    
+    const blockSelect = $('resource_block');
+    if (targetProgram && ACADEMIC_STRUCTURE[targetProgram]) {
+        const blocks = ACADEMIC_STRUCTURE[targetProgram].map(name => ({ id: name, name: name }));
+        populateSelect(blockSelect, blocks, 'id', 'name', `Select ${targetProgram} Block/Term`);
+    } else {
+        blockSelect.innerHTML = '<option value="">-- Select Program First --</option>';
     }
 }
 
-        async function loadLecturerResources() {
-            const tbody = $('resources-list');
-            if (!tbody) return;
+// FIXED: Function name matches HTML form ID + 'handle' prefix
+async function handleUploadResource(e) {
+    e.preventDefault();
+    const submitButton = e.submitter;
+    const originalText = submitButton.textContent;
+    setButtonLoading(submitButton, true, 'Uploading...');
+
+    // FIXED: Use correct element IDs that match HTML
+    const program = $('resource_program').value;
+    const intake = $('resource_intake').value;
+    const block = $('resource_block').value;
+    const fileInput = $('resource_file'); // FIXED: Changed from 'resource-file'
+    const title = $('resource_title').value.trim(); // FIXED: Changed from 'resource-title'
+    const description = $('resource_description').value.trim() || title;
+    const category = $('resource_category').value;
+
+    // Enhanced validation
+    if (!fileInput.files.length || !program || !intake || !block || !title || !category) {
+        showFeedback('Please fill in all required fields and select a file.', 'error');
+        setButtonLoading(submitButton, false, originalText);
+        return;
+    }
+
+    let file = fileInput.files[0];
+    let uploadFile = file;
+
+    const originalExt = file.name.split('.').pop();
+    const baseName = title.replace(/[^\w\-]+/g, '_') + '_' + file.name.replace(/\.[^.]+$/, '').replace(/[^\w\-]+/g, '_');
+
+    let originalName = `${baseName}.${originalExt}`;
+    let filePath = `${program}/${intake}/${block}/${originalName}`;
+
+    try {
+        // Convert Word or PPT to PDF (placeholder)
+        if (/\.(docx?|pptx?)$/i.test(file.name)) {
+            originalName = `${baseName}.pdf`;
+            filePath = `${program}/${intake}/${block}/${baseName}.pdf`;
+        }
+
+        const { error: uploadError } = await sb.storage
+            .from(RESOURCES_BUCKET)
+            .upload(filePath, uploadFile, {
+                cacheControl: '3600',
+                upsert: true,
+                contentType: uploadFile.type
+            });
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = sb.storage
+            .from(RESOURCES_BUCKET)
+            .getPublicUrl(filePath);
+
+        // Get authenticated user for uploader info
+        const { data: { user }, error: authError } = await sb.auth.getUser();
+        if (authError) throw authError;
+
+        // UPDATED INSERT QUERY - Match superadmin expected fields
+        const { error: dbError, data } = await sb
+            .from('resources')
+            .insert({
+                // Basic info
+                title: title,
+                description: description,
+                category: category,
+                
+                // Academic info
+                program_type: program,
+                target_program: program,
+                intake: intake,
+                intake_year: intake,
+                block: block,
+                block_term: block,
+                course_name: program,
+                
+                // File info
+                file_path: filePath,
+                file_name: originalName,
+                file_url: publicUrl,
+                
+                // Uploader info
+                uploaded_by: user.id, // FIXED: Use authenticated user ID
+                uploaded_by_name: currentUserProfile?.full_name,
+                lecturer_name: currentUserProfile?.full_name,
+                
+                // Timestamps
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            }).select('id');
             
-            tbody.innerHTML = '<tr><td colspan="5">Loading resources...</td></tr>';
+        if (dbError) throw dbError;
 
-            try {
-                const { data: resources, error } = await fetchData(
-                    RESOURCES_TABLE,
-                    '*',
-                    { uploaded_by: currentUserProfile.user_id },
-                    'created_at',
-                    false
-                );
+        await logAudit('RESOURCE_UPLOAD', `Uploaded resource: ${title} to ${program}/${intake}/${block}.`, data?.[0]?.id, 'SUCCESS');
+        showFeedback(`✅ Resource "${title}" uploaded successfully!`, 'success');
+        e.target.reset();
+        loadLecturerResources(); // FIXED: Changed from loadResources()
+    } catch (err) {
+        await logAudit('RESOURCE_UPLOAD', `Failed to upload resource: ${title}. Reason: ${err.message}`, null, 'FAILURE');
+        console.error('Upload failed:', err);
+        showFeedback(`❌ Upload failed: ${err.message}`, 'error');
+    } finally {
+        setButtonLoading(submitButton, false, originalText);
+    }
+}
 
-                if (error) throw error;
+// UPDATED: Fixed to match new table structure
+async function loadLecturerResources() {
+    const tbody = $('resources-list');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '<tr><td colspan="7">Loading resources...</td></tr>';
 
-                if (!resources || resources.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="5">No resources uploaded yet.</td></tr>';
-                    return;
-                }
+    try {
+        const { data: resources, error } = await fetchData(
+            RESOURCES_TABLE,
+            '*',
+            { uploaded_by: currentUserProfile.user_id },
+            'created_at',
+            false
+        );
 
-                tbody.innerHTML = resources.map(resource => {
-                    return `
-                        <tr>
-                            <td>${resource.title}</td>
-                            <td>${resource.course_name || 'General'}</td>
-                            <td>${resource.target_program || 'N/A'}/${resource.block_term || 'N/A'}</td>
-                            <td>${new Date(resource.created_at).toLocaleDateString()}</td>
-                            <td>
-                                <a href="${resource.file_url}" target="_blank" class="btn-action">
-                                    <i class="fas fa-download"></i> Download
-                                </a>
-                                <button class="btn-action delete" onclick="deleteResource('${resource.id}')">
-                                    <i class="fas fa-trash"></i> Delete
-                                </button>
-                            </td>
-                        </tr>
-                    `;
-                }).join('');
-            } catch (error) {
-                console.error('Failed to load resources:', error);
-                tbody.innerHTML = `<tr><td colspan="5">Error loading resources: ${error.message}</td></tr>`;
-            }
+        if (error) throw error;
+
+        if (!resources || resources.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7">No resources uploaded yet.</td></tr>';
+            return;
         }
 
-        async function deleteResource(resourceId) {
-            if (!confirm('Are you sure you want to delete this resource?')) return;
+        tbody.innerHTML = resources.map(resource => {
+            return `
+                <tr>
+                    <td>${resource.title || 'N/A'}</td>
+                    <td>${resource.description || resource.title || 'N/A'}</td>
+                    <td>${resource.category || 'Academic'}</td>
+                    <td>${resource.target_program || 'N/A'}/${resource.block_term || 'N/A'}</td>
+                    <td>${resource.uploaded_by_name || currentUserProfile?.full_name || 'N/A'}</td>
+                    <td>${new Date(resource.created_at).toLocaleDateString('en-GB', {
+                        day: '2-digit',
+                        month: '2-digit', 
+                        year: 'numeric'
+                    })}</td>
+                    <td>
+                        <a href="${resource.file_url}" target="_blank" class="btn-action">
+                            <i class="fas fa-download"></i> Download
+                        </a>
+                        <button class="btn-action delete" onclick="deleteResource('${resource.id}')">
+                            <i class="fas fa-trash"></i> Delete
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    } catch (error) {
+        console.error('Failed to load resources:', error);
+        tbody.innerHTML = `<tr><td colspan="7">Error loading resources: ${error.message}</td></tr>`;
+    }
+}
 
-            try {
-                const { error } = await sb.from(RESOURCES_TABLE)
-                    .delete()
-                    .eq('id', resourceId);
+async function deleteResource(resourceId) {
+    if (!confirm('Are you sure you want to delete this resource?')) return;
 
-                if (error) throw error;
+    try {
+        const { error } = await sb.from(RESOURCES_TABLE)
+            .delete()
+            .eq('id', resourceId);
 
-                showFeedback('✅ Resource deleted successfully!', 'success');
-                loadLecturerResources();
-            } catch (error) {
-                console.error('Delete failed:', error);
-                showFeedback(`Delete failed: ${error.message}`, 'error');
-            }
-        }
+        if (error) throw error;
+
+        showFeedback('✅ Resource deleted successfully!', 'success');
+        loadLecturerResources();
+    } catch (error) {
+        console.error('Delete failed:', error);
+        showFeedback(`Delete failed: ${error.message}`, 'error');
+    }
+}
+
+// Add event listener (make sure this is called)
+function initializeResourceHandlers() {
+    const uploadForm = $('upload-resource-form');
+    if (uploadForm) {
+        uploadForm.addEventListener('submit', handleUploadResource);
+    }
+    populateResourceFormSelects();
+    loadLecturerResources();
+}
 
         // =================================================================
         // === 10. MESSAGES MANAGEMENT ===
