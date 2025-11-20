@@ -1097,7 +1097,27 @@ form button:hover {
                     </div>
                 </div>
             </section>
-            
+            <h3>Courses for Current Academic Period</h3>
+
+<!-- Academic Period Filter -->
+<div class="filter-controls">
+    <div class="filter-row">
+        <div class="filter-group">
+            <label for="intake-year-filter">Filter by Intake Year:</label>
+            <select id="intake-year-filter" onchange="filterCoursesByAcademicPeriod()">
+                <option value="">All Intake Years</option>
+                <!-- Options will be populated by JavaScript -->
+            </select>
+        </div>
+        <div class="filter-group">
+            <label for="academic-period-filter" id="academic-period-label">Filter by Block:</label>
+            <select id="academic-period-filter" onchange="filterCoursesByAcademicPeriod()">
+                <option value="">All Blocks</option>
+                <!-- Options will be populated based on program -->
+            </select>
+        </div>
+    </div>
+</div>
             <section id="my-courses-content" class="tab-content">
                 <h2><i class="fas fa-book"></i> My Assigned Courses</h2>
                 <div class="search-container">
@@ -1112,7 +1132,8 @@ form button:hover {
                             <th>Course Code</th>
                             <th>Course Name</th>
                             <th>Program</th>
-                            <th>Block/Term</th>
+                            <th>Block</th>
+                             <th>Intake Year</th> <!-- Added this column -->
                             <th>Total Students</th>
                             <th>Action</th>
                         </tr>
@@ -2584,11 +2605,11 @@ function showSection(sectionId) {
             }
         }
 
-        // =================================================================
-        // === 5. STUDENT, COURSE & DASHBOARD LOADERS (SIMPLIFIED) ===
-        // =================================================================
+     // =================================================================
+// === 5. STUDENT, COURSE & DASHBOARD LOADERS (FIXED) ===
+// =================================================================
 
-  /**
+/**
  * Load the lecturer's courses table, filtered by program.
  */
 async function loadLecturerCourses() {
@@ -2601,7 +2622,7 @@ async function loadLecturerCourses() {
 
     if (!currentUserProfile || !lecturerTargetProgram) {
         tbody.innerHTML = `
-            <tr><td colspan="6" style="text-align:center;">No courses loaded. Your department is not assigned a program.</td></tr>`;
+            <tr><td colspan="7" style="text-align:center;">No courses loaded. Your department is not assigned a program.</td></tr>`;
         return;
     }
 
@@ -2609,59 +2630,48 @@ async function loadLecturerCourses() {
     if (allCourses && allCourses.length > 0) {
         const sampleCourse = allCourses[0];
         console.log('📋 Available course fields:', Object.keys(sampleCourse));
-        console.log('🔍 Checking field values:');
-        console.log('- unit_code:', sampleCourse.unit_code); // This exists
-        console.log('- course_name:', sampleCourse.course_name); // This exists
-        console.log('- target_program:', sampleCourse.target_program); // This exists
-        console.log('- status:', sampleCourse.status); // This exists
-        console.log('- block:', sampleCourse.block); // This exists
-        console.log('- intake_year:', sampleCourse.intake_year); // This exists
-        // These don't exist in your data:
-        console.log('- course_code:', sampleCourse.course_code); // Will be undefined
-        console.log('- program_type:', sampleCourse.program_type); // Will be undefined
-        console.log('- block_term:', sampleCourse.block_term); // Will be undefined
+        console.log('🔍 Sample course data:', {
+            unit_code: sampleCourse.unit_code,
+            course_name: sampleCourse.course_name,
+            target_program: sampleCourse.target_program,
+            status: sampleCourse.status,
+            block: sampleCourse.block,
+            intake_year: sampleCourse.intake_year
+        });
     }
 
+    // CORRECTED FILTER: Use the actual target_program field that exists in your data
     const filteredCourses = (allCourses || []).filter(course => {
-    // Since target_program doesn't exist in your data, infer it from unit code
-    const inferredProgram = getProgramFromUnitCode(course.unit_code);
-    const courseStatus = course.status || 'Active';
-    
-    const matchesProgram = inferredProgram === lecturerTargetProgram;
-    const isActive = courseStatus === 'Active';
-    
-    console.log(`📝 Course: "${course.course_name}" | Inferred Program: "${inferredProgram}" | Status: "${courseStatus}" | Match: ${matchesProgram}`);
-    
-    return matchesProgram && isActive;
-});
+        const courseProgram = course.target_program;
+        const courseStatus = course.status || 'Active';
+        
+        const matchesProgram = courseProgram === lecturerTargetProgram;
+        const isActive = courseStatus === 'Active';
+        
+        console.log(`📝 Course: "${course.course_name}" | Program: "${courseProgram}" | Status: "${courseStatus}" | Match: ${matchesProgram}`);
+        
+        return matchesProgram && isActive;
+    });
 
-console.log(`✅ Found ${filteredCourses.length} filtered courses for ${lecturerTargetProgram}`);
+    console.log(`✅ Found ${filteredCourses.length} filtered courses for ${lecturerTargetProgram}`);
 
-// Helper function to determine program from unit code
-function getProgramFromUnitCode(unitCode) {
-    if (!unitCode) return 'KRCHN';
-    
-    const code = unitCode.toString().toUpperCase();
-    
-    // All your courses have NCHS or IMMUN prefixes, which are KRCHN
-    if (code.startsWith('NCHS') || code.startsWith('IMMUN')) {
-        return 'KRCHN';
-    }
-    
-    return 'KRCHN'; // Default to KRCHN
-}
+    // Debug: Show all filtered courses
+    console.log('📋 Filtered KRCHN courses:');
+    filteredCourses.forEach((course, index) => {
+        console.log(`${index + 1}. ${course.unit_code} - ${course.course_name} (${course.intake_year}, Block: ${course.block})`);
+    });
 
     if (filteredCourses.length === 0) {
         const availablePrograms = [...new Set(allCourses?.map(c => c.target_program).filter(Boolean))];
         tbody.innerHTML = `
-            <tr><td colspan="6" style="text-align:center; color: gray;">
+            <tr><td colspan="7" style="text-align:center; color: gray;">
                 No courses currently found for program: <b>${lecturerTargetProgram}</b>.<br>
                 <small>Available programs: ${availablePrograms.join(', ') || 'None'}</small>
             </td></tr>`;
         return;
     }
 
-    // Debug student enrollment data first
+    // Debug student enrollment data
     console.log('🎯 Checking student enrollment data:');
     if (allStudents && allStudents.length > 0) {
         const sampleStudent = allStudents[0];
@@ -2669,48 +2679,41 @@ function getProgramFromUnitCode(unitCode) {
             name: sampleStudent.full_name,
             enrolled_courses: sampleStudent.enrolled_courses,
             courses: sampleStudent.courses,
-            program: sampleStudent.program
+            program: sampleStudent.program,
+            intake_year: sampleStudent.intake_year
         });
     }
 
     const coursesHtml = filteredCourses.map(course => {
-        // Use ONLY the fields that exist in your database
-        const courseCode = course.unit_code || 'N/A'; // Use unit_code, not course_code
+        const courseCode = course.unit_code || 'N/A';
         const courseName = course.course_name || 'N/A';
-        const program = course.target_program || 'N/A'; // Only target_program exists
-        const block = course.block || 'N/A'; // Only block exists, not block_term
+        const program = course.target_program || 'N/A';
+        const block = course.block || 'N/A';
         const intakeYear = course.intake_year || 'N/A';
 
-        // Enhanced student counting with better debugging
+        // Enhanced student counting - filter by program AND intake year
         const studentCount = allStudents?.filter(student => {
-            // Check if student is in the same program first
-            if (student.program !== lecturerTargetProgram) {
-                return false;
-            }
+            // Check if student is in the same program AND intake year
+            const studentIntakeYear = student.intake_year || student.admission_year;
+            if (student.program !== lecturerTargetProgram) return false;
+            if (studentIntakeYear !== intakeYear) return false;
 
             const enrolledCourses = student.enrolled_courses || student.courses || [];
             
-            // If no enrollment data exists, count all students in the program (temporary)
+            // If no enrollment data exists, count student (they're in matching program and intake year)
             if (enrolledCourses.length === 0) {
-                console.log(`⚠️ No enrollment data for ${student.full_name}, counting by program`);
-                return true; // Temporary: count all students in program
+                return true;
             }
 
-            // Debug specific matches
-            const hasMatch = enrolledCourses.some(enrolledCourse => {
-                const matches = enrolledCourse === courseCode || 
-                               enrolledCourse.includes(courseCode) ||
-                               courseCode.includes(enrolledCourse);
-                if (matches) {
-                    console.log(`✅ Match found: ${student.full_name} enrolled in ${courseCode}`);
-                }
-                return matches;
-            });
-
-            return hasMatch;
+            // Check if student is enrolled in this specific course
+            return enrolledCourses.some(enrolledCourse => 
+                enrolledCourse === courseCode || 
+                enrolledCourse.includes(courseCode) ||
+                courseCode.includes(enrolledCourse)
+            );
         }).length || 0;
 
-        console.log(`👥 Course: ${courseName} | Code: ${courseCode} | Students: ${studentCount}`);
+        console.log(`👥 Course: ${courseName} | Intake: ${intakeYear} | Students: ${studentCount}`);
 
         return `
             <tr>
@@ -2720,12 +2723,13 @@ function getProgramFromUnitCode(unitCode) {
                     <span class="program-badge">${program}</span>
                 </td>
                 <td>${block}</td>
+                <td>${intakeYear}</td>
                 <td>
                     <span class="student-count">${studentCount} students</span>
                 </td>
                 <td>
                     <button class="btn-action view-grades" 
-                        onclick="viewCourseGrades('${courseCode}', '${courseName.replace(/'/g, "\\'")}')">
+                        onclick="viewCourseGrades('${courseCode}', '${courseName.replace(/'/g, "\\'")}', '${intakeYear}')">
                         <i class="fas fa-chart-bar"></i> Manage Grades
                     </button>
                 </td>
@@ -2735,75 +2739,261 @@ function getProgramFromUnitCode(unitCode) {
     tbody.innerHTML = coursesHtml;
     console.log('✅ Courses table rendered successfully');
 }
+
 /**
  * View grades for a specific course
  */
-function viewCourseGrades(courseCode, courseName) {
-    showFeedback(`Loading grades for ${courseName} (${courseCode})`, 'info');
+function viewCourseGrades(courseCode, courseName, intakeYear) {
+    showFeedback(`Loading grades for ${courseName} (${courseCode}) - ${intakeYear} Intake`, 'info');
     
     // You can implement actual grade viewing logic here
-    console.log(`Opening grades for course: ${courseCode} - ${courseName}`);
+    console.log(`Opening grades for course: ${courseCode} - ${courseName} - ${intakeYear} Intake`);
     
     // Example: Redirect to grades page or open modal
-    // window.location.href = `/grades?course=${courseCode}`;
+    // window.location.href = `/grades?course=${courseCode}&intake=${intakeYear}`;
     // OR
-    // openGradesModal(courseCode, courseName);
+    // openGradesModal(courseCode, courseName, intakeYear);
 }
 
-        async function loadLecturerStudents() {
-            const tbody = $('lecturer-students-table');
-            if (!tbody) return;
+/**
+ * Load lecturer students table
+ */
+async function loadLecturerStudents() {
+    const tbody = $('lecturer-students-table');
+    if (!tbody) return;
 
-            tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;">Loading students...</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;">Loading students...</td></tr>`;
 
-            try {
-                if (!currentUserProfile || !lecturerTargetProgram || allStudents.length === 0) {
-                    tbody.innerHTML = `
-                        <tr>
-                            <td colspan="8" style="text-align:center;">
-                                No **${lecturerTargetProgram || 'Assigned'}** students found in the database matching your department focus.
-                            </td>
-                        </tr>`;
-                    return;
-                }
-
-                // Students were already filtered globally in allStudents by loadStudents()
-                const programStudents = allStudents; 
-
-                const studentsHtml = programStudents.map(profile => {
-                    const status = (profile.status || 'Active').toLowerCase();
-                    return `
-                        <tr>
-                            <td>${profile.full_name || 'N/A'}</td>
-                            <td>${profile.student_id || 'N/A'}</td> <td>${profile.email || 'N/A'}</td>
-                            <td>${profile.program || 'N/A'}</td>
-                            <td>${profile.intake_year || 'N/A'}</td>
-                            <td>${profile.block || 'N/A'}</td>
-                            <td>
-                                <span class="status status-${status}">
-                                    ${profile.status || 'Active'}
-                                </span>
-                            </td>
-                            <td>
-                                <button class="btn-action" 
-                                        onclick="showSendMessageModal('${profile.user_id}', '${profile.full_name?.replace(/'/g, "\\'") || ''}')">
-                                    Message
-                                </button>
-                            </td>
-                        </tr>`;
-                }).join('');
-
-                tbody.innerHTML = studentsHtml;
-            } catch (err) {
-                console.error('Failed to load student list:', err);
-                tbody.innerHTML = `
-                    <tr>
-                        <td colspan="8" style="text-align:center;">
-                            Failed to load student list. Please check the Supabase column names (program, block) and RLS policy.
-                        </td>
-                    </tr>`;
-            }
+    try {
+        if (!currentUserProfile || !lecturerTargetProgram || allStudents.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="8" style="text-align:center;">
+                        No **${lecturerTargetProgram || 'Assigned'}** students found in the database matching your department focus.
+                    </td>
+                </tr>`;
+            return;
         }
+
+        // Students were already filtered globally in allStudents by loadStudents()
+        const programStudents = allStudents; 
+
+        const studentsHtml = programStudents.map(profile => {
+            const status = (profile.status || 'Active').toLowerCase();
+            return `
+                <tr>
+                    <td>${profile.full_name || 'N/A'}</td>
+                    <td>${profile.student_id || 'N/A'}</td>
+                    <td>${profile.email || 'N/A'}</td>
+                    <td>${profile.program || 'N/A'}</td>
+                    <td>${profile.intake_year || 'N/A'}</td>
+                    <td>${profile.block || 'N/A'}</td>
+                    <td>
+                        <span class="status status-${status}">
+                            ${profile.status || 'Active'}
+                        </span>
+                    </td>
+                    <td>
+                        <button class="btn-action" 
+                                onclick="showSendMessageModal('${profile.user_id}', '${profile.full_name?.replace(/'/g, "\\'") || ''}')">
+                            Message
+                        </button>
+                    </td>
+                </tr>`;
+        }).join('');
+
+        tbody.innerHTML = studentsHtml;
+    } catch (err) {
+        console.error('Failed to load student list:', err);
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="8" style="text-align:center;">
+                    Failed to load student list. Please check the Supabase column names (program, block) and RLS policy.
+                </td>
+            </tr>`;
+    }
+}
+
+/**
+ * Load lecturer dashboard summary data.
+ */
+async function loadLecturerDashboardData() {
+    console.log('📊 Loading lecturer dashboard data...');
+    
+    try {
+        // Ensure we have the necessary data
+        if (!allCourses || allCourses.length === 0) {
+            await fetchGlobalDataCaches();
+        }
+        
+        if (!allStudents || allStudents.length === 0) {
+            await loadStudents();
+        }
+
+        // 1. General Info - Use correct field names
+        const programCourses = (allCourses || []).filter(c => {
+            const courseProgram = c.target_program;
+            return courseProgram === lecturerTargetProgram && (c.status || 'Active') === 'Active';
+        });
+        
+        // Count students in the current program
+        const programStudents = allStudents || [];
+
+        // Update dashboard counters
+        if ($('total_courses_count')) {
+            $('total_courses_count').textContent = programCourses.length || '0';
+        }
+        
+        if ($('total_students_count')) {
+            $('total_students_count').textContent = programStudents.length || '0';
+        }
+
+        console.log(`📊 Dashboard Stats: ${programCourses.length} courses, ${programStudents.length} students`);
+
+        // Update filter info in banner
+        const filterInfoEl = document.querySelector('#welcome-banner span:last-child');
+        if (filterInfoEl && lecturerTargetProgram) {
+            filterInfoEl.textContent = `This dashboard is filtered to your assigned program: ${lecturerTargetProgram}. All student/grade data shown is relevant to your assignment.`;
+        }
+
+        // 2. Actionable Alerts (You can replace with real data later)
+        if ($('students_at_risk_count')) {
+            $('students_at_risk_count').textContent = Math.floor((programStudents.length || 0) * 0.1) || '0';
+        }
+        
+        if ($('pending_attendance_count')) {
+            $('pending_attendance_count').textContent = '3';
+        }
+        
+        if ($('exams_due_count')) {
+            $('exams_due_count').textContent = '2';
+        }
+        
+        if ($('unread_messages_count')) {
+            $('unread_messages_count').textContent = '5';
+        }
+
+        console.log('✅ Dashboard data loaded successfully');
+
+    } catch (error) {
+        console.error('❌ Error loading dashboard data:', error);
+        showFeedback('Failed to load dashboard data. Some features may not work properly.', 'warning');
+    }
+}
+
+/**
+ * Initialize academic filters for courses
+ */
+function initializeAcademicFilters() {
+    console.log('🎯 Initializing academic filters...');
+    
+    // Populate intake year filter
+    const intakeYears = [...new Set(allCourses?.map(c => c.intake_year).filter(Boolean))].sort().reverse();
+    const intakeFilter = $('intake-year-filter');
+    
+    if (intakeFilter && intakeYears.length > 0) {
+        intakeFilter.innerHTML = '<option value="">All Intake Years</option>' +
+            intakeYears.map(year => `<option value="${year}">${year} Intake</option>`).join('');
+        
+        // Set default to most recent year
+        intakeFilter.value = intakeYears[0];
+        console.log(`✅ Populated intake year filter with: ${intakeYears.join(', ')}`);
+    }
+    
+    // Populate block/term filter based on program
+    const periodFilter = $('academic-period-filter');
+    const periodLabel = $('academic-period-label');
+    
+    if (periodFilter && periodLabel) {
+        if (lecturerTargetProgram === 'KRCHN') {
+            periodLabel.textContent = 'Filter by Block:';
+            const blocks = ['A', 'B', 'C', 'D'];
+            periodFilter.innerHTML = '<option value="">All Blocks</option>' +
+                blocks.map(block => `<option value="${block}">Block ${block}</option>`).join('');
+        } else if (lecturerTargetProgram === 'TVET') {
+            periodLabel.textContent = 'Filter by Term:';
+            const terms = ['Term 1', 'Term 2', 'Term 3'];
+            periodFilter.innerHTML = '<option value="">All Terms</option>' +
+                terms.map(term => `<option value="${term}">${term}</option>`).join('');
+        }
+        console.log(`✅ Populated ${lecturerTargetProgram} period filter`);
+    }
+}
+
+/**
+ * Filter courses by academic period
+ */
+function filterCoursesByAcademicPeriod() {
+    const selectedIntakeYear = $('intake-year-filter')?.value;
+    const selectedPeriod = $('academic-period-filter')?.value;
+    
+    const filteredCourses = (allCourses || []).filter(course => {
+        const courseProgram = course.target_program;
+        const courseIntakeYear = course.intake_year;
+        const courseBlock = course.block;
+        const courseStatus = course.status || 'Active';
+        
+        const matchesProgram = courseProgram === lecturerTargetProgram;
+        const matchesIntakeYear = !selectedIntakeYear || courseIntakeYear === selectedIntakeYear;
+        const matchesPeriod = !selectedPeriod || courseBlock === selectedPeriod;
+        const isActive = courseStatus === 'Active';
+        
+        return matchesProgram && matchesIntakeYear && matchesPeriod && isActive;
+    });
+    
+    updateCoursesTable(filteredCourses, selectedIntakeYear, selectedPeriod);
+}
+
+/**
+ * Update courses table with filtered data
+ */
+function updateCoursesTable(courses, intakeYear = 'All', academicPeriod = 'All') {
+    const tbody = $('lecturer-courses-table');
+    if (!tbody) return;
+    
+    const periodLabel = lecturerTargetProgram === 'TVET' ? 'Term' : 'Block';
+    
+    if (courses.length === 0) {
+        tbody.innerHTML = `
+            <tr><td colspan="7" style="text-align:center; color: gray;">
+                No courses found for ${intakeYear || 'all intake years'} and ${academicPeriod || 'all'} ${periodLabel.toLowerCase()}s.
+            </td></tr>`;
+        return;
+    }
+    
+    const coursesHtml = courses.map(course => {
+        const courseCode = course.unit_code || 'N/A';
+        const courseName = course.course_name || 'N/A';
+        const program = course.target_program || 'N/A';
+        const block = course.block || 'N/A';
+        const intakeYear = course.intake_year || 'N/A';
+
+        const studentCount = allStudents?.filter(student => 
+            student.program === lecturerTargetProgram && 
+            (student.intake_year === intakeYear || !intakeYear)
+        ).length || 0;
+
+        return `
+            <tr>
+                <td><strong>${courseCode}</strong></td>
+                <td>${courseName}</td>
+                <td><span class="program-badge">${program}</span></td>
+                <td>${block}</td>
+                <td>${intakeYear}</td>
+                <td><span class="student-count">${studentCount} students</span></td>
+                <td>
+                    <button class="btn-action view-grades" 
+                        onclick="viewCourseGrades('${courseCode}', '${courseName.replace(/'/g, "\\'")}', '${intakeYear}')">
+                        <i class="fas fa-chart-bar"></i> Manage Grades
+                    </button>
+                </td>
+            </tr>`;
+    }).join('');
+    
+    tbody.innerHTML = coursesHtml;
+    
+    console.log(`✅ Showing ${courses.length} courses for ${intakeYear || 'all intake years'} and ${academicPeriod || 'all'} ${periodLabel.toLowerCase()}s`);
+}
 
         // =================================================================
         // === 6. SESSIONS IMPLEMENTATION ===
