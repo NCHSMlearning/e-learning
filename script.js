@@ -1962,6 +1962,75 @@ function getSafeElement(id) {
   return element;
 }
 
+// Utility function to escape HTML
+function escapeHtml(unsafe) {
+    if (unsafe === null || unsafe === undefined) return '';
+    return unsafe
+        .toString()
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+// Show Grade Modal - Missing Function
+function showGradeModal(modalHtml) {
+    // Remove any existing modal first
+    const existingModal = document.getElementById('gradeModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+
+    // Create modal container
+    const modal = document.createElement('div');
+    modal.id = 'gradeModal';
+    modal.className = 'modal-overlay active';
+    modal.innerHTML = modalHtml;
+
+    // Add to DOM
+    document.body.appendChild(modal);
+
+    // Add event listeners
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) {
+            closeModal();
+        }
+    });
+
+    // Focus on search input
+    const searchInput = document.getElementById('gradeSearch');
+    if (searchInput) {
+        setTimeout(() => searchInput.focus(), 100);
+    }
+}
+
+// Close Modal function
+function closeModal() {
+    const modal = document.getElementById('gradeModal');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+// Filter Grade Students function
+function filterGradeStudents() {
+    const searchTerm = document.getElementById('gradeSearch').value.toLowerCase();
+    const rows = document.querySelectorAll('#gradeTableBody tr');
+    
+    rows.forEach(row => {
+        const name = row.getAttribute('data-name') || '';
+        const email = row.getAttribute('data-email') || '';
+        const id = row.getAttribute('data-id') || '';
+        
+        const matches = name.includes(searchTerm) || 
+                       email.includes(searchTerm) || 
+                       id.includes(searchTerm);
+        
+        row.style.display = matches ? '' : 'none';
+    });
+}
+
 // Open Grade Modal - Complete Implementation
 async function openGradeModal(examId, examName = '') {
     try {
@@ -2170,7 +2239,6 @@ async function saveGrades(examId) {
         showFeedback(`Failed to save grades: ${error.message}`, 'error');
     }
 }
-
 /*******************************************************
  * 12. MESSAGES & ANNOUNCEMENTS
  *******************************************************/
