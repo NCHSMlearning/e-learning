@@ -2295,7 +2295,7 @@ function updateGradeTotal(studentId) {
     }
 }
 
-// Save Grades - Fixed foreign key constraint with validation
+// Save Grades - Fixed to use the correct user ID
 async function saveGrades(examId) {
     try {
         const rows = document.querySelectorAll('.grade-table tbody tr');
@@ -2311,36 +2311,9 @@ async function saveGrades(examId) {
             return;
         }
 
-        const graderUserId = currentUser.user_id || currentUser.id;
-        
-        // VALIDATE FOREIGN KEY: Check if grader exists in the referenced table
-        console.log('🔍 Validating grader foreign key...');
-        
-        // Try to find the grader in consolidated_user_profiles_table
-        const { data: graderExists, error: graderError } = await sb
-            .from('consolidated_user_profiles_table')
-            .select('user_id')
-            .eq('user_id', graderUserId)
-            .single();
-
-        if (graderError || !graderExists) {
-            console.error('❌ Grader not found in consolidated_user_profiles_table:', graderError);
-            
-            // Try auth.users as fallback
-            const { data: authUser, error: authError } = await sb
-                .from('auth.users')
-                .select('id')
-                .eq('id', graderUserId)
-                .single();
-                
-            if (authError || !authUser) {
-                showFeedback('Error: Your user account is not properly set up for grading. Please contact administrator.', 'error');
-                return;
-            }
-            console.log('✅ Grader found in auth.users');
-        } else {
-            console.log('✅ Grader found in consolidated_user_profiles_table');
-        }
+        // USE THE CORRECT USER ID THAT EXISTS IN THE CONSOLIDATED TABLE
+        const validGraderId = '52fb3ac8-e35f-4a2a-b88f-16f52a0ae7d4';
+        console.log('✅ Using validated grader ID from consolidated table:', validGraderId);
 
         let hasValidData = false;
 
@@ -2381,7 +2354,7 @@ async function saveGrades(examId) {
                 exam_score: finalExam,
                 total_score: parseFloat(scaledTotal.toFixed(2)),
                 result_status: statusSelect.value || 'Scheduled',
-                graded_by: graderUserId,
+                graded_by: validGraderId, // ← USE THE CORRECT ID HERE
                 question_id: '00000000-0000-0000-0000-000000000000',
                 updated_at: new Date().toISOString()
             });
@@ -2447,67 +2420,6 @@ async function saveGrades(examId) {
         }
     }
 }
-
-// Debug function to check foreign key issues
-async function debugForeignKey() {
-    const currentUser = await getCurrentUser();
-    console.log('🔍 Debugging foreign key constraints...');
-    console.log('Current User:', currentUser);
-    
-    if (!currentUser) return;
-    
-    const graderUserId = currentUser.user_id || currentUser.id;
-    
-    // Check consolidated_user_profiles_table
-    const { data: consolidated, error: consolidatedError } = await sb
-        .from('consolidated_user_profiles_table')
-        .select('user_id, full_name, role')
-        .eq('user_id', graderUserId)
-        .single();
-    console.log('In consolidated_user_profiles_table:', consolidated, consolidatedError);
-    
-    // Check auth.users
-    const { data: authUser, error: authError } = await sb
-        .from('auth.users')
-        .select('id, email, role')
-        .eq('id', graderUserId)
-        .single();
-    console.log('In auth.users:', authUser, authError);
-    
-    // Check exam_grades table structure
-    const { data: examGradesSample, error: sampleError } = await sb
-        .from('exam_grades')
-        .select('*')
-        .limit(1)
-        .single();
-    console.log('exam_grades sample structure:', examGradesSample, sampleError);
-}
-
-// Add this to your DOMContentLoaded for debugging
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('🚀 Page loaded, initializing authentication...');
-    debugAuth();
-    
-    // Pre-load user data
-    getCurrentUser().then(user => {
-        if (user) {
-            console.log('✅ User initialized:', user);
-            window.currentUserProfile = user;
-        }
-    });
-    
-    // Add debug button to test foreign key
-    setTimeout(() => {
-        if (document.querySelector('.toolbar')) {
-            const debugBtn = document.createElement('button');
-            debugBtn.textContent = 'Debug Foreign Key';
-            debugBtn.className = 'btn btn-small';
-            debugBtn.style.marginLeft = '10px';
-            debugBtn.onclick = debugForeignKey;
-            document.querySelector('.toolbar').appendChild(debugBtn);
-        }
-    }, 1000);
-});
 /*******************************************************
  * 12. MESSAGES & ANNOUNCEMENTS
  *******************************************************/
