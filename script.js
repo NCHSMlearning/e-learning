@@ -2037,9 +2037,21 @@ async function getCurrentUser() {
         console.log('🔄 Getting current user...');
         
         // Method 1: Check global variable (most common)
-        if (typeof currentUserProfile !== 'undefined' && currentUserProfile && currentUserProfile.user_id) {
+        if (typeof currentUserProfile !== 'undefined' && currentUserProfile) {
             console.log('✅ Using global currentUserProfile:', currentUserProfile);
-            return currentUserProfile;
+            
+            // FIX: Check for both 'id' and 'user_id' properties
+            if (currentUserProfile.user_id) {
+                return currentUserProfile;
+            } else if (currentUserProfile.id) {
+                // Create a copy with user_id set to id
+                const fixedUser = {
+                    ...currentUserProfile,
+                    user_id: currentUserProfile.id
+                };
+                console.log('🔄 Fixed user object:', fixedUser);
+                return fixedUser;
+            }
         }
         
         // Method 2: Check window object
@@ -2053,8 +2065,12 @@ async function getCurrentUser() {
         if (storedUser) {
             try {
                 const user = JSON.parse(storedUser);
-                if (user && user.user_id) {
+                if (user && (user.user_id || user.id)) {
                     console.log('✅ Using session storage user:', user);
+                    // Ensure user_id exists
+                    if (!user.user_id && user.id) {
+                        user.user_id = user.id;
+                    }
                     return user;
                 }
             } catch (e) {
@@ -2087,6 +2103,7 @@ async function getCurrentUser() {
             // If no consolidated profile, return basic auth info
             const basicUser = {
                 user_id: authUser.id,
+                id: authUser.id, // Include both for compatibility
                 email: authUser.email,
                 full_name: authUser.user_metadata?.full_name || authUser.email
             };
@@ -2096,30 +2113,7 @@ async function getCurrentUser() {
             return basicUser;
         }
         
-        // Method 5: Check localStorage as last resort
-        const localUser = localStorage.getItem('currentUserProfile') || localStorage.getItem('currentUser');
-        if (localUser) {
-            try {
-                const user = JSON.parse(localUser);
-                if (user && user.user_id) {
-                    console.log('✅ Using localStorage user:', user);
-                    return user;
-                }
-            } catch (e) {
-                console.warn('❌ Failed to parse localStorage user:', e);
-            }
-        }
-        
         console.error('❌ No authentication method succeeded');
-        console.log('🔍 Debug info:', {
-            hasGlobal: typeof currentUserProfile !== 'undefined',
-            globalValue: typeof currentUserProfile !== 'undefined' ? currentUserProfile : 'undefined',
-            hasWindow: !!window.currentUserProfile,
-            windowValue: window.currentUserProfile,
-            sessionStorage: sessionStorage.getItem('currentUserProfile'),
-            localStorage: localStorage.getItem('currentUserProfile')
-        });
-        
         return null;
         
     } catch (error) {
