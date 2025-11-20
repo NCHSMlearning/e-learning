@@ -2124,22 +2124,23 @@ function showSection(sectionId) {
             return null;
         }
 
-        async function fetchGlobalDataCaches() {
-            // 1. Fetch all courses (needed for filtering in loadLecturerCourses)
-            const { data: courses, error } = await fetchData(
-                COURSES_TABLE,
-                'id, course_name, target_program, block, intake_year, status, unit_code',
-                {}, // no filters — load all
-                'course_name',
-                true
-            );
+     async function fetchGlobalDataCaches() {
+    // 1. Fetch all courses (needed for filtering in loadLecturerCourses)
+    const { data: courses, error } = await fetchData(
+        COURSES_TABLE,
+        'id, course_name, target_program, block, intake_year, status, unit_code, description',
+        {}, // no filters — load all
+        'course_name',
+        true
+    );
 
-            if (error) {
-                console.error('Error fetching courses:', error);
-            }
+    if (error) {
+        console.error('Error fetching courses:', error);
+    }
 
-            allCourses = courses || [];
-        }
+    allCourses = courses || [];
+    console.log(`✅ Loaded ${allCourses.length} courses with correct fields`);
+}
 
         // *************************************************************************
         // 2. Fetch and Display Students Filtered by Lecturer's Program (FIXED)
@@ -2565,7 +2566,7 @@ function showSection(sectionId) {
         // === 5. STUDENT, COURSE & DASHBOARD LOADERS (SIMPLIFIED) ===
         // =================================================================
 
-    /**
+  /**
  * Load the lecturer's courses table, filtered by program.
  */
 async function loadLecturerCourses() {
@@ -2575,7 +2576,6 @@ async function loadLecturerCourses() {
     console.log('🔍 Debug: Loading lecturer courses...');
     console.log('Lecturer Target Program:', lecturerTargetProgram);
     console.log('All Courses Count:', allCourses?.length);
-    console.log('Sample Course:', allCourses?.[0]);
 
     if (!currentUserProfile || !lecturerTargetProgram) {
         tbody.innerHTML = `
@@ -2588,18 +2588,21 @@ async function loadLecturerCourses() {
         const sampleCourse = allCourses[0];
         console.log('📋 Available course fields:', Object.keys(sampleCourse));
         console.log('🔍 Checking field values:');
-        console.log('- course_code:', sampleCourse.course_code);
-        console.log('- course_name:', sampleCourse.course_name);
-        console.log('- target_program:', sampleCourse.target_program);
-        console.log('- program_type:', sampleCourse.program_type);
-        console.log('- status:', sampleCourse.status);
-        console.log('- block:', sampleCourse.block);
-        console.log('- block_term:', sampleCourse.block_term);
+        console.log('- unit_code:', sampleCourse.unit_code); // This exists
+        console.log('- course_name:', sampleCourse.course_name); // This exists
+        console.log('- target_program:', sampleCourse.target_program); // This exists
+        console.log('- status:', sampleCourse.status); // This exists
+        console.log('- block:', sampleCourse.block); // This exists
+        console.log('- intake_year:', sampleCourse.intake_year); // This exists
+        // These don't exist in your data:
+        console.log('- course_code:', sampleCourse.course_code); // Will be undefined
+        console.log('- program_type:', sampleCourse.program_type); // Will be undefined
+        console.log('- block_term:', sampleCourse.block_term); // Will be undefined
     }
 
     const filteredCourses = (allCourses || []).filter(course => {
-        // Use the correct field names that exist in your database
-        const courseProgram = course.target_program || course.program_type;
+        // Use ONLY the fields that exist in your database
+        const courseProgram = course.target_program; // Only target_program exists
         const courseStatus = course.status || 'Active';
         
         const matchesProgram = courseProgram === lecturerTargetProgram;
@@ -2613,7 +2616,7 @@ async function loadLecturerCourses() {
     console.log(`✅ Found ${filteredCourses.length} filtered courses`);
 
     if (filteredCourses.length === 0) {
-        const availablePrograms = [...new Set(allCourses?.map(c => c.target_program || c.program_type).filter(Boolean))];
+        const availablePrograms = [...new Set(allCourses?.map(c => c.target_program).filter(Boolean))];
         tbody.innerHTML = `
             <tr><td colspan="6" style="text-align:center; color: gray;">
                 No courses currently found for program: <b>${lecturerTargetProgram}</b>.<br>
@@ -2622,21 +2625,56 @@ async function loadLecturerCourses() {
         return;
     }
 
-    const coursesHtml = filteredCourses.map(course => {
-        // Use the correct field names
-        const courseCode = course.course_code || course.unit_code || 'N/A';
-        const courseName = course.course_name || 'N/A';
-        const program = course.target_program || course.program_type || 'N/A';
-        const block = course.block || course.block_term || 'N/A';
+    // Debug student enrollment data first
+    console.log('🎯 Checking student enrollment data:');
+    if (allStudents && allStudents.length > 0) {
+        const sampleStudent = allStudents[0];
+        console.log('Sample student enrollment data:', {
+            name: sampleStudent.full_name,
+            enrolled_courses: sampleStudent.enrolled_courses,
+            courses: sampleStudent.courses,
+            program: sampleStudent.program
+        });
+    }
 
-        // Count students enrolled in this course - fix student counting logic
+    const coursesHtml = filteredCourses.map(course => {
+        // Use ONLY the fields that exist in your database
+        const courseCode = course.unit_code || 'N/A'; // Use unit_code, not course_code
+        const courseName = course.course_name || 'N/A';
+        const program = course.target_program || 'N/A'; // Only target_program exists
+        const block = course.block || 'N/A'; // Only block exists, not block_term
+        const intakeYear = course.intake_year || 'N/A';
+
+        // Enhanced student counting with better debugging
         const studentCount = allStudents?.filter(student => {
-            // Check if student is enrolled in this course
+            // Check if student is in the same program first
+            if (student.program !== lecturerTargetProgram) {
+                return false;
+            }
+
             const enrolledCourses = student.enrolled_courses || student.courses || [];
-            return enrolledCourses.includes(courseCode) || enrolledCourses.includes(courseName);
+            
+            // If no enrollment data exists, count all students in the program (temporary)
+            if (enrolledCourses.length === 0) {
+                console.log(`⚠️ No enrollment data for ${student.full_name}, counting by program`);
+                return true; // Temporary: count all students in program
+            }
+
+            // Debug specific matches
+            const hasMatch = enrolledCourses.some(enrolledCourse => {
+                const matches = enrolledCourse === courseCode || 
+                               enrolledCourse.includes(courseCode) ||
+                               courseCode.includes(enrolledCourse);
+                if (matches) {
+                    console.log(`✅ Match found: ${student.full_name} enrolled in ${courseCode}`);
+                }
+                return matches;
+            });
+
+            return hasMatch;
         }).length || 0;
 
-        console.log(`👥 Course: ${courseName} | Students: ${studentCount}`);
+        console.log(`👥 Course: ${courseName} | Code: ${courseCode} | Students: ${studentCount}`);
 
         return `
             <tr>
@@ -2652,7 +2690,7 @@ async function loadLecturerCourses() {
                 <td>
                     <button class="btn-action view-grades" 
                         onclick="viewCourseGrades('${courseCode}', '${courseName.replace(/'/g, "\\'")}')">
-                        <i class="fas fa-chart-bar"></i> View Grades
+                        <i class="fas fa-chart-bar"></i> Manage Grades
                     </button>
                 </td>
             </tr>`;
@@ -2661,7 +2699,6 @@ async function loadLecturerCourses() {
     tbody.innerHTML = coursesHtml;
     console.log('✅ Courses table rendered successfully');
 }
-
 /**
  * View grades for a specific course
  */
