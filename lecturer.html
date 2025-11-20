@@ -2357,77 +2357,117 @@ form button:hover {
         // === 5. STUDENT, COURSE & DASHBOARD LOADERS (SIMPLIFIED) ===
         // =================================================================
 
-        /**
-         * Load lecturer dashboard summary data.
-         */
-        async function loadLecturerDashboardData() {
-            // 1. General Info
-            const programCourses = allCourses.filter(c => c.target_program === lecturerTargetProgram && c.status === 'Active');
-            $('total_courses_count').textContent = programCourses.length || '0';
-            $('total_students_count').textContent = allStudents.length || '0'; // allStudents is already filtered
+    /**
+ * Load the lecturer's courses table, filtered by program.
+ */
+async function loadLecturerCourses() {
+    const tbody = $('lecturer-courses-table');
+    if (!tbody) return;
 
-            // Update filter info in banner
-            const filterInfoEl = document.querySelector('#welcome-banner span:last-child');
-            if (filterInfoEl && lecturerTargetProgram) {
-                filterInfoEl.textContent = `This dashboard is filtered to your assigned program: ${lecturerTargetProgram}. All student/grade data shown is relevant to your assignment.`;
-            }
+    console.log('🔍 Debug: Loading lecturer courses...');
+    console.log('Lecturer Target Program:', lecturerTargetProgram);
+    console.log('All Courses Count:', allCourses?.length);
+    console.log('Sample Course:', allCourses?.[0]);
 
-            // 2. Actionable Alerts (SIMPLIFIED - using mock data to avoid API errors)
-            $('students_at_risk_count').textContent = Math.floor(allStudents.length * 0.1) || '0';
-            $('pending_attendance_count').textContent = '3';
-            $('exams_due_count').textContent = '2';
-            $('unread_messages_count').textContent = '5';
-        }
+    if (!currentUserProfile || !lecturerTargetProgram) {
+        tbody.innerHTML = `
+            <tr><td colspan="6" style="text-align:center;">No courses loaded. Your department is not assigned a program.</td></tr>`;
+        return;
+    }
 
-        /**
-         * Load the lecturer's courses table, filtered by program.
-         */
-        async function loadLecturerCourses() {
-            const tbody = $('lecturer-courses-table');
-            if (!tbody) return;
+    // Debug: Check what fields actually exist in courses
+    if (allCourses && allCourses.length > 0) {
+        const sampleCourse = allCourses[0];
+        console.log('📋 Available course fields:', Object.keys(sampleCourse));
+        console.log('🔍 Checking field values:');
+        console.log('- course_code:', sampleCourse.course_code);
+        console.log('- course_name:', sampleCourse.course_name);
+        console.log('- target_program:', sampleCourse.target_program);
+        console.log('- program_type:', sampleCourse.program_type);
+        console.log('- status:', sampleCourse.status);
+        console.log('- block:', sampleCourse.block);
+        console.log('- block_term:', sampleCourse.block_term);
+    }
 
-            if (!currentUserProfile || !lecturerTargetProgram) {
-                tbody.innerHTML = `
-                    <tr><td colspan="6" style="text-align:center;">No courses loaded. Your department is not assigned a program.</td></tr>`;
-                return;
-            }
+    const filteredCourses = (allCourses || []).filter(course => {
+        // Use the correct field names that exist in your database
+        const courseProgram = course.target_program || course.program_type;
+        const courseStatus = course.status || 'Active';
+        
+        const matchesProgram = courseProgram === lecturerTargetProgram;
+        const isActive = courseStatus === 'Active';
+        
+        console.log(`📝 Course: "${course.course_name}" | Program: "${courseProgram}" | Status: "${courseStatus}" | Match: ${matchesProgram}`);
+        
+        return matchesProgram && isActive;
+    });
 
-            const filteredCourses = (allCourses || []).filter(course =>
-                course.target_program === lecturerTargetProgram && course.status === 'Active'
-            );
+    console.log(`✅ Found ${filteredCourses.length} filtered courses`);
 
-            if (filteredCourses.length === 0) {
-                tbody.innerHTML = `
-                    <tr><td colspan="6" style="text-align:center; color: gray;">
-                        No courses currently found for program: <b>${lecturerTargetProgram}</b>.
-                    </td></tr>`;
-                return;
-            }
+    if (filteredCourses.length === 0) {
+        const availablePrograms = [...new Set(allCourses?.map(c => c.target_program || c.program_type).filter(Boolean))];
+        tbody.innerHTML = `
+            <tr><td colspan="6" style="text-align:center; color: gray;">
+                No courses currently found for program: <b>${lecturerTargetProgram}</b>.<br>
+                <small>Available programs: ${availablePrograms.join(', ') || 'None'}</small>
+            </td></tr>`;
+        return;
+    }
 
-            const coursesHtml = filteredCourses.map(course => {
-                // Count students enrolled in this course
-                const studentCount = allStudents?.filter(student =>
-                    student.enrolled_courses?.includes(course.unit_code)
-                ).length || 0;
+    const coursesHtml = filteredCourses.map(course => {
+        // Use the correct field names
+        const courseCode = course.course_code || course.unit_code || 'N/A';
+        const courseName = course.course_name || 'N/A';
+        const program = course.target_program || course.program_type || 'N/A';
+        const block = course.block || course.block_term || 'N/A';
 
-                return `
-                    <tr>
-                        <td>${course.unit_code || 'N/A'}</td>
-                        <td>${course.course_name || 'N/A'}</td>
-                        <td>${course.target_program || 'N/A'}</td>
-                        <td>${course.block || 'N/A'}</td>
-                        <td>${studentCount}</td>
-                        <td>
-                            <button class="btn-action" 
-                                onclick="showFeedback('Viewing grades for ${course.course_name.replace(/'/g, "\\'")}', 'info')">
-                                View Grades
-                            </button>
-                        </td>
-                    </tr>`;
-            }).join('');
+        // Count students enrolled in this course - fix student counting logic
+        const studentCount = allStudents?.filter(student => {
+            // Check if student is enrolled in this course
+            const enrolledCourses = student.enrolled_courses || student.courses || [];
+            return enrolledCourses.includes(courseCode) || enrolledCourses.includes(courseName);
+        }).length || 0;
 
-            tbody.innerHTML = coursesHtml;
-        }
+        console.log(`👥 Course: ${courseName} | Students: ${studentCount}`);
+
+        return `
+            <tr>
+                <td><strong>${courseCode}</strong></td>
+                <td>${courseName}</td>
+                <td>
+                    <span class="program-badge">${program}</span>
+                </td>
+                <td>${block}</td>
+                <td>
+                    <span class="student-count">${studentCount} students</span>
+                </td>
+                <td>
+                    <button class="btn-action view-grades" 
+                        onclick="viewCourseGrades('${courseCode}', '${courseName.replace(/'/g, "\\'")}')">
+                        <i class="fas fa-chart-bar"></i> View Grades
+                    </button>
+                </td>
+            </tr>`;
+    }).join('');
+
+    tbody.innerHTML = coursesHtml;
+    console.log('✅ Courses table rendered successfully');
+}
+
+/**
+ * View grades for a specific course
+ */
+function viewCourseGrades(courseCode, courseName) {
+    showFeedback(`Loading grades for ${courseName} (${courseCode})`, 'info');
+    
+    // You can implement actual grade viewing logic here
+    console.log(`Opening grades for course: ${courseCode} - ${courseName}`);
+    
+    // Example: Redirect to grades page or open modal
+    // window.location.href = `/grades?course=${courseCode}`;
+    // OR
+    // openGradesModal(courseCode, courseName);
+}
 
         async function loadLecturerStudents() {
             const tbody = $('lecturer-students-table');
