@@ -2272,75 +2272,136 @@ if (window.location.pathname.endsWith('.html')) {
             // *** COURSES, EXAMS, AND RESOURCES ***
             // *************************************************************************
             
-            // Load courses
-            async function loadCourses() {
-                const tableBody = document.getElementById('courses-table');
-                if (!tableBody) return;
-                AppUtils.showLoading(tableBody, 'Loading courses...');
-            
-                if (!currentUserProfile) await loadProfile(currentUserId); 
-                const program = currentUserProfile?.program || currentUserProfile?.department; 
-                const block = currentUserProfile?.block;
-                const intakeYear = currentUserProfile?.intake_year;
-            
-                if (!program || !intakeYear) {
-                    tableBody.innerHTML = `<tr><td colspan="4">Missing program or intake year info. Cannot load courses.</td></tr>`;
-                    cachedCourses = [];
-                    return;
-                }
-            
-                try {
-                    const blockFilter = `block.eq.${block},block.is.null,block.eq.General`;
-            
-                    const { data: courses, error } = await sb
-                        .from('courses')
-                        .select('*')
-                        .or(`target_program.eq.${program},target_program.eq.General`)
-                        .eq('intake_year', intakeYear)
-                        .or(blockFilter)
-                        .order('course_name', { ascending: true });
-            
-                    if (error) throw error;
-            
-                    cachedCourses = courses || [];
-                    
-                    tableBody.innerHTML = '';
-                    if (cachedCourses.length > 0) {
-                        cachedCourses.forEach(c => {
-                            tableBody.innerHTML += `
-                                <tr>
-                                    <td>${c.course_name || 'N/A'}</td>
-                                    <td>${c.unit_code || 'N/A'}</td>
-                                    <td>${c.description || 'N/A'}</td>
-                                    <td>${c.status || 'N/A'}</td>
-                                </tr>
-                            `;
-                        });
-                    } else {
-                        tableBody.innerHTML = `<tr><td colspan="4">No courses found.</td></tr>`;
-                    }
-            
-                } catch (error) {
-                    console.error("❌ Failed to load courses:", error);
-                    AppUtils.showError(tableBody, `Error loading courses: ${error.message}`);
-                    cachedCourses = [];
-                }
-            
-                if (typeof loadDashboardMetrics === "function") {
-                    loadDashboardMetrics(currentUserId);
-                }
-            }
-            
-            // Utility to safely escape HTML
-            function escapeHtml(str) {
-                if (!str) return '';
-                return String(str)
-                    .replace(/&/g, "&amp;")
-                    .replace(/</g, "&lt;")
-                    .replace(/>/g, "&gt;")
-                    .replace(/"/g, "&quot;")
-                    .replace(/'/g, "&#039;");
-            }
+           // Load courses - FIXED VERSION
+async function loadCourses() {
+    const tableBody = document.getElementById('courses-table');
+    if (!tableBody) return;
+    AppUtils.showLoading(tableBody, 'Loading courses...');
+
+    if (!currentUserProfile) await loadProfile(currentUserId); 
+    
+    const program = currentUserProfile?.program;
+    const department = currentUserProfile?.department;
+    const block = currentUserProfile?.block;
+    const intakeYear = currentUserProfile?.intake_year;
+
+    // Debug info
+    console.log('User Profile:', {
+        program: program,
+        department: department,
+        block: block,
+        intakeYear: intakeYear
+    });
+
+    if ((!program && !department) || !intakeYear) {
+        tableBody.innerHTML = `<tr><td colspan="4">
+            Missing program/department or intake year info. 
+            Program: ${program || 'undefined'}, 
+            Department: ${department || 'undefined'},
+            Intake Year: ${intakeYear || 'undefined'}
+            Cannot load courses.
+        </td></tr>`;
+        cachedCourses = [];
+        return;
+    }
+
+    try {
+        const blockFilter = `block.eq.${block},block.is.null,block.eq.General`;
+
+        // Determine the correct target_program filter (REMOVED General since it doesn't exist)
+        let programFilter;
+        
+        // TVET students - check all possible combinations
+        if (program === 'TVET' || department === 'TVET') {
+            programFilter = `target_program.eq.TVET`; // Removed ,target_program.eq.General
+            console.log('Filtering for TVET courses only');
+        } 
+        // KRCHN students have program = 'KRCHN'
+        else if (program === 'KRCHN') {
+            programFilter = `target_program.eq.KRCHN`; // Removed ,target_program.eq.General
+            console.log('Filtering for KRCHN courses only');
+        }
+        // Nursing department students
+        else if (department === 'Nursing') {
+            programFilter = `target_program.eq.Nursing`; // Removed ,target_program.eq.General
+            console.log('Filtering for Nursing courses only');
+        }
+        // Clinical Medicine department
+        else if (department === 'Clinical Medicine') {
+            programFilter = `target_program.eq.Clinical Medicine`; // Removed ,target_program.eq.General
+            console.log('Filtering for Clinical Medicine courses only');
+        }
+        // Management department
+        else if (department === 'Management') {
+            programFilter = `target_program.eq.Management`; // Removed ,target_program.eq.General
+            console.log('Filtering for Management courses only');
+        }
+        else {
+            // Fallback: use program field if available
+            programFilter = `target_program.eq.${program}`; // Removed ,target_program.eq.General
+            console.log('Filtering for program:', program);
+        }
+
+        console.log('Final program filter:', programFilter);
+
+        const { data: courses, error } = await sb
+            .from('courses')
+            .select('*')
+            .or(programFilter)
+            .eq('intake_year', intakeYear)
+            .or(blockFilter)
+            .order('course_name', { ascending: true });
+
+        if (error) throw error;
+
+        cachedCourses = courses || [];
+        
+        console.log('Found courses:', cachedCourses.length);
+        console.log('Courses for', program || department, ':', cachedCourses);
+        
+        tableBody.innerHTML = '';
+        if (cachedCourses.length > 0) {
+            cachedCourses.forEach(c => {
+                tableBody.innerHTML += `
+                    <tr>
+                        <td>${escapeHtml(c.course_name) || 'N/A'}</td>
+                        <td>${escapeHtml(c.unit_code) || 'N/A'}</td>
+                        <td>${escapeHtml(c.description) || 'N/A'}</td>
+                        <td>${escapeHtml(c.status) || 'N/A'}</td>
+                    </tr>
+                `;
+            });
+        } else {
+            tableBody.innerHTML = `<tr><td colspan="4">
+                No courses found for: ${program || department} 
+                (Program: ${program || 'undefined'}, Department: ${department || 'undefined'})
+                <br>Intake Year: ${intakeYear}, Block: ${block}
+                <br>Filter used: ${programFilter}
+                <br><small>Check if courses exist with target_program = '${program || department}' and intake_year = '${intakeYear}'</small>
+            </td></tr>`;
+        }
+
+    } catch (error) {
+        console.error("❌ Failed to load courses:", error);
+        AppUtils.showError(tableBody, `Error loading courses: ${error.message}`);
+        cachedCourses = [];
+    }
+
+    if (typeof loadDashboardMetrics === "function") {
+        loadDashboardMetrics(currentUserId);
+    }
+}
+
+// Utility to safely escape HTML
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
             
             // Load exams
             async function loadExams() {
