@@ -577,9 +577,9 @@ function updateBlockTermOptions(programSelectId, blockTermSelectId) {
         ];
     } else if (program === 'TVET') {
         options = [
-            { value: 'Term_1', text: 'Term 1' },
-            { value: 'Term_2', text: 'Term 2' },
-            { value: 'Term_3', text: 'Term 3' }
+            { value: 'Term1', text: 'Term 1' },
+            { value: 'Term2', text: 'Term 2' },
+            { value: 'Term3', text: 'Term 3' }
         ];
     } else {
         options = [
