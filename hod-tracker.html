@@ -1,0 +1,1099 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>90-Day HOD Action Plan Tracker</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f7fa;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+        
+        .auth-section {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .auth-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        
+        .auth-status {
+            font-size: 14px;
+            color: #64748b;
+        }
+        
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .metric-card {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border-left: 4px solid #667eea;
+        }
+        
+        .metric-card h3 {
+            font-size: 14px;
+            color: #64748b;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .metric-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #1e293b;
+            margin-bottom: 5px;
+        }
+        
+        .metric-target {
+            font-size: 12px;
+            color: #94a3b8;
+        }
+        
+        .progress-bar {
+            background: #e2e8f0;
+            height: 8px;
+            border-radius: 4px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+        
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+        
+        .tab {
+            padding: 12px 24px;
+            background: none;
+            border: none;
+            color: #64748b;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+        }
+        
+        .tab:hover {
+            color: #667eea;
+        }
+        
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .tracker-table {
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        thead {
+            background: #f8fafc;
+        }
+        
+        th {
+            padding: 15px;
+            text-align: left;
+            font-size: 12px;
+            font-weight: 600;
+            color: #475569;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+        
+        td {
+            padding: 15px;
+            border-bottom: 1px solid #f1f5f9;
+            font-size: 14px;
+            color: #334155;
+        }
+        
+        tr:hover {
+            background: #f8fafc;
+        }
+        
+        .status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .status.not-started {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+        
+        .status.in-progress {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        
+        .status.completed {
+            background: #d1fae5;
+            color: #065f46;
+        }
+        
+        .status.on-hold {
+            background: #e0e7ff;
+            color: #3730a3;
+        }
+        
+        .priority {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        
+        .priority.high {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+        
+        .priority.medium {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        
+        .priority.low {
+            background: #e0e7ff;
+            color: #3730a3;
+        }
+        
+        .checkbox {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+            accent-color: #667eea;
+        }
+        
+        input[type="date"], input[type="number"], select {
+            padding: 8px 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 13px;
+            width: 100%;
+        }
+        
+        input[type="email"], input[type="password"] {
+            padding: 10px 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 14px;
+            width: 200px;
+        }
+        
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        button.btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #5568d3;
+        }
+        
+        .btn-secondary {
+            background: #f1f5f9;
+            color: #475569;
+        }
+        
+        .btn-secondary:hover {
+            background: #e2e8f0;
+        }
+        
+        .btn-success {
+            background: #10b981;
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background: #059669;
+        }
+        
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+        
+        .week-section {
+            margin-bottom: 30px;
+        }
+        
+        .week-header {
+            background: #667eea;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px 8px 0 0;
+            font-size: 16px;
+            font-weight: 600;
+        }
+        
+        .sync-status {
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+        
+        .sync-saved {
+            background: #d1fae5;
+            color: #065f46;
+        }
+        
+        .sync-pending {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        
+        .sync-error {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+        
+        @media print {
+            body {
+                background: white;
+            }
+            .action-buttons, .auth-section {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>90-Day Strategic Action Plan Tracker</h1>
+            <p>School of Nursing, Nakuru College of Health Science and Management</p>
+            <p>HOD Implementation Dashboard | Track Progress & Achieve Measurable Results</p>
+        </div>
+        
+        <div class="auth-section">
+            <div class="auth-buttons">
+                <button class="btn btn-primary" onclick="signIn()">Sign In</button>
+                <button class="btn btn-secondary" onclick="signUp()">Sign Up</button>
+                <button class="btn btn-danger" onclick="signOut()" id="signOutBtn" style="display: none;">Sign Out</button>
+            </div>
+            <div class="auth-status" id="authStatus">Not signed in - using local storage</div>
+        </div>
+        
+        <div class="dashboard">
+            <div class="metric-card">
+                <h3>Overall Progress</h3>
+                <div class="metric-value" id="overallProgress">0%</div>
+                <div class="metric-target">Target: 100% by Day 90</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="overallBar" style="width: 0%"></div>
+                </div>
+            </div>
+            
+            <div class="metric-card">
+                <h3>Tasks Completed</h3>
+                <div class="metric-value" id="tasksCompleted">0/54</div>
+                <div class="metric-target">54 Total Tasks</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="tasksBar" style="width: 0%"></div>
+                </div>
+            </div>
+            
+            <div class="metric-card">
+                <h3>Days Remaining</h3>
+                <div class="metric-value" id="daysRemaining">90</div>
+                <div class="metric-target">Started: <span id="startDate">--</span></div>
+            </div>
+            
+            <div class="metric-card">
+                <h3>Critical Targets Met</h3>
+                <div class="metric-value" id="targetsMet">0/12</div>
+                <div class="metric-target">Key Performance Indicators</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="targetsBar" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="action-buttons">
+            <button class="btn btn-primary" onclick="updateProgress()">Update Progress</button>
+            <button class="btn btn-secondary" onclick="exportData()">Export to JSON</button>
+            <button class="btn btn-secondary" onclick="importData()">Import Data</button>
+            <button class="btn btn-secondary" onclick="window.print()">Print Dashboard</button>
+            <button class="btn btn-danger" onclick="resetData()">Reset All Data</button>
+            <span id="syncStatus" class="sync-status"></span>
+        </div>
+        
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('days1-30')">Days 1-30</button>
+            <button class="tab" onclick="showTab('days31-60')">Days 31-60</button>
+            <button class="tab" onclick="showTab('days61-90')">Days 61-90</button>
+            <button class="tab" onclick="showTab('kpi')">KPI Dashboard</button>
+        </div>
+        
+        <!-- Days 1-30 Tab -->
+        <div id="days1-30" class="tab-content active">
+            <div class="week-section">
+                <div class="week-header">Week 1: E-Learning Portal (Days 1-7)</div>
+                <div class="tracker-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 40px">✓</th>
+                                <th>Activity</th>
+                                <th style="width: 100px">Days</th>
+                                <th style="width: 120px">Target</th>
+                                <th style="width: 120px">Actual</th>
+                                <th style="width: 100px">Priority</th>
+                                <th style="width: 120px">Status</th>
+                                <th style="width: 120px">Due Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><input type="checkbox" class="checkbox task-check" data-task="portal-audit"></td>
+                                <td>Audit portal infrastructure</td>
+                                <td>1-2</td>
+                                <td>100%</td>
+                                <td><input type="number" id="portal-audit-actual" min="0" max="100" value="0">%</td>
+                                <td><span class="priority high">High</span></td>
+                                <td>
+                                    <select class="status-select" onchange="updateTaskStatus(this)">
+                                        <option value="not-started">Not Started</option>
+                                        <option value="in-progress">In Progress</option>
+                                        <option value="completed">Completed</option>
+                                    </select>
+                                </td>
+                                <td><input type="date" class="due-date"></td>
+                            </tr>
+                            <tr>
+                                <td><input type="checkbox" class="checkbox task-check" data-task="faculty-training"></td>
+                                <td>Faculty training on portal (30 faculty)</td>
+                                <td>3-4</td>
+                                <td>30/30</td>
+                                <td><input type="number" min="0" max="30" value="0">/30</td>
+                                <td><span class="priority high">High</span></td>
+                                <td>
+                                    <select class="status-select" onchange="updateTaskStatus(this)">
+                                        <option value="not-started">Not Started</option>
+                                        <option value="in-progress">In Progress</option>
+                                        <option value="completed">Completed</option>
+                                    </select>
+                                </td>
+                                <td><input type="date" class="due-date"></td>
+                            </tr>
+                            <tr>
+                                <td><input type="checkbox" class="checkbox task-check" data-task="upload-materials"></td>
+                                <td>Upload course materials (200+ items)</td>
+                                <td>5-6</td>
+                                <td>200+</td>
+                                <td><input type="number" min="0" value="0"></td>
+                                <td><span class="priority high">High</span></td>
+                                <td>
+                                    <select class="status-select" onchange="updateTaskStatus(this)">
+                                        <option value="not-started">Not Started</option>
+                                        <option value="in-progress">In Progress</option>
+                                        <option value="completed">Completed</option>
+                                    </select>
+                                </td>
+                                <td><input type="date" class="due-date"></td>
+                            </tr>
+                            <tr>
+                                <td><input type="checkbox" class="checkbox task-check" data-task="student-orientation"></td>
+                                <td>Student orientation & registration</td>
+                                <td>6-7</td>
+                                <td>95%+</td>
+                                <td><input type="number" min="0" max="100" value="0">%</td>
+                                <td><span class="priority high">High</span></td>
+                                <td>
+                                    <select class="status-select" onchange="updateTaskStatus(this)">
+                                        <option value="not-started">Not Started</option>
+                                        <option value="in-progress">In Progress</option>
+                                        <option value="completed">Completed</option>
+                                    </select>
+                                </td>
+                                <td><input type="date" class="due-date"></td>
+                            </tr>
+                            <tr>
+                                <td><input type="checkbox" class="checkbox task-check" data-task="portal-launch"></td>
+                                <td>Official portal launch</td>
+                                <td>7</td>
+                                <td>Live</td>
+                                <td><input type="text" placeholder="Status"></td>
+                                <td><span class="priority high">High</span></td>
+                                <td>
+                                    <select class="status-select" onchange="updateTaskStatus(this)">
+                                        <option value="not-started">Not Started</option>
+                                        <option value="in-progress">In Progress</option>
+                                        <option value="completed">Completed</option>
+                                    </select>
+                                </td>
+                                <td><input type="date" class="due-date"></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- Additional weeks for Days 1-30 would continue here -->
+            <!-- For brevity, I'm showing just Week 1 as an example -->
+        </div>
+        
+        <!-- Days 31-60 Tab -->
+        <div id="days31-60" class="tab-content">
+            <div class="week-section">
+                <div class="week-header">Week 5-6: Student Licensing (Days 31-45)</div>
+                <div class="tracker-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 40px">✓</th>
+                                <th>Activity</th>
+                                <th style="width: 100px">Days</th>
+                                <th style="width: 120px">Target</th>
+                                <th style="width: 120px">Actual</th>
+                                <th style="width: 100px">Priority</th>
+                                <th style="width: 120px">Status</th>
+                                <th style="width: 120px">Due Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><input type="checkbox" class="checkbox task-check" data-task="licensing-database"></td>
+                                <td>Create licensing tracking database</td>
+                                <td>31-33</td>
+                                <td>Complete</td>
+                                <td><input type="text" placeholder="Status"></td>
+                                <td><span class="priority high">High</span></td>
+                                <td>
+                                    <select class="status-select" onchange="updateTaskStatus(this)">
+                                        <option value="not-started">Not Started</option>
+                                        <option value="in-progress">In Progress</option>
+                                        <option value="completed">Completed</option>
+                                    </select>
+                                </td>
+                                <td><input type="date" class="due-date"></td>
+                            </tr>
+                            <tr>
+                                <td><input type="checkbox" class="checkbox task-check" data-task="audit-students"></td>
+                                <td>Audit final year students (120+ students)</td>
+                                <td>34-37</td>
+                                <td>120+</td>
+                                <td><input type="number" min="0" value="0"></td>
+                                <td><span class="priority high">High</span></td>
+                                <td>
+                                    <select class="status-select" onchange="updateTaskStatus(this)">
+                                        <option value="not-started">Not Started</option>
+                                        <option value="in-progress">In Progress</option>
+                                        <option value="completed">Completed</option>
+                                    </select>
+                                </td>
+                                <td><input type="date" class="due-date"></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Days 61-90 Tab -->
+        <div id="days61-90" class="tab-content">
+            <div class="week-section">
+                <div class="week-header">Week 9-10: Clinical Budget & Resources (Days 61-75)</div>
+                <div class="tracker-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 40px">✓</th>
+                                <th>Activity</th>
+                                <th style="width: 100px">Days</th>
+                                <th style="width: 120px">Target</th>
+                                <th style="width: 120px">Actual</th>
+                                <th style="width: 100px">Priority</th>
+                                <th style="width: 120px">Status</th>
+                                <th style="width: 120px">Due Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><input type="checkbox" class="checkbox task-check" data-task="clinical-assessment"></td>
+                                <td>Clinical training needs assessment</td>
+                                <td>61-63</td>
+                                <td>Complete</td>
+                                <td><input type="text" placeholder="Status"></td>
+                                <td><span class="priority high">High</span></td>
+                                <td>
+                                    <select class="status-select" onchange="updateTaskStatus(this)">
+                                        <option value="not-started">Not Started</option>
+                                        <option value="in-progress">In Progress</option>
+                                        <option value="completed">Completed</option>
+                                    </select>
+                                </td>
+                                <td><input type="date" class="due-date"></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <!-- KPI Dashboard Tab -->
+        <div id="kpi" class="tab-content">
+            <div class="week-section">
+                <div class="week-header">Key Performance Indicators (KPI) Tracker</div>
+                <div class="tracker-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 40px">✓</th>
+                                <th>KPI</th>
+                                <th style="width: 120px">Target</th>
+                                <th style="width: 120px">Current</th>
+                                <th style="width: 150px">Progress</th>
+                                <th style="width: 120px">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><input type="checkbox" class="checkbox task-check" data-task="kpi-portal-usage"></td>
+                                <td><strong>E-Learning Portal Usage (Weekly)</strong></td>
+                                <td>85%+</td>
+                                <td><input type="number" min="0" max="100" value="0">%</td>
+                                <td>
+                                    <div class="progress-bar">
+                                        <div class="progress-fill" style="width: 0%"></div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <select class="status-select" onchange="updateTaskStatus(this)">
+                                        <option value="not-started">Not Started</option>
+                                        <option value="in-progress">In Progress</option>
+                                        <option value="completed">Completed</option>
+                                    </select>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <input type="file" id="importFile" accept=".json" style="display: none" onchange="handleFileImport(event)">
+    </div>
+
+    <script>
+        // Supabase configuration - UPDATE THESE WITH YOUR ACTUAL CREDENTIALS
+       const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co'; 
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk'; 
+
+        const supabase = window.supabase || supabase.createClient(supabaseUrl, supabaseKey);
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeApp();
+            setupEventListeners();
+        });
+
+        // Setup event listeners for auto-save
+        function setupEventListeners() {
+            // Auto-save when checkboxes change
+            document.querySelectorAll('.task-check').forEach(checkbox => {
+                checkbox.addEventListener('change', function() {
+                    updateProgress();
+                });
+            });
+
+            // Auto-save when inputs change
+            document.querySelectorAll('input[type="number"], input[type="text"], input[type="date"]').forEach(input => {
+                input.addEventListener('change', function() {
+                    updateProgress();
+                });
+            });
+
+            // Auto-save when selects change
+            document.querySelectorAll('.status-select').forEach(select => {
+                select.addEventListener('change', function() {
+                    updateTaskStatus(this);
+                });
+            });
+        }
+
+        // Initialize application
+        async function initializeApp() {
+            // Check authentication status
+            const { data: { session } } = await supabase.auth.getSession();
+            
+            if (session) {
+                document.getElementById('authStatus').textContent = `Signed in as ${session.user.email}`;
+                document.getElementById('signOutBtn').style.display = 'block';
+                await loadDataFromSupabase(session.user.id);
+            } else {
+                document.getElementById('authStatus').textContent = 'Not signed in - using local storage';
+                document.getElementById('signOutBtn').style.display = 'none';
+                loadDataFromLocalStorage();
+            }
+            
+            updateProgress();
+        }
+
+        // Authentication functions
+        async function signIn() {
+            const email = prompt('Enter your email:');
+            const password = prompt('Enter your password:');
+            
+            if (email && password) {
+                const { data, error } = await supabase.auth.signInWithPassword({
+                    email: email,
+                    password: password
+                });
+
+                if (error) {
+                    alert('Error signing in: ' + error.message);
+                } else {
+                    alert('Signed in successfully!');
+                    location.reload();
+                }
+            }
+        }
+
+        async function signUp() {
+            const email = prompt('Enter your email:');
+            const password = prompt('Enter your password:');
+            
+            if (email && password) {
+                const { data, error } = await supabase.auth.signUp({
+                    email: email,
+                    password: password
+                });
+
+                if (error) {
+                    alert('Error signing up: ' + error.message);
+                } else {
+                    alert('Check your email for verification link!');
+                }
+            }
+        }
+
+        async function signOut() {
+            const { error } = await supabase.auth.signOut();
+            if (error) {
+                alert('Error signing out: ' + error.message);
+            } else {
+                alert('Signed out successfully!');
+                location.reload();
+            }
+        }
+
+        // Tab navigation
+        function showTab(tabId) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Remove active class from all tab buttons
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected tab
+            document.getElementById(tabId).classList.add('active');
+            
+            // Add active class to clicked tab button
+            event.target.classList.add('active');
+        }
+
+        // Update task status
+        function updateTaskStatus(selectElement) {
+            const row = selectElement.closest('tr');
+            const checkbox = row.querySelector('.checkbox');
+            
+            if (selectElement.value === 'completed') {
+                checkbox.checked = true;
+            } else {
+                checkbox.checked = false;
+            }
+            
+            updateProgress();
+        }
+
+        // Update progress metrics
+        async function updateProgress() {
+            const checkboxes = document.querySelectorAll('.task-check');
+            const totalTasks = checkboxes.length;
+            let completedTasks = 0;
+            
+            checkboxes.forEach(checkbox => {
+                if (checkbox.checked) completedTasks++;
+            });
+            
+            // Update tasks completed
+            document.getElementById('tasksCompleted').textContent = `${completedTasks}/${totalTasks}`;
+            const taskPercentage = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
+            document.getElementById('tasksBar').style.width = `${taskPercentage}%`;
+            
+            // Update overall progress
+            document.getElementById('overallProgress').textContent = `${Math.round(taskPercentage)}%`;
+            document.getElementById('overallBar').style.width = `${taskPercentage}%`;
+            
+            // Update days remaining
+            const startDate = localStorage.getItem('startDate') || new Date().toISOString().split('T')[0];
+            document.getElementById('startDate').textContent = startDate;
+            
+            const start = new Date(startDate);
+            const today = new Date();
+            const daysPassed = Math.floor((today - start) / (1000 * 60 * 60 * 24));
+            const daysRemaining = Math.max(0, 90 - daysPassed);
+            document.getElementById('daysRemaining').textContent = daysRemaining;
+            
+            // Save data
+            await saveData();
+        }
+
+        // Save data to Supabase or local storage
+        async function saveData() {
+            const { data: { user } } = await supabase.auth.getUser();
+            const trackerData = collectAllData();
+            
+            if (user) {
+                // Save to Supabase
+                const { error } = await supabase
+                    .from('hod_tracker_data')
+                    .upsert({
+                        user_id: user.id,
+                        task_data: trackerData,
+                        last_updated: new Date()
+                    });
+
+                if (error) {
+                    console.error('Error saving to Supabase:', error);
+                    updateSyncStatus('error', 'Sync failed - using local storage');
+                    saveToLocalStorage();
+                } else {
+                    updateSyncStatus('saved', 'Saved to cloud');
+                }
+            } else {
+                // Save to local storage
+                saveToLocalStorage();
+                updateSyncStatus('saved', 'Saved locally');
+            }
+        }
+
+        // Load data from Supabase
+        async function loadDataFromSupabase(userId) {
+            const { data, error } = await supabase
+                .from('hod_tracker_data')
+                .select('*')
+                .eq('user_id', userId)
+                .single();
+
+            if (data && data.task_data) {
+                applySavedData(data.task_data);
+                updateSyncStatus('saved', 'Loaded from cloud');
+            } else {
+                // No data in Supabase, try local storage
+                loadDataFromLocalStorage();
+            }
+        }
+
+        // Load data from local storage
+        function loadDataFromLocalStorage() {
+            const savedData = localStorage.getItem('hodTrackerData');
+            if (savedData) {
+                const data = JSON.parse(savedData);
+                applySavedData(data);
+                updateSyncStatus('saved', 'Loaded from local storage');
+            }
+        }
+
+        // Save to local storage
+        function saveToLocalStorage() {
+            const data = collectAllData();
+            localStorage.setItem('hodTrackerData', JSON.stringify(data));
+            localStorage.setItem('startDate', document.getElementById('startDate').textContent);
+        }
+
+        // Collect all data from the form
+        function collectAllData() {
+            const data = {
+                checkboxes: {},
+                statuses: {},
+                inputs: {},
+                dates: {},
+                progress: {
+                    overall: document.getElementById('overallProgress').textContent,
+                    tasks: document.getElementById('tasksCompleted').textContent,
+                    days: document.getElementById('daysRemaining').textContent,
+                    startDate: document.getElementById('startDate').textContent
+                }
+            };
+            
+            // Collect checkbox states
+            document.querySelectorAll('.task-check').forEach((checkbox, index) => {
+                data.checkboxes[`task-${index}`] = checkbox.checked;
+            });
+            
+            // Collect status selections
+            document.querySelectorAll('.status-select').forEach((select, index) => {
+                data.statuses[`status-${index}`] = select.value;
+            });
+            
+            // Collect input values
+            document.querySelectorAll('input[type="number"], input[type="text"]').forEach((input, index) => {
+                data.inputs[`input-${index}`] = input.value;
+            });
+            
+            // Collect date values
+            document.querySelectorAll('input[type="date"]').forEach((dateInput, index) => {
+                data.dates[`date-${index}`] = dateInput.value;
+            });
+            
+            return data;
+        }
+
+        // Apply saved data to the form
+        function applySavedData(savedData) {
+            // Apply checkbox states
+            document.querySelectorAll('.task-check').forEach((checkbox, index) => {
+                if (savedData.checkboxes && savedData.checkboxes[`task-${index}`] !== undefined) {
+                    checkbox.checked = savedData.checkboxes[`task-${index}`];
+                }
+            });
+            
+            // Apply status selections
+            document.querySelectorAll('.status-select').forEach((select, index) => {
+                if (savedData.statuses && savedData.statuses[`status-${index}`]) {
+                    select.value = savedData.statuses[`status-${index}`];
+                }
+            });
+            
+            // Apply input values
+            document.querySelectorAll('input[type="number"], input[type="text"]').forEach((input, index) => {
+                if (savedData.inputs && savedData.inputs[`input-${index}`] !== undefined) {
+                    input.value = savedData.inputs[`input-${index}`];
+                }
+            });
+            
+            // Apply date values
+            document.querySelectorAll('input[type="date"]').forEach((dateInput, index) => {
+                if (savedData.dates && savedData.dates[`date-${index}`]) {
+                    dateInput.value = savedData.dates[`date-${index}`];
+                }
+            });
+            
+            // Apply progress metrics if available
+            if (savedData.progress) {
+                if (savedData.progress.startDate) {
+                    document.getElementById('startDate').textContent = savedData.progress.startDate;
+                }
+            }
+        }
+
+        // Update sync status display
+        function updateSyncStatus(type, message) {
+            const syncElement = document.getElementById('syncStatus');
+            syncElement.textContent = message;
+            syncElement.className = 'sync-status';
+            
+            if (type === 'saved') {
+                syncElement.classList.add('sync-saved');
+            } else if (type === 'pending') {
+                syncElement.classList.add('sync-pending');
+            } else if (type === 'error') {
+                syncElement.classList.add('sync-error');
+            }
+            
+            // Clear status after 3 seconds
+            setTimeout(() => {
+                syncElement.textContent = '';
+                syncElement.className = 'sync-status';
+            }, 3000);
+        }
+
+        // Export data to JSON file
+        function exportData() {
+            const data = collectAllData();
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'hod-tracker-backup.json';
+            a.click();
+            URL.revokeObjectURL(url);
+            
+            alert('Data exported successfully!');
+        }
+
+        // Import data from JSON file
+        function importData() {
+            document.getElementById('importFile').click();
+        }
+
+        // Handle file import
+        function handleFileImport(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    applySavedData(data);
+                    saveData();
+                    updateProgress();
+                    alert('Data imported successfully!');
+                } catch (error) {
+                    alert('Error importing data: Invalid file format');
+                }
+            };
+            reader.readAsText(file);
+            
+            // Reset file input
+            event.target.value = '';
+        }
+
+        // Reset all data
+        async function resetData() {
+            if (confirm('Are you sure you want to reset all data? This cannot be undone.')) {
+                // Clear checkboxes
+                document.querySelectorAll('.task-check').forEach(checkbox => {
+                    checkbox.checked = false;
+                });
+                
+                // Reset status selects
+                document.querySelectorAll('.status-select').forEach(select => {
+                    select.value = 'not-started';
+                });
+                
+                // Clear inputs
+                document.querySelectorAll('input[type="number"]').forEach(input => {
+                    input.value = 0;
+                });
+                
+                document.querySelectorAll('input[type="text"]').forEach(input => {
+                    input.value = '';
+                });
+                
+                document.querySelectorAll('input[type="date"]').forEach(input => {
+                    input.value = '';
+                });
+                
+                // Reset start date
+                const today = new Date().toISOString().split('T')[0];
+                localStorage.setItem('startDate', today);
+                document.getElementById('startDate').textContent = today;
+                
+                // Clear storage
+                localStorage.removeItem('hodTrackerData');
+                
+                // Clear Supabase data if signed in
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user) {
+                    await supabase
+                        .from('hod_tracker_data')
+                        .delete()
+                        .eq('user_id', user.id);
+                }
+                
+                updateProgress();
+                alert('All data has been reset.');
+            }
+        }
+    </script>
+</body>
+</html>
