@@ -6,6 +6,7 @@
     <title>90-Day HOD Action Plan Tracker</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
+        /* Your CSS remains exactly the same */
         * {
             margin: 0;
             padding: 0;
@@ -529,9 +530,6 @@
                     </table>
                 </div>
             </div>
-            
-            <!-- Additional weeks for Days 1-30 would continue here -->
-            <!-- For brevity, I'm showing just Week 1 as an example -->
         </div>
         
         <!-- Days 31-60 Tab -->
@@ -559,22 +557,6 @@
                                 <td>31-33</td>
                                 <td>Complete</td>
                                 <td><input type="text" placeholder="Status"></td>
-                                <td><span class="priority high">High</span></td>
-                                <td>
-                                    <select class="status-select" onchange="updateTaskStatus(this)">
-                                        <option value="not-started">Not Started</option>
-                                        <option value="in-progress">In Progress</option>
-                                        <option value="completed">Completed</option>
-                                    </select>
-                                </td>
-                                <td><input type="date" class="due-date"></td>
-                            </tr>
-                            <tr>
-                                <td><input type="checkbox" class="checkbox task-check" data-task="audit-students"></td>
-                                <td>Audit final year students (120+ students)</td>
-                                <td>34-37</td>
-                                <td>120+</td>
-                                <td><input type="number" min="0" value="0"></td>
                                 <td><span class="priority high">High</span></td>
                                 <td>
                                     <select class="status-select" onchange="updateTaskStatus(this)">
@@ -677,18 +659,50 @@
     </div>
 
     <script>
-        // Supabase configuration - FIXED VERSION
+        // Supabase configuration
         const supabaseUrl = 'https://lwhtjozfsmbyihenfunw.supabase.co'; 
         const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
         
-        // Initialize Supabase client - FIXED
-        const supabase = supabase.createClient(supabaseUrl, supabaseKey);
+        // Initialize Supabase client
+        let supabase;
 
         // Initialize when page loads
         document.addEventListener('DOMContentLoaded', function() {
+            initializeSupabase();
             initializeApp();
             setupEventListeners();
         });
+
+        // Initialize Supabase first
+        function initializeSupabase() {
+            try {
+                supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+                console.log('Supabase initialized successfully');
+            } catch (error) {
+                console.error('Error initializing Supabase:', error);
+                // Create a mock supabase for fallback
+                supabase = {
+                    auth: {
+                        getSession: () => Promise.resolve({ data: { session: null }, error: null }),
+                        getUser: () => Promise.resolve({ data: { user: null }, error: null }),
+                        signInWithPassword: () => Promise.resolve({ data: null, error: new Error('Supabase not initialized') }),
+                        signUp: () => Promise.resolve({ data: null, error: new Error('Supabase not initialized') }),
+                        signOut: () => Promise.resolve({ error: new Error('Supabase not initialized') })
+                    },
+                    from: () => ({
+                        upsert: () => Promise.resolve({ error: new Error('Supabase not initialized') }),
+                        select: () => ({
+                            eq: () => ({
+                                single: () => Promise.resolve({ data: null, error: new Error('Supabase not initialized') })
+                            })
+                        }),
+                        delete: () => ({
+                            eq: () => Promise.resolve({ error: new Error('Supabase not initialized') })
+                        })
+                    })
+                };
+            }
+        }
 
         // Setup event listeners for auto-save
         function setupEventListeners() {
