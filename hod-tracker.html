@@ -677,11 +677,12 @@
     </div>
 
     <script>
-        // Supabase configuration - UPDATE THESE WITH YOUR ACTUAL CREDENTIALS
-       const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co'; 
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk'; 
-
-        const supabase = window.supabase || supabase.createClient(supabaseUrl, supabaseKey);
+        // Supabase configuration - FIXED VERSION
+        const supabaseUrl = 'https://lwhtjozfsmbyihenfunw.supabase.co'; 
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
+        
+        // Initialize Supabase client - FIXED
+        const supabase = supabase.createClient(supabaseUrl, supabaseKey);
 
         // Initialize when page loads
         document.addEventListener('DOMContentLoaded', function() {
@@ -715,16 +716,22 @@
 
         // Initialize application
         async function initializeApp() {
-            // Check authentication status
-            const { data: { session } } = await supabase.auth.getSession();
-            
-            if (session) {
-                document.getElementById('authStatus').textContent = `Signed in as ${session.user.email}`;
-                document.getElementById('signOutBtn').style.display = 'block';
-                await loadDataFromSupabase(session.user.id);
-            } else {
-                document.getElementById('authStatus').textContent = 'Not signed in - using local storage';
-                document.getElementById('signOutBtn').style.display = 'none';
+            try {
+                // Check authentication status
+                const { data: { session } } = await supabase.auth.getSession();
+                
+                if (session) {
+                    document.getElementById('authStatus').textContent = `Signed in as ${session.user.email}`;
+                    document.getElementById('signOutBtn').style.display = 'block';
+                    await loadDataFromSupabase(session.user.id);
+                } else {
+                    document.getElementById('authStatus').textContent = 'Not signed in - using local storage';
+                    document.getElementById('signOutBtn').style.display = 'none';
+                    loadDataFromLocalStorage();
+                }
+            } catch (error) {
+                console.error('Error initializing app:', error);
+                document.getElementById('authStatus').textContent = 'Using local storage (offline mode)';
                 loadDataFromLocalStorage();
             }
             
@@ -737,16 +744,20 @@
             const password = prompt('Enter your password:');
             
             if (email && password) {
-                const { data, error } = await supabase.auth.signInWithPassword({
-                    email: email,
-                    password: password
-                });
+                try {
+                    const { data, error } = await supabase.auth.signInWithPassword({
+                        email: email,
+                        password: password
+                    });
 
-                if (error) {
-                    alert('Error signing in: ' + error.message);
-                } else {
-                    alert('Signed in successfully!');
-                    location.reload();
+                    if (error) {
+                        alert('Error signing in: ' + error.message);
+                    } else {
+                        alert('Signed in successfully!');
+                        location.reload();
+                    }
+                } catch (error) {
+                    alert('Authentication error: ' + error.message);
                 }
             }
         }
@@ -756,26 +767,34 @@
             const password = prompt('Enter your password:');
             
             if (email && password) {
-                const { data, error } = await supabase.auth.signUp({
-                    email: email,
-                    password: password
-                });
+                try {
+                    const { data, error } = await supabase.auth.signUp({
+                        email: email,
+                        password: password
+                    });
 
-                if (error) {
-                    alert('Error signing up: ' + error.message);
-                } else {
-                    alert('Check your email for verification link!');
+                    if (error) {
+                        alert('Error signing up: ' + error.message);
+                    } else {
+                        alert('Check your email for verification link!');
+                    }
+                } catch (error) {
+                    alert('Registration error: ' + error.message);
                 }
             }
         }
 
         async function signOut() {
-            const { error } = await supabase.auth.signOut();
-            if (error) {
-                alert('Error signing out: ' + error.message);
-            } else {
-                alert('Signed out successfully!');
-                location.reload();
+            try {
+                const { error } = await supabase.auth.signOut();
+                if (error) {
+                    alert('Error signing out: ' + error.message);
+                } else {
+                    alert('Signed out successfully!');
+                    location.reload();
+                }
+            } catch (error) {
+                alert('Sign out error: ' + error.message);
             }
         }
 
@@ -847,28 +866,34 @@
 
         // Save data to Supabase or local storage
         async function saveData() {
-            const { data: { user } } = await supabase.auth.getUser();
-            const trackerData = collectAllData();
-            
-            if (user) {
-                // Save to Supabase
-                const { error } = await supabase
-                    .from('hod_tracker_data')
-                    .upsert({
-                        user_id: user.id,
-                        task_data: trackerData,
-                        last_updated: new Date()
-                    });
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                const trackerData = collectAllData();
+                
+                if (user) {
+                    // Save to Supabase
+                    const { error } = await supabase
+                        .from('hod_tracker_data')
+                        .upsert({
+                            user_id: user.id,
+                            task_data: trackerData,
+                            last_updated: new Date()
+                        });
 
-                if (error) {
-                    console.error('Error saving to Supabase:', error);
-                    updateSyncStatus('error', 'Sync failed - using local storage');
-                    saveToLocalStorage();
+                    if (error) {
+                        console.error('Error saving to Supabase:', error);
+                        updateSyncStatus('error', 'Sync failed - using local storage');
+                        saveToLocalStorage();
+                    } else {
+                        updateSyncStatus('saved', 'Saved to cloud');
+                    }
                 } else {
-                    updateSyncStatus('saved', 'Saved to cloud');
+                    // Save to local storage
+                    saveToLocalStorage();
+                    updateSyncStatus('saved', 'Saved locally');
                 }
-            } else {
-                // Save to local storage
+            } catch (error) {
+                console.error('Error saving data:', error);
                 saveToLocalStorage();
                 updateSyncStatus('saved', 'Saved locally');
             }
@@ -876,17 +901,22 @@
 
         // Load data from Supabase
         async function loadDataFromSupabase(userId) {
-            const { data, error } = await supabase
-                .from('hod_tracker_data')
-                .select('*')
-                .eq('user_id', userId)
-                .single();
+            try {
+                const { data, error } = await supabase
+                    .from('hod_tracker_data')
+                    .select('*')
+                    .eq('user_id', userId)
+                    .single();
 
-            if (data && data.task_data) {
-                applySavedData(data.task_data);
-                updateSyncStatus('saved', 'Loaded from cloud');
-            } else {
-                // No data in Supabase, try local storage
+                if (data && data.task_data) {
+                    applySavedData(data.task_data);
+                    updateSyncStatus('saved', 'Loaded from cloud');
+                } else {
+                    // No data in Supabase, try local storage
+                    loadDataFromLocalStorage();
+                }
+            } catch (error) {
+                console.error('Error loading from Supabase:', error);
                 loadDataFromLocalStorage();
             }
         }
@@ -1082,12 +1112,16 @@
                 localStorage.removeItem('hodTrackerData');
                 
                 // Clear Supabase data if signed in
-                const { data: { user } } = await supabase.auth.getUser();
-                if (user) {
-                    await supabase
-                        .from('hod_tracker_data')
-                        .delete()
-                        .eq('user_id', user.id);
+                try {
+                    const { data: { user } } = await supabase.auth.getUser();
+                    if (user) {
+                        await supabase
+                            .from('hod_tracker_data')
+                            .delete()
+                            .eq('user_id', user.id);
+                    }
+                } catch (error) {
+                    console.error('Error clearing Supabase data:', error);
                 }
                 
                 updateProgress();
