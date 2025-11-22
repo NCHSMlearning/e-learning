@@ -953,6 +953,99 @@ form button:hover {
     background: #FEE2E2;
     color: #991B1B;
 }
+
+/* Loading states */
+.loading {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.loading::after {
+  content: "Loading...";
+  display: block;
+  text-align: center;
+  padding: 10px;
+  color: var(--text-medium);
+}
+
+/* Program badges */
+.program-badge {
+  background-color: var(--primary-purple-light);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+/* Student count */
+.student-count {
+  font-weight: 600;
+  color: var(--primary-purple);
+}
+
+/* Action buttons container */
+.action-buttons {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+/* Modal overlay */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10000;
+}
+
+/* Modal styling */
+.modal {
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  max-width: 500px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+/* Close button */
+.btn-close {
+  background: var(--danger-red);
+  color: white;
+  border: none;
+  padding: 8px 15px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-top: 15px;
+}
+
+.btn-close:hover {
+  background: var(--danger-red-dark);
+}
+
+/* Cancel button */
+.btn-cancel {
+  background: var(--text-light);
+}
+
+.btn-cancel:hover {
+  background: var(--text-medium);
+}
+
+/* Form actions */
+.form-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 15px;
+}
 </style>
 
 </head>
@@ -986,12 +1079,12 @@ form button:hover {
         <main class="main">
             <header>
                 <div>
-                    <h1>Welcome, Lecturer!</h1>
+                    <h1 id="welcome-header">Welcome, Lecturer!</h1>
                     <p class="subtitle">NCHSM Dashboard for Managing Academic Activities</p>
                 </div>
                 <div class="header-actions">
-                    <button class="btn-notification"><i class="fas fa-bell"></i> Notifications</button>
-                    <button class="btn-help"><i class="fas fa-question-circle"></i> Help</button>
+                    <button class="btn-notification" id="notification-btn"><i class="fas fa-bell"></i> Notifications</button>
+                    <button class="btn-help" id="help-btn"><i class="fas fa-question-circle"></i> Help</button>
                 </div>
             </header>
 
@@ -1097,35 +1190,36 @@ form button:hover {
                     </div>
                 </div>
             </section>
-            <h3>Courses for Current Academic Period</h3>
 
-<!-- Academic Period Filter -->
-<div class="filter-controls">
-    <div class="filter-row">
-        <div class="filter-group">
-            <label for="intake-year-filter">Filter by Intake Year:</label>
-            <select id="intake-year-filter" onchange="filterCoursesByAcademicPeriod()">
-                <option value="">All Intake Years</option>
-                <!-- Options will be populated by JavaScript -->
-            </select>
-        </div>
-        <div class="filter-group">
-            <label for="academic-period-filter" id="academic-period-label">Filter by Block:</label>
-            <select id="academic-period-filter" onchange="filterCoursesByAcademicPeriod()">
-                <option value="">All Blocks</option>
-                <!-- Options will be populated based on program -->
-            </select>
-        </div>
-    </div>
-</div>
             <section id="my-courses-content" class="tab-content">
                 <h2><i class="fas fa-book"></i> My Assigned Courses</h2>
-                <div class="search-container">
-                    <input type="text" id="course-search" placeholder="Search courses by name or code...">
-                    <button><i class="fas fa-search"></i> Search</button>
+                
+                <!-- Academic Period Filter -->
+                <div class="filter-controls">
+                    <h3>Courses for Current Academic Period</h3>
+                    <div class="filter-row">
+                        <div class="filter-group">
+                            <label for="intake-year-filter">Filter by Intake Year:</label>
+                            <select id="intake-year-filter" onchange="filterCoursesByAcademicPeriod()">
+                                <option value="">All Intake Years</option>
+                                <!-- Options will be populated by JavaScript -->
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label for="academic-period-filter" id="academic-period-label">Filter by Block:</label>
+                            <select id="academic-period-filter" onchange="filterCoursesByAcademicPeriod()">
+                                <option value="">All Blocks</option>
+                                <!-- Options will be populated based on program -->
+                            </select>
+                        </div>
+                    </div>
                 </div>
                 
-                <h3>Courses for Current Block</h3>
+                <div class="search-container">
+                    <input type="text" id="course-search" placeholder="Search courses by name or code...">
+                    <button onclick="filterTable('course-search', 'lecturer-courses-table', [0, 1])"><i class="fas fa-search"></i> Search</button>
+                </div>
+                
                 <table>
                     <thead>
                         <tr>
@@ -1133,13 +1227,13 @@ form button:hover {
                             <th>Course Name</th>
                             <th>Program</th>
                             <th>Block</th>
-                             <th>Intake Year</th> <!-- Added this column -->
+                            <th>Intake Year</th>
                             <th>Total Students</th>
                             <th>Action</th>
                         </tr>
                     </thead>
                     <tbody id="lecturer-courses-table">
-                        <tr><td colspan="6">Loading courses...</td></tr>
+                        <tr><td colspan="7">Loading courses...</td></tr>
                     </tbody>
                 </table>
             </section>
@@ -1156,10 +1250,9 @@ form button:hover {
                             <select id="student-intake-filter" onchange="filterStudentTable()">
                                 <option value="all">All Intakes</option>
                                 <option value="2028">2028 Intake</option>
-                                <option value="2027">2028 Intake</option>
-                                <option value="2026">2027 Intake</option>
-                                <option value="2025">2026 Intake</option>
-                                <option value="2024">2025 Intake</option>
+                                <option value="2027">2027 Intake</option>
+                                <option value="2026">2026 Intake</option>
+                                <option value="2025">2025 Intake</option>
                                 <option value="2024">2024 Intake</option>
                             </select>
                         </div>
@@ -1330,7 +1423,7 @@ form button:hover {
     <h3>Full Attendance Logs & Analytics</h3>
     <div class="search-container">
         <input type="text" id="attendance-search" placeholder="Filter attendance logs by name, course, or date...">
-        <button id="attendance-search-btn"><i class="fas fa-search"></i> Filter</button>
+        <button onclick="filterTable('attendance-search', 'attendance-table', [0, 1, 2, 3])"><i class="fas fa-search"></i> Filter</button>
     </div>
 
     <table>
@@ -1424,7 +1517,7 @@ form button:hover {
                 <h3>Recent Exams & Grades Overview</h3>
                 <div class="search-container">
                     <input type="text" id="exam-search" placeholder="Filter exams...">
-                    <button><i class="fas fa-search"></i> Search</button>
+                    <button onclick="filterTable('exam-search', 'exams-table', [0, 1, 4])"><i class="fas fa-search"></i> Search</button>
                 </div>
                 <table>
                     <thead>
@@ -1496,7 +1589,7 @@ form button:hover {
     <h3>My Uploaded Resources</h3>
     <div class="search-container">
         <input type="text" id="resource-search" placeholder="Search resources...">
-        <button><i class="fas fa-search"></i> Search</button>
+        <button onclick="filterTable('resource-search', 'resources-list', [0, 1, 2])"><i class="fas fa-search"></i> Search</button>
     </div>
     <table>
         <thead>
@@ -1650,15 +1743,6 @@ form button:hover {
         </main>
     </div>
 
-    <div id="mapModal" class="modal">
-        <div class="modal-content">
-            <span class="close-btn">&times;</span>
-            <h2>Check-in Location</h2>
-            <p id="map-details">Loading location details...</p>
-            <div id="mapbox-map"></div>
-        </div>
-    </div>
-
     <div id="gradeModal" class="modal">
         <div class="modal-content">
             <span class="close-btn">&times;</span>
@@ -1712,221 +1796,13 @@ form button:hover {
             'TVET': ['Term 1', 'Term 2', 'Term 3']
         };
 
-      let allIntakes = [
-    { id: '2024', name: '2024' },
-    { id: '2025', name: '2025' },
-    { id: '2026', name: '2026' },
-    { id: '2027', name: '2027' },
-    { id: '2028', name: '2028' }
-]; 
-
-// =================================================================
-// === DASHBOARD DATA FUNCTIONS ===
-// =================================================================
-
-/**
- * Load lecturer dashboard summary data.
- */
-async function loadLecturerDashboardData() {
-    console.log('📊 Loading lecturer dashboard data...');
-    
-    try {
-        // Ensure we have the necessary data
-        if (!allCourses || allCourses.length === 0) {
-            await fetchGlobalDataCaches();
-        }
-        
-        if (!allStudents || allStudents.length === 0) {
-            await loadStudents();
-        }
-
-        // 1. General Info - Use correct field names
-        const programCourses = (allCourses || []).filter(c => {
-            const courseProgram = c.target_program || c.program_type;
-            return courseProgram === lecturerTargetProgram && (c.status || 'Active') === 'Active';
-        });
-        
-        // Count students in the current program
-        const programStudents = allStudents || [];
-
-        // Update dashboard counters
-        if ($('total_courses_count')) {
-            $('total_courses_count').textContent = programCourses.length || '0';
-        }
-        
-        if ($('total_students_count')) {
-            $('total_students_count').textContent = programStudents.length || '0';
-        }
-
-        console.log(`📊 Dashboard Stats: ${programCourses.length} courses, ${programStudents.length} students`);
-
-        // Update filter info in banner
-        const filterInfoEl = document.querySelector('#welcome-banner span:last-child');
-        if (filterInfoEl && lecturerTargetProgram) {
-            filterInfoEl.textContent = `This dashboard is filtered to your assigned program: ${lecturerTargetProgram}. All student/grade data shown is relevant to your assignment.`;
-        }
-
-        // 2. Actionable Alerts (You can replace with real data later)
-        if ($('students_at_risk_count')) {
-            $('students_at_risk_count').textContent = Math.floor((programStudents.length || 0) * 0.1) || '0';
-        }
-        
-        if ($('pending_attendance_count')) {
-            $('pending_attendance_count').textContent = '3';
-        }
-        
-        if ($('exams_due_count')) {
-            $('exams_due_count').textContent = '2';
-        }
-        
-        if ($('unread_messages_count')) {
-            $('unread_messages_count').textContent = '5';
-        }
-
-        console.log('✅ Dashboard data loaded successfully');
-
-    } catch (error) {
-        console.error('❌ Error loading dashboard data:', error);
-        showFeedback('Failed to load dashboard data. Some features may not work properly.', 'warning');
-    }
-}
-
-/**
- * Load user profile data
- */
-async function loadUserProfile() {
-    try {
-        const { data: { user } } = await sb.auth.getUser();
-        if (!user) throw new Error('No authenticated user');
-        
-        const { data: profile, error } = await sb
-            .from(USER_PROFILE_TABLE)
-            .select('*')
-            .eq('user_id', user.id)
-            .single();
-            
-        if (error) throw error;
-        
-        currentUserProfile = profile;
-        currentUserId = user.id;
-        
-        console.log('✅ User profile loaded:', currentUserProfile);
-        return profile;
-        
-    } catch (error) {
-        console.error('❌ Error loading user profile:', error);
-        throw error;
-    }
-}
-
-/**
- * Load all students from the database
- */
-async function loadAllStudents() {
-    try {
-        console.log('🔄 Loading all students from database...');
-        
-        const { data: students, error } = await sb
-            .from('students')
-            .select('*')
-            .order('full_name');
-
-        if (error) {
-            console.error('❌ Failed to load students:', error);
-            throw error;
-        }
-
-        allStudents = students || [];
-        console.log(`✅ Loaded ${allStudents.length} students from database`);
-        
-        return allStudents;
-    } catch (error) {
-        console.error('❌ Error loading students:', error);
-        allStudents = [];
-        return [];
-    }
-}
-
-/**
- * Load all intakes from the database
- */
-async function loadAllIntakes() {
-    try {
-        console.log('🔄 Loading all intakes...');
-        
-        // This could be from a database or hardcoded
-        allIntakes = [
-            { id: '2024-1', name: '2024 Intake 1' },
-            { id: '2024-2', name: '2024 Intake 2' },
-            { id: '2025-1', name: '2025 Intake 1' }
-        ];
-        
-        console.log('✅ Intakes loaded:', allIntakes);
-        return allIntakes;
-        
-    } catch (error) {
-        console.error('❌ Error loading intakes:', error);
-        allIntakes = [];
-        return [];
-    }
-}
-
-/**
- * Initialize navigation and event listeners
- */
-function initializeNavigation() {
-    console.log('🔧 Initializing navigation...');
-    
-    // Tab navigation
-    const tabButtons = document.querySelectorAll('.tab-button');
-    tabButtons.forEach(button => {
-        button.addEventListener('click', (e) => {
-            const target = e.target.getAttribute('data-tab');
-            if (target) {
-                showSection(target);
-            }
-        });
-    });
-    
-    // Resource form submission
-    const resourceForm = $('upload-resource-form');
-    if (resourceForm) {
-        resourceForm.addEventListener('submit', handleUploadResource);
-    }
-    
-    console.log('✅ Navigation initialized');
-}
-
-/**
- * Show a specific section and hide others
- */
-function showSection(sectionId) {
-    console.log(`📁 Showing section: ${sectionId}`);
-    
-    // Hide all tab contents
-    const tabContents = document.querySelectorAll('.tab-content');
-    tabContents.forEach(content => {
-        content.style.display = 'none';
-    });
-    
-    // Show selected tab content
-    const targetSection = $(sectionId);
-    if (targetSection) {
-        targetSection.style.display = 'block';
-    }
-    
-    // Update active tab button
-    const tabButtons = document.querySelectorAll('.tab-button');
-    tabButtons.forEach(button => {
-        button.classList.remove('active');
-        if (button.getAttribute('data-tab') === sectionId) {
-            button.classList.add('active');
-        }
-    });
-    
-    // Load section-specific data
-    loadSectionData(sectionId);
-}
+        let allIntakes = [
+            { id: '2024', name: '2024' },
+            { id: '2025', name: '2025' },
+            { id: '2026', name: '2026' },
+            { id: '2027', name: '2027' },
+            { id: '2028', name: '2028' }
+        ]; 
 
         // =================================================================
         // === 2. CORE UTILITY FUNCTIONS (FIXED VERSION) ===
@@ -2072,7 +1948,7 @@ function showSection(sectionId) {
                 // Ensure program is set before fetching global data
                 lecturerTargetProgram = getProgramFilterFromDepartment(currentUserProfile.department); 
 
-                document.querySelector('header h1').textContent = `Welcome, ${currentUserProfile.full_name || 'Lecturer'}!`;
+                $('welcome-header').textContent = `Welcome, ${currentUserProfile.full_name || 'Lecturer'}!`;
                 
                 // 1. Fetch all courses (required by multiple functions)
                 await fetchGlobalDataCaches(); 
@@ -2145,45 +2021,45 @@ function showSection(sectionId) {
             return null;
         }
 
-    async function fetchGlobalDataCaches() {
-    try {
-        console.log('🔄 Loading ALL courses from database...');
-        
-        // Load ALL courses without any filters
-        const { data: courses, error } = await sb
-            .from(COURSES_TABLE)
-            .select('*')  // Select ALL columns
-            .order('course_name', { ascending: true });
+        async function fetchGlobalDataCaches() {
+            try {
+                console.log('🔄 Loading ALL courses from database...');
+                
+                // Load ALL courses without any filters
+                const { data: courses, error } = await sb
+                    .from(COURSES_TABLE)
+                    .select('*')  // Select ALL columns
+                    .order('course_name', { ascending: true });
 
-        if (error) {
-            console.error('❌ Error fetching courses:', error);
-            throw error;
-        }
+                if (error) {
+                    console.error('❌ Error fetching courses:', error);
+                    throw error;
+                }
 
-        allCourses = courses || [];
-        console.log(`✅ Loaded ${allCourses.length} total courses from database`);
-        
-        // Debug: Show KRCHN courses count
-        const krchnCourses = allCourses.filter(c => c.target_program === 'KRCHN');
-        console.log(`🎯 Found ${krchnCourses.length} KRCHN courses`);
-        
-        // Show sample of KRCHN courses
-        if (krchnCourses.length > 0) {
-            console.log('📋 Sample KRCHN courses:', krchnCourses.slice(0, 5).map(c => ({
-                name: c.course_name,
-                code: c.unit_code,
-                program: c.target_program,
-                block: c.block
-            })));
+                allCourses = courses || [];
+                console.log(`✅ Loaded ${allCourses.length} total courses from database`);
+                
+                // Debug: Show KRCHN courses count
+                const krchnCourses = allCourses.filter(c => c.target_program === 'KRCHN');
+                console.log(`🎯 Found ${krchnCourses.length} KRCHN courses`);
+                
+                // Show sample of KRCHN courses
+                if (krchnCourses.length > 0) {
+                    console.log('📋 Sample KRCHN courses:', krchnCourses.slice(0, 5).map(c => ({
+                        name: c.course_name,
+                        code: c.unit_code,
+                        program: c.target_program,
+                        block: c.block
+                    })));
+                }
+                
+                return allCourses;
+            } catch (error) {
+                console.error('❌ Error loading courses:', error);
+                allCourses = [];
+                return [];
+            }
         }
-        
-        return allCourses;
-    } catch (error) {
-        console.error('❌ Error loading courses:', error);
-        allCourses = [];
-        return [];
-    }
-}
 
         // *************************************************************************
         // 2. Fetch and Display Students Filtered by Lecturer's Program (FIXED)
@@ -2470,20 +2346,25 @@ function showSection(sectionId) {
             // General UI
             $('menu-toggle')?.addEventListener('click', toggleSidebar);
             $('logout-btn')?.addEventListener('click', logout);
+            $('notification-btn')?.addEventListener('click', () => showFeedback('Notifications feature coming soon!', 'info'));
+            $('help-btn')?.addEventListener('click', () => showFeedback('Help documentation is being prepared.', 'info'));
             
             // Profile
             $('update-photo-btn')?.addEventListener('click', () => { $('photo-upload-input').click(); });
             $('photo-upload-input')?.addEventListener('change', handleProfilePhotoChange); 
+            $('edit-profile-details-btn')?.addEventListener('click', () => showFeedback('Profile editing feature coming soon!', 'info'));
+            $('update-password-btn')?.addEventListener('click', () => showFeedback('Password change feature coming soon!', 'info'));
 
             // Forms
             $('add-session-form')?.addEventListener('submit', handleAddSession);
             $('add-exam-form')?.addEventListener('submit', handleAddExam);
             $('upload-resource-form')?.addEventListener('submit', handleUploadResource);
             $('send-message-form')?.addEventListener('submit', handleSendMessage);
+            $('report-generation-form')?.addEventListener('submit', handleGenerateReport);
+            $('settings-form')?.addEventListener('submit', handleSaveSettings);
             
             // Attendance
             $('manual-attendance-form')?.addEventListener('submit', handleManualAttendance);
-            $('attendance-search')?.addEventListener('keyup', () => filterTable('attendance-search', 'attendance-table', [0, 1, 2]));
             $('lecturer-checkin-btn')?.addEventListener('click', lecturerCheckIn); 
 
             // Resources Edit Modal
@@ -2492,8 +2373,10 @@ function showSection(sectionId) {
 
             // Search Filters
             $('student-search')?.addEventListener('keyup', () => filterStudentTable());
+            $('course-search')?.addEventListener('keyup', () => filterTable('course-search', 'lecturer-courses-table', [0, 1]));
             $('exam-search')?.addEventListener('keyup', () => filterTable('exam-search', 'exams-table', [0, 1, 4]));
             $('resource-search')?.addEventListener('keyup', () => filterTable('resource-search', 'resources-list', [0, 1, 2]));
+            $('attendance-search')?.addEventListener('keyup', () => filterTable('attendance-search', 'attendance-table', [0, 1, 2, 3]));
 
             // Modal closing
             document.querySelectorAll('.modal .close-btn').forEach(btn => {
@@ -2605,395 +2488,402 @@ function showSection(sectionId) {
             }
         }
 
-     // =================================================================
-// === 5. STUDENT, COURSE & DASHBOARD LOADERS (FIXED) ===
-// =================================================================
+        // =================================================================
+        // === 5. STUDENT, COURSE & DASHBOARD LOADERS (FIXED) ===
+        // =================================================================
 
-/**
- * Load the lecturer's courses table, filtered by program.
- */
-async function loadLecturerCourses() {
-    const tbody = $('lecturer-courses-table');
-    if (!tbody) return;
+        /**
+         * Load the lecturer's courses table, filtered by program.
+         */
+        async function loadLecturerCourses() {
+            const tbody = $('lecturer-courses-table');
+            if (!tbody) return;
 
-    console.log('🔍 Debug: Loading lecturer courses...');
-    console.log('Lecturer Target Program:', lecturerTargetProgram);
-    console.log('All Courses Count:', allCourses?.length);
+            console.log('🔍 Debug: Loading lecturer courses...');
+            console.log('Lecturer Target Program:', lecturerTargetProgram);
+            console.log('All Courses Count:', allCourses?.length);
 
-    if (!currentUserProfile || !lecturerTargetProgram) {
-        tbody.innerHTML = `
-            <tr><td colspan="7" style="text-align:center;">No courses loaded. Your department is not assigned a program.</td></tr>`;
-        return;
-    }
-
-    // Debug: Check what fields actually exist in courses
-    if (allCourses && allCourses.length > 0) {
-        const sampleCourse = allCourses[0];
-        console.log('📋 Available course fields:', Object.keys(sampleCourse));
-        console.log('🔍 Sample course data:', {
-            unit_code: sampleCourse.unit_code,
-            course_name: sampleCourse.course_name,
-            target_program: sampleCourse.target_program,
-            status: sampleCourse.status,
-            block: sampleCourse.block,
-            intake_year: sampleCourse.intake_year
-        });
-    }
-
-    // CORRECTED FILTER: Use the actual target_program field that exists in your data
-    const filteredCourses = (allCourses || []).filter(course => {
-        const courseProgram = course.target_program;
-        const courseStatus = course.status || 'Active';
-        
-        const matchesProgram = courseProgram === lecturerTargetProgram;
-        const isActive = courseStatus === 'Active';
-        
-        console.log(`📝 Course: "${course.course_name}" | Program: "${courseProgram}" | Status: "${courseStatus}" | Match: ${matchesProgram}`);
-        
-        return matchesProgram && isActive;
-    });
-
-    console.log(`✅ Found ${filteredCourses.length} filtered courses for ${lecturerTargetProgram}`);
-
-    // Debug: Show all filtered courses
-    console.log('📋 Filtered KRCHN courses:');
-    filteredCourses.forEach((course, index) => {
-        console.log(`${index + 1}. ${course.unit_code} - ${course.course_name} (${course.intake_year}, Block: ${course.block})`);
-    });
-
-    if (filteredCourses.length === 0) {
-        const availablePrograms = [...new Set(allCourses?.map(c => c.target_program).filter(Boolean))];
-        tbody.innerHTML = `
-            <tr><td colspan="7" style="text-align:center; color: gray;">
-                No courses currently found for program: <b>${lecturerTargetProgram}</b>.<br>
-                <small>Available programs: ${availablePrograms.join(', ') || 'None'}</small>
-            </td></tr>`;
-        return;
-    }
-
-    // Debug student enrollment data
-    console.log('🎯 Checking student enrollment data:');
-    if (allStudents && allStudents.length > 0) {
-        const sampleStudent = allStudents[0];
-        console.log('Sample student enrollment data:', {
-            name: sampleStudent.full_name,
-            enrolled_courses: sampleStudent.enrolled_courses,
-            courses: sampleStudent.courses,
-            program: sampleStudent.program,
-            intake_year: sampleStudent.intake_year
-        });
-    }
-
-    const coursesHtml = filteredCourses.map(course => {
-        const courseCode = course.unit_code || 'N/A';
-        const courseName = course.course_name || 'N/A';
-        const program = course.target_program || 'N/A';
-        const block = course.block || 'N/A';
-        const intakeYear = course.intake_year || 'N/A';
-
-        // Enhanced student counting - filter by program AND intake year
-        const studentCount = allStudents?.filter(student => {
-            // Check if student is in the same program AND intake year
-            const studentIntakeYear = student.intake_year || student.admission_year;
-            if (student.program !== lecturerTargetProgram) return false;
-            if (studentIntakeYear !== intakeYear) return false;
-
-            const enrolledCourses = student.enrolled_courses || student.courses || [];
-            
-            // If no enrollment data exists, count student (they're in matching program and intake year)
-            if (enrolledCourses.length === 0) {
-                return true;
+            if (!currentUserProfile || !lecturerTargetProgram) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="7" style="text-align:center;">No courses loaded. Your department is not assigned a program.</td>
+                    </tr>`;
+                return;
             }
 
-            // Check if student is enrolled in this specific course
-            return enrolledCourses.some(enrolledCourse => 
-                enrolledCourse === courseCode || 
-                enrolledCourse.includes(courseCode) ||
-                courseCode.includes(enrolledCourse)
-            );
-        }).length || 0;
+            // Debug: Check what fields actually exist in courses
+            if (allCourses && allCourses.length > 0) {
+                const sampleCourse = allCourses[0];
+                console.log('📋 Available course fields:', Object.keys(sampleCourse));
+                console.log('🔍 Sample course data:', {
+                    unit_code: sampleCourse.unit_code,
+                    course_name: sampleCourse.course_name,
+                    target_program: sampleCourse.target_program,
+                    status: sampleCourse.status,
+                    block: sampleCourse.block,
+                    intake_year: sampleCourse.intake_year
+                });
+            }
 
-        console.log(`👥 Course: ${courseName} | Intake: ${intakeYear} | Students: ${studentCount}`);
+            // CORRECTED FILTER: Use the actual target_program field that exists in your data
+            const filteredCourses = (allCourses || []).filter(course => {
+                const courseProgram = course.target_program;
+                const courseStatus = course.status || 'Active';
+                
+                const matchesProgram = courseProgram === lecturerTargetProgram;
+                const isActive = courseStatus === 'Active';
+                
+                console.log(`📝 Course: "${course.course_name}" | Program: "${courseProgram}" | Status: "${courseStatus}" | Match: ${matchesProgram}`);
+                
+                return matchesProgram && isActive;
+            });
 
-        return `
-            <tr>
-                <td><strong>${courseCode}</strong></td>
-                <td>${courseName}</td>
-                <td>
-                    <span class="program-badge">${program}</span>
-                </td>
-                <td>${block}</td>
-                <td>${intakeYear}</td>
-                <td>
-                    <span class="student-count">${studentCount} students</span>
-                </td>
-                <td>
-                    <button class="btn-action view-grades" 
-                        onclick="viewCourseGrades('${courseCode}', '${courseName.replace(/'/g, "\\'")}', '${intakeYear}')">
-                        <i class="fas fa-chart-bar"></i> Manage Grades
-                    </button>
-                </td>
-            </tr>`;
-    }).join('');
+            console.log(`✅ Found ${filteredCourses.length} filtered courses for ${lecturerTargetProgram}`);
 
-    tbody.innerHTML = coursesHtml;
-    console.log('✅ Courses table rendered successfully');
-}
+            // Debug: Show all filtered courses
+            console.log('📋 Filtered KRCHN courses:');
+            filteredCourses.forEach((course, index) => {
+                console.log(`${index + 1}. ${course.unit_code} - ${course.course_name} (${course.intake_year}, Block: ${course.block})`);
+            });
 
-/**
- * View grades for a specific course
- */
-function viewCourseGrades(courseCode, courseName, intakeYear) {
-    showFeedback(`Loading grades for ${courseName} (${courseCode}) - ${intakeYear} Intake`, 'info');
-    
-    // You can implement actual grade viewing logic here
-    console.log(`Opening grades for course: ${courseCode} - ${courseName} - ${intakeYear} Intake`);
-    
-    // Example: Redirect to grades page or open modal
-    // window.location.href = `/grades?course=${courseCode}&intake=${intakeYear}`;
-    // OR
-    // openGradesModal(courseCode, courseName, intakeYear);
-}
+            if (filteredCourses.length === 0) {
+                const availablePrograms = [...new Set(allCourses?.map(c => c.target_program).filter(Boolean))];
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="7" style="text-align:center; color: gray;">
+                            No courses currently found for program: <b>${lecturerTargetProgram}</b>.<br>
+                            <small>Available programs: ${availablePrograms.join(', ') || 'None'}</small>
+                        </td>
+                    </tr>`;
+                return;
+            }
 
-/**
- * Load lecturer students table
- */
-async function loadLecturerStudents() {
-    const tbody = $('lecturer-students-table');
-    if (!tbody) return;
+            // Debug student enrollment data
+            console.log('🎯 Checking student enrollment data:');
+            if (allStudents && allStudents.length > 0) {
+                const sampleStudent = allStudents[0];
+                console.log('Sample student enrollment data:', {
+                    name: sampleStudent.full_name,
+                    enrolled_courses: sampleStudent.enrolled_courses,
+                    courses: sampleStudent.courses,
+                    program: sampleStudent.program,
+                    intake_year: sampleStudent.intake_year
+                });
+            }
 
-    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;">Loading students...</td></tr>`;
+            const coursesHtml = filteredCourses.map(course => {
+                const courseCode = course.unit_code || 'N/A';
+                const courseName = course.course_name || 'N/A';
+                const program = course.target_program || 'N/A';
+                const block = course.block || 'N/A';
+                const intakeYear = course.intake_year || 'N/A';
 
-    try {
-        if (!currentUserProfile || !lecturerTargetProgram || allStudents.length === 0) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="8" style="text-align:center;">
-                        No **${lecturerTargetProgram || 'Assigned'}** students found in the database matching your department focus.
-                    </td>
-                </tr>`;
-            return;
+                // Enhanced student counting - filter by program AND intake year
+                const studentCount = allStudents?.filter(student => {
+                    // Check if student is in the same program AND intake year
+                    const studentIntakeYear = student.intake_year || student.admission_year;
+                    if (student.program !== lecturerTargetProgram) return false;
+                    if (studentIntakeYear !== intakeYear) return false;
+
+                    const enrolledCourses = student.enrolled_courses || student.courses || [];
+                    
+                    // If no enrollment data exists, count student (they're in matching program and intake year)
+                    if (enrolledCourses.length === 0) {
+                        return true;
+                    }
+
+                    // Check if student is enrolled in this specific course
+                    return enrolledCourses.some(enrolledCourse => 
+                        enrolledCourse === courseCode || 
+                        enrolledCourse.includes(courseCode) ||
+                        courseCode.includes(enrolledCourse)
+                    );
+                }).length || 0;
+
+                console.log(`👥 Course: ${courseName} | Intake: ${intakeYear} | Students: ${studentCount}`);
+
+                return `
+                    <tr>
+                        <td><strong>${courseCode}</strong></td>
+                        <td>${courseName}</td>
+                        <td>
+                            <span class="program-badge">${program}</span>
+                        </td>
+                        <td>${block}</td>
+                        <td>${intakeYear}</td>
+                        <td>
+                            <span class="student-count">${studentCount} students</span>
+                        </td>
+                        <td>
+                            <button class="btn-action view-grades" 
+                                onclick="viewCourseGrades('${courseCode}', '${courseName.replace(/'/g, "\\'")}', '${intakeYear}')">
+                                <i class="fas fa-chart-bar"></i> Manage Grades
+                            </button>
+                        </td>
+                    </tr>`;
+            }).join('');
+
+            tbody.innerHTML = coursesHtml;
+            console.log('✅ Courses table rendered successfully');
+            
+            // Initialize academic filters
+            initializeAcademicFilters();
         }
 
-        // Students were already filtered globally in allStudents by loadStudents()
-        const programStudents = allStudents; 
-
-        const studentsHtml = programStudents.map(profile => {
-            const status = (profile.status || 'Active').toLowerCase();
-            return `
-                <tr>
-                    <td>${profile.full_name || 'N/A'}</td>
-                    <td>${profile.student_id || 'N/A'}</td>
-                    <td>${profile.email || 'N/A'}</td>
-                    <td>${profile.program || 'N/A'}</td>
-                    <td>${profile.intake_year || 'N/A'}</td>
-                    <td>${profile.block || 'N/A'}</td>
-                    <td>
-                        <span class="status status-${status}">
-                            ${profile.status || 'Active'}
-                        </span>
-                    </td>
-                    <td>
-                        <button class="btn-action" 
-                                onclick="showSendMessageModal('${profile.user_id}', '${profile.full_name?.replace(/'/g, "\\'") || ''}')">
-                            Message
-                        </button>
-                    </td>
-                </tr>`;
-        }).join('');
-
-        tbody.innerHTML = studentsHtml;
-    } catch (err) {
-        console.error('Failed to load student list:', err);
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="8" style="text-align:center;">
-                    Failed to load student list. Please check the Supabase column names (program, block) and RLS policy.
-                </td>
-            </tr>`;
-    }
-}
-
-/**
- * Load lecturer dashboard summary data.
- */
-async function loadLecturerDashboardData() {
-    console.log('📊 Loading lecturer dashboard data...');
-    
-    try {
-        // Ensure we have the necessary data
-        if (!allCourses || allCourses.length === 0) {
-            await fetchGlobalDataCaches();
-        }
-        
-        if (!allStudents || allStudents.length === 0) {
-            await loadStudents();
+        /**
+         * View grades for a specific course
+         */
+        function viewCourseGrades(courseCode, courseName, intakeYear) {
+            showFeedback(`Loading grades for ${courseName} (${courseCode}) - ${intakeYear} Intake`, 'info');
+            
+            // You can implement actual grade viewing logic here
+            console.log(`Opening grades for course: ${courseCode} - ${courseName} - ${intakeYear} Intake`);
+            
+            // Example: Redirect to grades page or open modal
+            // window.location.href = `/grades?course=${courseCode}&intake=${intakeYear}`;
+            // OR
+            // openGradesModal(courseCode, courseName, intakeYear);
         }
 
-        // 1. General Info - Use correct field names
-        const programCourses = (allCourses || []).filter(c => {
-            const courseProgram = c.target_program;
-            return courseProgram === lecturerTargetProgram && (c.status || 'Active') === 'Active';
-        });
-        
-        // Count students in the current program
-        const programStudents = allStudents || [];
+        /**
+         * Load lecturer students table
+         */
+        async function loadLecturerStudents() {
+            const tbody = $('students-table-body');
+            if (!tbody) return;
 
-        // Update dashboard counters
-        if ($('total_courses_count')) {
-            $('total_courses_count').textContent = programCourses.length || '0';
+            tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;">Loading students...</td></tr>`;
+
+            try {
+                if (!currentUserProfile || !lecturerTargetProgram || allStudents.length === 0) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="8" style="text-align:center;">
+                                No **${lecturerTargetProgram || 'Assigned'}** students found in the database matching your department focus.
+                            </td>
+                        </tr>`;
+                    return;
+                }
+
+                // Students were already filtered globally in allStudents by loadStudents()
+                const programStudents = allStudents; 
+
+                const studentsHtml = programStudents.map(profile => {
+                    const status = (profile.status || 'Active').toLowerCase();
+                    return `
+                        <tr>
+                            <td>${profile.full_name || 'N/A'}</td>
+                            <td>${profile.student_id || 'N/A'}</td>
+                            <td>${profile.email || 'N/A'}</td>
+                            <td>${profile.program || 'N/A'}</td>
+                            <td>${profile.intake_year || 'N/A'}</td>
+                            <td>${profile.block || 'N/A'}</td>
+                            <td>
+                                <span class="status status-${status}">
+                                    ${profile.status || 'Active'}
+                                </span>
+                            </td>
+                            <td>
+                                <button class="btn-action" 
+                                        onclick="showSendMessageModal('${profile.user_id}', '${profile.full_name?.replace(/'/g, "\\'") || ''}')">
+                                    Message
+                                </button>
+                            </td>
+                        </tr>`;
+                }).join('');
+
+                tbody.innerHTML = studentsHtml;
+            } catch (err) {
+                console.error('Failed to load student list:', err);
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="8" style="text-align:center;">
+                            Failed to load student list. Please check the Supabase column names (program, block) and RLS policy.
+                        </td>
+                    </tr>`;
+            }
         }
-        
-        if ($('total_students_count')) {
-            $('total_students_count').textContent = programStudents.length || '0';
+
+        /**
+         * Load lecturer dashboard summary data.
+         */
+        async function loadLecturerDashboardData() {
+            console.log('📊 Loading lecturer dashboard data...');
+            
+            try {
+                // Ensure we have the necessary data
+                if (!allCourses || allCourses.length === 0) {
+                    await fetchGlobalDataCaches();
+                }
+                
+                if (!allStudents || allStudents.length === 0) {
+                    await loadStudents();
+                }
+
+                // 1. General Info - Use correct field names
+                const programCourses = (allCourses || []).filter(c => {
+                    const courseProgram = c.target_program;
+                    return courseProgram === lecturerTargetProgram && (c.status || 'Active') === 'Active';
+                });
+                
+                // Count students in the current program
+                const programStudents = allStudents || [];
+
+                // Update dashboard counters
+                if ($('total_courses_count')) {
+                    $('total_courses_count').textContent = programCourses.length || '0';
+                }
+                
+                if ($('total_students_count')) {
+                    $('total_students_count').textContent = programStudents.length || '0';
+                }
+
+                console.log(`📊 Dashboard Stats: ${programCourses.length} courses, ${programStudents.length} students`);
+
+                // Update filter info in banner
+                const filterInfoEl = document.querySelector('#welcome-banner span:last-child');
+                if (filterInfoEl && lecturerTargetProgram) {
+                    filterInfoEl.textContent = `This dashboard is filtered to your assigned program: ${lecturerTargetProgram}. All student/grade data shown is relevant to your assignment.`;
+                }
+
+                // 2. Actionable Alerts (You can replace with real data later)
+                if ($('students_at_risk_count')) {
+                    $('students_at_risk_count').textContent = Math.floor((programStudents.length || 0) * 0.1) || '0';
+                }
+                
+                if ($('pending_attendance_count')) {
+                    $('pending_attendance_count').textContent = '3';
+                }
+                
+                if ($('exams_due_count')) {
+                    $('exams_due_count').textContent = '2';
+                }
+                
+                if ($('unread_messages_count')) {
+                    $('unread_messages_count').textContent = '5';
+                }
+
+                console.log('✅ Dashboard data loaded successfully');
+
+            } catch (error) {
+                console.error('❌ Error loading dashboard data:', error);
+                showFeedback('Failed to load dashboard data. Some features may not work properly.', 'warning');
+            }
         }
 
-        console.log(`📊 Dashboard Stats: ${programCourses.length} courses, ${programStudents.length} students`);
-
-        // Update filter info in banner
-        const filterInfoEl = document.querySelector('#welcome-banner span:last-child');
-        if (filterInfoEl && lecturerTargetProgram) {
-            filterInfoEl.textContent = `This dashboard is filtered to your assigned program: ${lecturerTargetProgram}. All student/grade data shown is relevant to your assignment.`;
+        /**
+         * Initialize academic filters for courses
+         */
+        function initializeAcademicFilters() {
+            console.log('🎯 Initializing academic filters...');
+            
+            // Populate intake year filter
+            const intakeYears = [...new Set(allCourses?.map(c => c.intake_year).filter(Boolean))].sort().reverse();
+            const intakeFilter = $('intake-year-filter');
+            
+            if (intakeFilter && intakeYears.length > 0) {
+                intakeFilter.innerHTML = '<option value="">All Intake Years</option>' +
+                    intakeYears.map(year => `<option value="${year}">${year} Intake</option>`).join('');
+                
+                // Set default to most recent year
+                intakeFilter.value = intakeYears[0];
+                console.log(`✅ Populated intake year filter with: ${intakeYears.join(', ')}`);
+            }
+            
+            // Populate block/term filter based on program
+            const periodFilter = $('academic-period-filter');
+            const periodLabel = $('academic-period-label');
+            
+            if (periodFilter && periodLabel) {
+                if (lecturerTargetProgram === 'KRCHN') {
+                    periodLabel.textContent = 'Filter by Block:';
+                    const blocks = ['A', 'B', 'C', 'D'];
+                    periodFilter.innerHTML = '<option value="">All Blocks</option>' +
+                        blocks.map(block => `<option value="${block}">Block ${block}</option>`).join('');
+                } else if (lecturerTargetProgram === 'TVET') {
+                    periodLabel.textContent = 'Filter by Term:';
+                    const terms = ['Term 1', 'Term 2', 'Term 3'];
+                    periodFilter.innerHTML = '<option value="">All Terms</option>' +
+                        terms.map(term => `<option value="${term}">${term}</option>`).join('');
+                }
+                console.log(`✅ Populated ${lecturerTargetProgram} period filter`);
+            }
         }
 
-        // 2. Actionable Alerts (You can replace with real data later)
-        if ($('students_at_risk_count')) {
-            $('students_at_risk_count').textContent = Math.floor((programStudents.length || 0) * 0.1) || '0';
+        /**
+         * Filter courses by academic period
+         */
+        function filterCoursesByAcademicPeriod() {
+            const selectedIntakeYear = $('intake-year-filter')?.value;
+            const selectedPeriod = $('academic-period-filter')?.value;
+            
+            const filteredCourses = (allCourses || []).filter(course => {
+                const courseProgram = course.target_program;
+                const courseIntakeYear = course.intake_year;
+                const courseBlock = course.block;
+                const courseStatus = course.status || 'Active';
+                
+                const matchesProgram = courseProgram === lecturerTargetProgram;
+                const matchesIntakeYear = !selectedIntakeYear || courseIntakeYear === selectedIntakeYear;
+                const matchesPeriod = !selectedPeriod || courseBlock === selectedPeriod;
+                const isActive = courseStatus === 'Active';
+                
+                return matchesProgram && matchesIntakeYear && matchesPeriod && isActive;
+            });
+            
+            updateCoursesTable(filteredCourses, selectedIntakeYear, selectedPeriod);
         }
-        
-        if ($('pending_attendance_count')) {
-            $('pending_attendance_count').textContent = '3';
+
+        /**
+         * Update courses table with filtered data
+         */
+        function updateCoursesTable(courses, intakeYear = 'All', academicPeriod = 'All') {
+            const tbody = $('lecturer-courses-table');
+            if (!tbody) return;
+            
+            const periodLabel = lecturerTargetProgram === 'TVET' ? 'Term' : 'Block';
+            
+            if (courses.length === 0) {
+                tbody.innerHTML = `
+                    <tr><td colspan="7" style="text-align:center; color: gray;">
+                        No courses found for ${intakeYear || 'all intake years'} and ${academicPeriod || 'all'} ${periodLabel.toLowerCase()}s.
+                    </td></tr>`;
+                return;
+            }
+            
+            const coursesHtml = courses.map(course => {
+                const courseCode = course.unit_code || 'N/A';
+                const courseName = course.course_name || 'N/A';
+                const program = course.target_program || 'N/A';
+                const block = course.block || 'N/A';
+                const intakeYear = course.intake_year || 'N/A';
+
+                const studentCount = allStudents?.filter(student => 
+                    student.program === lecturerTargetProgram && 
+                    (student.intake_year === intakeYear || !intakeYear)
+                ).length || 0;
+
+                return `
+                    <tr>
+                        <td><strong>${courseCode}</strong></td>
+                        <td>${courseName}</td>
+                        <td><span class="program-badge">${program}</span></td>
+                        <td>${block}</td>
+                        <td>${intakeYear}</td>
+                        <td><span class="student-count">${studentCount} students</span></td>
+                        <td>
+                            <button class="btn-action view-grades" 
+                                onclick="viewCourseGrades('${courseCode}', '${courseName.replace(/'/g, "\\'")}', '${intakeYear}')">
+                                <i class="fas fa-chart-bar"></i> Manage Grades
+                            </button>
+                        </td>
+                    </tr>`;
+            }).join('');
+            
+            tbody.innerHTML = coursesHtml;
+            
+            console.log(`✅ Showing ${courses.length} courses for ${intakeYear || 'all intake years'} and ${academicPeriod || 'all'} ${periodLabel.toLowerCase()}s`);
         }
-        
-        if ($('exams_due_count')) {
-            $('exams_due_count').textContent = '2';
-        }
-        
-        if ($('unread_messages_count')) {
-            $('unread_messages_count').textContent = '5';
-        }
-
-        console.log('✅ Dashboard data loaded successfully');
-
-    } catch (error) {
-        console.error('❌ Error loading dashboard data:', error);
-        showFeedback('Failed to load dashboard data. Some features may not work properly.', 'warning');
-    }
-}
-
-/**
- * Initialize academic filters for courses
- */
-function initializeAcademicFilters() {
-    console.log('🎯 Initializing academic filters...');
-    
-    // Populate intake year filter
-    const intakeYears = [...new Set(allCourses?.map(c => c.intake_year).filter(Boolean))].sort().reverse();
-    const intakeFilter = $('intake-year-filter');
-    
-    if (intakeFilter && intakeYears.length > 0) {
-        intakeFilter.innerHTML = '<option value="">All Intake Years</option>' +
-            intakeYears.map(year => `<option value="${year}">${year} Intake</option>`).join('');
-        
-        // Set default to most recent year
-        intakeFilter.value = intakeYears[0];
-        console.log(`✅ Populated intake year filter with: ${intakeYears.join(', ')}`);
-    }
-    
-    // Populate block/term filter based on program
-    const periodFilter = $('academic-period-filter');
-    const periodLabel = $('academic-period-label');
-    
-    if (periodFilter && periodLabel) {
-        if (lecturerTargetProgram === 'KRCHN') {
-            periodLabel.textContent = 'Filter by Block:';
-            const blocks = ['A', 'B', 'C', 'D'];
-            periodFilter.innerHTML = '<option value="">All Blocks</option>' +
-                blocks.map(block => `<option value="${block}">Block ${block}</option>`).join('');
-        } else if (lecturerTargetProgram === 'TVET') {
-            periodLabel.textContent = 'Filter by Term:';
-            const terms = ['Term 1', 'Term 2', 'Term 3'];
-            periodFilter.innerHTML = '<option value="">All Terms</option>' +
-                terms.map(term => `<option value="${term}">${term}</option>`).join('');
-        }
-        console.log(`✅ Populated ${lecturerTargetProgram} period filter`);
-    }
-}
-
-/**
- * Filter courses by academic period
- */
-function filterCoursesByAcademicPeriod() {
-    const selectedIntakeYear = $('intake-year-filter')?.value;
-    const selectedPeriod = $('academic-period-filter')?.value;
-    
-    const filteredCourses = (allCourses || []).filter(course => {
-        const courseProgram = course.target_program;
-        const courseIntakeYear = course.intake_year;
-        const courseBlock = course.block;
-        const courseStatus = course.status || 'Active';
-        
-        const matchesProgram = courseProgram === lecturerTargetProgram;
-        const matchesIntakeYear = !selectedIntakeYear || courseIntakeYear === selectedIntakeYear;
-        const matchesPeriod = !selectedPeriod || courseBlock === selectedPeriod;
-        const isActive = courseStatus === 'Active';
-        
-        return matchesProgram && matchesIntakeYear && matchesPeriod && isActive;
-    });
-    
-    updateCoursesTable(filteredCourses, selectedIntakeYear, selectedPeriod);
-}
-
-/**
- * Update courses table with filtered data
- */
-function updateCoursesTable(courses, intakeYear = 'All', academicPeriod = 'All') {
-    const tbody = $('lecturer-courses-table');
-    if (!tbody) return;
-    
-    const periodLabel = lecturerTargetProgram === 'TVET' ? 'Term' : 'Block';
-    
-    if (courses.length === 0) {
-        tbody.innerHTML = `
-            <tr><td colspan="7" style="text-align:center; color: gray;">
-                No courses found for ${intakeYear || 'all intake years'} and ${academicPeriod || 'all'} ${periodLabel.toLowerCase()}s.
-            </td></tr>`;
-        return;
-    }
-    
-    const coursesHtml = courses.map(course => {
-        const courseCode = course.unit_code || 'N/A';
-        const courseName = course.course_name || 'N/A';
-        const program = course.target_program || 'N/A';
-        const block = course.block || 'N/A';
-        const intakeYear = course.intake_year || 'N/A';
-
-        const studentCount = allStudents?.filter(student => 
-            student.program === lecturerTargetProgram && 
-            (student.intake_year === intakeYear || !intakeYear)
-        ).length || 0;
-
-        return `
-            <tr>
-                <td><strong>${courseCode}</strong></td>
-                <td>${courseName}</td>
-                <td><span class="program-badge">${program}</span></td>
-                <td>${block}</td>
-                <td>${intakeYear}</td>
-                <td><span class="student-count">${studentCount} students</span></td>
-                <td>
-                    <button class="btn-action view-grades" 
-                        onclick="viewCourseGrades('${courseCode}', '${courseName.replace(/'/g, "\\'")}', '${intakeYear}')">
-                        <i class="fas fa-chart-bar"></i> Manage Grades
-                    </button>
-                </td>
-            </tr>`;
-    }).join('');
-    
-    tbody.innerHTML = coursesHtml;
-    
-    console.log(`✅ Showing ${courses.length} courses for ${intakeYear || 'all intake years'} and ${academicPeriod || 'all'} ${periodLabel.toLowerCase()}s`);
-}
 
         // =================================================================
         // === 6. SESSIONS IMPLEMENTATION ===
@@ -3118,72 +3008,71 @@ function updateCoursesTable(courses, intakeYear = 'All', academicPeriod = 'All')
             populateSelect($('att_course_id'), filteredCourses, 'unit_code', 'course_name', 'Select Course (Optional)');
         }
 
-    async function lecturerCheckIn() {
-    const button = $('lecturer-checkin-btn');
-    setButtonLoading(button, true, 'Marking Attendance...');
+        async function lecturerCheckIn() {
+            const button = $('lecturer-checkin-btn');
+            setButtonLoading(button, true, 'Marking Attendance...');
 
-    if (!navigator.geolocation) {
-        showFeedback('Geolocation is not supported by your browser.', 'error');
-        setButtonLoading(button, false);
-        return;
-    }
-
-    navigator.geolocation.getCurrentPosition(async (position) => {
-        const { latitude, longitude } = position.coords;
-        const checkinTime = new Date().toISOString();
-        const locationDetails = `Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)}`;
-
-        try {
-            // 1️⃣ Ensure lecturer exists in consolidated_user_profiles_table
-            const { data: lecturerData, error: checkError } = await sb
-                .from('consolidated_user_profiles_table')
-                .select('user_id')
-                .eq('user_id', currentUserProfile.user_id)
-                .single();
-
-            if (checkError && checkError.code !== 'PGRST116') {
-                throw checkError;
-            }
-
-            if (!lecturerData) {
-                showFeedback(
-                    '❌ Lecturer profile not found. Please contact admin to register your account.',
-                    'error'
-                );
+            if (!navigator.geolocation) {
+                showFeedback('Geolocation is not supported by your browser.', 'error');
+                setButtonLoading(button, false);
                 return;
             }
 
-            // 2️⃣ Insert attendance into geo_attendance_logs
-            const { error } = await sb.from('geo_attendance_logs').insert({
-                user_id: currentUserProfile.user_id,         // Must match the existing UUID
-                user_role: currentUserProfile.role || 'lecturer',
-                session_type: 'Lecturer Check-in',
-                check_in_time: checkinTime,
-                latitude,
-                longitude,
-                location_details: locationDetails,
-                status: 'Present'
+            navigator.geolocation.getCurrentPosition(async (position) => {
+                const { latitude, longitude } = position.coords;
+                const checkinTime = new Date().toISOString();
+                const locationDetails = `Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)}`;
+
+                try {
+                    // 1️⃣ Ensure lecturer exists in consolidated_user_profiles_table
+                    const { data: lecturerData, error: checkError } = await sb
+                        .from('consolidated_user_profiles_table')
+                        .select('user_id')
+                        .eq('user_id', currentUserProfile.user_id)
+                        .single();
+
+                    if (checkError && checkError.code !== 'PGRST116') {
+                        throw checkError;
+                    }
+
+                    if (!lecturerData) {
+                        showFeedback(
+                            '❌ Lecturer profile not found. Please contact admin to register your account.',
+                            'error'
+                        );
+                        return;
+                    }
+
+                    // 2️⃣ Insert attendance into geo_attendance_logs
+                    const { error } = await sb.from('geo_attendance_logs').insert({
+                        user_id: currentUserProfile.user_id,         // Must match the existing UUID
+                        user_role: currentUserProfile.role || 'lecturer',
+                        session_type: 'Lecturer Check-in',
+                        check_in_time: checkinTime,
+                        latitude,
+                        longitude,
+                        location_details: locationDetails,
+                        status: 'Present'
+                    });
+
+                    if (error) throw error;
+
+                    showFeedback('✅ Your attendance has been logged successfully!', 'success');
+                    loadTodaysAttendanceRecords();
+
+                } catch (error) {
+                    console.error('Check-in failed:', error);
+                    showFeedback(`Check-in failed: ${error.message}`, 'error');
+                } finally {
+                    setButtonLoading(button, false);
+                }
+
+            }, (error) => {
+                console.error('Geolocation Error:', error);
+                showFeedback(`Geolocation failed: ${error.message}. Please enable location services.`, 'error');
+                setButtonLoading(button, false);
             });
-
-            if (error) throw error;
-
-            showFeedback('✅ Your attendance has been logged successfully!', 'success');
-            loadTodaysAttendanceRecords();
-
-        } catch (error) {
-            console.error('Check-in failed:', error);
-            showFeedback(`Check-in failed: ${error.message}`, 'error');
-        } finally {
-            setButtonLoading(button, false);
         }
-
-    }, (error) => {
-        console.error('Geolocation Error:', error);
-        showFeedback(`Geolocation failed: ${error.message}. Please enable location services.`, 'error');
-        setButtonLoading(button, false);
-    });
-}
-
 
         async function handleManualAttendance(e) {
             e.preventDefault();
@@ -3240,103 +3129,102 @@ function updateCoursesTable(courses, intakeYear = 'All', academicPeriod = 'All')
             }
         }
 
-async function loadTodaysAttendanceRecords() {
-    const tbody = document.getElementById('attendance-table'); // match HTML ID
-    if (!tbody) return;
+        async function loadTodaysAttendanceRecords() {
+            const tbody = document.getElementById('attendance-table'); // match HTML ID
+            if (!tbody) return;
 
-    tbody.innerHTML = '<tr><td colspan="8">Loading today\'s records...</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8">Loading today\'s records...</td></tr>';
 
-    const today = new Date().toISOString().split('T')[0];
+            const today = new Date().toISOString().split('T')[0];
 
-    const { data: logs, error } = await fetchData(
-        'geo_attendance_logs',
-        '*',
-        { check_in_time: today },
-        'check_in_time',
-        false
-    );
+            const { data: logs, error } = await fetchData(
+                'geo_attendance_logs',
+                '*',
+                { check_in_time: today },
+                'check_in_time',
+                false
+            );
 
-    if (error) {
-        tbody.innerHTML = `<tr><td colspan="8">Error loading logs: ${error.message}</td></tr>`;
-        return;
-    }
+            if (error) {
+                tbody.innerHTML = `<tr><td colspan="8">Error loading logs: ${error.message}</td></tr>`;
+                return;
+            }
 
-    if (!logs || logs.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8">No attendance records found for today.</td></tr>';
-        return;
-    }
+            if (!logs || logs.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8">No attendance records found for today.</td></tr>';
+                return;
+            }
 
-    // Optional: latest check-ins first
-    logs.sort((a, b) => new Date(b.check_in_time) - new Date(a.check_in_time));
+            // Optional: latest check-ins first
+            logs.sort((a, b) => new Date(b.check_in_time) - new Date(a.check_in_time));
 
-    tbody.innerHTML = '';
-    logs.forEach(l => {
-        const student = allStudents?.find(s => s.user_id === l.user_id);
-        const lecturer = allLecturers?.find(lc => lc.user_id === l.user_id);
+            tbody.innerHTML = '';
+            logs.forEach(l => {
+                const student = allStudents?.find(s => s.user_id === l.user_id);
+                const lecturer = allLecturers?.find(lc => lc.user_id === l.user_id);
 
-        const userName = student?.full_name || lecturer?.full_name || l.lecturer_name || 'N/A';
-        const regNo = student?.student_id || 'N/A';
-        const target = allCourses?.find(c => c.unit_code === l.course_id)?.course_name || l.course_id || 'General';
-        const dateTime = new Date(l.check_in_time).toLocaleString();
-        const locationText = l.location_details || 'N/A';
-        const geoId = `geo-${l.id}`;
+                const userName = student?.full_name || lecturer?.full_name || l.lecturer_name || 'N/A';
+                const regNo = student?.student_id || 'N/A';
+                const target = allCourses?.find(c => c.unit_code === l.course_id)?.course_name || l.course_id || 'General';
+                const dateTime = new Date(l.check_in_time).toLocaleString();
+                const locationText = l.location_details || 'N/A';
+                const geoId = `geo-${l.id}`;
 
-        tbody.innerHTML += `
-            <tr>
-                <td>${userName}</td>
-                <td>${regNo}</td>
-                <td>${l.session_type || 'N/A'}</td>
-                <td>${target}</td>
-                <td>${dateTime}</td>
-                <td id="${geoId}">${locationText}</td>
-                <td><span class="status status-${(l.status || 'N/A').toLowerCase()}">${l.status}</span></td>
-                <td>
-                    <button
-                        onclick="viewCheckInMap(${l.latitude}, ${l.longitude}, '${encodeURIComponent(userName)}', '${geoId}')"
-                        class="btn-action"
-                        ${(!l.latitude || !l.longitude) ? 'disabled title="No Geo-location recorded"' : ''}>
-                        View Map
-                    </button>
-                </td>
-            </tr>
-        `;
-    });
-}
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${userName}</td>
+                        <td>${regNo}</td>
+                        <td>${l.session_type || 'N/A'}</td>
+                        <td>${target}</td>
+                        <td>${dateTime}</td>
+                        <td id="${geoId}">${locationText}</td>
+                        <td><span class="status status-${(l.status || 'N/A').toLowerCase()}">${l.status}</span></td>
+                        <td>
+                            <button
+                                onclick="viewCheckInMap(${l.latitude}, ${l.longitude}, '${encodeURIComponent(userName)}', '${geoId}')"
+                                class="btn-action"
+                                ${(!l.latitude || !l.longitude) ? 'disabled title="No Geo-location recorded"' : ''}>
+                                View Map
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
 
-function viewCheckInMap(lat, lng, nameEncoded, locationElementId) {
-    const name = decodeURIComponent(nameEncoded);
-    const mapModal = $('mapModal');
-    mapModal.classList.add('active');
+        function viewCheckInMap(lat, lng, nameEncoded, locationElementId) {
+            const name = decodeURIComponent(nameEncoded);
+            const mapModal = $('mapModal');
+            mapModal.classList.add('active');
 
-    const mapContainer = $('mapbox-map');
-    if (!mapContainer) {
-        showFeedback("Error: Map container not found.", "error");
-        return;
-    }
+            const mapContainer = $('mapbox-map');
+            if (!mapContainer) {
+                showFeedback("Error: Map container not found.", "error");
+                return;
+            }
 
-    if (attendanceMap) attendanceMap.remove();
+            if (attendanceMap) attendanceMap.remove();
 
-    const locationText = $(locationElementId)?.textContent || 'N/A';
-    $('map-details').textContent = `Location for ${name}: ${locationText}`;
+            const locationText = $(locationElementId)?.textContent || 'N/A';
+            $('map-details').textContent = `Location for ${name}: ${locationText}`;
 
-    attendanceMap = L.map('mapbox-map').setView([lat, lng], 16);
+            attendanceMap = L.map('mapbox-map').setView([lat, lng], 16);
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(attendanceMap);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(attendanceMap);
 
-    L.marker([lat, lng]).addTo(attendanceMap)
-        .bindPopup(`<b>${name}'s Check-in Location</b><br>${locationText}`)
-        .openPopup();
+            L.marker([lat, lng]).addTo(attendanceMap)
+                .bindPopup(`<b>${name}'s Check-in Location</b><br>${locationText}`)
+                .openPopup();
 
-    setTimeout(() => attendanceMap.invalidateSize(), 300);
-}
+            setTimeout(() => attendanceMap.invalidateSize(), 300);
+        }
 
-function closeMapModal() {
-    const mapModal = $('mapModal');
-    mapModal.classList.remove('active');
-}
-
+        function closeMapModal() {
+            const mapModal = $('mapModal');
+            mapModal.classList.remove('active');
+        }
 
         // =================================================================
         // === 8. EXAMS/CATS MANAGEMENT ===
@@ -3466,211 +3354,201 @@ function closeMapModal() {
         }
 
         // =================================================================
-// === 9. RESOURCES MANAGEMENT ===
-// =================================================================
+        // === 9. RESOURCES MANAGEMENT ===
+        // =================================================================
 
-function populateResourceFormSelects() {
-    const targetProgram = lecturerTargetProgram;
-    const programs = targetProgram ? [{ id: targetProgram, name: targetProgram }] : [];
-    
-    populateSelect($('resource_program'), programs, 'id', 'name', 'Select Program');
-    if (targetProgram) {
-        $('resource_program').value = targetProgram;
-    }
-
-    populateSelect($('resource_intake'), allIntakes, 'id', 'name', 'Select Intake Year');
-    
-    const blockSelect = $('resource_block');
-    if (targetProgram && ACADEMIC_STRUCTURE[targetProgram]) {
-        const blocks = ACADEMIC_STRUCTURE[targetProgram].map(name => ({ id: name, name: name }));
-        populateSelect(blockSelect, blocks, 'id', 'name', `Select ${targetProgram} Block/Term`);
-    } else {
-        blockSelect.innerHTML = '<option value="">-- Select Program First --</option>';
-    }
-}
-
-// FIXED: Function name matches HTML form ID + 'handle' prefix
-async function handleUploadResource(e) {
-    e.preventDefault();
-    const submitButton = e.submitter;
-    const originalText = submitButton.textContent;
-    setButtonLoading(submitButton, true, 'Uploading...');
-
-    const program = $('resource_program').value;
-    const intake = $('resource_intake').value;
-    const block = $('resource_block').value;
-    const fileInput = $('resource_file');
-    const title = $('resource_title').value.trim();
-    const category = $('resource_category').value;
-
-    // Enhanced validation
-    if (!fileInput.files.length || !program || !intake || !block || !title || !category) {
-        showFeedback('Please fill in all required fields and select a file.', 'error');
-        setButtonLoading(submitButton, false, originalText);
-        return;
-    }
-
-    let file = fileInput.files[0];
-    let uploadFile = file;
-
-    const originalExt = file.name.split('.').pop();
-    const baseName = title.replace(/[^\w\-]+/g, '_') + '_' + file.name.replace(/\.[^.]+$/, '').replace(/[^\w\-]+/g, '_');
-
-    let originalName = `${baseName}.${originalExt}`;
-    let filePath = `${program}/${intake}/${block}/${originalName}`;
-
-    try {
-        // Convert Word or PPT to PDF (placeholder)
-        if (/\.(docx?|pptx?)$/i.test(file.name)) {
-            originalName = `${baseName}.pdf`;
-            filePath = `${program}/${intake}/${block}/${baseName}.pdf`;
-        }
-
-        const { error: uploadError } = await sb.storage
-            .from(RESOURCES_BUCKET)
-            .upload(filePath, uploadFile, {
-                cacheControl: '3600',
-                upsert: true,
-                contentType: uploadFile.type
-            });
-        if (uploadError) throw uploadError;
-
-        const { data: { publicUrl } } = sb.storage
-            .from(RESOURCES_BUCKET)
-            .getPublicUrl(filePath);
-
-        // Get authenticated user for uploader info
-        const { data: { user }, error: authError } = await sb.auth.getUser();
-        if (authError) throw authError;
-
-        // CORRECTED: Use only existing column names from your table
-        const { error: dbError, data } = await sb
-            .from('resources')
-            .insert({
-                // Basic info
-                title: title,
-                category: category, // This column exists
-                
-                // Academic info - use the correct column names
-                program_type: program,
-                target_program: program, // This column exists
-                intake: intake, // This column exists
-                intake_year: intake, // This column exists (duplicate of intake)
-                block: block, // This column exists
-                block_term: block, // This column exists (duplicate of block)
-                course_name: program, // This column exists
-                
-                // File info
-                file_path: filePath,
-                file_name: originalName,
-                file_url: publicUrl,
-                
-                // Uploader info
-                uploaded_by: user.id,
-                uploaded_by_name: currentUserProfile?.full_name,
-                // lecturer_name column doesn't exist - use uploaded_by_name instead
-                
-                // Additional settings
-                allow_download: true // This column exists
-                
-                // created_at is automatically set by Supabase
-                // course_id can be null if not needed
-            }).select('id');
+        function populateResourceFormSelects() {
+            const targetProgram = lecturerTargetProgram;
+            const programs = targetProgram ? [{ id: targetProgram, name: targetProgram }] : [];
             
-        if (dbError) throw dbError;
+            populateSelect($('resource_program'), programs, 'id', 'name', 'Select Program');
+            if (targetProgram) {
+                $('resource_program').value = targetProgram;
+            }
 
-        showFeedback(`✅ Resource "${title}" uploaded successfully!`, 'success');
-        e.target.reset();
-        loadLecturerResources();
-    } catch (err) {
-        console.error('Upload failed:', err);
-        showFeedback(`❌ Upload failed: ${err.message}`, 'error');
-    } finally {
-        setButtonLoading(submitButton, false, originalText);
-    }
-}
-
-// UPDATED: Fixed to match new table structure
-async function loadLecturerResources() {
-    const tbody = $('resources-list');
-    if (!tbody) return;
-    
-    tbody.innerHTML = '<tr><td colspan="7">Loading resources...</td></tr>';
-
-    try {
-        const { data: resources, error } = await fetchData(
-            RESOURCES_TABLE,
-            '*',
-            { uploaded_by: currentUserProfile.user_id },
-            'created_at',
-            false
-        );
-
-        if (error) throw error;
-
-        if (!resources || resources.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7">No resources uploaded yet.</td></tr>';
-            return;
+            populateSelect($('resource_intake'), allIntakes, 'id', 'name', 'Select Intake Year');
+            
+            const blockSelect = $('resource_block');
+            if (targetProgram && ACADEMIC_STRUCTURE[targetProgram]) {
+                const blocks = ACADEMIC_STRUCTURE[targetProgram].map(name => ({ id: name, name: name }));
+                populateSelect(blockSelect, blocks, 'id', 'name', `Select ${targetProgram} Block/Term`);
+            } else {
+                blockSelect.innerHTML = '<option value="">-- Select Program First --</option>';
+            }
         }
 
-        tbody.innerHTML = resources.map(resource => {
-            return `
-                <tr>
-                    <td>${resource.title || 'N/A'}</td>
-                    <td>${resource.category || 'Academic'}</td>
-                    <td>${resource.target_program || resource.program_type || 'N/A'}/${resource.block_term || resource.block || 'N/A'}</td>
-                    <td>${resource.uploaded_by_name || 'N/A'}</td>
-                    <td>${new Date(resource.created_at).toLocaleDateString('en-GB', {
-                        day: '2-digit',
-                        month: '2-digit', 
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                    })}</td>
-                    <td>
-                        <a href="${resource.file_url}" target="_blank" class="btn-action">
-                            <i class="fas fa-download"></i> Download
-                        </a>
-                        <button class="btn-action delete" onclick="deleteResource('${resource.id}')">
-                            <i class="fas fa-trash"></i> Delete
-                        </button>
-                    </td>
-                </tr>
-            `;
-        }).join('');
-    } catch (error) {
-        console.error('Failed to load resources:', error);
-        tbody.innerHTML = `<tr><td colspan="7">Error loading resources: ${error.message}</td></tr>`;
-    }
-}
+        // FIXED: Function name matches HTML form ID + 'handle' prefix
+        async function handleUploadResource(e) {
+            e.preventDefault();
+            const submitButton = e.submitter;
+            const originalText = submitButton.textContent;
+            setButtonLoading(submitButton, true, 'Uploading...');
 
-async function deleteResource(resourceId) {
-    if (!confirm('Are you sure you want to delete this resource?')) return;
+            const program = $('resource_program').value;
+            const intake = $('resource_intake').value;
+            const block = $('resource_block').value;
+            const fileInput = $('resource_file');
+            const title = $('resource_title').value.trim();
+            const category = $('resource_category').value;
 
-    try {
-        const { error } = await sb.from(RESOURCES_TABLE)
-            .delete()
-            .eq('id', resourceId);
+            // Enhanced validation
+            if (!fileInput.files.length || !program || !intake || !block || !title || !category) {
+                showFeedback('Please fill in all required fields and select a file.', 'error');
+                setButtonLoading(submitButton, false, originalText);
+                return;
+            }
 
-        if (error) throw error;
+            let file = fileInput.files[0];
+            let uploadFile = file;
 
-        showFeedback('✅ Resource deleted successfully!', 'success');
-        loadLecturerResources();
-    } catch (error) {
-        console.error('Delete failed:', error);
-        showFeedback(`Delete failed: ${error.message}`, 'error');
-    }
-}
+            const originalExt = file.name.split('.').pop();
+            const baseName = title.replace(/[^\w\-]+/g, '_') + '_' + file.name.replace(/\.[^.]+$/, '').replace(/[^\w\-]+/g, '_');
 
-// Add event listener (make sure this is called)
-function initializeResourceHandlers() {
-    const uploadForm = $('upload-resource-form');
-    if (uploadForm) {
-        uploadForm.addEventListener('submit', handleUploadResource);
-    }
-    populateResourceFormSelects();
-    loadLecturerResources();
-}
+            let originalName = `${baseName}.${originalExt}`;
+            let filePath = `${program}/${intake}/${block}/${originalName}`;
+
+            try {
+                // Convert Word or PPT to PDF (placeholder)
+                if (/\.(docx?|pptx?)$/i.test(file.name)) {
+                    originalName = `${baseName}.pdf`;
+                    filePath = `${program}/${intake}/${block}/${baseName}.pdf`;
+                }
+
+                const { error: uploadError } = await sb.storage
+                    .from(RESOURCES_BUCKET)
+                    .upload(filePath, uploadFile, {
+                        cacheControl: '3600',
+                        upsert: true,
+                        contentType: uploadFile.type
+                    });
+                if (uploadError) throw uploadError;
+
+                const { data: { publicUrl } } = sb.storage
+                    .from(RESOURCES_BUCKET)
+                    .getPublicUrl(filePath);
+
+                // Get authenticated user for uploader info
+                const { data: { user }, error: authError } = await sb.auth.getUser();
+                if (authError) throw authError;
+
+                // CORRECTED: Use only existing column names from your table
+                const { error: dbError, data } = await sb
+                    .from('resources')
+                    .insert({
+                        // Basic info
+                        title: title,
+                        category: category, // This column exists
+                        
+                        // Academic info - use the correct column names
+                        program_type: program,
+                        target_program: program, // This column exists
+                        intake: intake, // This column exists
+                        intake_year: intake, // This column exists (duplicate of intake)
+                        block: block, // This column exists
+                        block_term: block, // This column exists (duplicate of block)
+                        course_name: program, // This column exists
+                        
+                        // File info
+                        file_path: filePath,
+                        file_name: originalName,
+                        file_url: publicUrl,
+                        
+                        // Uploader info
+                        uploaded_by: user.id,
+                        uploaded_by_name: currentUserProfile?.full_name,
+                        // lecturer_name column doesn't exist - use uploaded_by_name instead
+                        
+                        // Additional settings
+                        allow_download: true // This column exists
+                        
+                        // created_at is automatically set by Supabase
+                        // course_id can be null if not needed
+                    }).select('id');
+                    
+                if (dbError) throw dbError;
+
+                showFeedback(`✅ Resource "${title}" uploaded successfully!`, 'success');
+                e.target.reset();
+                loadLecturerResources();
+            } catch (err) {
+                console.error('Upload failed:', err);
+                showFeedback(`❌ Upload failed: ${err.message}`, 'error');
+            } finally {
+                setButtonLoading(submitButton, false, originalText);
+            }
+        }
+
+        // UPDATED: Fixed to match new table structure
+        async function loadLecturerResources() {
+            const tbody = $('resources-list');
+            if (!tbody) return;
+            
+            tbody.innerHTML = '<tr><td colspan="6">Loading resources...</td></tr>';
+
+            try {
+                const { data: resources, error } = await fetchData(
+                    RESOURCES_TABLE,
+                    '*',
+                    { uploaded_by: currentUserProfile.user_id },
+                    'created_at',
+                    false
+                );
+
+                if (error) throw error;
+
+                if (!resources || resources.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6">No resources uploaded yet.</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = resources.map(resource => {
+                    return `
+                        <tr>
+                            <td>${resource.title || 'N/A'}</td>
+                            <td>${resource.category || 'Academic'}</td>
+                            <td>${resource.target_program || resource.program_type || 'N/A'}/${resource.block_term || resource.block || 'N/A'}</td>
+                            <td>${resource.uploaded_by_name || 'N/A'}</td>
+                            <td>${new Date(resource.created_at).toLocaleDateString('en-GB', {
+                                day: '2-digit',
+                                month: '2-digit', 
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                            })}</td>
+                            <td>
+                                <a href="${resource.file_url}" target="_blank" class="btn-action">
+                                    <i class="fas fa-download"></i> Download
+                                </a>
+                                <button class="btn-action delete" onclick="deleteResource('${resource.id}')">
+                                    <i class="fas fa-trash"></i> Delete
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            } catch (error) {
+                console.error('Failed to load resources:', error);
+                tbody.innerHTML = `<tr><td colspan="6">Error loading resources: ${error.message}</td></tr>`;
+            }
+        }
+
+        async function deleteResource(resourceId) {
+            if (!confirm('Are you sure you want to delete this resource?')) return;
+
+            try {
+                const { error } = await sb.from(RESOURCES_TABLE)
+                    .delete()
+                    .eq('id', resourceId);
+
+                if (error) throw error;
+
+                showFeedback('✅ Resource deleted successfully!', 'success');
+                loadLecturerResources();
+            } catch (error) {
+                console.error('Delete failed:', error);
+                showFeedback(`Delete failed: ${error.message}`, 'error');
+            }
+        }
 
         // =================================================================
         // === 10. MESSAGES MANAGEMENT ===
@@ -3821,7 +3699,83 @@ function initializeResourceHandlers() {
         }
 
         // =================================================================
-        // === 11. BASIC UI FUNCTIONALITY ===
+        // === 11. REPORTS & SETTINGS ===
+        // =================================================================
+
+        async function handleGenerateReport(e) {
+            e.preventDefault();
+            const button = e.submitter;
+            setButtonLoading(button, true, 'Generate Report');
+            
+            const reportType = $('report_type').value;
+            const reportScope = $('report_scope').value;
+            
+            if (!reportType || !reportScope) {
+                showFeedback('Please select both report type and scope.', 'error');
+                setButtonLoading(button, false);
+                return;
+            }
+            
+            try {
+                // Simulate report generation
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
+                showFeedback(`✅ ${reportType} report generated successfully for ${reportScope}!`, 'success');
+                
+                // Add to reports table
+                const reportsTable = $('reports-table');
+                const newRow = `
+                    <tr>
+                        <td>${reportType} - ${new Date().toLocaleDateString()}</td>
+                        <td>${reportType}</td>
+                        <td>${reportScope}</td>
+                        <td>${new Date().toLocaleDateString()}</td>
+                        <td>
+                            <button class="btn-action" onclick="showFeedback('Downloading report...', 'info')">
+                                <i class="fas fa-download"></i> Download
+                            </button>
+                        </td>
+                    </tr>
+                `;
+                
+                if (reportsTable.innerHTML.includes('No reports generated yet')) {
+                    reportsTable.innerHTML = newRow;
+                } else {
+                    reportsTable.innerHTML = newRow + reportsTable.innerHTML;
+                }
+                
+            } catch (error) {
+                console.error('Report generation failed:', error);
+                showFeedback(`Report generation failed: ${error.message}`, 'error');
+            } finally {
+                setButtonLoading(button, false);
+            }
+        }
+
+        async function handleSaveSettings(e) {
+            e.preventDefault();
+            const button = e.submitter;
+            setButtonLoading(button, true, 'Save Settings');
+            
+            const emailNotify = $('email_notify').checked;
+            const smsNotify = $('sms_notify').checked;
+            
+            try {
+                // Simulate saving settings
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                showFeedback('✅ Settings saved successfully!', 'success');
+                
+            } catch (error) {
+                console.error('Settings save failed:', error);
+                showFeedback(`Settings save failed: ${error.message}`, 'error');
+            } finally {
+                setButtonLoading(button, false);
+            }
+        }
+
+        // =================================================================
+        // === 12. BASIC UI FUNCTIONALITY ===
         // =================================================================
 
         function saveResourceEdits() { 
