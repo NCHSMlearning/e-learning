@@ -1932,14 +1932,21 @@ async function loadTodaysAttendanceRecords() {
         return;
     }
 
+    // Filter to only students assigned to this lecturer's program/block
+    const lecturerStudents = allStudents.filter(s => s.target_program === lecturerTargetProgram);
+    const lecturerStudentIds = lecturerStudents.map(s => s.user_id);
+
+    const filteredLogs = logs.filter(l => 
+        l.user_role === 'lecturer' || // keep lecturer check-ins
+        (l.user_role === 'student' && lecturerStudentIds.includes(l.user_id))
+    );
+
     // Sort latest first
-    logs.sort((a, b) => new Date(b.check_in_time) - new Date(a.check_in_time));
+    filteredLogs.sort((a, b) => new Date(b.check_in_time) - new Date(a.check_in_time));
 
     tbody.innerHTML = '';
-    logs.forEach(l => {
-        // Check both user_id and student_id
-        const student = allStudents?.find(s => s.user_id === l.user_id) 
-                        || allStudents?.find(s => s.user_id === l.student_id);
+    filteredLogs.forEach(l => {
+        const student = allStudents.find(s => s.user_id === l.user_id) || null;
 
         const userName = student?.full_name || 'Unknown Student';
         const regNo = student?.student_id || l.student_id || 'N/A';
@@ -1970,6 +1977,7 @@ async function loadTodaysAttendanceRecords() {
         `;
     });
 }
+
 
 function viewCheckInMap(lat, lng, nameEncoded, locationElementId) {
     const name = decodeURIComponent(nameEncoded);
