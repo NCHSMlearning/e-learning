@@ -1781,225 +1781,230 @@
             }).join('');
         }
 
+        
         // =================================================================
-        // === 8. ATTENDANCE MANAGEMENT ===
-        // =================================================================
+// === 8. ATTENDANCE MANAGEMENT ===
+// =================================================================
 
-        function loadAttendanceSelects() {
-            populateSelect($('att_student_id'), allStudents, 'user_id', 'full_name', 'Select Student');
-            const filteredCourses = allCourses.filter(c => c.target_program === lecturerTargetProgram);
-            populateSelect($('att_course_id'), filteredCourses, 'unit_code', 'course_name', 'Select Course (Optional)');
-        }
+function loadAttendanceSelects() {
+    populateSelect($('att_student_id'), allStudents, 'user_id', 'full_name', 'Select Student');
+    const filteredCourses = allCourses.filter(c => c.target_program === lecturerTargetProgram);
+    populateSelect($('att_course_id'), filteredCourses, 'unit_code', 'course_name', 'Select Course (Optional)');
+}
 
-        async function lecturerCheckIn() {
-            const button = $('lecturer-checkin-btn');
-            setButtonLoading(button, true, 'Marking Attendance...');
+async function lecturerCheckIn() {
+    const button = $('lecturer-checkin-btn');
+    setButtonLoading(button, true, 'Marking Attendance...');
 
-            if (!navigator.geolocation) {
-                showFeedback('Geolocation is not supported by your browser.', 'error');
-                setButtonLoading(button, false);
+    if (!navigator.geolocation) {
+        showFeedback('Geolocation is not supported by your browser.', 'error');
+        setButtonLoading(button, false);
+        return;
+    }
+
+    navigator.geolocation.getCurrentPosition(async (position) => {
+        const { latitude, longitude } = position.coords;
+        const checkinTime = new Date().toISOString();
+        const locationDetails = `Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)}`;
+
+        try {
+            const { data: lecturerData, error: checkError } = await sb
+                .from('consolidated_user_profiles_table')
+                .select('user_id')
+                .eq('user_id', currentUserProfile.user_id)
+                .single();
+
+            if (checkError && checkError.code !== 'PGRST116') throw checkError;
+
+            if (!lecturerData) {
+                showFeedback('❌ Lecturer profile not found.', 'error');
                 return;
             }
 
-            navigator.geolocation.getCurrentPosition(async (position) => {
-                const { latitude, longitude } = position.coords;
-                const checkinTime = new Date().toISOString();
-                const locationDetails = `Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)}`;
-
-                try {
-                    const { data: lecturerData, error: checkError } = await sb
-                        .from('consolidated_user_profiles_table')
-                        .select('user_id')
-                        .eq('user_id', currentUserProfile.user_id)
-                        .single();
-
-                    if (checkError && checkError.code !== 'PGRST116') {
-                        throw checkError;
-                    }
-
-                    if (!lecturerData) {
-                        showFeedback('❌ Lecturer profile not found.', 'error');
-                        return;
-                    }
-
-                    const { error } = await sb.from('geo_attendance_logs').insert({
-                        user_id: currentUserProfile.user_id,
-                        user_role: currentUserProfile.role || 'lecturer',
-                        session_type: 'Lecturer Check-in',
-                        check_in_time: checkinTime,
-                        latitude,
-                        longitude,
-                        location_details: locationDetails,
-                        status: 'Present'
-                    });
-
-                    if (error) throw error;
-
-                    showFeedback('✅ Your attendance has been logged successfully!', 'success');
-                    loadTodaysAttendanceRecords();
-
-                } catch (error) {
-                    console.error('Check-in failed:', error);
-                    showFeedback(`Check-in failed: ${error.message}`, 'error');
-                } finally {
-                    setButtonLoading(button, false);
-                }
-
-            }, (error) => {
-                console.error('Geolocation Error:', error);
-                showFeedback(`Geolocation failed: ${error.message}.`, 'error');
-                setButtonLoading(button, false);
+            const { error } = await sb.from('geo_attendance_logs').insert({
+                user_id: currentUserProfile.user_id,
+                user_role: currentUserProfile.role || 'lecturer',
+                session_type: 'Lecturer Check-in',
+                check_in_time: checkinTime,
+                latitude,
+                longitude,
+                location_details: locationDetails,
+                status: 'Present'
             });
+
+            if (error) throw error;
+
+            showFeedback('✅ Your attendance has been logged successfully!', 'success');
+            loadTodaysAttendanceRecords();
+
+        } catch (error) {
+            console.error('Check-in failed:', error);
+            showFeedback(`Check-in failed: ${error.message}`, 'error');
+        } finally {
+            setButtonLoading(button, false);
         }
 
-        async function handleManualAttendance(e) {
-            e.preventDefault();
-            const button = e.submitter;
-            setButtonLoading(button, true, 'Mark Student Present');
-            
-            const formData = {
-                student_id: $('att_student_id').value,
-                session_type: $('att_session_type').value,
-                course_id: $('att_course_id').value,
-                location: $('att_location').value,
-                date: $('att_date').value,
-                time: $('att_time').value
-            };
+    }, (error) => {
+        console.error('Geolocation Error:', error);
+        showFeedback(`Geolocation failed: ${error.message}.`, 'error');
+        setButtonLoading(button, false);
+    });
+}
 
-            if (!formData.student_id || !formData.session_type || !formData.date) {
-                showFeedback('Please fill in Student, Session Type, and Date.', 'error');
-                setButtonLoading(button, false);
-                return;
-            }
-            
-            const studentProfile = allStudents.find(s => s.user_id === formData.student_id);
-            if (!studentProfile) {
-                showFeedback('Selected student profile not found.', 'error');
-                setButtonLoading(button, false);
-                return;
-            }
+async function handleManualAttendance(e) {
+    e.preventDefault();
+    const button = e.submitter;
+    setButtonLoading(button, true, 'Mark Student Present');
 
-            const checkinDateTime = `${formData.date}T${formData.time || '12:00'}:00.000Z`;
+    const formData = {
+        student_id: $('att_student_id').value,
+        session_type: $('att_session_type').value,
+        course_id: $('att_course_id').value,
+        location: $('att_location').value,
+        date: $('att_date').value,
+        time: $('att_time').value
+    };
 
-            try {
-                const { error } = await sb.from(ATTENDANCE_TABLE).insert({
-                    user_id: formData.student_id,
-                    user_role: 'student', 
-                    session_type: formData.session_type,
-                    check_in_time: checkinDateTime,
-                    course_id: formData.course_id || null,
-                    location_details: `MANUAL ENTRY: ${formData.location || 'N/A'} (By ${currentUserProfile.full_name})`,
-                    status: 'Present',
-                    recorded_by_id: currentUserProfile.user_id, 
-                    recorded_by_name: currentUserProfile.full_name 
-                });
+    if (!formData.student_id || !formData.session_type || !formData.date) {
+        showFeedback('Please fill in Student, Session Type, and Date.', 'error');
+        setButtonLoading(button, false);
+        return;
+    }
 
-                if (error) throw error;
+    const studentProfile = allStudents.find(s => s.user_id === formData.student_id);
+    if (!studentProfile) {
+        showFeedback('Selected student profile not found.', 'error');
+        setButtonLoading(button, false);
+        return;
+    }
 
-                showFeedback(`✅ Attendance for ${studentProfile.full_name} marked present successfully!`, 'success');
-                e.target.reset();
-                loadTodaysAttendanceRecords();
-            } catch (error) {
-                console.error('Manual attendance failed:', error);
-                showFeedback(`Manual attendance failed: ${error.message}`, 'error');
-            } finally {
-                setButtonLoading(button, false);
-            }
-        }
+    const checkinDateTime = `${formData.date}T${formData.time || '12:00'}:00.000Z`;
 
-        async function loadTodaysAttendanceRecords() {
-            const tbody = document.getElementById('attendance-table');
-            if (!tbody) return;
+    try {
+        const { error } = await sb.from(ATTENDANCE_TABLE).insert({
+            user_id: formData.student_id,
+            user_role: 'student',
+            session_type: formData.session_type,
+            check_in_time: checkinDateTime,
+            course_id: formData.course_id || null,
+            location_details: `MANUAL ENTRY: ${formData.location || 'N/A'} (By ${currentUserProfile.full_name})`,
+            status: 'Present',
+            recorded_by_id: currentUserProfile.user_id,
+            recorded_by_name: currentUserProfile.full_name
+        });
 
-            tbody.innerHTML = '<tr><td colspan="8">Loading today\'s records...</td></tr>';
+        if (error) throw error;
 
-            const today = new Date().toISOString().split('T')[0];
+        showFeedback(`✅ Attendance for ${studentProfile.full_name} marked present successfully!`, 'success');
+        e.target.reset();
+        loadTodaysAttendanceRecords();
+    } catch (error) {
+        console.error('Manual attendance failed:', error);
+        showFeedback(`Manual attendance failed: ${error.message}`, 'error');
+    } finally {
+        setButtonLoading(button, false);
+    }
+}
 
-            const { data: logs, error } = await fetchData(
-                'geo_attendance_logs',
-                '*',
-                { check_in_time: today },
-                'check_in_time',
-                false
-            );
+async function loadTodaysAttendanceRecords() {
+    const tbody = document.getElementById('attendance-table');
+    if (!tbody) return;
 
-            if (error) {
-                tbody.innerHTML = `<tr><td colspan="8">Error loading logs: ${error.message}</td></tr>`;
-                return;
-            }
+    tbody.innerHTML = '<tr><td colspan="8">Loading today\'s records...</td></tr>';
 
-            if (!logs || logs.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8">No attendance records found for today.</td></tr>';
-                return;
-            }
+    const today = new Date().toISOString().split('T')[0];
 
-            logs.sort((a, b) => new Date(b.check_in_time) - new Date(a.check_in_time));
+    const { data: logs, error } = await fetchData(
+        'geo_attendance_logs',
+        '*',
+        { check_in_time: today },
+        'check_in_time',
+        false
+    );
 
-            tbody.innerHTML = '';
-            logs.forEach(l => {
-                const student = allStudents?.find(s => s.user_id === l.user_id);
-                const userName = student?.full_name || 'N/A';
-                const regNo = student?.student_id || 'N/A';
-                const target = allCourses?.find(c => c.unit_code === l.course_id)?.course_name || l.course_id || 'General';
-                const dateTime = new Date(l.check_in_time).toLocaleString();
-                const locationText = l.location_details || 'N/A';
-                const geoId = `geo-${l.id}`;
+    if (error) {
+        tbody.innerHTML = `<tr><td colspan="8">Error loading logs: ${error.message}</td></tr>`;
+        return;
+    }
 
-                tbody.innerHTML += `
-                    <tr>
-                        <td>${userName}</td>
-                        <td>${regNo}</td>
-                        <td>${l.session_type || 'N/A'}</td>
-                        <td>${target}</td>
-                        <td>${dateTime}</td>
-                        <td id="${geoId}">${locationText}</td>
-                        <td><span class="status status-${(l.status || 'N/A').toLowerCase()}">${l.status}</span></td>
-                        <td>
-                            <button
-                                onclick="viewCheckInMap(${l.latitude}, ${l.longitude}, '${encodeURIComponent(userName)}', '${geoId}')"
-                                class="btn-action"
-                                ${(!l.latitude || !l.longitude) ? 'disabled title="No Geo-location recorded"' : ''}>
-                                View Map
-                            </button>
-                        </td>
-                    </tr>
-                `;
-            });
-        }
+    if (!logs || logs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8">No attendance records found for today.</td></tr>';
+        return;
+    }
 
-        function viewCheckInMap(lat, lng, nameEncoded, locationElementId) {
-            const name = decodeURIComponent(nameEncoded);
-            const mapModal = $('mapModal');
-            mapModal.classList.add('active');
+    // Sort latest first
+    logs.sort((a, b) => new Date(b.check_in_time) - new Date(a.check_in_time));
 
-            const mapContainer = $('mapbox-map');
-            if (!mapContainer) {
-                showFeedback("Error: Map container not found.", "error");
-                return;
-            }
+    tbody.innerHTML = '';
+    logs.forEach(l => {
+        // Check both user_id and student_id
+        const student = allStudents?.find(s => s.user_id === l.user_id) 
+                        || allStudents?.find(s => s.user_id === l.student_id);
 
-            if (attendanceMap) attendanceMap.remove();
+        const userName = student?.full_name || 'Unknown Student';
+        const regNo = student?.student_id || l.student_id || 'N/A';
+        const target = allCourses?.find(c => c.unit_code === l.course_id)?.course_name || l.course_id || 'General';
+        const dateTime = l.check_in_time ? new Date(l.check_in_time).toLocaleString() : 'N/A';
+        const locationText = l.location_details || 'N/A';
+        const geoId = `geo-${l.id}`;
+        const statusText = l.status || 'Present';
 
-            const locationText = $(locationElementId)?.textContent || 'N/A';
-            $('map-details').textContent = `Location for ${name}: ${locationText}`;
+        tbody.innerHTML += `
+            <tr>
+                <td>${userName}</td>
+                <td>${regNo}</td>
+                <td>${l.session_type || 'N/A'}</td>
+                <td>${target}</td>
+                <td>${dateTime}</td>
+                <td id="${geoId}">${locationText}</td>
+                <td><span class="status status-${statusText.toLowerCase()}">${statusText}</span></td>
+                <td>
+                    <button
+                        onclick="viewCheckInMap(${l.latitude || 0}, ${l.longitude || 0}, '${encodeURIComponent(userName)}', '${geoId}')"
+                        class="btn-action"
+                        ${(!l.latitude || !l.longitude) ? 'disabled title="No Geo-location recorded"' : ''}>
+                        View Map
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+}
 
-            attendanceMap = L.map('mapbox-map').setView([lat, lng], 16);
+function viewCheckInMap(lat, lng, nameEncoded, locationElementId) {
+    const name = decodeURIComponent(nameEncoded);
+    const mapModal = $('mapModal');
+    mapModal.classList.add('active');
 
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; OpenStreetMap contributors'
-            }).addTo(attendanceMap);
+    const mapContainer = $('mapbox-map');
+    if (!mapContainer) {
+        showFeedback("Error: Map container not found.", "error");
+        return;
+    }
 
-            L.marker([lat, lng]).addTo(attendanceMap)
-                .bindPopup(`<b>${name}'s Check-in Location</b><br>${locationText}`)
-                .openPopup();
+    if (attendanceMap) attendanceMap.remove();
 
-            setTimeout(() => attendanceMap.invalidateSize(), 300);
-        }
+    const locationText = $(locationElementId)?.textContent || 'N/A';
+    $('map-details').textContent = `Location for ${name}: ${locationText}`;
 
-        function closeMapModal() {
-            const mapModal = $('mapModal');
-            mapModal.classList.remove('active');
-        }
+    attendanceMap = L.map('mapbox-map').setView([lat, lng], 16);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(attendanceMap);
+
+    L.marker([lat, lng]).addTo(attendanceMap)
+        .bindPopup(`<b>${name}'s Check-in Location</b><br>${locationText}`)
+        .openPopup();
+
+    setTimeout(() => attendanceMap.invalidateSize(), 300);
+}
+
+function closeMapModal() {
+    const mapModal = $('mapModal');
+    mapModal.classList.remove('active');
+}
+
 
         // =================================================================
         // === 9. EXAMS/CATS MANAGEMENT - ENHANCED VERSION ===
