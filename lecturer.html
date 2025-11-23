@@ -1936,6 +1936,8 @@ async function loadTodaysAttendanceRecords() {
         const startOfDay = new Date(today.setHours(0, 0, 0, 0)).toISOString();
         const endOfDay = new Date(today.setHours(23, 59, 59, 999)).toISOString();
 
+        console.log('🔍 Fetching attendance records for:', new Date().toDateString());
+
         // Fetch ALL attendance records for today
         const { data: logs, error } = await sb
             .from('geo_attendance_logs')
@@ -1955,70 +1957,109 @@ async function loadTodaysAttendanceRecords() {
             return;
         }
 
-        console.log(`📊 Found ${logs.length} attendance records for today`);
+        console.log(`📊 Found ${logs.length} total attendance records for today`);
+        console.log('📝 Raw logs sample:', logs.slice(0, 3));
 
-        // Get student user IDs from logs that have user_id
-        const studentUserIds = logs
-            .filter(log => log.user_role === 'student' && log.user_id)
+        // Get ALL user IDs from logs (including NULL ones)
+        const allUserIds = logs
+            .filter(log => log.user_id) // Only include logs with user_id
             .map(log => log.user_id);
 
-        // Fetch student details
-        let studentDetails = {};
-        if (studentUserIds.length > 0) {
-            const { data: students, error: studentError } = await sb
-                .from('consolidated_user_profiles_table')
-                .select('user_id, full_name, student_id, program, email, block, intake_year')
-                .in('user_id', studentUserIds);
+        console.log(`👥 User IDs found in logs:`, allUserIds);
 
-            if (!studentError && students) {
-                students.forEach(student => {
-                    studentDetails[student.user_id] = student;
+        // Fetch user details for these user IDs
+        let userDetails = {};
+        if (allUserIds.length > 0) {
+            const { data: users, error: userError } = await sb
+                .from('consolidated_user_profiles_table')
+                .select('user_id, full_name, student_id, program, email, block, intake_year, role')
+                .in('user_id', allUserIds);
+
+            if (!userError && users) {
+                users.forEach(user => {
+                    userDetails[user.user_id] = user;
                 });
+                console.log(`✅ Loaded ${users.length} user profiles`);
             }
         }
 
+        // NEW: Also get student records by matching program in the log itself
         // Filter logs to show relevant records for this lecturer
         const filteredLogs = logs.filter(log => {
-            // Always show lecturer's own check-ins
-            if (log.user_id === currentUserProfile.user_id) return true;
-            
-            // Show records inserted by this lecturer
-            if (log.recorded_by_id === currentUserProfile.user_id) return true;
-            
-            // For student records, check if student belongs to lecturer's program
-            if (log.user_role === 'student') {
-                const student = studentDetails[log.user_id];
-                if (student && student.program === lecturerTargetProgram) return true;
-                
-                // Also show if the log itself has the lecturer's program
-                if (log.program === lecturerTargetProgram) return true;
+            console.log(`🔍 Processing log ${log.id}:`, {
+                user_id: log.user_id,
+                user_role: log.user_role,
+                program: log.program,
+                recorded_by_id: log.recorded_by_id
+            });
+
+            // 1. Always show lecturer's own check-ins
+            if (log.user_id === currentUserProfile.user_id) {
+                console.log(`   ✅ Including: Lecturer's own check-in`);
+                return true;
             }
             
+            // 2. Show records inserted by this lecturer
+            if (log.recorded_by_id === currentUserProfile.user_id) {
+                console.log(`   ✅ Including: Recorded by lecturer`);
+                return true;
+            }
+            
+            // 3. For student records with user_id, check if student belongs to lecturer's program
+            if (log.user_id && log.user_role === 'student') {
+                const user = userDetails[log.user_id];
+                if (user && user.program === lecturerTargetProgram) {
+                    console.log(`   ✅ Including: Student from lecturer's program`);
+                    return true;
+                }
+            }
+            
+            // 4. NEW: Show records that have the lecturer's program in the log itself
+            if (log.program === lecturerTargetProgram) {
+                console.log(`   ✅ Including: Log has lecturer's program`);
+                return true;
+            }
+            
+            // 5. NEW: Show student records even if user_id is NULL but program matches
+            if (!log.user_id && log.program === lecturerTargetProgram) {
+                console.log(`   ✅ Including: NULL user_id but matching program`);
+                return true;
+            }
+
+            console.log(`   ❌ Excluding: Not relevant to lecturer`);
             return false;
         });
 
+        console.log(`👨‍🏫 Filtered to ${filteredLogs.length} records for lecturer`);
+
         if (filteredLogs.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8">No relevant attendance records found for today.</td></tr>';
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="8" style="text-align: center; padding: 20px;">
+                        No relevant attendance records found for today.<br>
+                        <small>Try adding manual student attendance or check if students from program "${lecturerTargetProgram}" have checked in.</small>
+                    </td>
+                </tr>`;
             return;
         }
-
-        console.log(`👨‍🏫 Showing ${filteredLogs.length} filtered records for lecturer`);
 
         // Display the filtered logs
         tbody.innerHTML = '';
         filteredLogs.forEach(log => {
-            let userName, regNo, userProgram;
+            let userName, regNo, userProgram, userRole;
             
             if (log.user_role === 'lecturer') {
                 userName = currentUserProfile.full_name || 'Lecturer';
                 regNo = currentUserProfile.employee_id || 'N/A';
                 userProgram = lecturerTargetProgram || 'N/A';
+                userRole = 'lecturer';
             } else {
-                // Try to get student info from multiple sources
-                const student = studentDetails[log.user_id];
-                userName = student?.full_name || log.student_name || 'Unknown Student';
-                regNo = student?.student_id || 'N/A';
-                userProgram = student?.program || log.program || 'N/A';
+                // Try to get user info from multiple sources
+                const user = userDetails[log.user_id];
+                userName = user?.full_name || log.student_name || 'Unknown Student';
+                regNo = user?.student_id || 'N/A';
+                userProgram = user?.program || log.program || 'N/A';
+                userRole = user?.role || log.user_role || 'student';
             }
 
             const courseName = allCourses.find(c => c.unit_code === log.course_id)?.course_name || log.course_id || 'General';
@@ -2027,6 +2068,7 @@ async function loadTodaysAttendanceRecords() {
             const geoId = `geo-${log.id}`;
             const statusText = log.status || 'Present';
             const isRecordedByLecturer = log.recorded_by_id === currentUserProfile.user_id;
+            const hasLocation = log.latitude && log.longitude;
 
             tbody.innerHTML += `
                 <tr>
@@ -2034,24 +2076,39 @@ async function loadTodaysAttendanceRecords() {
                         ${userName}
                         ${isRecordedByLecturer ? 
                           '<span style="color: #10B981; margin-left: 5px;" title="Recorded by you">✓</span>' : ''}
+                        ${!log.user_id ? '<span style="color: #F59E0B; margin-left: 5px;" title="Missing user data">⚠️</span>' : ''}
                     </td>
                     <td>${regNo}</td>
                     <td>${log.session_type || 'N/A'}</td>
                     <td>${courseName}</td>
                     <td>${dateTime}</td>
                     <td id="${geoId}">${locationText}</td>
-                    <td><span class="status status-${statusText.toLowerCase()}">${statusText}</span></td>
+                    <td>
+                        <span class="status status-${statusText.toLowerCase()}">
+                            ${statusText}
+                            ${userRole === 'student' ? ' (Student)' : ' (Lecturer)'}
+                        </span>
+                    </td>
                     <td>
                         <button
                             onclick="viewCheckInMap(${log.latitude || 0}, ${log.longitude || 0}, '${encodeURIComponent(userName)}', '${geoId}')"
                             class="btn-action"
-                            ${(!log.latitude || !log.longitude) ? 'disabled title="No Geo-location recorded"' : ''}>
-                            View Map
+                            ${!hasLocation ? 'disabled title="No Geo-location recorded"' : ''}>
+                            ${hasLocation ? 'View Map' : 'No Location'}
                         </button>
                     </td>
                 </tr>
             `;
         });
+
+        // Show summary
+        const studentCount = filteredLogs.filter(log => 
+            log.user_role === 'student' || (!log.user_role && log.program)
+        ).length;
+        
+        const lecturerCount = filteredLogs.filter(log => log.user_role === 'lecturer').length;
+        
+        console.log(`📈 Summary: ${studentCount} student records, ${lecturerCount} lecturer records`);
 
     } catch (error) {
         console.error('Unexpected error loading attendance:', error);
