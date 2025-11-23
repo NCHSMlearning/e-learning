@@ -1781,16 +1781,9 @@
             }).join('');
         }
 
-        
-        // =================================================================
-// === 8. ATTENDANCE MANAGEMENT ===
+   // =================================================================
+// === 8. ATTENDANCE MANAGEMENT - FIXED VERSION ===
 // =================================================================
-
-function loadAttendanceSelects() {
-    populateSelect($('att_student_id'), allStudents, 'user_id', 'full_name', 'Select Student');
-    const filteredCourses = allCourses.filter(c => c.target_program === lecturerTargetProgram);
-    populateSelect($('att_course_id'), filteredCourses, 'unit_code', 'course_name', 'Select Course (Optional)');
-}
 
 async function lecturerCheckIn() {
     const button = $('lecturer-checkin-btn');
@@ -1805,31 +1798,23 @@ async function lecturerCheckIn() {
     navigator.geolocation.getCurrentPosition(async (position) => {
         const { latitude, longitude } = position.coords;
         const checkinTime = new Date().toISOString();
-        const locationDetails = `Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)}`;
+        const locationDetails = `Lecturer Check-in: Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)}`;
 
         try {
-            const { data: lecturerData, error: checkError } = await sb
-                .from('consolidated_user_profiles_table')
-                .select('user_id')
-                .eq('user_id', currentUserProfile.user_id)
-                .single();
-
-            if (checkError && checkError.code !== 'PGRST116') throw checkError;
-
-            if (!lecturerData) {
-                showFeedback('❌ Lecturer profile not found.', 'error');
-                return;
-            }
-
             const { error } = await sb.from('geo_attendance_logs').insert({
                 user_id: currentUserProfile.user_id,
-                user_role: currentUserProfile.role || 'lecturer',
+                user_role: 'lecturer',
                 session_type: 'Lecturer Check-in',
                 check_in_time: checkinTime,
-                latitude,
-                longitude,
+                latitude: latitude,
+                longitude: longitude,
                 location_details: locationDetails,
-                status: 'Present'
+                status: 'Present',
+                recorded_by_id: currentUserProfile.user_id,
+                recorded_by_name: currentUserProfile.full_name,
+                student_name: currentUserProfile.full_name,
+                program: lecturerTargetProgram,
+                is_manual_entry: false
             });
 
             if (error) throw error;
@@ -1881,7 +1866,7 @@ async function handleManualAttendance(e) {
     const checkinDateTime = `${formData.date}T${formData.time || '12:00'}:00.000Z`;
 
     try {
-        const { error } = await sb.from(ATTENDANCE_TABLE).insert({
+        const { error } = await sb.from('geo_attendance_logs').insert({
             user_id: formData.student_id,
             user_role: 'student',
             session_type: formData.session_type,
@@ -1890,7 +1875,13 @@ async function handleManualAttendance(e) {
             location_details: `MANUAL ENTRY: ${formData.location || 'N/A'} (By ${currentUserProfile.full_name})`,
             status: 'Present',
             recorded_by_id: currentUserProfile.user_id,
-            recorded_by_name: currentUserProfile.full_name
+            recorded_by_name: currentUserProfile.full_name,
+            student_name: studentProfile.full_name,
+            student_email: studentProfile.email,
+            program: studentProfile.program,
+            block: studentProfile.block,
+            intake_year: studentProfile.intake_year,
+            is_manual_entry: true
         });
 
         if (error) throw error;
@@ -1912,74 +1903,142 @@ async function loadTodaysAttendanceRecords() {
 
     tbody.innerHTML = '<tr><td colspan="8">Loading today\'s records...</td></tr>';
 
-    const today = new Date().toISOString().split('T')[0];
+    try {
+        // Get today's date range
+        const today = new Date();
+        const startOfDay = new Date(today.setHours(0, 0, 0, 0)).toISOString();
+        const endOfDay = new Date(today.setHours(23, 59, 59, 999)).toISOString();
 
-    const { data: logs, error } = await fetchData(
-        'geo_attendance_logs',
-        '*',
-        { check_in_time: today },
-        'check_in_time',
-        false
-    );
+        // Fetch ALL attendance records for today
+        const { data: logs, error } = await sb
+            .from('geo_attendance_logs')
+            .select('*')
+            .gte('check_in_time', startOfDay)
+            .lte('check_in_time', endOfDay)
+            .order('check_in_time', { ascending: false });
 
-    if (error) {
-        tbody.innerHTML = `<tr><td colspan="8">Error loading logs: ${error.message}</td></tr>`;
-        return;
+        if (error) {
+            console.error('Error loading attendance logs:', error);
+            tbody.innerHTML = `<tr><td colspan="8">Error loading logs: ${error.message}</td></tr>`;
+            return;
+        }
+
+        if (!logs || logs.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8">No attendance records found for today.</td></tr>';
+            return;
+        }
+
+        console.log(`📊 Found ${logs.length} attendance records for today`);
+
+        // Get student user IDs from logs that have user_id
+        const studentUserIds = logs
+            .filter(log => log.user_role === 'student' && log.user_id)
+            .map(log => log.user_id);
+
+        // Fetch student details
+        let studentDetails = {};
+        if (studentUserIds.length > 0) {
+            const { data: students, error: studentError } = await sb
+                .from('consolidated_user_profiles_table')
+                .select('user_id, full_name, student_id, program, email, block, intake_year')
+                .in('user_id', studentUserIds);
+
+            if (!studentError && students) {
+                students.forEach(student => {
+                    studentDetails[student.user_id] = student;
+                });
+            }
+        }
+
+        // Filter logs to show relevant records for this lecturer
+        const filteredLogs = logs.filter(log => {
+            // Always show lecturer's own check-ins
+            if (log.user_id === currentUserProfile.user_id) return true;
+            
+            // Show records inserted by this lecturer
+            if (log.recorded_by_id === currentUserProfile.user_id) return true;
+            
+            // For student records, check if student belongs to lecturer's program
+            if (log.user_role === 'student') {
+                const student = studentDetails[log.user_id];
+                if (student && student.program === lecturerTargetProgram) return true;
+                
+                // Also show if the log itself has the lecturer's program
+                if (log.program === lecturerTargetProgram) return true;
+            }
+            
+            return false;
+        });
+
+        if (filteredLogs.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8">No relevant attendance records found for today.</td></tr>';
+            return;
+        }
+
+        console.log(`👨‍🏫 Showing ${filteredLogs.length} filtered records for lecturer`);
+
+        // Display the filtered logs
+        tbody.innerHTML = '';
+        filteredLogs.forEach(log => {
+            let userName, regNo, userProgram;
+            
+            if (log.user_role === 'lecturer') {
+                userName = currentUserProfile.full_name || 'Lecturer';
+                regNo = currentUserProfile.employee_id || 'N/A';
+                userProgram = lecturerTargetProgram || 'N/A';
+            } else {
+                // Try to get student info from multiple sources
+                const student = studentDetails[log.user_id];
+                userName = student?.full_name || log.student_name || 'Unknown Student';
+                regNo = student?.student_id || 'N/A';
+                userProgram = student?.program || log.program || 'N/A';
+            }
+
+            const courseName = allCourses.find(c => c.unit_code === log.course_id)?.course_name || log.course_id || 'General';
+            const dateTime = log.check_in_time ? new Date(log.check_in_time).toLocaleString() : 'N/A';
+            const locationText = log.location_details || 'N/A';
+            const geoId = `geo-${log.id}`;
+            const statusText = log.status || 'Present';
+            const isRecordedByLecturer = log.recorded_by_id === currentUserProfile.user_id;
+
+            tbody.innerHTML += `
+                <tr>
+                    <td>
+                        ${userName}
+                        ${isRecordedByLecturer ? 
+                          '<span style="color: #10B981; margin-left: 5px;" title="Recorded by you">✓</span>' : ''}
+                    </td>
+                    <td>${regNo}</td>
+                    <td>${log.session_type || 'N/A'}</td>
+                    <td>${courseName}</td>
+                    <td>${dateTime}</td>
+                    <td id="${geoId}">${locationText}</td>
+                    <td><span class="status status-${statusText.toLowerCase()}">${statusText}</span></td>
+                    <td>
+                        <button
+                            onclick="viewCheckInMap(${log.latitude || 0}, ${log.longitude || 0}, '${encodeURIComponent(userName)}', '${geoId}')"
+                            class="btn-action"
+                            ${(!log.latitude || !log.longitude) ? 'disabled title="No Geo-location recorded"' : ''}>
+                            View Map
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
+
+    } catch (error) {
+        console.error('Unexpected error loading attendance:', error);
+        tbody.innerHTML = `<tr><td colspan="8">Unexpected error: ${error.message}</td></tr>`;
     }
-
-    if (!logs || logs.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8">No attendance records found for today.</td></tr>';
-        return;
-    }
-
-    // Filter to only students assigned to this lecturer's program/block
-    const lecturerStudents = allStudents.filter(s => s.target_program === lecturerTargetProgram);
-    const lecturerStudentIds = lecturerStudents.map(s => s.user_id);
-
-    const filteredLogs = logs.filter(l => 
-        l.user_role === 'lecturer' || // keep lecturer check-ins
-        (l.user_role === 'student' && lecturerStudentIds.includes(l.user_id))
-    );
-
-    // Sort latest first
-    filteredLogs.sort((a, b) => new Date(b.check_in_time) - new Date(a.check_in_time));
-
-    tbody.innerHTML = '';
-    filteredLogs.forEach(l => {
-        const student = allStudents.find(s => s.user_id === l.user_id) || null;
-
-        const userName = student?.full_name || 'Unknown Student';
-        const regNo = student?.student_id || l.student_id || 'N/A';
-        const target = allCourses?.find(c => c.unit_code === l.course_id)?.course_name || l.course_id || 'General';
-        const dateTime = l.check_in_time ? new Date(l.check_in_time).toLocaleString() : 'N/A';
-        const locationText = l.location_details || 'N/A';
-        const geoId = `geo-${l.id}`;
-        const statusText = l.status || 'Present';
-
-        tbody.innerHTML += `
-            <tr>
-                <td>${userName}</td>
-                <td>${regNo}</td>
-                <td>${l.session_type || 'N/A'}</td>
-                <td>${target}</td>
-                <td>${dateTime}</td>
-                <td id="${geoId}">${locationText}</td>
-                <td><span class="status status-${statusText.toLowerCase()}">${statusText}</span></td>
-                <td>
-                    <button
-                        onclick="viewCheckInMap(${l.latitude || 0}, ${l.longitude || 0}, '${encodeURIComponent(userName)}', '${geoId}')"
-                        class="btn-action"
-                        ${(!l.latitude || !l.longitude) ? 'disabled title="No Geo-location recorded"' : ''}>
-                        View Map
-                    </button>
-                </td>
-            </tr>
-        `;
-    });
 }
 
-
 function viewCheckInMap(lat, lng, nameEncoded, locationElementId) {
+    // Only show map if we have valid coordinates
+    if (!lat || !lng || lat === 0 || lng === 0) {
+        showFeedback('No location data available for this check-in.', 'info');
+        return;
+    }
+
     const name = decodeURIComponent(nameEncoded);
     const mapModal = $('mapModal');
     mapModal.classList.add('active');
@@ -2012,7 +2071,6 @@ function closeMapModal() {
     const mapModal = $('mapModal');
     mapModal.classList.remove('active');
 }
-
 
         // =================================================================
         // === 9. EXAMS/CATS MANAGEMENT - ENHANCED VERSION ===
