@@ -1923,7 +1923,6 @@ async function handleManualAttendance(e) {
         setButtonLoading(button, false);
     }
 }
-
 // Enhanced version to handle NULL user_id records better
 async function loadTodaysAttendanceRecords() {
     const tbody = document.getElementById('attendance-table');
@@ -1986,7 +1985,7 @@ async function loadTodaysAttendanceRecords() {
                 // If we can't find a match, at least we know it's from our program
                 if (!studentDetails[log.id]) {
                     studentDetails[log.id] = {
-                        full_name: 'Student (Self-check-in)',
+                        full_name: 'Student',
                         student_id: 'N/A',
                         program: log.program
                     };
@@ -2019,9 +2018,9 @@ async function loadTodaysAttendanceRecords() {
                 userProgram = lecturerTargetProgram || 'N/A';
                 userRole = 'lecturer';
             } else {
-                // IMPROVED: Better student name detection
+                // ✅ FIXED: Use database student_name first, then student details
                 const student = studentDetails[log.user_id] || studentDetails[log.id];
-                userName = student?.full_name || log.student_name || 'Student (Self-check-in)';
+                userName = log.student_name || student?.full_name || 'Student';
                 regNo = student?.student_id || 'N/A';
                 userProgram = student?.program || log.program || 'N/A';
                 userRole = student?.role || log.user_role || 'student';
@@ -2034,7 +2033,10 @@ async function loadTodaysAttendanceRecords() {
             )?.course_name || log.course_id || 'General';
 
             const dateTime = log.check_in_time ? new Date(log.check_in_time).toLocaleString() : 'N/A';
-            const locationText = log.location_details || 'N/A';
+            
+            // ✅ FIXED: Use location_friendly_name instead of location_details
+            const locationText = log.location_friendly_name || log.location_details || 'N/A';
+            
             const geoId = `geo-${log.id}`;
             const statusText = log.status || 'Present';
             const isRecordedByLecturer = log.recorded_by_id === currentUserProfile.user_id;
