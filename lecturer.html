@@ -403,82 +403,113 @@
                 </div>
             </section>
 
-            <!-- Exams Section -->
+            <!-- Enhanced Exams Section -->
             <section id="cats-content" class="tab-content">
                 <h2><i class="fas fa-file-alt"></i> Exam & CAT Management</h2>
                 
+                <!-- Create New Exam Form -->
                 <form id="add-exam-form" class="check-in-controls">
                     <h4>Create New Exam / CAT Record</h4>
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="exam_name">Exam/CAT Name</label>
-                            <input type="text" id="exam_name" placeholder="e.g., Block A Mid-Term CAT" required>
+                            <label for="exam_title">Exam/CAT Title *</label>
+                            <input type="text" id="exam_title" placeholder="e.g., Block A Mid-Term CAT" required>
                         </div>
                         <div class="form-group">
-                            <label for="exam_date">Date</label>
+                            <label for="exam_date">Date *</label>
                             <input type="date" id="exam_date" required>
                         </div>
                         <div class="form-group">
-                            <label for="exam_type">Exam Type</label>
+                            <label for="exam_type">Exam Type *</label>
                             <select id="exam_type" required>
-                                <option value="">-- Exam Type --</option>
+                                <option value="">-- Select Type --</option>
                                 <option value="CAT">CAT</option>
                                 <option value="Exam">End of Block Exam</option>
+                                <option value="Practical">Practical</option>
                             </select>
                         </div>
                     </div>
+                    
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="exam_program">Program</label>
-                            <select id="exam_program" required></select>
+                            <label for="exam_program">Program *</label>
+                            <select id="exam_program" required onchange="populateExamCourseSelects()">
+                                <option value="">-- Select Program --</option>
+                            </select>
                         </div>
                         <div class="form-group">
-                            <label for="exam_intake">Intake</label>
-                            <select id="exam_intake" required></select>
+                            <label for="exam_intake">Intake Year *</label>
+                            <select id="exam_intake" required>
+                                <option value="">-- Select Intake --</option>
+                                <option value="2024">2024</option>
+                                <option value="2025">2025</option>
+                                <option value="2026">2026</option>
+                                <option value="2027">2027</option>
+                                <option value="2028">2028</option>
+                            </select>
                         </div>
                         <div class="form-group">
-                            <label for="exam_block_term">Block/Term</label>
-                            <select id="exam_block_term" required></select>
+                            <label for="exam_block_term">Block/Term *</label>
+                            <select id="exam_block_term" required>
+                                <option value="">-- Select Block/Term --</option>
+                            </select>
                         </div>
+                    </div>
+                    
+                    <div class="form-row">
                         <div class="form-group">
                             <label for="exam_course_id">Course</label>
-                            <select id="exam_course_id" required></select>
+                            <select id="exam_course_id">
+                                <option value="">-- Select Course (Optional) --</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="exam_start_time">Start Time</label>
+                            <input type="time" id="exam_start_time">
+                        </div>
+                        <div class="form-group">
+                            <label for="exam_duration_minutes">Duration (minutes) *</label>
+                            <input type="number" id="exam_duration_minutes" placeholder="e.g., 120" min="1" required>
                         </div>
                     </div>
+                    
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="total_marks">Total Marks</label>
-                            <input type="number" id="total_marks" placeholder="e.g., 30" required>
+                            <label for="exam_link">Online Link (Optional)</label>
+                            <input type="url" id="exam_link" placeholder="https://...">
                         </div>
                         <div class="form-group">
-                            <label for="exam_status">Status</label>
+                            <label for="exam_status">Status *</label>
                             <select id="exam_status" required>
-                                 <option value="Scheduled">Scheduled</option>
-                                 <option value="In Progress">In Progress</option>
-                                 <option value="Grading">Grading</option>
-                                 <option value="Completed">Completed</option>
+                                <option value="Scheduled">Scheduled</option>
+                                <option value="InProgress">In Progress</option>
+                                <option value="Completed">Completed</option>
+                                <option value="Cancelled">Cancelled</option>
                             </select>
                         </div>
                     </div>
+                    
                     <button type="submit"><i class="fas fa-plus-circle"></i> Create Exam Record</button>
                 </form>
                 
-                <h3>Recent Exams</h3>
+                <!-- Exams List -->
+                <h3>My Exams & CATs</h3>
                 <div class="search-container">
-                    <input type="text" id="exam-search" placeholder="Filter exams...">
-                    <button onclick="filterTable('exam-search', 'exams-table', [0, 1, 4])"><i class="fas fa-search"></i> Search</button>
+                    <input type="text" id="exam-search" placeholder="Search exams by title, course, or type...">
+                    <button onclick="filterTable('exam-search', 'exams-table', [1, 2, 3])"><i class="fas fa-search"></i> Search</button>
                 </div>
+                
                 <table>
                     <thead>
                         <tr>
-                            <th>Exam Name</th>
-                            <th>Course</th>
-                            <th>Date</th>
                             <th>Type</th>
-                            <th>Program/Intake</th>
-                            <th>Total Marks</th>
+                            <th>Title</th>
+                            <th>Course</th>
+                            <th>Program/Block</th>
+                            <th>Date/Time</th>
+                            <th>Duration</th>
                             <th>Status</th>
-                            <th>Action</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody id="exams-table">
@@ -694,17 +725,48 @@
         </div>
     </div>
 
+    <!-- Grade Modal -->
     <div id="gradeModal" class="modal">
+        <div class="modal-content" style="width:95%; max-width:1200px;">
+            <!-- Grade modal content will be dynamically loaded -->
+        </div>
+    </div>
+
+    <!-- Edit Exam Modal -->
+    <div id="examEditModal" class="modal">
         <div class="modal-content">
             <span class="close-btn">&times;</span>
-            <h2>Grade Submission</h2>
-            <p>Grading interface will appear here.</p>
+            <h3>Edit Exam</h3>
+            <form id="edit-exam-form">
+                <input type="hidden" id="edit_exam_id">
+                <div class="form-group">
+                    <label for="edit_exam_title">Title *</label>
+                    <input type="text" id="edit_exam_title" required>
+                </div>
+                <div class="form-group">
+                    <label for="edit_exam_date">Date *</label>
+                    <input type="date" id="edit_exam_date" required>
+                </div>
+                <div class="form-group">
+                    <label for="edit_exam_status">Status *</label>
+                    <select id="edit_exam_status" required>
+                        <option value="Scheduled">Scheduled</option>
+                        <option value="InProgress">In Progress</option>
+                        <option value="Completed">Completed</option>
+                        <option value="Cancelled">Cancelled</option>
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn-action"><i class="fas fa-save"></i> Save Changes</button>
+                    <button type="button" class="btn-action btn-cancel" onclick="closeEditExamModal()"><i class="fas fa-times"></i> Cancel</button>
+                </div>
+            </form>
         </div>
     </div>
 
     <script>
         // =================================================================
-        // === NCHSM LECTURER DASHBOARD SCRIPT - FIXED VERSION ===
+        // === NCHSM LECTURER DASHBOARD SCRIPT - COMPLETE VERSION ===
         // =================================================================
 
         // === 1. CONFIGURATION & GLOBAL VARIABLES ===
@@ -716,14 +778,12 @@
         // Table constants - UPDATED to match actual table names
         const USER_PROFILE_TABLE = 'consolidated_user_profiles_table';
         const COURSES_TABLE = 'courses';
-        const EXAMS_TABLE = 'cats_exams';  
+        const EXAMS_TABLE = 'exams';  
         const SESSIONS_TABLE = 'scheduled_sessions';
         const ATTENDANCE_TABLE = 'geo_attendance_logs';
         const RESOURCES_TABLE = 'resources';
         const RESOURCES_BUCKET = 'resources'; 
-
-        // Messages table might not exist, so we'll handle it gracefully
-        const MESSAGES_TABLE = 'messages'; // This might not exist
+        const MESSAGES_TABLE = 'messages';
 
         // Global variables
         let currentUserProfile = null;
@@ -1109,10 +1169,13 @@
             $('edit-resource-form')?.addEventListener('submit', saveResourceEdits);
             $('closeEditResourceModal')?.addEventListener('click', closeEditResourceModal);
 
+            // Exams/CATs
+            $('edit-exam-form')?.addEventListener('submit', saveEditedExam);
+
             // Search Filters
             $('student-search')?.addEventListener('keyup', () => filterStudentTable());
             $('course-search')?.addEventListener('keyup', () => filterTable('course-search', 'lecturer-courses-table', [0, 1]));
-            $('exam-search')?.addEventListener('keyup', () => filterTable('exam-search', 'exams-table', [0, 1, 4]));
+            $('exam-search')?.addEventListener('keyup', () => filterTable('exam-search', 'exams-table', [1, 2, 3]));
             $('resource-search')?.addEventListener('keyup', () => filterTable('resource-search', 'resources-list', [0, 1, 2]));
             $('attendance-search')?.addEventListener('keyup', () => filterTable('attendance-search', 'attendance-table', [0, 1, 2, 3]));
 
@@ -1939,20 +2002,26 @@
         }
 
         // =================================================================
-        // === 9. EXAMS MANAGEMENT ===
+        // === 9. EXAMS/CATS MANAGEMENT - ENHANCED VERSION ===
         // =================================================================
 
+        // Initialize exams section
         function populateExamFormSelects() {
             const targetProgram = lecturerTargetProgram;
             const programs = targetProgram ? [{ id: targetProgram, name: targetProgram }] : [];
             
-            populateSelect($('exam_program'), programs, 'id', 'name', 'Select Program');
+            // Program select
+            const programSelect = $('exam_program');
+            populateSelect(programSelect, programs, 'id', 'name', 'Select Program');
             if (targetProgram) {
-                $('exam_program').value = targetProgram;
+                programSelect.value = targetProgram;
+                programSelect.disabled = true; // Lecturer can only create for their program
             }
 
+            // Intake years
             populateSelect($('exam_intake'), allIntakes, 'id', 'name', 'Select Intake Year');
             
+            // Block/Term based on program
             const blockSelect = $('exam_block_term');
             if (targetProgram && ACADEMIC_STRUCTURE[targetProgram]) {
                 const blocks = ACADEMIC_STRUCTURE[targetProgram].map(name => ({ id: name, name: name }));
@@ -1961,70 +2030,102 @@
                 blockSelect.innerHTML = '<option value="">-- Select Program First --</option>';
             }
 
-            const filteredCourses = allCourses.filter(c => c.target_program === lecturerTargetProgram);
-            populateSelect($('exam_course_id'), filteredCourses, 'unit_code', 'course_name', 'Select Course');
+            // Courses for the lecturer's program
+            populateExamCourseSelects();
         }
 
+        // Populate courses based on selected program
+        async function populateExamCourseSelects(courses = null) {
+            const courseSelect = $('exam_course_id');
+            const program = $('exam_program').value;
+
+            let filteredCourses = [];
+            if (!program) {
+                filteredCourses = [];
+            } else {
+                if (!courses) {
+                    // Use cached courses filtered by program
+                    filteredCourses = allCourses.filter(c => c.target_program === program);
+                } else {
+                    filteredCourses = courses.filter(c => c.target_program === program);
+                }
+            }
+
+            populateSelect(courseSelect, filteredCourses, 'unit_code', 'course_name', 'Select Course (Optional)');
+        }
+
+        // Create new exam
         async function handleAddExam(e) {
             e.preventDefault();
             const button = e.submitter;
             setButtonLoading(button, true, 'Create Exam Record');
             
             const formData = {
-                name: $('exam_name').value,
+                title: $('exam_title').value,
                 date: $('exam_date').value,
                 type: $('exam_type').value,
                 program: $('exam_program').value,
                 intake: $('exam_intake').value,
                 block_term: $('exam_block_term').value,
                 course_id: $('exam_course_id').value,
-                total_marks: $('total_marks').value,
+                start_time: $('exam_start_time').value,
+                duration: $('exam_duration_minutes').value,
+                link: $('exam_link').value,
                 status: $('exam_status').value
             };
 
-            if (Object.values(formData).some(v => !v)) {
-                showFeedback('Please fill in all exam details.', 'error');
+            // Validation
+            if (Object.values(formData).some((v, i) => i < 6 && !v)) { // First 6 fields are required
+                showFeedback('Please fill in all required fields (Title, Date, Type, Program, Intake, Block/Term, Duration).', 'error');
                 setButtonLoading(button, false);
                 return;
             }
 
             try {
-                const { error } = await sb.from(EXAMS_TABLE).insert({
-                    exam_name: formData.name,
+                const { error } = await sb.from('exams').insert({
+                    exam_name: formData.title,
                     exam_date: formData.date,
+                    exam_start_time: formData.start_time || null,
                     exam_type: formData.type,
+                    online_link: formData.link || null,
+                    duration_minutes: parseInt(formData.duration),
                     target_program: formData.program,
+                    course_id: formData.course_id || null,
                     intake_year: formData.intake,
                     block_term: formData.block_term,
-                    course_id: formData.course_id,
-                    total_marks: parseInt(formData.total_marks),
                     status: formData.status,
                     created_by: currentUserProfile.user_id
                 });
 
                 if (error) throw error;
 
-                showFeedback(`✅ Exam "${formData.name}" created successfully!`, 'success');
+                showFeedback(`✅ ${formData.type} "${formData.title}" created successfully!`, 'success');
                 e.target.reset();
+                // Reset program to lecturer's program
+                if (lecturerTargetProgram) {
+                    $('exam_program').value = lecturerTargetProgram;
+                }
                 loadLecturerExams();
+                
             } catch (error) {
                 console.error('Exam creation failed:', error);
-                showFeedback(`Exam creation failed: ${error.message}`, 'error');
+                showFeedback(`Failed to create exam: ${error.message}`, 'error');
             } finally {
                 setButtonLoading(button, false);
             }
         }
 
+        // Load lecturer's exams
         async function loadLecturerExams() {
             const tbody = $('exams-table');
             if (!tbody) return;
             
-            tbody.innerHTML = '<tr><td colspan="8">Loading exams...</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8">Loading your exams...</td></tr>';
 
             try {
                 const { data: exams, error } = await fetchData(
-                    EXAMS_TABLE,
-                    '*',
+                    'exams',
+                    '*, course:course_id(course_name, unit_code)',
                     { created_by: currentUserProfile.user_id },
                     'exam_date',
                     false
@@ -2033,25 +2134,44 @@
                 if (error) throw error;
 
                 if (!exams || exams.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="8">No exams found.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="8">No exams found. Create your first exam above.</td></tr>';
                     return;
                 }
 
                 tbody.innerHTML = exams.map(exam => {
-                    const course = allCourses.find(c => c.unit_code === exam.course_id);
+                    const courseName = exam.course?.course_name || 'General';
+                    const dateTime = exam.exam_date ? 
+                        new Date(exam.exam_date).toLocaleDateString() + 
+                        (exam.exam_start_time ? ` ${exam.exam_start_time}` : '') : 'N/A';
+                    
+                    const duration = exam.duration_minutes ? `${exam.duration_minutes} mins` : 'N/A';
+
                     return `
                         <tr>
-                            <td>${exam.exam_name || 'N/A'}</td>
-                            <td>${course?.course_name || exam.course_id}</td>
-                            <td>${new Date(exam.exam_date).toLocaleDateString()}</td>
-                            <td>${exam.exam_type || 'N/A'}</td>
-                            <td>${exam.target_program || 'N/A'}/${exam.intake_year || 'N/A'}</td>
-                            <td>${exam.total_marks || '0'}</td>
+                            <td><span class="exam-type-badge">${exam.exam_type || 'N/A'}</span></td>
+                            <td><strong>${exam.exam_name || 'N/A'}</strong></td>
+                            <td>${courseName}</td>
+                            <td>${exam.target_program || 'N/A'}/${exam.block_term || 'N/A'}</td>
+                            <td>${dateTime}</td>
+                            <td>${duration}</td>
                             <td><span class="status status-${(exam.status || 'Scheduled').toLowerCase()}">${exam.status}</span></td>
                             <td>
-                                <button class="btn-action btn-grade-exam" onclick="showGradeModal('${exam.id}')">
-                                    <i class="fas fa-edit"></i> Grade
-                                </button>
+                                <div class="action-buttons">
+                                    <button class="btn-action" onclick="openEditExamModal('${exam.id}')" title="Edit">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button class="btn-action btn-grade-exam" onclick="openGradeModal('${exam.id}')" title="Grade">
+                                        <i class="fas fa-check-circle"></i>
+                                    </button>
+                                    ${exam.online_link ? `
+                                        <a href="${exam.online_link}" target="_blank" class="btn-action" title="Open Link">
+                                            <i class="fas fa-external-link-alt"></i>
+                                        </a>
+                                    ` : ''}
+                                    <button class="btn-action delete" onclick="deleteExam('${exam.id}', '${exam.exam_name?.replace(/'/g, "\\'") || ''}')" title="Delete">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
                             </td>
                         </tr>
                     `;
@@ -2060,6 +2180,432 @@
                 console.error('Failed to load exams:', error);
                 tbody.innerHTML = `<tr><td colspan="8">Error loading exams: ${error.message}</td></tr>`;
             }
+        }
+
+        // Delete exam
+        async function deleteExam(examId, examName) {
+            if (!confirm(`Are you sure you want to delete "${examName}"?`)) return;
+
+            try {
+                const { error } = await sb.from('exams')
+                    .delete()
+                    .eq('id', examId)
+                    .eq('created_by', currentUserProfile.user_id); // Security: only delete own exams
+
+                if (error) throw error;
+
+                showFeedback('✅ Exam deleted successfully!', 'success');
+                loadLecturerExams();
+            } catch (error) {
+                console.error('Delete failed:', error);
+                showFeedback(`Delete failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Edit exam modal
+        async function openEditExamModal(examId) {
+            try {
+                const { data: exam, error } = await sb
+                    .from('exams')
+                    .select('*')
+                    .eq('id', examId)
+                    .eq('created_by', currentUserProfile.user_id) // Security: only edit own exams
+                    .single();
+
+                if (error || !exam) {
+                    showFeedback('Exam not found or access denied.', 'error');
+                    return;
+                }
+
+                // Populate form
+                $('edit_exam_id').value = exam.id;
+                $('edit_exam_title').value = exam.exam_name || '';
+                $('edit_exam_date').value = exam.exam_date || '';
+                $('edit_exam_status').value = exam.status || 'Scheduled';
+
+                // Show modal
+                $('examEditModal').classList.add('active');
+                
+            } catch (error) {
+                console.error('Error opening edit modal:', error);
+                showFeedback('Failed to load exam details.', 'error');
+            }
+        }
+
+        // Close edit modal
+        function closeEditExamModal() {
+            $('examEditModal').classList.remove('active');
+        }
+
+        // Save edited exam
+        async function saveEditedExam(e) {
+            e.preventDefault();
+            const button = e.submitter;
+            setButtonLoading(button, true, 'Save Changes');
+
+            const examId = $('edit_exam_id').value;
+            const title = $('edit_exam_title').value;
+            const date = $('edit_exam_date').value;
+            const status = $('edit_exam_status').value;
+
+            if (!title || !date) {
+                showFeedback('Title and date are required.', 'error');
+                setButtonLoading(button, false);
+                return;
+            }
+
+            try {
+                const { error } = await sb.from('exams')
+                    .update({
+                        exam_name: title,
+                        exam_date: date,
+                        status: status,
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', examId)
+                    .eq('created_by', currentUserProfile.user_id); // Security: only update own exams
+
+                if (error) throw error;
+
+                showFeedback('✅ Exam updated successfully!', 'success');
+                closeEditExamModal();
+                loadLecturerExams();
+                
+            } catch (error) {
+                console.error('Error saving exam:', error);
+                showFeedback(`Failed to update exam: ${error.message}`, 'error');
+            } finally {
+                setButtonLoading(button, false);
+            }
+        }
+
+        // Enhanced Grade Modal for Lecturers
+        async function openGradeModal(examId) {
+            try {
+                // Show loading state
+                showFeedback('Loading grading interface...', 'info');
+
+                // Get current user
+                const currentUser = await getCurrentUser();
+                if (!currentUser || !currentUser.user_id) {
+                    showFeedback('Authentication required for grading.', 'error');
+                    return;
+                }
+
+                // Fetch exam details
+                const { data: exam, error: examError } = await sb
+                    .from('exams')
+                    .select('*, course:course_id(course_name)')
+                    .eq('id', examId)
+                    .eq('created_by', currentUserProfile.user_id) // Security: only grade own exams
+                    .single();
+
+                if (examError || !exam) {
+                    showFeedback('Exam not found or access denied.', 'error');
+                    return;
+                }
+
+                // Fetch students for this exam
+                const { data: students, error: studentError } = await sb
+                    .from('consolidated_user_profiles_table')
+                    .select('user_id, full_name, email, student_id')
+                    .eq('program', exam.target_program)
+                    .eq('intake_year', exam.intake_year)
+                    .eq('block', exam.block_term)
+                    .order('full_name');
+
+                if (studentError) {
+                    showFeedback('Error loading students.', 'error');
+                    return;
+                }
+
+                if (!students || students.length === 0) {
+                    showFeedback('No students found for this exam.', 'warning');
+                    return;
+                }
+
+                // Fetch existing grades
+                const { data: existingGrades } = await sb
+                    .from('exam_grades')
+                    .select('*')
+                    .eq('exam_id', examId);
+
+                // Build grade modal HTML
+                const modalHtml = `
+                    <div class="modal-header">
+                        <h3><i class="fas fa-check-circle"></i> Grade: ${escapeHtml(exam.exam_name)}</h3>
+                        <span class="close-btn" onclick="closeGradeModal()">&times;</span>
+                    </div>
+                    <div class="modal-body">
+                        <div class="exam-info-card">
+                            <h4>Exam Details</h4>
+                            <p><strong>Course:</strong> ${escapeHtml(exam.course?.course_name || 'General')}</p>
+                            <p><strong>Program:</strong> ${escapeHtml(exam.target_program)} | Block ${escapeHtml(exam.block_term)} | ${escapeHtml(exam.intake_year)}</p>
+                            <p><strong>Type:</strong> ${escapeHtml(exam.exam_type)}</p>
+                            <p><strong>Date:</strong> ${new Date(exam.exam_date).toLocaleDateString()}</p>
+                        </div>
+
+                        <div class="search-container">
+                            <input type="text" id="gradeSearch" placeholder="Search students..." oninput="filterGradeStudents()">
+                            <button class="btn-action" onclick="exportGrades('${examId}')"><i class="fas fa-download"></i> Export</button>
+                        </div>
+
+                        <div class="table-container">
+                            <table class="grade-table">
+                                <thead>
+                                    <tr>
+                                        <th>Student Name</th>
+                                        <th>Student ID</th>
+                                        <th>CAT 1<br><small>(/30)</small></th>
+                                        <th>CAT 2<br><small>(/30)</small></th>
+                                        <th>Final Exam<br><small>(/100)</small></th>
+                                        <th>Total<br><small>(/100)</small></th>
+                                        <th>Grade</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="gradeTableBody">
+                                    ${students.map(student => {
+                                        const grade = existingGrades?.find(g => g.student_id === student.user_id) || {};
+                                        const cat1 = grade.cat_1_score || '';
+                                        const cat2 = grade.cat_2_score || '';
+                                        const final = grade.exam_score || '';
+                                        const total = grade.total_score || '';
+                                        
+                                        return `
+                                            <tr data-name="${student.full_name.toLowerCase()}" data-id="${student.student_id.toLowerCase()}">
+                                                <td>${escapeHtml(student.full_name)}</td>
+                                                <td>${escapeHtml(student.student_id)}</td>
+                                                <td><input type="number" min="0" max="30" step="0.5" 
+                                                       id="cat1-${student.user_id}" value="${cat1}" 
+                                                       oninput="calculateStudentGrade('${student.user_id}')"
+                                                       class="grade-input"></td>
+                                                <td><input type="number" min="0" max="30" step="0.5"
+                                                       id="cat2-${student.user_id}" value="${cat2}"
+                                                       oninput="calculateStudentGrade('${student.user_id}')"
+                                                       class="grade-input"></td>
+                                                <td><input type="number" min="0" max="100" step="0.5"
+                                                       id="final-${student.user_id}" value="${final}"
+                                                       oninput="calculateStudentGrade('${student.user_id}')"
+                                                       class="grade-input"></td>
+                                                <td><input type="number" id="total-${student.user_id}" 
+                                                       value="${total}" readonly class="total-score"></td>
+                                                <td><span id="grade-${student.user_id}" class="grade-letter">${calculateGradeLetter(total)}</span></td>
+                                                <td>
+                                                    <select id="status-${student.user_id}" class="status-select">
+                                                        <option value="Scheduled" ${grade.result_status === 'Scheduled' ? 'selected' : ''}>Scheduled</option>
+                                                        <option value="InProgress" ${grade.result_status === 'InProgress' ? 'selected' : ''}>In Progress</option>
+                                                        <option value="Graded" ${grade.result_status === 'Graded' ? 'selected' : ''}>Graded</option>
+                                                        <option value="Final" ${grade.result_status === 'Final' ? 'selected' : ''}>Final</option>
+                                                    </select>
+                                                </td>
+                                            </tr>
+                                        `;
+                                    }).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="modal-actions">
+                            <button class="btn-action" onclick="saveAllGrades('${examId}')">
+                                <i class="fas fa-save"></i> Save All Grades
+                            </button>
+                            <button class="btn-action btn-cancel" onclick="closeGradeModal()">
+                                <i class="fas fa-times"></i> Cancel
+                            </button>
+                        </div>
+                    </div>
+                `;
+
+                // Show modal
+                const modal = $('gradeModal');
+                modal.innerHTML = modalHtml;
+                modal.classList.add('active');
+
+                // Calculate initial grades
+                students.forEach(student => calculateStudentGrade(student.user_id));
+                
+                showFeedback('Grading interface loaded successfully', 'success');
+
+            } catch (error) {
+                console.error('Error opening grade modal:', error);
+                showFeedback('Failed to load grading interface: ' + error.message, 'error');
+            }
+        }
+
+        // Calculate student grade
+        function calculateStudentGrade(studentId) {
+            const cat1 = parseFloat($(`#cat1-${studentId}`).value) || 0;
+            const cat2 = parseFloat($(`#cat2-${studentId}`).value) || 0;
+            const final = parseFloat($(`#final-${studentId}`).value) || 0;
+            
+            // Calculate total (CATs are 30% each, final is 40%)
+            const total = (cat1 * 0.3) + (cat2 * 0.3) + (final * 0.4);
+            
+            $(`#total-${studentId}`).value = total.toFixed(1);
+            $(`#grade-${studentId}`).textContent = calculateGradeLetter(total);
+            $(`#grade-${studentId}`).className = `grade-letter ${getGradeClass(total)}`;
+        }
+
+        // Calculate grade letter
+        function calculateGradeLetter(score) {
+            if (!score) return '-';
+            if (score >= 80) return 'A';
+            if (score >= 75) return 'A-';
+            if (score >= 70) return 'B+';
+            if (score >= 65) return 'B';
+            if (score >= 60) return 'B-';
+            if (score >= 55) return 'C+';
+            if (score >= 50) return 'C';
+            if (score >= 45) return 'C-';
+            if (score >= 40) return 'D+';
+            if (score >= 35) return 'D';
+            return 'E';
+        }
+
+        // Get grade CSS class
+        function getGradeClass(score) {
+            if (!score) return 'grade-pending';
+            if (score >= 50) return 'grade-pass';
+            return 'grade-fail';
+        }
+
+        // Filter students in grade modal
+        function filterGradeStudents() {
+            const searchTerm = $('#gradeSearch').value.toLowerCase();
+            const rows = document.querySelectorAll('#gradeTableBody tr');
+            
+            rows.forEach(row => {
+                const name = row.getAttribute('data-name') || '';
+                const id = row.getAttribute('data-id') || '';
+                const matches = name.includes(searchTerm) || id.includes(searchTerm);
+                row.style.display = matches ? '' : 'none';
+            });
+        }
+
+        // Save all grades
+        async function saveAllGrades(examId) {
+            try {
+                const rows = document.querySelectorAll('#gradeTableBody tr');
+                const grades = [];
+                let hasChanges = false;
+
+                for (const row of rows) {
+                    if (row.style.display === 'none') continue;
+                    
+                    const studentId = row.querySelector('input[id^="cat1-"]')?.id.replace('cat1-', '');
+                    if (!studentId) continue;
+
+                    const cat1 = $(`#cat1-${studentId}`).value;
+                    const cat2 = $(`#cat2-${studentId}`).value;
+                    const final = $(`#final-${studentId}`).value;
+                    const status = $(`#status-${studentId}`).value;
+                    const total = $(`#total-${studentId}`).value;
+
+                    // Only save if there are values
+                    if (cat1 || cat2 || final) {
+                        hasChanges = true;
+                        grades.push({
+                            exam_id: parseInt(examId),
+                            student_id: studentId,
+                            cat_1_score: cat1 ? parseFloat(cat1) : null,
+                            cat_2_score: cat2 ? parseFloat(cat2) : null,
+                            exam_score: final ? parseFloat(final) : null,
+                            total_score: total ? parseFloat(total) : null,
+                            result_status: status,
+                            graded_by: currentUserProfile.user_id,
+                            question_id: '00000000-0000-0000-0000-000000000000', // Required field
+                            updated_at: new Date().toISOString()
+                        });
+                    }
+                }
+
+                if (!hasChanges) {
+                    showFeedback('No grade changes to save.', 'info');
+                    return;
+                }
+
+                const { error } = await sb.from('exam_grades').upsert(grades, {
+                    onConflict: 'exam_id,student_id,question_id'
+                });
+
+                if (error) throw error;
+
+                showFeedback(`✅ Successfully saved grades for ${grades.length} students!`, 'success');
+                
+            } catch (error) {
+                console.error('Error saving grades:', error);
+                showFeedback(`Failed to save grades: ${error.message}`, 'error');
+            }
+        }
+
+        // Close grade modal
+        function closeGradeModal() {
+            $('gradeModal').classList.remove('active');
+        }
+
+        // Export grades to CSV
+        async function exportGrades(examId) {
+            try {
+                const { data: grades, error } = await sb
+                    .from('exam_grades')
+                    .select(`
+                        *,
+                        student:student_id(full_name, student_id),
+                        exam:exam_id(exam_name)
+                    `)
+                    .eq('exam_id', examId);
+
+                if (error) throw error;
+
+                if (!grades || grades.length === 0) {
+                    showFeedback('No grades to export.', 'info');
+                    return;
+                }
+
+                // Create CSV content
+                let csv = 'Student Name,Student ID,CAT 1,CAT 2,Final Exam,Total Score,Grade,Status\n';
+                
+                grades.forEach(grade => {
+                    const student = grade.student;
+                    const gradeLetter = calculateGradeLetter(grade.total_score);
+                    csv += `"${student.full_name}","${student.student_id}",${grade.cat_1_score || ''},${grade.cat_2_score || ''},${grade.exam_score || ''},${grade.total_score || ''},${gradeLetter},${grade.result_status}\n`;
+                });
+
+                // Create download link
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `grades_${examId}_${new Date().toISOString().split('T')[0]}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+
+                showFeedback('Grades exported successfully!', 'success');
+                
+            } catch (error) {
+                console.error('Error exporting grades:', error);
+                showFeedback('Failed to export grades.', 'error');
+            }
+        }
+
+        // Utility function to escape HTML
+        function escapeHtml(unsafe) {
+            if (unsafe === null || unsafe === undefined) return '';
+            return unsafe.toString()
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        // Get current user
+        async function getCurrentUser() {
+            const { data: { user } } = await sb.auth.getUser();
+            return user;
         }
 
         // =================================================================
@@ -2485,13 +3031,6 @@
         
         function closeEditResourceModal() { 
             $('editResourceModal').classList.remove('active'); 
-        }
-
-        function showGradeModal(examId) {
-            const modal = $('gradeModal');
-            if (modal) {
-                modal.classList.add('active');
-            }
         }
 
         function showAuthFailure(error) {
