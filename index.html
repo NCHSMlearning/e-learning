@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-  <link rel="stylesheet" href="indexstyle.css">
+    <link rel="stylesheet" href="indexstyle.css">
 </head>
 <body>
     <!-- Mobile Header -->
@@ -303,31 +303,234 @@
                 </div>
             </section>
 
-          <!-- Resources Tab -->
-<section id="resources" class="tab-content">
-    <div class="resources-header">
-        <h2 style="color: var(--color-primary); margin-bottom: 8px;">Learning Resources</h2>
-        <p class="subtitle" style="margin-bottom: 20px;">Access your course materials and study resources</p>
-    </div>
-    
-    <div class="resources-container">
-        <div id="resources-list" class="resources-sidebar">
-            <div class="resources-count">
-                <strong id="resources-count">0</strong> resources available
-            </div>
-            <!-- Resources will be loaded here dynamically -->
-            <div class="loading-state">Loading resources...</div>
-        </div>
+            <!-- Resources Tab - ENHANCED FOR MOBILE -->
+            <section id="resources" class="tab-content">
+                <div class="resources-header">
+                    <h2 style="color: var(--color-primary); margin-bottom: 8px;">Learning Resources</h2>
+                    <p class="subtitle" style="margin-bottom: 20px;">Access your course materials and study resources</p>
+                    
+                    <!-- Mobile Filter Controls -->
+                    <div class="mobile-resource-controls">
+                        <div class="filter-group">
+                            <label for="resource-type-filter">Filter by Type:</label>
+                            <select id="resource-type-filter" class="resource-filter">
+                                <option value="all">All Types</option>
+                                <option value="pdf">PDF Documents</option>
+                                <option value="video">Videos</option>
+                                <option value="image">Images</option>
+                                <option value="document">Documents</option>
+                                <option value="presentation">Presentations</option>
+                            </select>
+                        </div>
+                        
+                        <div class="sort-group">
+                            <label for="resource-sort">Sort by:</label>
+                            <select id="resource-sort" class="resource-filter">
+                                <option value="newest">Newest First</option>
+                                <option value="oldest">Oldest First</option>
+                                <option value="name">Name A-Z</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="resources-container">
+                    <!-- Resources List - Mobile Optimized -->
+                    <div id="resources-list" class="resources-sidebar">
+                        <div class="resources-count">
+                            <i class="fas fa-file-alt"></i>
+                            <span><strong id="resources-count">0</strong> resources available</span>
+                            <div class="mobile-view-toggle">
+                                <button class="view-btn active" data-view="list">
+                                    <i class="fas fa-list"></i>
+                                </button>
+                                <button class="view-btn" data-view="grid">
+                                    <i class="fas fa-th"></i>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="resources-search">
+                            <input type="text" id="resource-search" placeholder="Search resources..." class="search-input">
+                            <i class="fas fa-search search-icon"></i>
+                        </div>
+                        
+                        <div class="resources-list" id="resources-list-container">
+                            <!-- Resources will be loaded here dynamically -->
+                            <div class="loading-state">
+                                <i class="fas fa-spinner fa-spin"></i>
+                                Loading resources...
+                            </div>
+                        </div>
+                    </div>
 
-        <div id="resource-viewer" class="resource-preview">
-            <div class="preview-placeholder">
-                <i class="fas fa-file-alt"></i>
-                <h3>Select a Resource</h3>
-                <p>Choose a resource from the list to view its content</p>
-            </div>
-        </div>
-    </div>
-</section>
+                    <!-- Resource Preview - Enhanced for Mobile -->
+                    <div id="resource-viewer" class="resource-preview">
+                        <div class="preview-placeholder">
+                            <div class="placeholder-icon">
+                                <i class="fas fa-file-alt"></i>
+                            </div>
+                            <h3>Select a Resource</h3>
+                            <p>Choose a resource from the list to view its content</p>
+                        </div>
+                        
+                        <!-- Active Resource Viewer -->
+                        <div class="active-resource" style="display: none;">
+                            <div class="resource-header">
+                                <div class="resource-meta">
+                                    <h3 id="resource-title">Resource Title</h3>
+                                    <div class="resource-info">
+                                        <span class="resource-type" id="resource-type">PDF</span>
+                                        <span class="resource-size" id="resource-size">2.4 MB</span>
+                                        <span class="resource-date" id="resource-date">Jan 15, 2024</span>
+                                    </div>
+                                </div>
+                                <div class="resource-actions">
+                                    <button class="action-btn fullscreen-btn" id="fullscreen-resource">
+                                        <i class="fas fa-expand"></i>
+                                        Full Screen
+                                    </button>
+                                    <button class="action-btn bookmark-btn" id="bookmark-resource">
+                                        <i class="fas fa-bookmark"></i>
+                                        Bookmark
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div class="preview-container">
+                                <!-- PDF Preview -->
+                                <div id="pdf-preview" class="preview-content" style="display: none;">
+                                    <div class="pdf-controls">
+                                        <button id="prev-page" class="page-btn">
+                                            <i class="fas fa-chevron-left"></i>
+                                        </button>
+                                        <span class="page-info">
+                                            Page <span id="page-num">1</span> of <span id="page-count">1</span>
+                                        </span>
+                                        <button id="next-page" class="page-btn">
+                                            <i class="fas fa-chevron-right"></i>
+                                        </button>
+                                        <button class="page-btn zoom-out" id="zoom-out">
+                                            <i class="fas fa-search-minus"></i>
+                                        </button>
+                                        <button class="page-btn zoom-in" id="zoom-in">
+                                            <i class="fas fa-search-plus"></i>
+                                        </button>
+                                    </div>
+                                    <div class="pdf-viewer">
+                                        <canvas id="pdf-canvas"></canvas>
+                                    </div>
+                                </div>
+                                
+                                <!-- Image Preview -->
+                                <div id="image-preview" class="preview-content" style="display: none;">
+                                    <div class="image-controls">
+                                        <button class="action-btn zoom-btn" id="image-zoom">
+                                            <i class="fas fa-search-plus"></i>
+                                            Zoom
+                                        </button>
+                                    </div>
+                                    <div class="image-viewer">
+                                        <img id="preview-image" src="" alt="Resource Image">
+                                    </div>
+                                </div>
+                                
+                                <!-- Video Preview -->
+                                <div id="video-preview" class="preview-content" style="display: none;">
+                                    <div class="video-controls">
+                                        <button class="action-btn fullscreen-btn" id="video-fullscreen">
+                                            <i class="fas fa-expand"></i>
+                                            Full Screen
+                                        </button>
+                                    </div>
+                                    <div class="video-viewer">
+                                        <video id="preview-video" controls>
+                                            Your browser does not support the video tag.
+                                        </video>
+                                    </div>
+                                </div>
+                                
+                                <!-- Document Preview (Office files) -->
+                                <div id="office-preview" class="preview-content" style="display: none;">
+                                    <div class="office-controls">
+                                        <button class="action-btn fullscreen-btn" id="office-fullscreen">
+                                            <i class="fas fa-expand"></i>
+                                            Full Screen
+                                        </button>
+                                    </div>
+                                    <div class="office-viewer">
+                                        <iframe id="office-frame" width="100%" height="600px" frameborder="0"></iframe>
+                                    </div>
+                                </div>
+                                
+                                <!-- Unsupported File Type -->
+                                <div id="unsupported-preview" class="preview-content" style="display: none;">
+                                    <div class="unsupported-message">
+                                        <i class="fas fa-file-exclamation"></i>
+                                        <h4>Preview Not Available</h4>
+                                        <p>This file type cannot be previewed in the browser.</p>
+                                        <p class="note">Please contact your instructor for alternative access.</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Resource Details -->
+                            <div class="resource-details">
+                                <h4>Details</h4>
+                                <div class="details-grid">
+                                    <div class="detail-item">
+                                        <span class="detail-label">Uploaded by:</span>
+                                        <span class="detail-value" id="detail-uploader">Admin</span>
+                                    </div>
+                                    <div class="detail-item">
+                                        <span class="detail-label">Course:</span>
+                                        <span class="detail-value" id="detail-course">General</span>
+                                    </div>
+                                    <div class="detail-item">
+                                        <span class="detail-label">Block:</span>
+                                        <span class="detail-value" id="detail-block">Block 1</span>
+                                    </div>
+                                    <div class="detail-item">
+                                        <span class="detail-label">Description:</span>
+                                        <span class="detail-value" id="detail-description">No description available</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Full Screen Overlay -->
+                <div id="fullscreen-overlay" class="fullscreen-overlay">
+                    <div class="fullscreen-header">
+                        <button class="close-fullscreen" id="close-fullscreen">
+                            <i class="fas fa-times"></i>
+                            Close
+                        </button>
+                        <h3 id="fullscreen-title">Resource Title</h3>
+                    </div>
+                    <div class="fullscreen-content" id="fullscreen-content">
+                        <!-- Content will be moved here when fullscreen is activated -->
+                    </div>
+                </div>
+                
+                <!-- Mobile Bottom Navigation -->
+                <div class="mobile-resource-nav">
+                    <button class="nav-btn active" data-action="list">
+                        <i class="fas fa-list"></i>
+                        <span>Resources</span>
+                    </button>
+                    <button class="nav-btn" data-action="preview">
+                        <i class="fas fa-eye"></i>
+                        <span>Preview</span>
+                    </button>
+                    <button class="nav-btn" data-action="fullscreen">
+                        <i class="fas fa-expand"></i>
+                        <span>Full Screen</span>
+                    </button>
+                </div>
+            </section>
+
             <!-- Messages Tab -->
             <section id="messages" class="tab-content">
                 <h2 style="color: var(--color-primary);">Message Admin / Instructor</h2>
@@ -378,10 +581,11 @@
         // *************************************************************************
 
         // Hides the .html extension in the URL
-if (window.location.pathname.endsWith('.html')) {
-    const cleanPath = window.location.pathname.replace(/\.html$/, '');
-    window.history.replaceState({}, '', cleanPath);
-}
+        if (window.location.pathname.endsWith('.html')) {
+            const cleanPath = window.location.pathname.replace(/\.html$/, '');
+            window.history.replaceState({}, '', cleanPath);
+        }
+
         // Configuration validation
         function validateConfig() {
             if (!window.APP_CONFIG) {
@@ -906,7 +1110,8 @@ if (window.location.pathname.endsWith('.html')) {
                 const { data: logs, error } = await sb
                     .from('geo_attendance_logs')
                     .select('is_verified')
-                    .eq('student_id', userId);
+                    .eq('student_id', userId)
+                    .order('check_in_time', { ascending: false });
             
                 if (error) throw error;
             
@@ -1510,9 +1715,8 @@ if (window.location.pathname.endsWith('.html')) {
                         p_device_id: deviceId,
                         p_is_verified: isVerified,
                         p_course_id: selectedCourseId,
-                       // ADD THIS NEW PARAMETER:
-    p_student_name: studentProfile.full_name || studentProfile.name || 'Unknown Student'
-});
+                        p_student_name: studentProfile.full_name || studentProfile.name || 'Unknown Student'
+                    });
             
                     if (error) {
                         console.error('Check-in failed:', error);
@@ -1535,136 +1739,136 @@ if (window.location.pathname.endsWith('.html')) {
             // *** COURSES, EXAMS, AND RESOURCES ***
             // *************************************************************************
             
-           // Load courses - FIXED VERSION
-async function loadCourses() {
-    const tableBody = document.getElementById('courses-table');
-    if (!tableBody) return;
-    AppUtils.showLoading(tableBody, 'Loading courses...');
+            // Load courses - FIXED VERSION
+            async function loadCourses() {
+                const tableBody = document.getElementById('courses-table');
+                if (!tableBody) return;
+                AppUtils.showLoading(tableBody, 'Loading courses...');
 
-    if (!currentUserProfile) await loadProfile(currentUserId); 
-    
-    const program = currentUserProfile?.program;
-    const department = currentUserProfile?.department;
-    const block = currentUserProfile?.block;
-    const intakeYear = currentUserProfile?.intake_year;
+                if (!currentUserProfile) await loadProfile(currentUserId); 
+                
+                const program = currentUserProfile?.program;
+                const department = currentUserProfile?.department;
+                const block = currentUserProfile?.block;
+                const intakeYear = currentUserProfile?.intake_year;
 
-    // Debug info
-    console.log('User Profile:', {
-        program: program,
-        department: department,
-        block: block,
-        intakeYear: intakeYear
-    });
+                // Debug info
+                console.log('User Profile:', {
+                    program: program,
+                    department: department,
+                    block: block,
+                    intakeYear: intakeYear
+                });
 
-    if ((!program && !department) || !intakeYear) {
-        tableBody.innerHTML = `<tr><td colspan="4">
-            Missing program/department or intake year info. 
-            Program: ${program || 'undefined'}, 
-            Department: ${department || 'undefined'},
-            Intake Year: ${intakeYear || 'undefined'}
-            Cannot load courses.
-        </td></tr>`;
-        cachedCourses = [];
-        return;
-    }
+                if ((!program && !department) || !intakeYear) {
+                    tableBody.innerHTML = `<tr><td colspan="4">
+                        Missing program/department or intake year info. 
+                        Program: ${program || 'undefined'}, 
+                        Department: ${department || 'undefined'},
+                        Intake Year: ${intakeYear || 'undefined'}
+                        Cannot load courses.
+                    </td></tr>`;
+                    cachedCourses = [];
+                    return;
+                }
 
-    try {
-        const blockFilter = `block.eq.${block},block.is.null,block.eq.General`;
+                try {
+                    const blockFilter = `block.eq.${block},block.is.null,block.eq.General`;
 
-        // Determine the correct target_program filter (REMOVED General since it doesn't exist)
-        let programFilter;
-        
-        // TVET students - check all possible combinations
-        if (program === 'TVET' || department === 'TVET') {
-            programFilter = `target_program.eq.TVET`; // Removed ,target_program.eq.General
-            console.log('Filtering for TVET courses only');
-        } 
-        // KRCHN students have program = 'KRCHN'
-        else if (program === 'KRCHN') {
-            programFilter = `target_program.eq.KRCHN`; // Removed ,target_program.eq.General
-            console.log('Filtering for KRCHN courses only');
-        }
-        // Nursing department students
-        else if (department === 'Nursing') {
-            programFilter = `target_program.eq.Nursing`; // Removed ,target_program.eq.General
-            console.log('Filtering for Nursing courses only');
-        }
-        // Clinical Medicine department
-        else if (department === 'Clinical Medicine') {
-            programFilter = `target_program.eq.Clinical Medicine`; // Removed ,target_program.eq.General
-            console.log('Filtering for Clinical Medicine courses only');
-        }
-        // Management department
-        else if (department === 'Management') {
-            programFilter = `target_program.eq.Management`; // Removed ,target_program.eq.General
-            console.log('Filtering for Management courses only');
-        }
-        else {
-            // Fallback: use program field if available
-            programFilter = `target_program.eq.${program}`; // Removed ,target_program.eq.General
-            console.log('Filtering for program:', program);
-        }
+                    // Determine the correct target_program filter
+                    let programFilter;
+                    
+                    // TVET students - check all possible combinations
+                    if (program === 'TVET' || department === 'TVET') {
+                        programFilter = `target_program.eq.TVET`;
+                        console.log('Filtering for TVET courses only');
+                    } 
+                    // KRCHN students have program = 'KRCHN'
+                    else if (program === 'KRCHN') {
+                        programFilter = `target_program.eq.KRCHN`;
+                        console.log('Filtering for KRCHN courses only');
+                    }
+                    // Nursing department students
+                    else if (department === 'Nursing') {
+                        programFilter = `target_program.eq.Nursing`;
+                        console.log('Filtering for Nursing courses only');
+                    }
+                    // Clinical Medicine department
+                    else if (department === 'Clinical Medicine') {
+                        programFilter = `target_program.eq.Clinical Medicine`;
+                        console.log('Filtering for Clinical Medicine courses only');
+                    }
+                    // Management department
+                    else if (department === 'Management') {
+                        programFilter = `target_program.eq.Management`;
+                        console.log('Filtering for Management courses only');
+                    }
+                    else {
+                        // Fallback: use program field if available
+                        programFilter = `target_program.eq.${program}`;
+                        console.log('Filtering for program:', program);
+                    }
 
-        console.log('Final program filter:', programFilter);
+                    console.log('Final program filter:', programFilter);
 
-        const { data: courses, error } = await sb
-            .from('courses')
-            .select('*')
-            .or(programFilter)
-            .eq('intake_year', intakeYear)
-            .or(blockFilter)
-            .order('course_name', { ascending: true });
+                    const { data: courses, error } = await sb
+                        .from('courses')
+                        .select('*')
+                        .or(programFilter)
+                        .eq('intake_year', intakeYear)
+                        .or(blockFilter)
+                        .order('course_name', { ascending: true });
 
-        if (error) throw error;
+                    if (error) throw error;
 
-        cachedCourses = courses || [];
-        
-        console.log('Found courses:', cachedCourses.length);
-        console.log('Courses for', program || department, ':', cachedCourses);
-        
-        tableBody.innerHTML = '';
-        if (cachedCourses.length > 0) {
-            cachedCourses.forEach(c => {
-                tableBody.innerHTML += `
-                    <tr>
-                        <td>${escapeHtml(c.course_name) || 'N/A'}</td>
-                        <td>${escapeHtml(c.unit_code) || 'N/A'}</td>
-                        <td>${escapeHtml(c.description) || 'N/A'}</td>
-                        <td>${escapeHtml(c.status) || 'N/A'}</td>
-                    </tr>
-                `;
-            });
-        } else {
-            tableBody.innerHTML = `<tr><td colspan="4">
-                No courses found for: ${program || department} 
-                (Program: ${program || 'undefined'}, Department: ${department || 'undefined'})
-                <br>Intake Year: ${intakeYear}, Block: ${block}
-                <br>Filter used: ${programFilter}
-                <br><small>Check if courses exist with target_program = '${program || department}' and intake_year = '${intakeYear}'</small>
-            </td></tr>`;
-        }
+                    cachedCourses = courses || [];
+                    
+                    console.log('Found courses:', cachedCourses.length);
+                    console.log('Courses for', program || department, ':', cachedCourses);
+                    
+                    tableBody.innerHTML = '';
+                    if (cachedCourses.length > 0) {
+                        cachedCourses.forEach(c => {
+                            tableBody.innerHTML += `
+                                <tr>
+                                    <td>${escapeHtml(c.course_name) || 'N/A'}</td>
+                                    <td>${escapeHtml(c.unit_code) || 'N/A'}</td>
+                                    <td>${escapeHtml(c.description) || 'N/A'}</td>
+                                    <td>${escapeHtml(c.status) || 'N/A'}</td>
+                                </tr>
+                            `;
+                        });
+                    } else {
+                        tableBody.innerHTML = `<tr><td colspan="4">
+                            No courses found for: ${program || department} 
+                            (Program: ${program || 'undefined'}, Department: ${department || 'undefined'})
+                            <br>Intake Year: ${intakeYear}, Block: ${block}
+                            <br>Filter used: ${programFilter}
+                            <br><small>Check if courses exist with target_program = '${program || department}' and intake_year = '${intakeYear}'</small>
+                        </td></tr>`;
+                    }
 
-    } catch (error) {
-        console.error("❌ Failed to load courses:", error);
-        AppUtils.showError(tableBody, `Error loading courses: ${error.message}`);
-        cachedCourses = [];
-    }
+                } catch (error) {
+                    console.error("❌ Failed to load courses:", error);
+                    AppUtils.showError(tableBody, `Error loading courses: ${error.message}`);
+                    cachedCourses = [];
+                }
 
-    if (typeof loadDashboardMetrics === "function") {
-        loadDashboardMetrics(currentUserId);
-    }
-}
+                if (typeof loadDashboardMetrics === "function") {
+                    loadDashboardMetrics(currentUserId);
+                }
+            }
 
-// Utility to safely escape HTML
-function escapeHtml(str) {
-    if (!str) return '';
-    return String(str)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-}
+            // Utility to safely escape HTML
+            function escapeHtml(str) {
+                if (!str) return '';
+                return String(str)
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;")
+                    .replace(/'/g, "&#039;");
+            }
             
             // Load exams
             async function loadExams() {
@@ -1820,140 +2024,15 @@ function escapeHtml(str) {
                 document.getElementById('transcript-modal').style.display = 'none';
             }
             
-            // View resource
-            async function viewResource(resourceId) {
-                const resourceViewer = document.getElementById('resource-viewer');
-                const resource = cachedResources.find(r => r.id == resourceId);
+            // *************************************************************************
+            // *** ENHANCED RESOURCES SYSTEM ***
+            // *************************************************************************
             
-                if (!resource || !resourceViewer) {
-                    if (resourceViewer) resourceViewer.innerHTML = 'Resource not found.';
-                    return;
-                }
-            
-                const fileUrl = resource.file_url;
-                const filePath = resource.file_path;
-                const ext = (filePath || '').split('.').pop().toLowerCase();
-            
-                // Clear viewer and add header
-                resourceViewer.innerHTML = `
-                    <h3 style="color: var(--color-primary); margin-bottom: 5px;">
-                        ${escapeHtml(resource.title)}
-                    </h3>
-                    <p style="font-size: 0.9em; color: #6B7280; margin-bottom: 15px;">
-                        Uploaded by: ${escapeHtml(resource.uploaded_by_name || 'Admin')}
-                        on ${new Date(resource.created_at).toLocaleDateString()}
-                    </p>
-                `;
-            
-                // PDF files
-                if (ext === 'pdf') {
-                    resourceViewer.innerHTML += `
-                        <div id="pdf-container" style="width:100%; max-height:80vh; overflow:auto;">
-                            <canvas id="pdf-canvas" style="width:100%; height:auto; border:1px solid #ddd; border-radius:6px;"></canvas>
-                        </div>
-            
-                        <div id="pdf-controls" style="margin-top:15px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:center;">
-                            <button id="prev-page" class="profile-button" style="padding:8px 15px; font-size:0.9em;">Prev</button>
-                            <button id="next-page" class="profile-button" style="padding:8px 15px; font-size:0.9em;">Next</button>
-                            <span style="font-weight:600;">Page: <span id="page-num"></span> / <span id="page-count"></span></span>
-                        </div>
-                    `;
-            
-                    const canvas = document.getElementById('pdf-canvas');
-                    const ctx = canvas.getContext('2d');
-                    let pdfDoc = null;
-                    let pageNum = 1;
-            
-                    pdfjsLib.getDocument(fileUrl).promise
-                        .then(pdf => {
-                            pdfDoc = pdf;
-                            document.getElementById('page-count').textContent = pdf.numPages;
-                            renderPage(pageNum);
-                        })
-                        .catch(err => {
-                            resourceViewer.innerHTML += `<p style="color:#EF4444;">Failed to load PDF: ${err.message}</p>`;
-                        });
-            
-                    function renderPage(num) {
-                        pdfDoc.getPage(num).then(page => {
-                            const containerWidth = document.getElementById('pdf-container').clientWidth;
-                            const baseViewport = page.getViewport({ scale: 1 });
-                            const pixelRatio = window.devicePixelRatio || 1;
-                            const scale = (containerWidth / baseViewport.width) * pixelRatio;
-                            const viewport = page.getViewport({ scale });
-            
-                            canvas.width = viewport.width;
-                            canvas.height = viewport.height;
-                            canvas.style.width = `${viewport.width / pixelRatio}px`;
-                            canvas.style.height = `${viewport.height / pixelRatio}px`;
-            
-                            const renderContext = { canvasContext: ctx, viewport };
-                            page.render(renderContext).promise.then(() => {
-                                document.getElementById('page-num').textContent = num;
-                            });
-                        });
-                    }
-            
-                    document.getElementById('prev-page').onclick = () => {
-                        if (pageNum > 1) {
-                            pageNum--;
-                            renderPage(pageNum);
-                        }
-                    };
-            
-                    document.getElementById('next-page').onclick = () => {
-                        if (pageNum < pdfDoc.numPages) {
-                            pageNum++;
-                            renderPage(pageNum);
-                        }
-                    };
-            
-                    return;
-                }
-            
-                // Office files
-                if (['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'].includes(ext)) {
-                    try {
-                        // Generate a signed URL (1 hour)
-                        const { data: signed } = await sb.storage
-                            .from(RESOURCES_BUCKET)
-                            .createSignedUrl(filePath, 3600);
-            
-                        if (!signed?.signedUrl) {
-                            resourceViewer.innerHTML += `<p style="color:#EF4444;">Unable to load file.</p>`;
-                            return;
-                        }
-            
-                        const encoded = encodeURIComponent(signed.signedUrl);
-            
-                        resourceViewer.innerHTML += `
-                            <iframe 
-                                src="https://view.officeapps.live.com/op/embed.aspx?src=${encoded}"
-                                width="100%"
-                                height="75vh"
-                                style="border:none; min-height:500px; border-radius:6px;">
-                            </iframe>`;
-                    } catch (err) {
-                        resourceViewer.innerHTML += `<p style="color:#EF4444;">Failed to load file: ${err.message}</p>`;
-                    }
-            
-                    return;
-                }
-            
-                // Unsupported files
-                resourceViewer.innerHTML += `
-                    <p>This file type (<strong>.${ext}</strong>) cannot be previewed.</p>
-                    <a href="${fileUrl}" download class="profile-button" style="margin-top:10px; display:inline-block;">
-                        Download File
-                    </a>
-                `;
-            }
-            
-            // Load resources
+            // Load resources with enhanced mobile features
             async function loadResources() {
                 if (!currentUserProfile) await loadProfile(currentUserId);
             
-                const resourceListContainer = document.getElementById('resources-list');
+                const resourceListContainer = document.getElementById('resources-list-container');
                 if (!resourceListContainer) return;
                 AppUtils.showLoading(resourceListContainer, 'Loading resources...');
                 cachedResources = [];
@@ -1970,7 +2049,7 @@ function escapeHtml(str) {
             
                     const { data: resources, error } = await sb
                         .from('resources')
-                        .select('id, title, file_path, file_url, program_type, block, intake, uploaded_by_name, created_at')
+                        .select('id, title, file_path, file_url, program_type, block, intake, uploaded_by_name, created_at, file_size, file_type')
                         .eq('program_type', program)
                         .eq('block', block)
                         .eq('intake', intakeYear)
@@ -1979,25 +2058,12 @@ function escapeHtml(str) {
                     if (error) throw error;
             
                     cachedResources = resources || [];
-                    resourceListContainer.innerHTML = '';
+                    renderResourcesList(cachedResources);
             
-                    if (!cachedResources.length) {
-                        resourceListContainer.innerHTML = `<p>No learning resources found for your program, block, and intake.</p>`;
-                        return;
-                    }
+                    // Update resources count
+                    document.getElementById('resources-count').textContent = cachedResources.length;
             
-                    cachedResources.forEach(res => {
-                        const displayDate = new Date(res.created_at).toLocaleDateString();
-                        const itemDiv = document.createElement('div');
-                        itemDiv.className = 'resource-item';
-                        itemDiv.innerHTML = `
-                            <strong>${escapeHtml(res.title)}</strong>
-                            <p>Uploaded: ${displayDate} (${escapeHtml(res.program_type)})</p>
-                        `;
-                        itemDiv.addEventListener('click', () => viewResource(res.id));
-                        resourceListContainer.appendChild(itemDiv);
-                    });
-            
+                    // Load first resource if available
                     if (cachedResources.length > 0) {
                         viewResource(cachedResources[0].id);
                     } else {
@@ -2013,6 +2079,454 @@ function escapeHtml(str) {
                     loadDashboardMetrics(currentUserId);
                 }
             }
+            
+            // Render resources list with enhanced UI
+            function renderResourcesList(resources) {
+                const resourceListContainer = document.getElementById('resources-list-container');
+                if (!resourceListContainer) return;
+            
+                resourceListContainer.innerHTML = '';
+            
+                if (!resources.length) {
+                    resourceListContainer.innerHTML = '<div class="no-resources">No resources found for your program and block.</div>';
+                    return;
+                }
+            
+                resources.forEach(resource => {
+                    const itemDiv = document.createElement('div');
+                    itemDiv.className = 'resource-item';
+                    itemDiv.setAttribute('data-resource-id', resource.id);
+                    
+                    const fileExt = (resource.file_path || '').split('.').pop().toLowerCase();
+                    const fileType = getFileType(fileExt);
+                    const fileIcon = getFileIcon(fileExt);
+                    const fileSize = formatFileSize(resource.file_size);
+                    const uploadDate = new Date(resource.created_at).toLocaleDateString();
+                    
+                    itemDiv.innerHTML = `
+                        <div class="resource-icon ${fileType}">
+                            <i class="${fileIcon}"></i>
+                        </div>
+                        <div class="resource-content">
+                            <div class="resource-name">${escapeHtml(resource.title)}</div>
+                            <div class="resource-meta">
+                                <span class="resource-type-badge">${fileExt.toUpperCase()}</span>
+                                <span>${fileSize}</span>
+                                <span>${uploadDate}</span>
+                            </div>
+                        </div>
+                    `;
+                    
+                    itemDiv.addEventListener('click', () => viewResource(resource.id));
+                    resourceListContainer.appendChild(itemDiv);
+                });
+            }
+            
+            // Get file type for styling
+            function getFileType(extension) {
+                const pdfTypes = ['pdf'];
+                const imageTypes = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg'];
+                const videoTypes = ['mp4', 'avi', 'mov', 'wmv', 'flv'];
+                const documentTypes = ['doc', 'docx', 'txt', 'rtf'];
+                const presentationTypes = ['ppt', 'pptx'];
+                const spreadsheetTypes = ['xls', 'xlsx', 'csv'];
+                
+                if (pdfTypes.includes(extension)) return 'pdf';
+                if (imageTypes.includes(extension)) return 'image';
+                if (videoTypes.includes(extension)) return 'video';
+                if (documentTypes.includes(extension)) return 'document';
+                if (presentationTypes.includes(extension)) return 'presentation';
+                if (spreadsheetTypes.includes(extension)) return 'spreadsheet';
+                return 'other';
+            }
+            
+            // Get appropriate icon for file type
+            function getFileIcon(extension) {
+                const fileType = getFileType(extension);
+                
+                switch(fileType) {
+                    case 'pdf': return 'fas fa-file-pdf';
+                    case 'image': return 'fas fa-file-image';
+                    case 'video': return 'fas fa-file-video';
+                    case 'document': return 'fas fa-file-word';
+                    case 'presentation': return 'fas fa-file-powerpoint';
+                    case 'spreadsheet': return 'fas fa-file-excel';
+                    default: return 'fas fa-file';
+                }
+            }
+            
+            // Format file size for display
+            function formatFileSize(bytes) {
+                if (!bytes) return 'Unknown size';
+                
+                const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+                if (bytes === 0) return '0 Bytes';
+                const i = parseInt(Math.floor(Math.log(bytes) / Math.log(1024)));
+                return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
+            }
+            
+            // Enhanced view resource function with full-screen support
+            async function viewResource(resourceId) {
+                const resourceViewer = document.getElementById('resource-viewer');
+                const resource = cachedResources.find(r => r.id == resourceId);
+            
+                if (!resource || !resourceViewer) {
+                    if (resourceViewer) resourceViewer.innerHTML = 'Resource not found.';
+                    return;
+                }
+            
+                // Update active state in list
+                document.querySelectorAll('.resource-item').forEach(item => {
+                    item.classList.remove('active');
+                });
+                document.querySelector(`.resource-item[data-resource-id="${resourceId}"]`).classList.add('active');
+            
+                const fileUrl = resource.file_url;
+                const filePath = resource.file_path;
+                const ext = (filePath || '').split('.').pop().toLowerCase();
+                const fileType = getFileType(ext);
+            
+                // Show active resource viewer
+                document.querySelector('.preview-placeholder').style.display = 'none';
+                document.querySelector('.active-resource').style.display = 'flex';
+            
+                // Update resource header
+                document.getElementById('resource-title').textContent = resource.title;
+                document.getElementById('resource-type').textContent = ext.toUpperCase();
+                document.getElementById('resource-size').textContent = formatFileSize(resource.file_size);
+                document.getElementById('resource-date').textContent = new Date(resource.created_at).toLocaleDateString();
+                
+                // Update resource details
+                document.getElementById('detail-uploader').textContent = resource.uploaded_by_name || 'Admin';
+                document.getElementById('detail-course').textContent = resource.program_type || 'General';
+                document.getElementById('detail-block').textContent = resource.block || 'N/A';
+                document.getElementById('detail-description').textContent = resource.description || 'No description available';
+            
+                // Hide all preview types first
+                document.querySelectorAll('.preview-content').forEach(preview => {
+                    preview.style.display = 'none';
+                });
+            
+                // Setup fullscreen button
+                document.getElementById('fullscreen-resource').onclick = () => openFullscreen(resourceId);
+                document.getElementById('bookmark-resource').onclick = () => toggleBookmark(resourceId);
+            
+                // Handle different file types
+                switch(fileType) {
+                    case 'pdf':
+                        await loadPdfPreview(fileUrl);
+                        break;
+                    case 'image':
+                        await loadImagePreview(fileUrl);
+                        break;
+                    case 'video':
+                        await loadVideoPreview(fileUrl);
+                        break;
+                    case 'document':
+                    case 'presentation':
+                    case 'spreadsheet':
+                        await loadOfficePreview(fileUrl, filePath);
+                        break;
+                    default:
+                        showUnsupportedPreview(fileUrl);
+                        break;
+                }
+            }
+            
+            // Load PDF preview with enhanced controls
+            async function loadPdfPreview(fileUrl) {
+                const pdfPreview = document.getElementById('pdf-preview');
+                pdfPreview.style.display = 'flex';
+            
+                const canvas = document.getElementById('pdf-canvas');
+                const ctx = canvas.getContext('2d');
+                let pdfDoc = null;
+                let pageNum = 1;
+                let scale = 1.5;
+            
+                try {
+                    pdfjsLib.getDocument(fileUrl).promise
+                        .then(pdf => {
+                            pdfDoc = pdf;
+                            document.getElementById('page-count').textContent = pdf.numPages;
+                            renderPage(pageNum, scale);
+                        })
+                        .catch(err => {
+                            pdfPreview.innerHTML = `<p style="color:#EF4444;">Failed to load PDF: ${err.message}</p>`;
+                        });
+            
+                    function renderPage(num, zoomLevel = scale) {
+                        pdfDoc.getPage(num).then(page => {
+                            const viewport = page.getViewport({ scale: zoomLevel });
+            
+                            canvas.width = viewport.width;
+                            canvas.height = viewport.height;
+            
+                            const renderContext = {
+                                canvasContext: ctx,
+                                viewport: viewport
+                            };
+            
+                            page.render(renderContext).promise.then(() => {
+                                document.getElementById('page-num').textContent = num;
+                            });
+                        });
+                    }
+            
+                    // Navigation controls
+                    document.getElementById('prev-page').onclick = () => {
+                        if (pageNum > 1) {
+                            pageNum--;
+                            renderPage(pageNum, scale);
+                        }
+                    };
+            
+                    document.getElementById('next-page').onclick = () => {
+                        if (pageNum < pdfDoc.numPages) {
+                            pageNum++;
+                            renderPage(pageNum, scale);
+                        }
+                    };
+            
+                    // Zoom controls
+                    document.getElementById('zoom-in').onclick = () => {
+                        scale += 0.25;
+                        renderPage(pageNum, scale);
+                    };
+            
+                    document.getElementById('zoom-out').onclick = () => {
+                        if (scale > 0.5) {
+                            scale -= 0.25;
+                            renderPage(pageNum, scale);
+                        }
+                    };
+            
+                } catch (err) {
+                    pdfPreview.innerHTML = `<p style="color:#EF4444;">Error loading PDF: ${err.message}</p>`;
+                }
+            }
+            
+            // Load image preview
+            async function loadImagePreview(fileUrl) {
+                const imagePreview = document.getElementById('image-preview');
+                imagePreview.style.display = 'flex';
+            
+                const img = document.getElementById('preview-image');
+                img.src = fileUrl;
+                
+                // Zoom functionality
+                let isZoomed = false;
+                document.getElementById('image-zoom').onclick = () => {
+                    isZoomed = !isZoomed;
+                    img.style.transform = isZoomed ? 'scale(1.5)' : 'scale(1)';
+                    img.style.transition = 'transform 0.3s ease';
+                    document.getElementById('image-zoom').innerHTML = isZoomed ? 
+                        '<i class="fas fa-search-minus"></i> Zoom Out' : 
+                        '<i class="fas fa-search-plus"></i> Zoom';
+                };
+            }
+            
+            // Load video preview
+            async function loadVideoPreview(fileUrl) {
+                const videoPreview = document.getElementById('video-preview');
+                videoPreview.style.display = 'flex';
+            
+                const video = document.getElementById('preview-video');
+                video.src = fileUrl;
+                
+                // Fullscreen for video
+                document.getElementById('video-fullscreen').onclick = () => {
+                    if (video.requestFullscreen) {
+                        video.requestFullscreen();
+                    } else if (video.webkitRequestFullscreen) {
+                        video.webkitRequestFullscreen();
+                    } else if (video.msRequestFullscreen) {
+                        video.msRequestFullscreen();
+                    }
+                };
+            }
+            
+            // Load office document preview
+            async function loadOfficePreview(fileUrl, filePath) {
+                const officePreview = document.getElementById('office-preview');
+                officePreview.style.display = 'flex';
+            
+                try {
+                    // Generate a signed URL (1 hour)
+                    const { data: signed } = await sb.storage
+                        .from(RESOURCES_BUCKET)
+                        .createSignedUrl(filePath, 3600);
+            
+                    if (!signed?.signedUrl) {
+                        officePreview.innerHTML = `<p style="color:#EF4444;">Unable to load file.</p>`;
+                        return;
+                    }
+            
+                    const encoded = encodeURIComponent(signed.signedUrl);
+                    const iframe = document.getElementById('office-frame');
+                    iframe.src = `https://view.officeapps.live.com/op/embed.aspx?src=${encoded}`;
+                    
+                    // Fullscreen for office docs
+                    document.getElementById('office-fullscreen').onclick = () => {
+                        openFullscreenOffice(encoded);
+                    };
+            
+                } catch (err) {
+                    officePreview.innerHTML = `<p style="color:#EF4444;">Failed to load file: ${err.message}</p>`;
+                }
+            }
+            
+            // Show unsupported file type
+            function showUnsupportedPreview(fileUrl) {
+                const unsupportedPreview = document.getElementById('unsupported-preview');
+                unsupportedPreview.style.display = 'flex';
+            }
+            
+            // Fullscreen functionality
+            function openFullscreen(resourceId) {
+                const resource = cachedResources.find(r => r.id == resourceId);
+                if (!resource) return;
+            
+                const overlay = document.getElementById('fullscreen-overlay');
+                const content = document.getElementById('fullscreen-content');
+                const title = document.getElementById('fullscreen-title');
+                
+                title.textContent = resource.title;
+                
+                // Clone the current preview content
+                const currentPreview = document.querySelector('.preview-content[style*="display: flex"]');
+                if (currentPreview) {
+                    const clone = currentPreview.cloneNode(true);
+                    content.innerHTML = '';
+                    content.appendChild(clone);
+                    
+                    // Adjust for fullscreen
+                    const canvas = clone.querySelector('#pdf-canvas');
+                    if (canvas) {
+                        // Re-render PDF at larger scale for fullscreen
+                        setTimeout(() => {
+                            const pdfPreview = clone.querySelector('#pdf-preview');
+                            if (pdfPreview) {
+                                pdfPreview.style.height = '100%';
+                                pdfPreview.style.flexDirection = 'column';
+                            }
+                        }, 100);
+                    }
+                }
+                
+                overlay.classList.add('active');
+                
+                // Close fullscreen
+                document.getElementById('close-fullscreen').onclick = closeFullscreen;
+                
+                // ESC key to close
+                document.addEventListener('keydown', function escHandler(e) {
+                    if (e.key === 'Escape') {
+                        closeFullscreen();
+                        document.removeEventListener('keydown', escHandler);
+                    }
+                });
+            }
+            
+            function closeFullscreen() {
+                const overlay = document.getElementById('fullscreen-overlay');
+                overlay.classList.remove('active');
+            }
+            
+            function openFullscreenOffice(encodedUrl) {
+                const overlay = document.getElementById('fullscreen-overlay');
+                const content = document.getElementById('fullscreen-content');
+                const title = document.getElementById('fullscreen-title');
+                
+                title.textContent = 'Document Preview';
+                content.innerHTML = `
+                    <iframe 
+                        src="https://view.officeapps.live.com/op/embed.aspx?src=${encodedUrl}"
+                        width="100%"
+                        height="100%"
+                        style="border:none;"
+                        frameborder="0">
+                    </iframe>
+                `;
+                
+                overlay.classList.add('active');
+                document.getElementById('close-fullscreen').onclick = closeFullscreen;
+            }
+            
+            // Bookmark functionality
+            function toggleBookmark(resourceId) {
+                let bookmarks = JSON.parse(localStorage.getItem('resourceBookmarks') || '[]');
+                const index = bookmarks.indexOf(resourceId);
+                
+                if (index > -1) {
+                    bookmarks.splice(index, 1);
+                    AppUtils.showToast('Resource removed from bookmarks', 'info');
+                } else {
+                    bookmarks.push(resourceId);
+                    AppUtils.showToast('Resource bookmarked', 'success');
+                }
+                
+                localStorage.setItem('resourceBookmarks', JSON.stringify(bookmarks));
+                updateBookmarkButton(resourceId);
+            }
+            
+            function updateBookmarkButton(resourceId) {
+                const bookmarks = JSON.parse(localStorage.getItem('resourceBookmarks') || '[]');
+                const isBookmarked = bookmarks.includes(resourceId);
+                const button = document.getElementById('bookmark-resource');
+                
+                if (button) {
+                    button.innerHTML = isBookmarked ? 
+                        '<i class="fas fa-bookmark"></i> Bookmarked' : 
+                        '<i class="fas fa-bookmark"></i> Bookmark';
+                    button.style.background = isBookmarked ? 'var(--color-warning)' : 'var(--color-primary)';
+                }
+            }
+            
+            // Mobile navigation
+            function setupMobileNavigation() {
+                const navButtons = document.querySelectorAll('.mobile-resource-nav .nav-btn');
+                const resourcesSidebar = document.querySelector('.resources-sidebar');
+                const resourcePreview = document.querySelector('.resource-preview');
+                
+                navButtons.forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        const action = this.getAttribute('data-action');
+                        
+                        // Update active state
+                        navButtons.forEach(b => b.classList.remove('active'));
+                        this.classList.add('active');
+                        
+                        // Handle actions
+                        switch(action) {
+                            case 'list':
+                                resourcesSidebar.style.display = 'flex';
+                                resourcePreview.style.display = 'none';
+                                break;
+                            case 'preview':
+                                resourcesSidebar.style.display = 'none';
+                                resourcePreview.style.display = 'flex';
+                                break;
+                            case 'fullscreen':
+                                const activeResource = document.querySelector('.resource-item.active');
+                                if (activeResource) {
+                                    const resourceId = activeResource.getAttribute('data-resource-id');
+                                    openFullscreen(resourceId);
+                                }
+                                break;
+                        }
+                    });
+                });
+            }
+            
+            // Initialize mobile navigation when resources tab is shown
+            const originalShowTab = window.showTab;
+            window.showTab = function(tabId) {
+                originalShowTab(tabId);
+                if (tabId === 'resources') {
+                    setTimeout(setupMobileNavigation, 100);
+                }
+            };
             
             // *************************************************************************
             // *** ACADEMIC CALENDAR ***
@@ -2200,7 +2714,90 @@ function escapeHtml(str) {
                 if (calendarFilter) {
                     calendarFilter.addEventListener('change', loadAcademicCalendar);
                 }
+                
+                // Resource filters
+                const resourceTypeFilter = document.getElementById('resource-type-filter');
+                const resourceSort = document.getElementById('resource-sort');
+                const resourceSearch = document.getElementById('resource-search');
+                
+                if (resourceTypeFilter) {
+                    resourceTypeFilter.addEventListener('change', filterResources);
+                }
+                
+                if (resourceSort) {
+                    resourceSort.addEventListener('change', sortResources);
+                }
+                
+                if (resourceSearch) {
+                    resourceSearch.addEventListener('input', searchResources);
+                }
+                
+                // View toggle
+                const viewButtons = document.querySelectorAll('.view-btn');
+                viewButtons.forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        viewButtons.forEach(b => b.classList.remove('active'));
+                        this.classList.add('active');
+                        toggleView(this.getAttribute('data-view'));
+                    });
+                });
             });
+            
+            // Resource filtering
+            function filterResources() {
+                const filterValue = document.getElementById('resource-type-filter').value;
+                let filtered = cachedResources;
+                
+                if (filterValue !== 'all') {
+                    filtered = cachedResources.filter(resource => {
+                        const ext = (resource.file_path || '').split('.').pop().toLowerCase();
+                        const fileType = getFileType(ext);
+                        return fileType === filterValue;
+                    });
+                }
+                
+                renderResourcesList(filtered);
+            }
+            
+            // Resource sorting
+            function sortResources() {
+                const sortValue = document.getElementById('resource-sort').value;
+                let sorted = [...cachedResources];
+                
+                switch(sortValue) {
+                    case 'newest':
+                        sorted.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+                        break;
+                    case 'oldest':
+                        sorted.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+                        break;
+                    case 'name':
+                        sorted.sort((a, b) => a.title.localeCompare(b.title));
+                        break;
+                }
+                
+                renderResourcesList(sorted);
+            }
+            
+            // Resource search
+            function searchResources() {
+                const searchValue = document.getElementById('resource-search').value.toLowerCase();
+                const filtered = cachedResources.filter(resource => 
+                    resource.title.toLowerCase().includes(searchValue)
+                );
+                
+                renderResourcesList(filtered);
+            }
+            
+            // Toggle between list and grid view
+            function toggleView(viewType) {
+                const container = document.getElementById('resources-list-container');
+                if (viewType === 'grid') {
+                    container.classList.add('grid-view');
+                } else {
+                    container.classList.remove('grid-view');
+                }
+            }
             
             // Make functions globally available
             window.toggleMenu = toggleMenu;
@@ -2212,6 +2809,8 @@ function escapeHtml(str) {
             window.viewProvisionalTranscript = viewProvisionalTranscript;
             window.closeTranscriptModal = closeTranscriptModal;
             window.viewResource = viewResource;
+            window.openFullscreen = openFullscreen;
+            window.closeFullscreen = closeFullscreen;
         }
 
         // Start application when config is ready
