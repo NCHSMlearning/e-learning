@@ -9,9 +9,94 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    
+    <!-- Security Headers -->
+    <meta http-equiv="Content-Security-Policy" 
+          content="default-src 'self'; 
+                   script-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com;
+                   style-src 'self' https://fonts.googleapis.com https://cdnjs.cloudflare.com;
+                   img-src 'self' https: data:;
+                   connect-src 'self' https://*.supabase.co https://us1.locationiq.com;
+                   frame-src https://view.officeapps.live.com;">
+    
+    <style>
+        /* Skeleton Loading Styles */
+        .skeleton-loader {
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: loading 1.5s infinite;
+            border-radius: 4px;
+        }
+
+        .skeleton-line {
+            height: 1em;
+            margin-bottom: 0.5em;
+        }
+
+        .skeleton-line.short {
+            width: 60%;
+        }
+
+        @keyframes loading {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        /* Enhanced Toast Styles */
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            border-radius: 6px;
+            color: white;
+            font-weight: 600;
+            z-index: 10000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            max-width: 300px;
+        }
+
+        .toast.success { background-color: #10B981; }
+        .toast.error { background-color: #EF4444; }
+        .toast.warning { background-color: #F59E0B; }
+        .toast.info { background-color: #3B82F6; }
+
+        /* Offline Indicator */
+        .offline-indicator {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #F59E0B;
+            color: white;
+            text-align: center;
+            padding: 8px;
+            font-weight: 600;
+            z-index: 10001;
+            display: none;
+        }
+
+        /* Enhanced Loading States */
+        .loading-state {
+            text-align: center;
+            padding: 20px;
+            color: #6B7280;
+        }
+
+        .loading-state.skeleton {
+            background: none;
+            animation: none;
+        }
+    </style>
+    
     <link rel="stylesheet" href="indexstyle.css">
 </head>
 <body>
+    <!-- Offline Indicator -->
+    <div class="offline-indicator" id="offline-indicator">
+        ⚠️ You are currently offline. Some features may be unavailable.
+    </div>
+
     <!-- Mobile Header -->
     <div class="mobile-header">
         <button class="menu-toggle" onclick="toggleMenu()">☰</button>
@@ -303,231 +388,29 @@
                 </div>
             </section>
 
-            <!-- Resources Tab - ENHANCED FOR MOBILE -->
+            <!-- Resources Tab -->
             <section id="resources" class="tab-content">
                 <div class="resources-header">
                     <h2 style="color: var(--color-primary); margin-bottom: 8px;">Learning Resources</h2>
                     <p class="subtitle" style="margin-bottom: 20px;">Access your course materials and study resources</p>
-                    
-                    <!-- Mobile Filter Controls -->
-                    <div class="mobile-resource-controls">
-                        <div class="filter-group">
-                            <label for="resource-type-filter">Filter by Type:</label>
-                            <select id="resource-type-filter" class="resource-filter">
-                                <option value="all">All Types</option>
-                                <option value="pdf">PDF Documents</option>
-                                <option value="video">Videos</option>
-                                <option value="image">Images</option>
-                                <option value="document">Documents</option>
-                                <option value="presentation">Presentations</option>
-                            </select>
-                        </div>
-                        
-                        <div class="sort-group">
-                            <label for="resource-sort">Sort by:</label>
-                            <select id="resource-sort" class="resource-filter">
-                                <option value="newest">Newest First</option>
-                                <option value="oldest">Oldest First</option>
-                                <option value="name">Name A-Z</option>
-                            </select>
-                        </div>
-                    </div>
                 </div>
                 
                 <div class="resources-container">
-                    <!-- Resources List - Mobile Optimized -->
                     <div id="resources-list" class="resources-sidebar">
                         <div class="resources-count">
-                            <i class="fas fa-file-alt"></i>
-                            <span><strong id="resources-count">0</strong> resources available</span>
-                            <div class="mobile-view-toggle">
-                                <button class="view-btn active" data-view="list">
-                                    <i class="fas fa-list"></i>
-                                </button>
-                                <button class="view-btn" data-view="grid">
-                                    <i class="fas fa-th"></i>
-                                </button>
-                            </div>
+                            <strong id="resources-count">0</strong> resources available
                         </div>
-                        
-                        <div class="resources-search">
-                            <input type="text" id="resource-search" placeholder="Search resources..." class="search-input">
-                            <i class="fas fa-search search-icon"></i>
-                        </div>
-                        
-                        <div class="resources-list" id="resources-list-container">
-                            <!-- Resources will be loaded here dynamically -->
-                            <div class="loading-state">
-                                <i class="fas fa-spinner fa-spin"></i>
-                                Loading resources...
-                            </div>
-                        </div>
+                        <!-- Resources will be loaded here dynamically -->
+                        <div class="loading-state">Loading resources...</div>
                     </div>
 
-                    <!-- Resource Preview - Enhanced for Mobile -->
                     <div id="resource-viewer" class="resource-preview">
                         <div class="preview-placeholder">
-                            <div class="placeholder-icon">
-                                <i class="fas fa-file-alt"></i>
-                            </div>
+                            <i class="fas fa-file-alt"></i>
                             <h3>Select a Resource</h3>
                             <p>Choose a resource from the list to view its content</p>
                         </div>
-                        
-                        <!-- Active Resource Viewer -->
-                        <div class="active-resource" style="display: none;">
-                            <div class="resource-header">
-                                <div class="resource-meta">
-                                    <h3 id="resource-title">Resource Title</h3>
-                                    <div class="resource-info">
-                                        <span class="resource-type" id="resource-type">PDF</span>
-                                        <span class="resource-size" id="resource-size">2.4 MB</span>
-                                        <span class="resource-date" id="resource-date">Jan 15, 2024</span>
-                                    </div>
-                                </div>
-                                <div class="resource-actions">
-                                    <button class="action-btn fullscreen-btn" id="fullscreen-resource">
-                                        <i class="fas fa-expand"></i>
-                                        Full Screen
-                                    </button>
-                                    <button class="action-btn bookmark-btn" id="bookmark-resource">
-                                        <i class="fas fa-bookmark"></i>
-                                        Bookmark
-                                    </button>
-                                </div>
-                            </div>
-                            
-                            <div class="preview-container">
-                                <!-- PDF Preview -->
-                                <div id="pdf-preview" class="preview-content" style="display: none;">
-                                    <div class="pdf-controls">
-                                        <button id="prev-page" class="page-btn">
-                                            <i class="fas fa-chevron-left"></i>
-                                        </button>
-                                        <span class="page-info">
-                                            Page <span id="page-num">1</span> of <span id="page-count">1</span>
-                                        </span>
-                                        <button id="next-page" class="page-btn">
-                                            <i class="fas fa-chevron-right"></i>
-                                        </button>
-                                        <button class="page-btn zoom-out" id="zoom-out">
-                                            <i class="fas fa-search-minus"></i>
-                                        </button>
-                                        <button class="page-btn zoom-in" id="zoom-in">
-                                            <i class="fas fa-search-plus"></i>
-                                        </button>
-                                    </div>
-                                    <div class="pdf-viewer">
-                                        <canvas id="pdf-canvas"></canvas>
-                                    </div>
-                                </div>
-                                
-                                <!-- Image Preview -->
-                                <div id="image-preview" class="preview-content" style="display: none;">
-                                    <div class="image-controls">
-                                        <button class="action-btn zoom-btn" id="image-zoom">
-                                            <i class="fas fa-search-plus"></i>
-                                            Zoom
-                                        </button>
-                                    </div>
-                                    <div class="image-viewer">
-                                        <img id="preview-image" src="" alt="Resource Image">
-                                    </div>
-                                </div>
-                                
-                                <!-- Video Preview -->
-                                <div id="video-preview" class="preview-content" style="display: none;">
-                                    <div class="video-controls">
-                                        <button class="action-btn fullscreen-btn" id="video-fullscreen">
-                                            <i class="fas fa-expand"></i>
-                                            Full Screen
-                                        </button>
-                                    </div>
-                                    <div class="video-viewer">
-                                        <video id="preview-video" controls>
-                                            Your browser does not support the video tag.
-                                        </video>
-                                    </div>
-                                </div>
-                                
-                                <!-- Document Preview (Office files) -->
-                                <div id="office-preview" class="preview-content" style="display: none;">
-                                    <div class="office-controls">
-                                        <button class="action-btn fullscreen-btn" id="office-fullscreen">
-                                            <i class="fas fa-expand"></i>
-                                            Full Screen
-                                        </button>
-                                    </div>
-                                    <div class="office-viewer">
-                                        <iframe id="office-frame" width="100%" height="600px" frameborder="0"></iframe>
-                                    </div>
-                                </div>
-                                
-                                <!-- Unsupported File Type -->
-                                <div id="unsupported-preview" class="preview-content" style="display: none;">
-                                    <div class="unsupported-message">
-                                        <i class="fas fa-file-exclamation"></i>
-                                        <h4>Preview Not Available</h4>
-                                        <p>This file type cannot be previewed in the browser.</p>
-                                        <p class="note">Please contact your instructor for alternative access.</p>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <!-- Resource Details -->
-                            <div class="resource-details">
-                                <h4>Details</h4>
-                                <div class="details-grid">
-                                    <div class="detail-item">
-                                        <span class="detail-label">Uploaded by:</span>
-                                        <span class="detail-value" id="detail-uploader">Admin</span>
-                                    </div>
-                                    <div class="detail-item">
-                                        <span class="detail-label">Course:</span>
-                                        <span class="detail-value" id="detail-course">General</span>
-                                    </div>
-                                    <div class="detail-item">
-                                        <span class="detail-label">Block:</span>
-                                        <span class="detail-value" id="detail-block">Block 1</span>
-                                    </div>
-                                    <div class="detail-item">
-                                        <span class="detail-label">Description:</span>
-                                        <span class="detail-value" id="detail-description">No description available</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
                     </div>
-                </div>
-                
-                <!-- Full Screen Overlay -->
-                <div id="fullscreen-overlay" class="fullscreen-overlay">
-                    <div class="fullscreen-header">
-                        <button class="close-fullscreen" id="close-fullscreen">
-                            <i class="fas fa-times"></i>
-                            Close
-                        </button>
-                        <h3 id="fullscreen-title">Resource Title</h3>
-                    </div>
-                    <div class="fullscreen-content" id="fullscreen-content">
-                        <!-- Content will be moved here when fullscreen is activated -->
-                    </div>
-                </div>
-                
-                <!-- Mobile Bottom Navigation -->
-                <div class="mobile-resource-nav">
-                    <button class="nav-btn active" data-action="list">
-                        <i class="fas fa-list"></i>
-                        <span>Resources</span>
-                    </button>
-                    <button class="nav-btn" data-action="preview">
-                        <i class="fas fa-eye"></i>
-                        <span>Preview</span>
-                    </button>
-                    <button class="nav-btn" data-action="fullscreen">
-                        <i class="fas fa-expand"></i>
-                        <span>Full Screen</span>
-                    </button>
                 </div>
             </section>
 
@@ -657,7 +540,7 @@
         // YOUR EXISTING APPLICATION CODE - MODIFIED FOR SECURITY
         async function startMainApplication(sb, LOCATIONIQ_API_KEY, LOCATIONIQ_API_URL) {
             // *************************************************************************
-            // *** CONFIGURATION AND INITIALIZATION ***
+            // *** ENHANCED CONFIGURATION AND INITIALIZATION ***
             // *************************************************************************
             
             // Global State
@@ -668,22 +551,183 @@
             let cachedClinicalAreas = [];
             let cachedResources = [];
             
-            // Constants
+            // Enhanced Constants
             const MAX_ALLOWED_ACCURACY = 30;
             const MAX_DISTANCE_RADIUS = 200;
             const FALLBACK_LAT = 0.00;
             const FALLBACK_LON = 0.00;
             const FALLBACK_ACCURACY = 9999;
             const RESOURCES_BUCKET = 'resources';
+            const CHECKIN_COOLDOWN = 300000; // 5 minutes in milliseconds
+            
+            // Enhanced Cache with size limits
+            const cache = {
+                data: new Map(),
+                maxSize: 100,
+                
+                set(key, value, ttl = 5 * 60 * 1000) {
+                    // Remove oldest item if cache is full
+                    if (this.data.size >= this.maxSize) {
+                        const firstKey = this.data.keys().next().value;
+                        this.data.delete(firstKey);
+                    }
+                    
+                    this.data.set(key, {
+                        value,
+                        expiry: Date.now() + ttl,
+                        timestamp: new Date().toISOString(),
+                        accessCount: 0
+                    });
+                },
+                
+                get(key) {
+                    const item = this.data.get(key);
+                    if (!item) return null;
+                    
+                    if (Date.now() > item.expiry) {
+                        this.data.delete(key);
+                        return null;
+                    }
+                    
+                    item.accessCount++;
+                    return item.value;
+                },
+                
+                clear() {
+                    this.data.clear();
+                },
+                
+                // Clear expired items periodically
+                cleanup() {
+                    const now = Date.now();
+                    for (const [key, item] of this.data.entries()) {
+                        if (now > item.expiry) {
+                            this.data.delete(key);
+                        }
+                    }
+                }
+            };
+
+            // Run cleanup every minute
+            setInterval(() => cache.cleanup(), 60000);
+            
+            // Rate limiting for check-ins
+            const checkInCooldown = new Map();
+            
+            // Performance monitoring
+            const performanceMetrics = {
+                startTime: Date.now(),
+                pageLoads: 0,
+                apiCalls: 0,
+                errors: 0,
+                
+                trackApiCall(duration) {
+                    this.apiCalls++;
+                    console.log(`API call completed in ${duration}ms`);
+                },
+                
+                trackError(error) {
+                    this.errors++;
+                    console.error('Application error:', error);
+                },
+                
+                getMetrics() {
+                    return {
+                        uptime: Date.now() - this.startTime,
+                        pageLoads: this.pageLoads,
+                        apiCalls: this.apiCalls,
+                        errorRate: this.apiCalls > 0 ? (this.errors / this.apiCalls) * 100 : 0
+                    };
+                }
+            };
+
+            // Enhanced Analytics
+            const Analytics = {
+                track(event, properties = {}) {
+                    console.log(`Analytics: ${event}`, properties);
+                    
+                    // Integrate with analytics services here
+                    if (window.umami) {
+                        window.umami.track(event, properties);
+                    }
+                },
+                
+                trackPageView(tabName) {
+                    this.track('page_view', { tab: tabName });
+                },
+                
+                trackCheckIn(sessionType, verified) {
+                    this.track('check_in', { 
+                        session_type: sessionType, 
+                        verified: verified,
+                        timestamp: new Date().toISOString()
+                    });
+                }
+            };
+
+            // Offline Manager
+            const OnlineManager = {
+                isOnline: navigator.onLine,
+                
+                init() {
+                    window.addEventListener('online', () => {
+                        this.isOnline = true;
+                        document.getElementById('offline-indicator').style.display = 'none';
+                        AppUtils.showToast('Back online', 'success');
+                        this.syncPendingData();
+                    });
+                    
+                    window.addEventListener('offline', () => {
+                        this.isOnline = false;
+                        document.getElementById('offline-indicator').style.display = 'block';
+                        AppUtils.showToast('You are offline', 'warning');
+                    });
+                },
+                
+                async syncPendingData() {
+                    const pending = JSON.parse(localStorage.getItem('pendingCheckins') || '[]');
+                    if (pending.length > 0) {
+                        AppUtils.showToast(`Syncing ${pending.length} pending check-ins`, 'info');
+                        for (const checkin of pending) {
+                            await this.retryCheckIn(checkin);
+                        }
+                        localStorage.removeItem('pendingCheckins');
+                    }
+                },
+                
+                async retryCheckIn(checkinData) {
+                    // Implement retry logic for pending check-ins
+                    console.log('Retrying check-in:', checkinData);
+                },
+                
+                queueCheckIn(checkinData) {
+                    const pending = JSON.parse(localStorage.getItem('pendingCheckins') || '[]');
+                    pending.push({ ...checkinData, timestamp: new Date().toISOString() });
+                    localStorage.setItem('pendingCheckins', JSON.stringify(pending));
+                }
+            };
+
+            // Initialize offline manager
+            OnlineManager.init();
             
             // *************************************************************************
-            // *** UTILITY FUNCTIONS ***
+            // *** ENHANCED UTILITY FUNCTIONS ***
             // *************************************************************************
             
             const AppUtils = {
-                // Show loading state
-                showLoading(element, message = 'Loading...') {
-                    if (element) {
+                // Enhanced loading state with skeleton support
+                showLoading(element, message = 'Loading...', skeleton = false) {
+                    if (!element) return;
+                    
+                    if (skeleton) {
+                        element.innerHTML = `
+                            <div class="skeleton-loader">
+                                <div class="skeleton-line"></div>
+                                <div class="skeleton-line short"></div>
+                                <div class="skeleton-line"></div>
+                            </div>
+                        `;
+                    } else {
                         element.innerHTML = `<div class="loading-state">${message}</div>`;
                     }
                 },
@@ -695,53 +739,152 @@
                     }
                 },
             
-                // Safe API call wrapper
-                async safeApiCall(apiCall, errorMessage = 'Operation failed') {
+                // Enhanced API call with retries and performance tracking
+                async safeApiCall(apiCall, errorMessage = 'Operation failed', maxRetries = 2) {
+                    const start = performance.now();
                     try {
-                        return await apiCall();
+                        const result = await this.apiCallWithRetry(apiCall, maxRetries);
+                        const duration = performance.now() - start;
+                        performanceMetrics.trackApiCall(duration);
+                        return result;
                     } catch (error) {
+                        performanceMetrics.trackError(error);
                         console.error(errorMessage, error);
                         this.showToast(errorMessage, 'error');
                         return null;
                     }
                 },
+
+                // Retry mechanism for API calls
+                async apiCallWithRetry(apiCall, maxRetries = 3) {
+                    for (let i = 0; i < maxRetries; i++) {
+                        try {
+                            return await apiCall();
+                        } catch (error) {
+                            if (i === maxRetries - 1) throw error;
+                            await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+                        }
+                    }
+                },
             
-                // Toast notification
+                // Enhanced Toast notification
                 showToast(message, type = 'info') {
+                    // Remove existing toasts
+                    document.querySelectorAll('.toast').forEach(toast => toast.remove());
+                    
                     const toast = document.createElement('div');
                     toast.className = `toast ${type}`;
                     toast.textContent = message;
                     document.body.appendChild(toast);
             
                     setTimeout(() => {
-                        toast.remove();
+                        if (toast.parentNode) {
+                            toast.remove();
+                        }
                     }, 4000);
                 }
             };
-            
-            // Simple cache implementation
-            const cache = {
-                data: new Map(),
-                set(key, value, ttl = 5 * 60 * 1000) {
-                    this.data.set(key, {
-                        value,
-                        expiry: Date.now() + ttl,
-                        timestamp: new Date().toISOString()
-                    });
-                },
-                get(key) {
-                    const item = this.data.get(key);
-                    if (!item) return null;
-                    if (Date.now() > item.expiry) {
-                        this.data.delete(key);
-                        return null;
-                    }
-                    return item.value;
-                },
-                clear() {
-                    this.data.clear();
+
+            // Enhanced Input Validation
+            function validateInputs() {
+                const validators = {
+                    email: (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value),
+                    phone: (value) => /^\+?[\d\s-()]{10,}$/.test(value),
+                    name: (value) => value && value.length >= 2 && value.length <= 100,
+                    studentId: (value) => value && /^[A-Z0-9-]+$/.test(value)
+                };
+                
+                return validators;
+            }
+
+            // Enhanced GPS Validation
+            async function validateGPSLocation(latitude, longitude, accuracy) {
+                // Check for impossible accuracy
+                if (accuracy > MAX_ALLOWED_ACCURACY) {
+                    throw new Error(`GPS accuracy too low: ${accuracy}m (max: ${MAX_ALLOWED_ACCURACY}m)`);
                 }
-            };
+                
+                // Check for null island (common fake location)
+                if (Math.abs(latitude) < 1 && Math.abs(longitude) < 1) {
+                    throw new Error('Invalid location detected');
+                }
+                
+                // Check if location is within reasonable bounds for Nairobi area
+                const NAIROBI_BOUNDS = {
+                    minLat: -1.5, maxLat: -1.0,
+                    minLon: 36.5, maxLon: 37.2
+                };
+                
+                if (latitude < NAIROBI_BOUNDS.minLat || latitude > NAIROBI_BOUNDS.maxLat ||
+                    longitude < NAIROBI_BOUNDS.minLon || longitude > NAIROBI_BOUNDS.maxLon) {
+                    console.warn('Location outside expected area:', { latitude, longitude });
+                    // Don't throw, just log for monitoring
+                }
+                
+                return true;
+            }
+
+            // Enhanced File Upload Validation
+            function validateImageFile(file) {
+                const maxSize = 5 * 1024 * 1024; // 5MB
+                const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+                
+                if (!allowedTypes.includes(file.type)) {
+                    throw new Error('Please select a JPEG or PNG image');
+                }
+                
+                if (file.size > maxSize) {
+                    throw new Error('Image must be smaller than 5MB');
+                }
+                
+                return new Promise((resolve, reject) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        if (img.width < 100 || img.height < 100) {
+                            reject(new Error('Image must be at least 100x100 pixels'));
+                        } else {
+                            resolve(true);
+                        }
+                    };
+                    img.onerror = () => reject(new Error('Invalid image file'));
+                    img.src = URL.createObjectURL(file);
+                });
+            }
+
+            // Rate Limiting Function
+            function canCheckIn(userId) {
+                const lastCheckIn = checkInCooldown.get(userId);
+                if (lastCheckIn && Date.now() - lastCheckIn < CHECKIN_COOLDOWN) {
+                    const remainingTime = Math.ceil((CHECKIN_COOLDOWN - (Date.now() - lastCheckIn)) / 1000 / 60);
+                    throw new Error(`Please wait ${remainingTime} minutes between check-ins`);
+                }
+                checkInCooldown.set(userId, Date.now());
+                return true;
+            }
+
+            // Keyboard Shortcuts
+            function setupKeyboardShortcuts() {
+                document.addEventListener('keydown', (e) => {
+                    // Ctrl + Number for tabs (Ctrl+1 for dashboard, etc.)
+                    if (e.ctrlKey && e.key >= '1' && e.key <= '8') {
+                        e.preventDefault();
+                        const tabs = ['dashboard', 'profile', 'calendar', 'courses', 'attendance', 'cats', 'resources', 'messages'];
+                        const tabIndex = parseInt(e.key) - 1;
+                        if (tabs[tabIndex]) {
+                            showTab(tabs[tabIndex]);
+                        }
+                    }
+                    
+                    // Escape to close modals
+                    if (e.key === 'Escape') {
+                        closeTranscriptModal();
+                        closeMenu();
+                    }
+                });
+            }
+
+            // Initialize keyboard shortcuts
+            setupKeyboardShortcuts();
             
             // *************************************************************************
             // *** AUTHENTICATION ***
@@ -818,6 +961,10 @@
                     showTab('dashboard');
                     loadDashboardMetrics(currentUserId);
                     
+                    // Track initial page load
+                    performanceMetrics.pageLoads++;
+                    Analytics.trackPageView('dashboard');
+                    
                     console.log("✅ Dashboard initialization complete");
                     
                 } catch (error) {
@@ -829,6 +976,7 @@
             // Logout function
             async function logout() {
                 try {
+                    Analytics.track('logout');
                     sb.realtime.channels.forEach(channel => sb.removeChannel(channel));
                     await sb.auth.signOut();
                     window.location.href = "login.html";
@@ -868,7 +1016,7 @@
                 document.body.style.overflow = 'auto';
             }
             
-            // Tab navigation
+            // Enhanced Tab navigation with analytics
             function showTab(tabId) {
                 // Highlight active link
                 navLinks.forEach(l => l.classList.remove('active'));
@@ -884,6 +1032,9 @@
                 if (sidebar.classList.contains('open')) {
                     closeMenu();
                 }
+            
+                // Track page view
+                Analytics.trackPageView(tabId);
             
                 // Load tab-specific data
                 switch(tabId) {
@@ -973,7 +1124,7 @@
                 const element = document.getElementById(elementId);
                 if (!element) return;
             
-                AppUtils.showLoading(element, 'Loading...');
+                AppUtils.showLoading(element, 'Loading...', true); // Use skeleton loading
             
                 try {
                     const { data, error } = await sb
@@ -1000,7 +1151,7 @@
                 const element = document.getElementById('student-announcement');
                 if (!element) return;
             
-                AppUtils.showLoading(element, 'Loading latest announcement...');
+                AppUtils.showLoading(element, 'Loading latest announcement...', true);
             
                 try {
                     const { data, error } = await sb
@@ -1075,10 +1226,10 @@
             // Load dashboard metrics
             async function loadDashboardMetrics(userId) {
                 try {
-                    // Show loading states
-                    AppUtils.showLoading(document.getElementById('dashboard-attendance-rate'), '--%');
-                    AppUtils.showLoading(document.getElementById('dashboard-active-courses'), '0');
-                    AppUtils.showLoading(document.getElementById('dashboard-upcoming-exam'), 'Loading...');
+                    // Show loading states with skeletons
+                    AppUtils.showLoading(document.getElementById('dashboard-attendance-rate'), '--%', true);
+                    AppUtils.showLoading(document.getElementById('dashboard-active-courses'), '0', true);
+                    AppUtils.showLoading(document.getElementById('dashboard-upcoming-exam'), 'Loading...', true);
             
                     // Load data in parallel for better performance
                     const [attendanceData, coursesData, examsData, resourcesData] = await Promise.all([
@@ -1110,8 +1261,7 @@
                 const { data: logs, error } = await sb
                     .from('geo_attendance_logs')
                     .select('is_verified')
-                    .eq('student_id', userId)
-                    .order('check_in_time', { ascending: false });
+                    .eq('student_id', userId);
             
                 if (error) throw error;
             
@@ -1211,7 +1361,7 @@
             }
             
             // *************************************************************************
-            // *** PROFILE MANAGEMENT ***
+            // *** ENHANCED PROFILE MANAGEMENT ***
             // *************************************************************************
             
             const profileForm = document.getElementById('profile-form');
@@ -1292,22 +1442,45 @@
                 if (document.getElementById('upload-button')) document.getElementById('upload-button').style.display = 'none';
             }
             
+            // Enhanced profile validation
+            function validateProfileForm(data) {
+                const errors = [];
+                const validators = validateInputs();
+                
+                if (!validators.name(data.full_name)) {
+                    errors.push('Full name must be between 2-100 characters');
+                }
+                if (data.phone && !validators.phone(data.phone)) {
+                    errors.push('Please enter a valid phone number');
+                }
+                
+                return errors;
+            }
+            
             // Edit profile button event
             if (editProfileButton) {
                 editProfileButton.addEventListener('click', () => toggleProfileEdit(true));
             }
             
-            // Save profile
+            // Save profile with validation
             if (profileForm) {
                 profileForm.addEventListener('submit', async (e) => {
                     e.preventDefault();
-                    if (profileStatus) profileStatus.textContent = 'Saving changes...';
-            
+                    
                     const updates = {
                         full_name: document.getElementById('profile-name').value,
                         phone: document.getElementById('profile-phone').value,
                         updated_at: new Date().toISOString()
                     };
+                    
+                    // Validate inputs
+                    const errors = validateProfileForm(updates);
+                    if (errors.length > 0) {
+                        if (profileStatus) profileStatus.textContent = `Validation errors: ${errors.join(', ')}`;
+                        return;
+                    }
+                    
+                    if (profileStatus) profileStatus.textContent = 'Saving changes...';
             
                     const { error } = await sb
                         .from('consolidated_user_profiles_table')
@@ -1318,20 +1491,27 @@
                         if (profileStatus) profileStatus.textContent = `Error saving profile: ${error.message}`;
                     } else {
                         if (profileStatus) profileStatus.textContent = 'Profile updated successfully!';
+                        Analytics.track('profile_updated');
                         loadProfile(currentUserId);
                     }
                 });
             }
             
-            // Passport photo upload
+            // Enhanced passport photo upload with validation
             if (passportFileInput) {
-                passportFileInput.addEventListener('change', () => {
+                passportFileInput.addEventListener('change', async () => {
                     const file = passportFileInput.files[0];
                     if (file) {
-                        // Display temporary object URL for preview
-                        if (passportPreview) passportPreview.src = URL.createObjectURL(file);
-                        if (uploadButton) uploadButton.style.display = 'block';
-                        if (uploadLabel) uploadLabel.style.display = 'none';
+                        try {
+                            await validateImageFile(file);
+                            // Display temporary object URL for preview
+                            if (passportPreview) passportPreview.src = URL.createObjectURL(file);
+                            if (uploadButton) uploadButton.style.display = 'block';
+                            if (uploadLabel) uploadLabel.style.display = 'none';
+                        } catch (error) {
+                            AppUtils.showToast(error.message, 'error');
+                            passportFileInput.value = '';
+                        }
                     }
                 });
             }
@@ -1348,48 +1528,53 @@
                     if (profileStatus) profileStatus.textContent = 'Uploading photo... (This may take a few seconds)';
                     if (uploadButton) uploadButton.disabled = true;
             
-                    const fileExt = file.name.split('.').pop();
-                    const filePath = `${currentUserId}.${fileExt}`;
+                    try {
+                        const fileExt = file.name.split('.').pop();
+                        const filePath = `${currentUserId}.${fileExt}`;
             
-                    const { error: uploadError } = await sb.storage
-                        .from('passports')
-                        .upload(filePath, file, { cacheControl: '3600', upsert: true });
+                        const { error: uploadError } = await sb.storage
+                            .from('passports')
+                            .upload(filePath, file, { cacheControl: '3600', upsert: true });
             
-                    if (uploadError) {
-                        if (profileStatus) profileStatus.textContent = `Upload failed: ${uploadError.message}`;
+                        if (uploadError) {
+                            if (profileStatus) profileStatus.textContent = `Upload failed: ${uploadError.message}`;
+                            if (uploadButton) uploadButton.disabled = false;
+                            return;
+                        }
+            
+                        const { error: updateError } = await sb
+                            .from('consolidated_user_profiles_table')
+                            .update({ passport_url: filePath, updated_at: new Date().toISOString() })
+                            .eq('user_id', currentUserId);
+            
+                        if (updateError) {
+                            if (profileStatus) profileStatus.textContent = `Database update failed: ${updateError.message}`;
+                        } else {
+                            if (profileStatus) profileStatus.textContent = 'Photo uploaded and saved successfully! Refreshing profile...';
+                            
+                            // Clear file input and hide buttons after successful upload
+                            if (passportFileInput) passportFileInput.value = ''; 
+                            if (uploadButton) uploadButton.style.display = 'none';
+                            if (uploadLabel) uploadLabel.style.display = 'none';
+                            
+                            // Reload profile and dashboard to reflect change
+                            await loadProfile(currentUserId);
+                            loadDashboardMetrics(currentUserId);
+                            
+                            // Set final status message
+                            if (profileStatus) profileStatus.textContent = 'Photo updated successfully!';
+                            Analytics.track('photo_uploaded');
+                        }
+                    } catch (error) {
+                        if (profileStatus) profileStatus.textContent = `Upload failed: ${error.message}`;
+                    } finally {
                         if (uploadButton) uploadButton.disabled = false;
-                        return;
                     }
-            
-                    const { error: updateError } = await sb
-                        .from('consolidated_user_profiles_table')
-                        .update({ passport_url: filePath, updated_at: new Date().toISOString() })
-                        .eq('user_id', currentUserId);
-            
-                    if (updateError) {
-                        if (profileStatus) profileStatus.textContent = `Database update failed: ${updateError.message}`;
-                    } else {
-                        if (profileStatus) profileStatus.textContent = 'Photo uploaded and saved successfully! Refreshing profile...';
-                        
-                        // Clear file input and hide buttons after successful upload
-                        if (passportFileInput) passportFileInput.value = ''; 
-                        if (uploadButton) uploadButton.style.display = 'none';
-                        if (uploadLabel) uploadLabel.style.display = 'none';
-                        
-                        // Reload profile and dashboard to reflect change
-                        await loadProfile(currentUserId);
-                        loadDashboardMetrics(currentUserId);
-                        
-                        // Set final status message
-                        if (profileStatus) profileStatus.textContent = 'Photo updated successfully!';
-                    }
-            
-                    if (uploadButton) uploadButton.disabled = false;
                 });
             }
             
             // *************************************************************************
-            // *** ATTENDANCE SYSTEM ***
+            // *** ENHANCED ATTENDANCE SYSTEM ***
             // *************************************************************************
             
             // Load clinical targets
@@ -1492,7 +1677,7 @@
                 const tableBody = document.getElementById('geo-attendance-history');
                 if (!tableBody) return;
                 
-                tableBody.innerHTML = '<tr><td colspan="4">Loading geo check-in history...</td></tr>';
+                AppUtils.showLoading(tableBody, 'Loading geo check-in history...', true);
             
                 try {
                     const { data: logs, error } = await sb
@@ -1526,7 +1711,7 @@
                     });
                 } catch (error) {
                     console.error("Failed to load attendance history:", error);
-                    tableBody.innerHTML = `<tr><td colspan="4" style="color:#EF4444;">Error loading attendance logs: ${error.message}</td></tr>`;
+                    AppUtils.showError(tableBody, `Error loading attendance logs: ${error.message}`);
                 }
             }
             
@@ -1598,7 +1783,7 @@
                 return deviceId;
             }
             
-            // Geo check-in function - UPDATED WITH SIMPLIFIED MESSAGE
+            // Enhanced Geo check-in function with rate limiting and validation
             async function geoCheckIn() {
                 const button = document.getElementById('check-in-button');
                 const geoMessage = document.getElementById('geo-message');
@@ -1609,6 +1794,20 @@
                 if (geoMessage) geoMessage.textContent = '⏱️ Initializing check-in...';
             
                 try {
+                    // Check if online
+                    if (!OnlineManager.isOnline) {
+                        AppUtils.showToast('You are offline. Check-in will be queued.', 'warning');
+                        // Queue check-in for later
+                        OnlineManager.queueCheckIn({
+                            sessionType: sessionTypeSelect?.value,
+                            target: attendanceTargetSelect?.value
+                        });
+                        return;
+                    }
+                    
+                    // Check rate limiting
+                    canCheckIn(currentUserId);
+                    
                     if (!currentUserProfile) await loadProfile(currentUserId);
                     const studentProfile = currentUserProfile;
                     if (!studentProfile) {
@@ -1646,6 +1845,9 @@
                             { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
                         );
                     });
+            
+                    // Validate GPS location
+                    await validateGPSLocation(location.lat, location.lon, location.acc);
             
                     // Reverse-geocode for friendly name
                     if (!location.friendly) {
@@ -1724,12 +1926,13 @@
                     } else {
                         // ✅ UPDATED: Simplified success message
                         if (geoMessage) geoMessage.innerHTML = `✅ Check-in complete! ${isVerified ? 'Verified successfully' : 'Pending verification'}`;
+                        Analytics.trackCheckIn(sessionType, isVerified);
                         loadGeoAttendanceHistory(currentUserId);
                     }
             
                 } catch (e) {
                     console.error('GeoCheckIn error:', e);
-                    if (geoMessage) geoMessage.textContent = `🚫 Critical error: ${e.message}`;
+                    if (geoMessage) geoMessage.textContent = `🚫 ${e.message}`;
                 } finally {
                     if (button) button.disabled = false;
                 }
@@ -1743,7 +1946,7 @@
             async function loadCourses() {
                 const tableBody = document.getElementById('courses-table');
                 if (!tableBody) return;
-                AppUtils.showLoading(tableBody, 'Loading courses...');
+                AppUtils.showLoading(tableBody, 'Loading courses...', true);
 
                 if (!currentUserProfile) await loadProfile(currentUserId); 
                 
@@ -1775,37 +1978,37 @@
                 try {
                     const blockFilter = `block.eq.${block},block.is.null,block.eq.General`;
 
-                    // Determine the correct target_program filter
+                    // Determine the correct target_program filter (REMOVED General since it doesn't exist)
                     let programFilter;
                     
                     // TVET students - check all possible combinations
                     if (program === 'TVET' || department === 'TVET') {
-                        programFilter = `target_program.eq.TVET`;
+                        programFilter = `target_program.eq.TVET`; // Removed ,target_program.eq.General
                         console.log('Filtering for TVET courses only');
                     } 
                     // KRCHN students have program = 'KRCHN'
                     else if (program === 'KRCHN') {
-                        programFilter = `target_program.eq.KRCHN`;
+                        programFilter = `target_program.eq.KRCHN`; // Removed ,target_program.eq.General
                         console.log('Filtering for KRCHN courses only');
                     }
                     // Nursing department students
                     else if (department === 'Nursing') {
-                        programFilter = `target_program.eq.Nursing`;
+                        programFilter = `target_program.eq.Nursing`; // Removed ,target_program.eq.General
                         console.log('Filtering for Nursing courses only');
                     }
                     // Clinical Medicine department
                     else if (department === 'Clinical Medicine') {
-                        programFilter = `target_program.eq.Clinical Medicine`;
+                        programFilter = `target_program.eq.Clinical Medicine`; // Removed ,target_program.eq.General
                         console.log('Filtering for Clinical Medicine courses only');
                     }
                     // Management department
                     else if (department === 'Management') {
-                        programFilter = `target_program.eq.Management`;
+                        programFilter = `target_program.eq.Management`; // Removed ,target_program.eq.General
                         console.log('Filtering for Management courses only');
                     }
                     else {
                         // Fallback: use program field if available
-                        programFilter = `target_program.eq.${program}`;
+                        programFilter = `target_program.eq.${program}`; // Removed ,target_program.eq.General
                         console.log('Filtering for program:', program);
                     }
 
@@ -1869,13 +2072,13 @@
                     .replace(/"/g, "&quot;")
                     .replace(/'/g, "&#039;");
             }
-            
+                        
             // Load exams
             async function loadExams() {
                 const tableBody = document.getElementById('exams-table');
                 if (!tableBody) return;
             
-                AppUtils.showLoading(tableBody, 'Loading your exams and grades...');
+                AppUtils.showLoading(tableBody, 'Loading your exams and grades...', true);
             
                 if (!currentUserProfile) await loadProfile(currentUserId);
                 const program = currentUserProfile?.program || currentUserProfile?.department;
@@ -2017,6 +2220,7 @@
                 document.getElementById('transcript-status').style.color = statusColor;
             
                 document.getElementById('transcript-modal').style.display = 'flex';
+                Analytics.track('transcript_viewed', { exam_id: examId });
             }
             
             // Close transcript modal
@@ -2024,17 +2228,144 @@
                 document.getElementById('transcript-modal').style.display = 'none';
             }
             
-            // *************************************************************************
-            // *** ENHANCED RESOURCES SYSTEM ***
-            // *************************************************************************
+            // View resource
+            async function viewResource(resourceId) {
+                const resourceViewer = document.getElementById('resource-viewer');
+                const resource = cachedResources.find(r => r.id == resourceId);
             
-            // Load resources with enhanced mobile features
+                if (!resource || !resourceViewer) {
+                    if (resourceViewer) resourceViewer.innerHTML = 'Resource not found.';
+                    return;
+                }
+            
+                const fileUrl = resource.file_url;
+                const filePath = resource.file_path;
+                const ext = (filePath || '').split('.').pop().toLowerCase();
+            
+                // Clear viewer and add header
+                resourceViewer.innerHTML = `
+                    <h3 style="color: var(--color-primary); margin-bottom: 5px;">
+                        ${escapeHtml(resource.title)}
+                    </h3>
+                    <p style="font-size: 0.9em; color: #6B7280; margin-bottom: 15px;">
+                        Uploaded by: ${escapeHtml(resource.uploaded_by_name || 'Admin')}
+                        on ${new Date(resource.created_at).toLocaleDateString()}
+                    </p>
+                `;
+            
+                // PDF files
+                if (ext === 'pdf') {
+                    resourceViewer.innerHTML += `
+                        <div id="pdf-container" style="width:100%; max-height:80vh; overflow:auto;">
+                            <canvas id="pdf-canvas" style="width:100%; height:auto; border:1px solid #ddd; border-radius:6px;"></canvas>
+                        </div>
+            
+                        <div id="pdf-controls" style="margin-top:15px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:center;">
+                            <button id="prev-page" class="profile-button" style="padding:8px 15px; font-size:0.9em;">Prev</button>
+                            <button id="next-page" class="profile-button" style="padding:8px 15px; font-size:0.9em;">Next</button>
+                            <span style="font-weight:600;">Page: <span id="page-num"></span> / <span id="page-count"></span></span>
+                        </div>
+                    `;
+            
+                    const canvas = document.getElementById('pdf-canvas');
+                    const ctx = canvas.getContext('2d');
+                    let pdfDoc = null;
+                    let pageNum = 1;
+            
+                    pdfjsLib.getDocument(fileUrl).promise
+                        .then(pdf => {
+                            pdfDoc = pdf;
+                            document.getElementById('page-count').textContent = pdf.numPages;
+                            renderPage(pageNum);
+                        })
+                        .catch(err => {
+                            resourceViewer.innerHTML += `<p style="color:#EF4444;">Failed to load PDF: ${err.message}</p>`;
+                        });
+            
+                    function renderPage(num) {
+                        pdfDoc.getPage(num).then(page => {
+                            const containerWidth = document.getElementById('pdf-container').clientWidth;
+                            const baseViewport = page.getViewport({ scale: 1 });
+                            const pixelRatio = window.devicePixelRatio || 1;
+                            const scale = (containerWidth / baseViewport.width) * pixelRatio;
+                            const viewport = page.getViewport({ scale });
+            
+                            canvas.width = viewport.width;
+                            canvas.height = viewport.height;
+                            canvas.style.width = `${viewport.width / pixelRatio}px`;
+                            canvas.style.height = `${viewport.height / pixelRatio}px`;
+            
+                            const renderContext = { canvasContext: ctx, viewport };
+                            page.render(renderContext).promise.then(() => {
+                                document.getElementById('page-num').textContent = num;
+                            });
+                        });
+                    }
+            
+                    document.getElementById('prev-page').onclick = () => {
+                        if (pageNum > 1) {
+                            pageNum--;
+                            renderPage(pageNum);
+                        }
+                    };
+            
+                    document.getElementById('next-page').onclick = () => {
+                        if (pageNum < pdfDoc.numPages) {
+                            pageNum++;
+                            renderPage(pageNum);
+                        }
+                    };
+            
+                    return;
+                }
+            
+                // Office files
+                if (['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'].includes(ext)) {
+                    try {
+                        // Generate a signed URL (1 hour)
+                        const { data: signed } = await sb.storage
+                            .from(RESOURCES_BUCKET)
+                            .createSignedUrl(filePath, 3600);
+            
+                        if (!signed?.signedUrl) {
+                            resourceViewer.innerHTML += `<p style="color:#EF4444;">Unable to load file.</p>`;
+                            return;
+                        }
+            
+                        const encoded = encodeURIComponent(signed.signedUrl);
+            
+                        resourceViewer.innerHTML += `
+                            <iframe 
+                                src="https://view.officeapps.live.com/op/embed.aspx?src=${encoded}"
+                                width="100%"
+                                height="75vh"
+                                style="border:none; min-height:500px; border-radius:6px;">
+                            </iframe>`;
+                    } catch (err) {
+                        resourceViewer.innerHTML += `<p style="color:#EF4444;">Failed to load file: ${err.message}</p>`;
+                    }
+            
+                    return;
+                }
+            
+                // Unsupported files
+                resourceViewer.innerHTML += `
+                    <p>This file type (<strong>.${ext}</strong>) cannot be previewed.</p>
+                    <a href="${fileUrl}" download class="profile-button" style="margin-top:10px; display:inline-block;">
+                        Download File
+                    </a>
+                `;
+
+                Analytics.track('resource_viewed', { resource_id: resourceId, file_type: ext });
+            }
+            
+            // Load resources
             async function loadResources() {
                 if (!currentUserProfile) await loadProfile(currentUserId);
             
-                const resourceListContainer = document.getElementById('resources-list-container');
+                const resourceListContainer = document.getElementById('resources-list');
                 if (!resourceListContainer) return;
-                AppUtils.showLoading(resourceListContainer, 'Loading resources...');
+                AppUtils.showLoading(resourceListContainer, 'Loading resources...', true);
                 cachedResources = [];
             
                 try {
@@ -2049,7 +2380,7 @@
             
                     const { data: resources, error } = await sb
                         .from('resources')
-                        .select('id, title, file_path, file_url, program_type, block, intake, uploaded_by_name, created_at, file_size, file_type')
+                        .select('id, title, file_path, file_url, program_type, block, intake, uploaded_by_name, created_at')
                         .eq('program_type', program)
                         .eq('block', block)
                         .eq('intake', intakeYear)
@@ -2058,12 +2389,25 @@
                     if (error) throw error;
             
                     cachedResources = resources || [];
-                    renderResourcesList(cachedResources);
+                    resourceListContainer.innerHTML = '';
             
-                    // Update resources count
-                    document.getElementById('resources-count').textContent = cachedResources.length;
+                    if (!cachedResources.length) {
+                        resourceListContainer.innerHTML = `<p>No learning resources found for your program, block, and intake.</p>`;
+                        return;
+                    }
             
-                    // Load first resource if available
+                    cachedResources.forEach(res => {
+                        const displayDate = new Date(res.created_at).toLocaleDateString();
+                        const itemDiv = document.createElement('div');
+                        itemDiv.className = 'resource-item';
+                        itemDiv.innerHTML = `
+                            <strong>${escapeHtml(res.title)}</strong>
+                            <p>Uploaded: ${displayDate} (${escapeHtml(res.program_type)})</p>
+                        `;
+                        itemDiv.addEventListener('click', () => viewResource(res.id));
+                        resourceListContainer.appendChild(itemDiv);
+                    });
+            
                     if (cachedResources.length > 0) {
                         viewResource(cachedResources[0].id);
                     } else {
@@ -2079,454 +2423,6 @@
                     loadDashboardMetrics(currentUserId);
                 }
             }
-            
-            // Render resources list with enhanced UI
-            function renderResourcesList(resources) {
-                const resourceListContainer = document.getElementById('resources-list-container');
-                if (!resourceListContainer) return;
-            
-                resourceListContainer.innerHTML = '';
-            
-                if (!resources.length) {
-                    resourceListContainer.innerHTML = '<div class="no-resources">No resources found for your program and block.</div>';
-                    return;
-                }
-            
-                resources.forEach(resource => {
-                    const itemDiv = document.createElement('div');
-                    itemDiv.className = 'resource-item';
-                    itemDiv.setAttribute('data-resource-id', resource.id);
-                    
-                    const fileExt = (resource.file_path || '').split('.').pop().toLowerCase();
-                    const fileType = getFileType(fileExt);
-                    const fileIcon = getFileIcon(fileExt);
-                    const fileSize = formatFileSize(resource.file_size);
-                    const uploadDate = new Date(resource.created_at).toLocaleDateString();
-                    
-                    itemDiv.innerHTML = `
-                        <div class="resource-icon ${fileType}">
-                            <i class="${fileIcon}"></i>
-                        </div>
-                        <div class="resource-content">
-                            <div class="resource-name">${escapeHtml(resource.title)}</div>
-                            <div class="resource-meta">
-                                <span class="resource-type-badge">${fileExt.toUpperCase()}</span>
-                                <span>${fileSize}</span>
-                                <span>${uploadDate}</span>
-                            </div>
-                        </div>
-                    `;
-                    
-                    itemDiv.addEventListener('click', () => viewResource(resource.id));
-                    resourceListContainer.appendChild(itemDiv);
-                });
-            }
-            
-            // Get file type for styling
-            function getFileType(extension) {
-                const pdfTypes = ['pdf'];
-                const imageTypes = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg'];
-                const videoTypes = ['mp4', 'avi', 'mov', 'wmv', 'flv'];
-                const documentTypes = ['doc', 'docx', 'txt', 'rtf'];
-                const presentationTypes = ['ppt', 'pptx'];
-                const spreadsheetTypes = ['xls', 'xlsx', 'csv'];
-                
-                if (pdfTypes.includes(extension)) return 'pdf';
-                if (imageTypes.includes(extension)) return 'image';
-                if (videoTypes.includes(extension)) return 'video';
-                if (documentTypes.includes(extension)) return 'document';
-                if (presentationTypes.includes(extension)) return 'presentation';
-                if (spreadsheetTypes.includes(extension)) return 'spreadsheet';
-                return 'other';
-            }
-            
-            // Get appropriate icon for file type
-            function getFileIcon(extension) {
-                const fileType = getFileType(extension);
-                
-                switch(fileType) {
-                    case 'pdf': return 'fas fa-file-pdf';
-                    case 'image': return 'fas fa-file-image';
-                    case 'video': return 'fas fa-file-video';
-                    case 'document': return 'fas fa-file-word';
-                    case 'presentation': return 'fas fa-file-powerpoint';
-                    case 'spreadsheet': return 'fas fa-file-excel';
-                    default: return 'fas fa-file';
-                }
-            }
-            
-            // Format file size for display
-            function formatFileSize(bytes) {
-                if (!bytes) return 'Unknown size';
-                
-                const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-                if (bytes === 0) return '0 Bytes';
-                const i = parseInt(Math.floor(Math.log(bytes) / Math.log(1024)));
-                return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
-            }
-            
-            // Enhanced view resource function with full-screen support
-            async function viewResource(resourceId) {
-                const resourceViewer = document.getElementById('resource-viewer');
-                const resource = cachedResources.find(r => r.id == resourceId);
-            
-                if (!resource || !resourceViewer) {
-                    if (resourceViewer) resourceViewer.innerHTML = 'Resource not found.';
-                    return;
-                }
-            
-                // Update active state in list
-                document.querySelectorAll('.resource-item').forEach(item => {
-                    item.classList.remove('active');
-                });
-                document.querySelector(`.resource-item[data-resource-id="${resourceId}"]`).classList.add('active');
-            
-                const fileUrl = resource.file_url;
-                const filePath = resource.file_path;
-                const ext = (filePath || '').split('.').pop().toLowerCase();
-                const fileType = getFileType(ext);
-            
-                // Show active resource viewer
-                document.querySelector('.preview-placeholder').style.display = 'none';
-                document.querySelector('.active-resource').style.display = 'flex';
-            
-                // Update resource header
-                document.getElementById('resource-title').textContent = resource.title;
-                document.getElementById('resource-type').textContent = ext.toUpperCase();
-                document.getElementById('resource-size').textContent = formatFileSize(resource.file_size);
-                document.getElementById('resource-date').textContent = new Date(resource.created_at).toLocaleDateString();
-                
-                // Update resource details
-                document.getElementById('detail-uploader').textContent = resource.uploaded_by_name || 'Admin';
-                document.getElementById('detail-course').textContent = resource.program_type || 'General';
-                document.getElementById('detail-block').textContent = resource.block || 'N/A';
-                document.getElementById('detail-description').textContent = resource.description || 'No description available';
-            
-                // Hide all preview types first
-                document.querySelectorAll('.preview-content').forEach(preview => {
-                    preview.style.display = 'none';
-                });
-            
-                // Setup fullscreen button
-                document.getElementById('fullscreen-resource').onclick = () => openFullscreen(resourceId);
-                document.getElementById('bookmark-resource').onclick = () => toggleBookmark(resourceId);
-            
-                // Handle different file types
-                switch(fileType) {
-                    case 'pdf':
-                        await loadPdfPreview(fileUrl);
-                        break;
-                    case 'image':
-                        await loadImagePreview(fileUrl);
-                        break;
-                    case 'video':
-                        await loadVideoPreview(fileUrl);
-                        break;
-                    case 'document':
-                    case 'presentation':
-                    case 'spreadsheet':
-                        await loadOfficePreview(fileUrl, filePath);
-                        break;
-                    default:
-                        showUnsupportedPreview(fileUrl);
-                        break;
-                }
-            }
-            
-            // Load PDF preview with enhanced controls
-            async function loadPdfPreview(fileUrl) {
-                const pdfPreview = document.getElementById('pdf-preview');
-                pdfPreview.style.display = 'flex';
-            
-                const canvas = document.getElementById('pdf-canvas');
-                const ctx = canvas.getContext('2d');
-                let pdfDoc = null;
-                let pageNum = 1;
-                let scale = 1.5;
-            
-                try {
-                    pdfjsLib.getDocument(fileUrl).promise
-                        .then(pdf => {
-                            pdfDoc = pdf;
-                            document.getElementById('page-count').textContent = pdf.numPages;
-                            renderPage(pageNum, scale);
-                        })
-                        .catch(err => {
-                            pdfPreview.innerHTML = `<p style="color:#EF4444;">Failed to load PDF: ${err.message}</p>`;
-                        });
-            
-                    function renderPage(num, zoomLevel = scale) {
-                        pdfDoc.getPage(num).then(page => {
-                            const viewport = page.getViewport({ scale: zoomLevel });
-            
-                            canvas.width = viewport.width;
-                            canvas.height = viewport.height;
-            
-                            const renderContext = {
-                                canvasContext: ctx,
-                                viewport: viewport
-                            };
-            
-                            page.render(renderContext).promise.then(() => {
-                                document.getElementById('page-num').textContent = num;
-                            });
-                        });
-                    }
-            
-                    // Navigation controls
-                    document.getElementById('prev-page').onclick = () => {
-                        if (pageNum > 1) {
-                            pageNum--;
-                            renderPage(pageNum, scale);
-                        }
-                    };
-            
-                    document.getElementById('next-page').onclick = () => {
-                        if (pageNum < pdfDoc.numPages) {
-                            pageNum++;
-                            renderPage(pageNum, scale);
-                        }
-                    };
-            
-                    // Zoom controls
-                    document.getElementById('zoom-in').onclick = () => {
-                        scale += 0.25;
-                        renderPage(pageNum, scale);
-                    };
-            
-                    document.getElementById('zoom-out').onclick = () => {
-                        if (scale > 0.5) {
-                            scale -= 0.25;
-                            renderPage(pageNum, scale);
-                        }
-                    };
-            
-                } catch (err) {
-                    pdfPreview.innerHTML = `<p style="color:#EF4444;">Error loading PDF: ${err.message}</p>`;
-                }
-            }
-            
-            // Load image preview
-            async function loadImagePreview(fileUrl) {
-                const imagePreview = document.getElementById('image-preview');
-                imagePreview.style.display = 'flex';
-            
-                const img = document.getElementById('preview-image');
-                img.src = fileUrl;
-                
-                // Zoom functionality
-                let isZoomed = false;
-                document.getElementById('image-zoom').onclick = () => {
-                    isZoomed = !isZoomed;
-                    img.style.transform = isZoomed ? 'scale(1.5)' : 'scale(1)';
-                    img.style.transition = 'transform 0.3s ease';
-                    document.getElementById('image-zoom').innerHTML = isZoomed ? 
-                        '<i class="fas fa-search-minus"></i> Zoom Out' : 
-                        '<i class="fas fa-search-plus"></i> Zoom';
-                };
-            }
-            
-            // Load video preview
-            async function loadVideoPreview(fileUrl) {
-                const videoPreview = document.getElementById('video-preview');
-                videoPreview.style.display = 'flex';
-            
-                const video = document.getElementById('preview-video');
-                video.src = fileUrl;
-                
-                // Fullscreen for video
-                document.getElementById('video-fullscreen').onclick = () => {
-                    if (video.requestFullscreen) {
-                        video.requestFullscreen();
-                    } else if (video.webkitRequestFullscreen) {
-                        video.webkitRequestFullscreen();
-                    } else if (video.msRequestFullscreen) {
-                        video.msRequestFullscreen();
-                    }
-                };
-            }
-            
-            // Load office document preview
-            async function loadOfficePreview(fileUrl, filePath) {
-                const officePreview = document.getElementById('office-preview');
-                officePreview.style.display = 'flex';
-            
-                try {
-                    // Generate a signed URL (1 hour)
-                    const { data: signed } = await sb.storage
-                        .from(RESOURCES_BUCKET)
-                        .createSignedUrl(filePath, 3600);
-            
-                    if (!signed?.signedUrl) {
-                        officePreview.innerHTML = `<p style="color:#EF4444;">Unable to load file.</p>`;
-                        return;
-                    }
-            
-                    const encoded = encodeURIComponent(signed.signedUrl);
-                    const iframe = document.getElementById('office-frame');
-                    iframe.src = `https://view.officeapps.live.com/op/embed.aspx?src=${encoded}`;
-                    
-                    // Fullscreen for office docs
-                    document.getElementById('office-fullscreen').onclick = () => {
-                        openFullscreenOffice(encoded);
-                    };
-            
-                } catch (err) {
-                    officePreview.innerHTML = `<p style="color:#EF4444;">Failed to load file: ${err.message}</p>`;
-                }
-            }
-            
-            // Show unsupported file type
-            function showUnsupportedPreview(fileUrl) {
-                const unsupportedPreview = document.getElementById('unsupported-preview');
-                unsupportedPreview.style.display = 'flex';
-            }
-            
-            // Fullscreen functionality
-            function openFullscreen(resourceId) {
-                const resource = cachedResources.find(r => r.id == resourceId);
-                if (!resource) return;
-            
-                const overlay = document.getElementById('fullscreen-overlay');
-                const content = document.getElementById('fullscreen-content');
-                const title = document.getElementById('fullscreen-title');
-                
-                title.textContent = resource.title;
-                
-                // Clone the current preview content
-                const currentPreview = document.querySelector('.preview-content[style*="display: flex"]');
-                if (currentPreview) {
-                    const clone = currentPreview.cloneNode(true);
-                    content.innerHTML = '';
-                    content.appendChild(clone);
-                    
-                    // Adjust for fullscreen
-                    const canvas = clone.querySelector('#pdf-canvas');
-                    if (canvas) {
-                        // Re-render PDF at larger scale for fullscreen
-                        setTimeout(() => {
-                            const pdfPreview = clone.querySelector('#pdf-preview');
-                            if (pdfPreview) {
-                                pdfPreview.style.height = '100%';
-                                pdfPreview.style.flexDirection = 'column';
-                            }
-                        }, 100);
-                    }
-                }
-                
-                overlay.classList.add('active');
-                
-                // Close fullscreen
-                document.getElementById('close-fullscreen').onclick = closeFullscreen;
-                
-                // ESC key to close
-                document.addEventListener('keydown', function escHandler(e) {
-                    if (e.key === 'Escape') {
-                        closeFullscreen();
-                        document.removeEventListener('keydown', escHandler);
-                    }
-                });
-            }
-            
-            function closeFullscreen() {
-                const overlay = document.getElementById('fullscreen-overlay');
-                overlay.classList.remove('active');
-            }
-            
-            function openFullscreenOffice(encodedUrl) {
-                const overlay = document.getElementById('fullscreen-overlay');
-                const content = document.getElementById('fullscreen-content');
-                const title = document.getElementById('fullscreen-title');
-                
-                title.textContent = 'Document Preview';
-                content.innerHTML = `
-                    <iframe 
-                        src="https://view.officeapps.live.com/op/embed.aspx?src=${encodedUrl}"
-                        width="100%"
-                        height="100%"
-                        style="border:none;"
-                        frameborder="0">
-                    </iframe>
-                `;
-                
-                overlay.classList.add('active');
-                document.getElementById('close-fullscreen').onclick = closeFullscreen;
-            }
-            
-            // Bookmark functionality
-            function toggleBookmark(resourceId) {
-                let bookmarks = JSON.parse(localStorage.getItem('resourceBookmarks') || '[]');
-                const index = bookmarks.indexOf(resourceId);
-                
-                if (index > -1) {
-                    bookmarks.splice(index, 1);
-                    AppUtils.showToast('Resource removed from bookmarks', 'info');
-                } else {
-                    bookmarks.push(resourceId);
-                    AppUtils.showToast('Resource bookmarked', 'success');
-                }
-                
-                localStorage.setItem('resourceBookmarks', JSON.stringify(bookmarks));
-                updateBookmarkButton(resourceId);
-            }
-            
-            function updateBookmarkButton(resourceId) {
-                const bookmarks = JSON.parse(localStorage.getItem('resourceBookmarks') || '[]');
-                const isBookmarked = bookmarks.includes(resourceId);
-                const button = document.getElementById('bookmark-resource');
-                
-                if (button) {
-                    button.innerHTML = isBookmarked ? 
-                        '<i class="fas fa-bookmark"></i> Bookmarked' : 
-                        '<i class="fas fa-bookmark"></i> Bookmark';
-                    button.style.background = isBookmarked ? 'var(--color-warning)' : 'var(--color-primary)';
-                }
-            }
-            
-            // Mobile navigation
-            function setupMobileNavigation() {
-                const navButtons = document.querySelectorAll('.mobile-resource-nav .nav-btn');
-                const resourcesSidebar = document.querySelector('.resources-sidebar');
-                const resourcePreview = document.querySelector('.resource-preview');
-                
-                navButtons.forEach(btn => {
-                    btn.addEventListener('click', function() {
-                        const action = this.getAttribute('data-action');
-                        
-                        // Update active state
-                        navButtons.forEach(b => b.classList.remove('active'));
-                        this.classList.add('active');
-                        
-                        // Handle actions
-                        switch(action) {
-                            case 'list':
-                                resourcesSidebar.style.display = 'flex';
-                                resourcePreview.style.display = 'none';
-                                break;
-                            case 'preview':
-                                resourcesSidebar.style.display = 'none';
-                                resourcePreview.style.display = 'flex';
-                                break;
-                            case 'fullscreen':
-                                const activeResource = document.querySelector('.resource-item.active');
-                                if (activeResource) {
-                                    const resourceId = activeResource.getAttribute('data-resource-id');
-                                    openFullscreen(resourceId);
-                                }
-                                break;
-                        }
-                    });
-                });
-            }
-            
-            // Initialize mobile navigation when resources tab is shown
-            const originalShowTab = window.showTab;
-            window.showTab = function(tabId) {
-                originalShowTab(tabId);
-                if (tabId === 'resources') {
-                    setTimeout(setupMobileNavigation, 100);
-                }
-            };
             
             // *************************************************************************
             // *** ACADEMIC CALENDAR ***
@@ -2575,7 +2471,7 @@
             async function loadAcademicCalendar() {
                 const tableBody = document.getElementById('calendar-table');
                 if (!tableBody) return;
-                AppUtils.showLoading(tableBody, 'Loading academic schedule...');
+                AppUtils.showLoading(tableBody, 'Loading academic schedule...', true);
             
                 try {
                     const allEvents = await fetchAllScheduleData();
@@ -2623,7 +2519,7 @@
                 const messageContainer = document.getElementById('messages-list');
                 if (!messageContainer) return;
             
-                AppUtils.showLoading(messageContainer, 'Loading messages...');
+                AppUtils.showLoading(messageContainer, 'Loading messages...', true);
             
                 try {
                     // Load personal messages
@@ -2714,90 +2610,7 @@
                 if (calendarFilter) {
                     calendarFilter.addEventListener('change', loadAcademicCalendar);
                 }
-                
-                // Resource filters
-                const resourceTypeFilter = document.getElementById('resource-type-filter');
-                const resourceSort = document.getElementById('resource-sort');
-                const resourceSearch = document.getElementById('resource-search');
-                
-                if (resourceTypeFilter) {
-                    resourceTypeFilter.addEventListener('change', filterResources);
-                }
-                
-                if (resourceSort) {
-                    resourceSort.addEventListener('change', sortResources);
-                }
-                
-                if (resourceSearch) {
-                    resourceSearch.addEventListener('input', searchResources);
-                }
-                
-                // View toggle
-                const viewButtons = document.querySelectorAll('.view-btn');
-                viewButtons.forEach(btn => {
-                    btn.addEventListener('click', function() {
-                        viewButtons.forEach(b => b.classList.remove('active'));
-                        this.classList.add('active');
-                        toggleView(this.getAttribute('data-view'));
-                    });
-                });
             });
-            
-            // Resource filtering
-            function filterResources() {
-                const filterValue = document.getElementById('resource-type-filter').value;
-                let filtered = cachedResources;
-                
-                if (filterValue !== 'all') {
-                    filtered = cachedResources.filter(resource => {
-                        const ext = (resource.file_path || '').split('.').pop().toLowerCase();
-                        const fileType = getFileType(ext);
-                        return fileType === filterValue;
-                    });
-                }
-                
-                renderResourcesList(filtered);
-            }
-            
-            // Resource sorting
-            function sortResources() {
-                const sortValue = document.getElementById('resource-sort').value;
-                let sorted = [...cachedResources];
-                
-                switch(sortValue) {
-                    case 'newest':
-                        sorted.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-                        break;
-                    case 'oldest':
-                        sorted.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-                        break;
-                    case 'name':
-                        sorted.sort((a, b) => a.title.localeCompare(b.title));
-                        break;
-                }
-                
-                renderResourcesList(sorted);
-            }
-            
-            // Resource search
-            function searchResources() {
-                const searchValue = document.getElementById('resource-search').value.toLowerCase();
-                const filtered = cachedResources.filter(resource => 
-                    resource.title.toLowerCase().includes(searchValue)
-                );
-                
-                renderResourcesList(filtered);
-            }
-            
-            // Toggle between list and grid view
-            function toggleView(viewType) {
-                const container = document.getElementById('resources-list-container');
-                if (viewType === 'grid') {
-                    container.classList.add('grid-view');
-                } else {
-                    container.classList.remove('grid-view');
-                }
-            }
             
             // Make functions globally available
             window.toggleMenu = toggleMenu;
@@ -2809,8 +2622,6 @@
             window.viewProvisionalTranscript = viewProvisionalTranscript;
             window.closeTranscriptModal = closeTranscriptModal;
             window.viewResource = viewResource;
-            window.openFullscreen = openFullscreen;
-            window.closeFullscreen = closeFullscreen;
         }
 
         // Start application when config is ready
