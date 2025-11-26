@@ -10,15 +10,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     
-    <!-- Security Headers -->
-    <meta http-equiv="Content-Security-Policy" 
-          content="default-src 'self'; 
-                   script-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com;
-                   style-src 'self' https://fonts.googleapis.com https://cdnjs.cloudflare.com;
-                   img-src 'self' https: data:;
-                   connect-src 'self' https://*.supabase.co https://us1.locationiq.com;
-                   frame-src https://view.officeapps.live.com;">
-    
     <style>
         /* Skeleton Loading Styles */
         .skeleton-loader {
@@ -485,7 +476,6 @@
             }
             
             console.log('✅ Configuration loaded successfully from GitHub Secrets');
-            console.log('Build:', window.APP_CONFIG.BUILD_TIME, 'Commit:', window.APP_CONFIG.COMMIT_SHA);
             return true;
         }
 
@@ -537,12 +527,8 @@
             startMainApplication(sb, LOCATIONIQ_API_KEY, LOCATIONIQ_API_URL);
         }
 
-        // YOUR EXISTING APPLICATION CODE - MODIFIED FOR SECURITY
+        // MAIN APPLICATION CODE
         async function startMainApplication(sb, LOCATIONIQ_API_KEY, LOCATIONIQ_API_URL) {
-            // *************************************************************************
-            // *** ENHANCED CONFIGURATION AND INITIALIZATION ***
-            // *************************************************************************
-            
             // Global State
             let currentUserId = null;
             let currentUserProfile = null;
@@ -551,346 +537,132 @@
             let cachedClinicalAreas = [];
             let cachedResources = [];
             
-            // Enhanced Constants
+            // Constants
             const MAX_ALLOWED_ACCURACY = 30;
             const MAX_DISTANCE_RADIUS = 200;
             const FALLBACK_LAT = 0.00;
             const FALLBACK_LON = 0.00;
             const FALLBACK_ACCURACY = 9999;
             const RESOURCES_BUCKET = 'resources';
-            const CHECKIN_COOLDOWN = 300000; // 5 minutes in milliseconds
-            
-            // Enhanced Cache with size limits
-            const cache = {
-                data: new Map(),
-                maxSize: 100,
-                
-                set(key, value, ttl = 5 * 60 * 1000) {
-                    // Remove oldest item if cache is full
-                    if (this.data.size >= this.maxSize) {
-                        const firstKey = this.data.keys().next().value;
-                        this.data.delete(firstKey);
-                    }
-                    
-                    this.data.set(key, {
-                        value,
-                        expiry: Date.now() + ttl,
-                        timestamp: new Date().toISOString(),
-                        accessCount: 0
-                    });
-                },
-                
-                get(key) {
-                    const item = this.data.get(key);
-                    if (!item) return null;
-                    
-                    if (Date.now() > item.expiry) {
-                        this.data.delete(key);
-                        return null;
-                    }
-                    
-                    item.accessCount++;
-                    return item.value;
-                },
-                
-                clear() {
-                    this.data.clear();
-                },
-                
-                // Clear expired items periodically
-                cleanup() {
-                    const now = Date.now();
-                    for (const [key, item] of this.data.entries()) {
-                        if (now > item.expiry) {
-                            this.data.delete(key);
-                        }
-                    }
-                }
-            };
-
-            // Run cleanup every minute
-            setInterval(() => cache.cleanup(), 60000);
+            const CHECKIN_COOLDOWN = 300000; // 5 minutes
             
             // Rate limiting for check-ins
             const checkInCooldown = new Map();
             
-            // Performance monitoring
-            const performanceMetrics = {
-                startTime: Date.now(),
-                pageLoads: 0,
-                apiCalls: 0,
-                errors: 0,
-                
-                trackApiCall(duration) {
-                    this.apiCalls++;
-                    console.log(`API call completed in ${duration}ms`);
-                },
-                
-                trackError(error) {
-                    this.errors++;
-                    console.error('Application error:', error);
-                },
-                
-                getMetrics() {
-                    return {
-                        uptime: Date.now() - this.startTime,
-                        pageLoads: this.pageLoads,
-                        apiCalls: this.apiCalls,
-                        errorRate: this.apiCalls > 0 ? (this.errors / this.apiCalls) * 100 : 0
-                    };
-                }
-            };
-
-            // Enhanced Analytics
-            const Analytics = {
-                track(event, properties = {}) {
-                    console.log(`Analytics: ${event}`, properties);
-                    
-                    // Integrate with analytics services here
-                    if (window.umami) {
-                        window.umami.track(event, properties);
-                    }
-                },
-                
-                trackPageView(tabName) {
-                    this.track('page_view', { tab: tabName });
-                },
-                
-                trackCheckIn(sessionType, verified) {
-                    this.track('check_in', { 
-                        session_type: sessionType, 
-                        verified: verified,
+            // Simple cache implementation
+            const cache = {
+                data: new Map(),
+                set(key, value, ttl = 5 * 60 * 1000) {
+                    this.data.set(key, {
+                        value,
+                        expiry: Date.now() + ttl,
                         timestamp: new Date().toISOString()
                     });
-                }
-            };
-
-            // Offline Manager
-            const OnlineManager = {
-                isOnline: navigator.onLine,
-                
-                init() {
-                    window.addEventListener('online', () => {
-                        this.isOnline = true;
-                        document.getElementById('offline-indicator').style.display = 'none';
-                        AppUtils.showToast('Back online', 'success');
-                        this.syncPendingData();
-                    });
-                    
-                    window.addEventListener('offline', () => {
-                        this.isOnline = false;
-                        document.getElementById('offline-indicator').style.display = 'block';
-                        AppUtils.showToast('You are offline', 'warning');
-                    });
                 },
-                
-                async syncPendingData() {
-                    const pending = JSON.parse(localStorage.getItem('pendingCheckins') || '[]');
-                    if (pending.length > 0) {
-                        AppUtils.showToast(`Syncing ${pending.length} pending check-ins`, 'info');
-                        for (const checkin of pending) {
-                            await this.retryCheckIn(checkin);
-                        }
-                        localStorage.removeItem('pendingCheckins');
+                get(key) {
+                    const item = this.data.get(key);
+                    if (!item) return null;
+                    if (Date.now() > item.expiry) {
+                        this.data.delete(key);
+                        return null;
                     }
+                    return item.value;
                 },
-                
-                async retryCheckIn(checkinData) {
-                    // Implement retry logic for pending check-ins
-                    console.log('Retrying check-in:', checkinData);
-                },
-                
-                queueCheckIn(checkinData) {
-                    const pending = JSON.parse(localStorage.getItem('pendingCheckins') || '[]');
-                    pending.push({ ...checkinData, timestamp: new Date().toISOString() });
-                    localStorage.setItem('pendingCheckins', JSON.stringify(pending));
+                clear() {
+                    this.data.clear();
                 }
             };
-
-            // Initialize offline manager
-            OnlineManager.init();
             
-            // *************************************************************************
-            // *** ENHANCED UTILITY FUNCTIONS ***
-            // *************************************************************************
-            
+            // Utility functions
             const AppUtils = {
-                // Enhanced loading state with skeleton support
-                showLoading(element, message = 'Loading...', skeleton = false) {
-                    if (!element) return;
-                    
-                    if (skeleton) {
-                        element.innerHTML = `
-                            <div class="skeleton-loader">
-                                <div class="skeleton-line"></div>
-                                <div class="skeleton-line short"></div>
-                                <div class="skeleton-line"></div>
-                            </div>
-                        `;
-                    } else {
+                showLoading(element, message = 'Loading...') {
+                    if (element) {
                         element.innerHTML = `<div class="loading-state">${message}</div>`;
                     }
                 },
             
-                // Show error state
                 showError(element, message) {
                     if (element) {
                         element.innerHTML = `<div class="error-state">${message}</div>`;
                     }
                 },
             
-                // Enhanced API call with retries and performance tracking
-                async safeApiCall(apiCall, errorMessage = 'Operation failed', maxRetries = 2) {
-                    const start = performance.now();
+                async safeApiCall(apiCall, errorMessage = 'Operation failed') {
                     try {
-                        const result = await this.apiCallWithRetry(apiCall, maxRetries);
-                        const duration = performance.now() - start;
-                        performanceMetrics.trackApiCall(duration);
-                        return result;
+                        return await apiCall();
                     } catch (error) {
-                        performanceMetrics.trackError(error);
                         console.error(errorMessage, error);
                         this.showToast(errorMessage, 'error');
                         return null;
                     }
                 },
-
-                // Retry mechanism for API calls
-                async apiCallWithRetry(apiCall, maxRetries = 3) {
-                    for (let i = 0; i < maxRetries; i++) {
-                        try {
-                            return await apiCall();
-                        } catch (error) {
-                            if (i === maxRetries - 1) throw error;
-                            await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
-                        }
-                    }
-                },
             
-                // Enhanced Toast notification
                 showToast(message, type = 'info') {
-                    // Remove existing toasts
-                    document.querySelectorAll('.toast').forEach(toast => toast.remove());
-                    
                     const toast = document.createElement('div');
                     toast.className = `toast ${type}`;
                     toast.textContent = message;
                     document.body.appendChild(toast);
             
                     setTimeout(() => {
-                        if (toast.parentNode) {
-                            toast.remove();
-                        }
+                        toast.remove();
                     }, 4000);
                 }
             };
 
-            // Enhanced Input Validation
-            function validateInputs() {
-                const validators = {
-                    email: (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value),
-                    phone: (value) => /^\+?[\d\s-()]{10,}$/.test(value),
-                    name: (value) => value && value.length >= 2 && value.length <= 100,
-                    studentId: (value) => value && /^[A-Z0-9-]+$/.test(value)
-                };
+            // Enhanced Online Manager with better detection
+            const OnlineManager = {
+                isOnline: true, // Assume online by default
                 
-                return validators;
-            }
-
-            // Enhanced GPS Validation
-            async function validateGPSLocation(latitude, longitude, accuracy) {
-                // Check for impossible accuracy
-                if (accuracy > MAX_ALLOWED_ACCURACY) {
-                    throw new Error(`GPS accuracy too low: ${accuracy}m (max: ${MAX_ALLOWED_ACCURACY}m)`);
-                }
-                
-                // Check for null island (common fake location)
-                if (Math.abs(latitude) < 1 && Math.abs(longitude) < 1) {
-                    throw new Error('Invalid location detected');
-                }
-                
-                // Check if location is within reasonable bounds for Nairobi area
-                const NAIROBI_BOUNDS = {
-                    minLat: -1.5, maxLat: -1.0,
-                    minLon: 36.5, maxLon: 37.2
-                };
-                
-                if (latitude < NAIROBI_BOUNDS.minLat || latitude > NAIROBI_BOUNDS.maxLat ||
-                    longitude < NAIROBI_BOUNDS.minLon || longitude > NAIROBI_BOUNDS.maxLon) {
-                    console.warn('Location outside expected area:', { latitude, longitude });
-                    // Don't throw, just log for monitoring
-                }
-                
-                return true;
-            }
-
-            // Enhanced File Upload Validation
-            function validateImageFile(file) {
-                const maxSize = 5 * 1024 * 1024; // 5MB
-                const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
-                
-                if (!allowedTypes.includes(file.type)) {
-                    throw new Error('Please select a JPEG or PNG image');
-                }
-                
-                if (file.size > maxSize) {
-                    throw new Error('Image must be smaller than 5MB');
-                }
-                
-                return new Promise((resolve, reject) => {
-                    const img = new Image();
-                    img.onload = () => {
-                        if (img.width < 100 || img.height < 100) {
-                            reject(new Error('Image must be at least 100x100 pixels'));
-                        } else {
-                            resolve(true);
-                        }
-                    };
-                    img.onerror = () => reject(new Error('Invalid image file'));
-                    img.src = URL.createObjectURL(file);
-                });
-            }
-
-            // Rate Limiting Function
-            function canCheckIn(userId) {
-                const lastCheckIn = checkInCooldown.get(userId);
-                if (lastCheckIn && Date.now() - lastCheckIn < CHECKIN_COOLDOWN) {
-                    const remainingTime = Math.ceil((CHECKIN_COOLDOWN - (Date.now() - lastCheckIn)) / 1000 / 60);
-                    throw new Error(`Please wait ${remainingTime} minutes between check-ins`);
-                }
-                checkInCooldown.set(userId, Date.now());
-                return true;
-            }
-
-            // Keyboard Shortcuts
-            function setupKeyboardShortcuts() {
-                document.addEventListener('keydown', (e) => {
-                    // Ctrl + Number for tabs (Ctrl+1 for dashboard, etc.)
-                    if (e.ctrlKey && e.key >= '1' && e.key <= '8') {
-                        e.preventDefault();
-                        const tabs = ['dashboard', 'profile', 'calendar', 'courses', 'attendance', 'cats', 'resources', 'messages'];
-                        const tabIndex = parseInt(e.key) - 1;
-                        if (tabs[tabIndex]) {
-                            showTab(tabs[tabIndex]);
-                        }
-                    }
+                init() {
+                    // Set up event listeners
+                    window.addEventListener('online', () => {
+                        this.handleOnline();
+                    });
                     
-                    // Escape to close modals
-                    if (e.key === 'Escape') {
-                        closeTranscriptModal();
-                        closeMenu();
+                    window.addEventListener('offline', () => {
+                        this.handleOffline();
+                    });
+                    
+                    // Initial check
+                    this.checkConnection();
+                },
+                
+                async checkConnection() {
+                    try {
+                        // Try to fetch a small resource to verify connection
+                        await fetch('https://www.google.com/favicon.ico?=' + Date.now(), {
+                            method: 'HEAD',
+                            mode: 'no-cors',
+                            cache: 'no-cache'
+                        });
+                        this.handleOnline();
+                        return true;
+                    } catch (error) {
+                        // If fetch fails, check navigator.onLine as fallback
+                        if (navigator.onLine === false) {
+                            this.handleOffline();
+                        }
+                        return navigator.onLine;
                     }
-                });
-            }
+                },
+                
+                handleOnline() {
+                    this.isOnline = true;
+                    document.getElementById('offline-indicator').style.display = 'none';
+                    console.log('✅ Online');
+                },
+                
+                handleOffline() {
+                    this.isOnline = false;
+                    document.getElementById('offline-indicator').style.display = 'block';
+                    console.log('⚠️ Offline');
+                }
+            };
 
-            // Initialize keyboard shortcuts
-            setupKeyboardShortcuts();
+            // Initialize online manager
+            OnlineManager.init();
             
-            // *************************************************************************
-            // *** AUTHENTICATION ***
-            // *************************************************************************
-            
-            // Enforce authentication
+            // Authentication
             (async function enforceAuth() {
                 try {
                     console.log("🔐 Checking authentication...");
@@ -939,14 +711,12 @@
                         }),
                         loadClinicalTargets().catch(err => {
                             console.error("Clinical targets failed:", err);
-                            AppUtils.showToast('Clinical data incomplete', 'warning');
                         }),
                         loadClassTargets().catch(err => {
                             console.error("Class targets failed:", err);
                         }),
                         loadCourses().catch(err => {
                             console.error("Courses failed:", err);
-                            AppUtils.showToast('Course data unavailable', 'warning');
                         }),
                         loadExams().catch(err => {
                             console.error("Exams failed:", err);
@@ -961,10 +731,6 @@
                     showTab('dashboard');
                     loadDashboardMetrics(currentUserId);
                     
-                    // Track initial page load
-                    performanceMetrics.pageLoads++;
-                    Analytics.trackPageView('dashboard');
-                    
                     console.log("✅ Dashboard initialization complete");
                     
                 } catch (error) {
@@ -976,7 +742,6 @@
             // Logout function
             async function logout() {
                 try {
-                    Analytics.track('logout');
                     sb.realtime.channels.forEach(channel => sb.removeChannel(channel));
                     await sb.auth.signOut();
                     window.location.href = "login.html";
@@ -986,16 +751,12 @@
                 }
             }
             
-            // *************************************************************************
-            // *** UI AND NAVIGATION ***
-            // *************************************************************************
-            
+            // UI Navigation
             const sidebar = document.getElementById('sidebar');
             const overlay = document.querySelector('.overlay');
             const navLinks = document.querySelectorAll('.nav a');
             const tabs = document.querySelectorAll('.tab-content');
             
-            // Mobile menu functions
             function toggleMenu() {
                 if (sidebar.classList.contains('open')) {
                     closeMenu();
@@ -1016,27 +777,19 @@
                 document.body.style.overflow = 'auto';
             }
             
-            // Enhanced Tab navigation with analytics
             function showTab(tabId) {
-                // Highlight active link
                 navLinks.forEach(l => l.classList.remove('active'));
                 const activeLink = document.querySelector(`.nav a[data-tab="${tabId}"]`);
                 if (activeLink) activeLink.classList.add('active');
             
-                // Show active tab content
                 tabs.forEach(tab => tab.classList.remove('active'));
                 const activeTab = document.getElementById(tabId);
                 if (activeTab) activeTab.classList.add('active');
             
-                // Close mobile menu if open
                 if (sidebar.classList.contains('open')) {
                     closeMenu();
                 }
             
-                // Track page view
-                Analytics.trackPageView(tabId);
-            
-                // Load tab-specific data
                 switch(tabId) {
                     case 'profile':
                         if (currentUserId) loadProfile(currentUserId);
@@ -1070,11 +823,9 @@
                         break;
                 }
             
-                // Always refresh latest announcement
                 if (currentUserId) loadLatestOfficialAnnouncement();
             }
             
-            // Attach event listeners to nav links
             navLinks.forEach(link => {
                 link.addEventListener('click', e => {
                     e.preventDefault();
@@ -1083,11 +834,7 @@
                 });
             });
             
-            // *************************************************************************
-            // *** DASHBOARD FUNCTIONS ***
-            // *************************************************************************
-            
-            // Load welcome details with live clock
+            // Dashboard Functions
             async function loadWelcomeDetails() {
                 const studentName = currentUserProfile?.full_name || 'Student';
                 const welcomeHeader = document.getElementById('welcome-header');
@@ -1110,21 +857,18 @@
                     }
                 }
             
-                // Initialize and start the live clock
                 updateHeader();
                 setInterval(updateHeader, 1000);
             
-                // Load other messages
                 await loadStudentMessage('student_welcome', 'student-welcome-message');
                 await loadLatestOfficialAnnouncement();
             }
             
-            // Load student message from app_settings
             async function loadStudentMessage(key, elementId) {
                 const element = document.getElementById(elementId);
                 if (!element) return;
             
-                AppUtils.showLoading(element, 'Loading...', true); // Use skeleton loading
+                AppUtils.showLoading(element, 'Loading...');
             
                 try {
                     const { data, error } = await sb
@@ -1146,12 +890,11 @@
                 }
             }
             
-            // Load latest official announcement
             async function loadLatestOfficialAnnouncement() {
                 const element = document.getElementById('student-announcement');
                 if (!element) return;
             
-                AppUtils.showLoading(element, 'Loading latest announcement...', true);
+                AppUtils.showLoading(element, 'Loading latest announcement...');
             
                 try {
                     const { data, error } = await sb
@@ -1173,7 +916,7 @@
                     AppUtils.showError(element, 'Failed to load announcement. Please refresh.');
                 }
             }
-            
+
             // Load system messages for dashboard
             async function loadSystemMessages(studentProgram) {
                 const card = document.getElementById('latest-announcement-card');
@@ -1223,40 +966,32 @@
                 }
             }
             
-            // Load dashboard metrics
             async function loadDashboardMetrics(userId) {
                 try {
-                    // Show loading states with skeletons
-                    AppUtils.showLoading(document.getElementById('dashboard-attendance-rate'), '--%', true);
-                    AppUtils.showLoading(document.getElementById('dashboard-active-courses'), '0', true);
-                    AppUtils.showLoading(document.getElementById('dashboard-upcoming-exam'), 'Loading...', true);
-            
-                    // Load data in parallel for better performance
+                    AppUtils.showLoading(document.getElementById('dashboard-attendance-rate'), '--%');
+                    AppUtils.showLoading(document.getElementById('dashboard-active-courses'), '0');
+                    AppUtils.showLoading(document.getElementById('dashboard-upcoming-exam'), 'Loading...');
+
                     const [attendanceData, coursesData, examsData, resourcesData] = await Promise.all([
                         AppUtils.safeApiCall(() => loadAttendanceMetrics(userId)),
                         AppUtils.safeApiCall(() => loadCoursesMetrics()),
                         AppUtils.safeApiCall(() => loadExamsMetrics()),
                         AppUtils.safeApiCall(() => loadResourcesMetrics())
                     ]);
-            
-                    // Update UI with actual data
+
                     updateDashboardUI(attendanceData, coursesData, examsData, resourcesData);
-                    
-                    // Load profile photo
                     loadProfilePhoto();
                     
-                    // Load system messages
                     if (currentUserProfile?.program) {
                         loadSystemMessages(currentUserProfile.program);
                     }
-            
+
                 } catch (error) {
                     console.error('Dashboard metrics loading failed:', error);
                     AppUtils.showToast('Failed to load dashboard data', 'error');
                 }
             }
             
-            // Helper functions for metrics
             async function loadAttendanceMetrics(userId) {
                 const { data: logs, error } = await sb
                     .from('geo_attendance_logs')
@@ -1292,7 +1027,6 @@
             }
             
             function updateDashboardUI(attendance, courses, exams, resources) {
-                // Update attendance
                 if (attendance) {
                     document.getElementById('dashboard-attendance-rate').textContent = attendance.attendanceRate + '%';
                     document.getElementById('dashboard-verified-count').textContent = attendance.verifiedCount;
@@ -1300,12 +1034,10 @@
                     document.getElementById('dashboard-pending-count').textContent = attendance.pendingCount;
                 }
             
-                // Update courses
                 if (courses) {
                     document.getElementById('dashboard-active-courses').textContent = courses.count;
                 }
             
-                // Update exams
                 if (exams?.upcomingExam) {
                     const examDate = new Date(exams.upcomingExam.exam_date).toLocaleDateString('en-US', { 
                         month: 'short', day: 'numeric' 
@@ -1316,13 +1048,11 @@
                     document.getElementById('dashboard-upcoming-exam').textContent = 'No Exams Scheduled';
                 }
             
-                // Update resources
                 if (resources) {
                     document.getElementById('dashboard-new-resources').textContent = resources.newResourcesCount;
                 }
             }
             
-            // Load profile photo
             function loadProfilePhoto() {
                 const passportImg = document.getElementById('passport-preview');
                 const headerPassportImg = document.getElementById('header-passport-preview');
@@ -1334,15 +1064,12 @@
                     passportCard.style.display = photoUrl ? 'none' : 'block';
                 }
             
-                // Determine the photo source (URL or fallback)
                 let finalPhotoSrc = 'https://dummyimage.com/150x150/cccccc/000000.png&text=NO+PHOTO';
                 
                 if (photoUrl) {
-                    // Construct proper Supabase URL
                     finalPhotoSrc = `${window.APP_CONFIG.SUPABASE_URL}/storage/v1/object/public/passports/${photoUrl}?t=${new Date().getTime()}`;
                 }
             
-                // Update both profile and header images
                 if (passportImg) {
                     passportImg.src = finalPhotoSrc;
                     passportImg.onerror = function() {
@@ -1360,10 +1087,7 @@
                 }
             }
             
-            // *************************************************************************
-            // *** ENHANCED PROFILE MANAGEMENT ***
-            // *************************************************************************
-            
+            // Profile Management
             const profileForm = document.getElementById('profile-form');
             const passportFileInput = document.getElementById('passport-file-input');
             const passportPreview = document.getElementById('passport-preview');
@@ -1373,7 +1097,6 @@
             const saveProfileButton = document.getElementById('save-profile-button');
             const uploadLabel = document.getElementById('upload-label');
             
-            // Load profile from consolidated_user_profiles_table
             async function loadProfile(userId) {
                 if (profileStatus) profileStatus.textContent = 'Loading profile...';
             
@@ -1392,7 +1115,6 @@
                     if (profileStatus) profileStatus.textContent = '';
                 }
             
-                // Populate form fields
                 if (document.getElementById('profile-student-id')) document.getElementById('profile-student-id').value = currentUserProfile.student_id || 'N/A';
                 if (document.getElementById('profile-name')) document.getElementById('profile-name').value = currentUserProfile.full_name || 'N/A';
                 if (document.getElementById('profile-email')) document.getElementById('profile-email').value = currentUserProfile.email || 'N/A';
@@ -1401,16 +1123,13 @@
                 if (document.getElementById('profile-block')) document.getElementById('profile-block').value = currentUserProfile.block || 'N/A';
                 if (document.getElementById('profile-intake-year')) document.getElementById('profile-intake-year').value = currentUserProfile.intake_year || 'N/A';
             
-                // Load profile photo
                 loadProfilePhoto();
-            
                 toggleProfileEdit(false);
                 if (uploadLabel && !currentUserProfile.passport_url) {
                     uploadLabel.style.display = 'block';
                 }
             }
             
-            // Toggle profile edit mode
             function toggleProfileEdit(enable) {
                 const editableFields = ['profile-name', 'profile-phone'];
             
@@ -1419,18 +1138,15 @@
                     if (input) input.readOnly = !enable;
                 });
             
-                // Non-editable fields
                 if (document.getElementById('profile-student-id')) document.getElementById('profile-student-id').readOnly = true;
                 if (document.getElementById('profile-email')) document.getElementById('profile-email').readOnly = true;
                 if (document.getElementById('profile-program')) document.getElementById('profile-program').readOnly = true;
                 if (document.getElementById('profile-block')) document.getElementById('profile-block').readOnly = true;
                 if (document.getElementById('profile-intake-year')) document.getElementById('profile-intake-year').readOnly = true;
             
-                // Toggle buttons
                 if (editProfileButton) editProfileButton.style.display = enable ? 'none' : 'block';
                 if (saveProfileButton) saveProfileButton.style.display = enable ? 'block' : 'none';
             
-                // Upload label visibility
                 if (uploadLabel) {
                     if (enable || !(currentUserProfile && currentUserProfile.passport_url)) {
                         uploadLabel.style.display = 'block';
@@ -1442,45 +1158,20 @@
                 if (document.getElementById('upload-button')) document.getElementById('upload-button').style.display = 'none';
             }
             
-            // Enhanced profile validation
-            function validateProfileForm(data) {
-                const errors = [];
-                const validators = validateInputs();
-                
-                if (!validators.name(data.full_name)) {
-                    errors.push('Full name must be between 2-100 characters');
-                }
-                if (data.phone && !validators.phone(data.phone)) {
-                    errors.push('Please enter a valid phone number');
-                }
-                
-                return errors;
-            }
-            
-            // Edit profile button event
             if (editProfileButton) {
                 editProfileButton.addEventListener('click', () => toggleProfileEdit(true));
             }
             
-            // Save profile with validation
             if (profileForm) {
                 profileForm.addEventListener('submit', async (e) => {
                     e.preventDefault();
-                    
+                    if (profileStatus) profileStatus.textContent = 'Saving changes...';
+            
                     const updates = {
                         full_name: document.getElementById('profile-name').value,
                         phone: document.getElementById('profile-phone').value,
                         updated_at: new Date().toISOString()
                     };
-                    
-                    // Validate inputs
-                    const errors = validateProfileForm(updates);
-                    if (errors.length > 0) {
-                        if (profileStatus) profileStatus.textContent = `Validation errors: ${errors.join(', ')}`;
-                        return;
-                    }
-                    
-                    if (profileStatus) profileStatus.textContent = 'Saving changes...';
             
                     const { error } = await sb
                         .from('consolidated_user_profiles_table')
@@ -1491,32 +1182,22 @@
                         if (profileStatus) profileStatus.textContent = `Error saving profile: ${error.message}`;
                     } else {
                         if (profileStatus) profileStatus.textContent = 'Profile updated successfully!';
-                        Analytics.track('profile_updated');
                         loadProfile(currentUserId);
                     }
                 });
             }
             
-            // Enhanced passport photo upload with validation
             if (passportFileInput) {
-                passportFileInput.addEventListener('change', async () => {
+                passportFileInput.addEventListener('change', () => {
                     const file = passportFileInput.files[0];
                     if (file) {
-                        try {
-                            await validateImageFile(file);
-                            // Display temporary object URL for preview
-                            if (passportPreview) passportPreview.src = URL.createObjectURL(file);
-                            if (uploadButton) uploadButton.style.display = 'block';
-                            if (uploadLabel) uploadLabel.style.display = 'none';
-                        } catch (error) {
-                            AppUtils.showToast(error.message, 'error');
-                            passportFileInput.value = '';
-                        }
+                        if (passportPreview) passportPreview.src = URL.createObjectURL(file);
+                        if (uploadButton) uploadButton.style.display = 'block';
+                        if (uploadLabel) uploadLabel.style.display = 'none';
                     }
                 });
             }
             
-            // Upload photo button
             if (uploadButton) {
                 uploadButton.addEventListener('click', async () => {
                     const file = passportFileInput.files[0];
@@ -1525,59 +1206,43 @@
                         return;
                     }
             
-                    if (profileStatus) profileStatus.textContent = 'Uploading photo... (This may take a few seconds)';
+                    if (profileStatus) profileStatus.textContent = 'Uploading photo...';
                     if (uploadButton) uploadButton.disabled = true;
             
-                    try {
-                        const fileExt = file.name.split('.').pop();
-                        const filePath = `${currentUserId}.${fileExt}`;
+                    const fileExt = file.name.split('.').pop();
+                    const filePath = `${currentUserId}.${fileExt}`;
             
-                        const { error: uploadError } = await sb.storage
-                            .from('passports')
-                            .upload(filePath, file, { cacheControl: '3600', upsert: true });
+                    const { error: uploadError } = await sb.storage
+                        .from('passports')
+                        .upload(filePath, file, { cacheControl: '3600', upsert: true });
             
-                        if (uploadError) {
-                            if (profileStatus) profileStatus.textContent = `Upload failed: ${uploadError.message}`;
-                            if (uploadButton) uploadButton.disabled = false;
-                            return;
-                        }
-            
-                        const { error: updateError } = await sb
-                            .from('consolidated_user_profiles_table')
-                            .update({ passport_url: filePath, updated_at: new Date().toISOString() })
-                            .eq('user_id', currentUserId);
-            
-                        if (updateError) {
-                            if (profileStatus) profileStatus.textContent = `Database update failed: ${updateError.message}`;
-                        } else {
-                            if (profileStatus) profileStatus.textContent = 'Photo uploaded and saved successfully! Refreshing profile...';
-                            
-                            // Clear file input and hide buttons after successful upload
-                            if (passportFileInput) passportFileInput.value = ''; 
-                            if (uploadButton) uploadButton.style.display = 'none';
-                            if (uploadLabel) uploadLabel.style.display = 'none';
-                            
-                            // Reload profile and dashboard to reflect change
-                            await loadProfile(currentUserId);
-                            loadDashboardMetrics(currentUserId);
-                            
-                            // Set final status message
-                            if (profileStatus) profileStatus.textContent = 'Photo updated successfully!';
-                            Analytics.track('photo_uploaded');
-                        }
-                    } catch (error) {
-                        if (profileStatus) profileStatus.textContent = `Upload failed: ${error.message}`;
-                    } finally {
+                    if (uploadError) {
+                        if (profileStatus) profileStatus.textContent = `Upload failed: ${uploadError.message}`;
                         if (uploadButton) uploadButton.disabled = false;
+                        return;
                     }
+            
+                    const { error: updateError } = await sb
+                        .from('consolidated_user_profiles_table')
+                        .update({ passport_url: filePath, updated_at: new Date().toISOString() })
+                        .eq('user_id', currentUserId);
+            
+                    if (updateError) {
+                        if (profileStatus) profileStatus.textContent = `Database update failed: ${updateError.message}`;
+                    } else {
+                        if (profileStatus) profileStatus.textContent = 'Photo uploaded successfully!';
+                        if (passportFileInput) passportFileInput.value = ''; 
+                        if (uploadButton) uploadButton.style.display = 'none';
+                        if (uploadLabel) uploadLabel.style.display = 'none';
+                        await loadProfile(currentUserId);
+                        loadDashboardMetrics(currentUserId);
+                    }
+            
+                    if (uploadButton) uploadButton.disabled = false;
                 });
             }
             
-            // *************************************************************************
-            // *** ENHANCED ATTENDANCE SYSTEM ***
-            // *************************************************************************
-            
-            // Load clinical targets
+            // Attendance System
             async function loadClinicalTargets() {
                 if (!currentUserProfile || (!currentUserProfile.program && !currentUserProfile.department) || !currentUserProfile.intake_year) {
                     await loadProfile(currentUserId);
@@ -1593,7 +1258,6 @@
                 }
             
                 try {
-                    // Geo-based clinical areas
                     const { data: areaData, error: areaError } = await sb
                         .from('clinical_areas')
                         .select('id, name, latitude, longitude, block, program, intake_year')
@@ -1602,7 +1266,6 @@
                         .or(blockTerm ? `block.ilike.${blockTerm},block.is.null` : 'block.is.null');
                     if (areaError) throw areaError;
             
-                    // Textual clinical names including UUID + coordinates
                     const { data: nameData, error: nameError } = await sb
                         .from('clinical_names')
                         .select('id, uuid, clinical_area_name, latitude, longitude, program, intake_year, block_term')
@@ -1611,7 +1274,6 @@
                         .or(blockTerm ? `block_term.ilike.${blockTerm},block_term.is.null` : 'block_term.is.null');
                     if (nameError) throw nameError;
             
-                    // Map textual names to use actual UUIDs + keep coordinates
                     const mappedNames = (nameData || []).map(n => ({
                         id: n.uuid,
                         original_id: n.id,
@@ -1621,7 +1283,6 @@
                         block: n.block_term || null
                     }));
             
-                    // Merge + deduplicate
                     cachedClinicalAreas = [...(areaData || []), ...mappedNames]
                         .filter((v, i, a) => a.findIndex(t => t.name === v.name) === i)
                         .sort((a, b) => a.name.localeCompare(b.name));
@@ -1632,7 +1293,6 @@
                 }
             }
             
-            // Load class targets
             async function loadClassTargets() {
                 if (!currentUserProfile || (!currentUserProfile.program && !currentUserProfile.department) || !currentUserProfile.intake_year) {
                     await loadProfile(currentUserId); 
@@ -1672,12 +1332,11 @@
                 }
             }
             
-            // Load attendance history
             async function loadGeoAttendanceHistory(userId) {
                 const tableBody = document.getElementById('geo-attendance-history');
                 if (!tableBody) return;
                 
-                AppUtils.showLoading(tableBody, 'Loading geo check-in history...', true);
+                tableBody.innerHTML = '<tr><td colspan="4">Loading geo check-in history...</td></tr>';
             
                 try {
                     const { data: logs, error } = await sb
@@ -1711,11 +1370,10 @@
                     });
                 } catch (error) {
                     console.error("Failed to load attendance history:", error);
-                    AppUtils.showError(tableBody, `Error loading attendance logs: ${error.message}`);
+                    tableBody.innerHTML = `<tr><td colspan="4" style="color:#EF4444;">Error loading attendance logs: ${error.message}</td></tr>`;
                 }
             }
             
-            // Update target dropdown
             function updateTargetSelect() {
                 const sessionTypeSelect = document.getElementById('session-type');
                 const attendanceTargetSelect = document.getElementById('attendance-target');
@@ -1773,7 +1431,6 @@
                 geoMessage.innerHTML = `Please select a specific <strong>${label.replace(':', '')}</strong> to check in.`;
             }
             
-            // Get device ID
             function getDeviceId() {
                 let deviceId = localStorage.getItem('device_id');
                 if (!deviceId) {
@@ -1783,7 +1440,16 @@
                 return deviceId;
             }
             
-            // Enhanced Geo check-in function with rate limiting and validation
+            function canCheckIn(userId) {
+                const lastCheckIn = checkInCooldown.get(userId);
+                if (lastCheckIn && Date.now() - lastCheckIn < CHECKIN_COOLDOWN) {
+                    const remainingTime = Math.ceil((CHECKIN_COOLDOWN - (Date.now() - lastCheckIn)) / 1000 / 60);
+                    throw new Error(`Please wait ${remainingTime} minutes between check-ins`);
+                }
+                checkInCooldown.set(userId, Date.now());
+                return true;
+            }
+            
             async function geoCheckIn() {
                 const button = document.getElementById('check-in-button');
                 const geoMessage = document.getElementById('geo-message');
@@ -1794,17 +1460,6 @@
                 if (geoMessage) geoMessage.textContent = '⏱️ Initializing check-in...';
             
                 try {
-                    // Check if online
-                    if (!OnlineManager.isOnline) {
-                        AppUtils.showToast('You are offline. Check-in will be queued.', 'warning');
-                        // Queue check-in for later
-                        OnlineManager.queueCheckIn({
-                            sessionType: sessionTypeSelect?.value,
-                            target: attendanceTargetSelect?.value
-                        });
-                        return;
-                    }
-                    
                     // Check rate limiting
                     canCheckIn(currentUserId);
                     
@@ -1826,7 +1481,6 @@
                         return;
                     }
             
-                    // TargetSelect format is ID|NAME
                     const [targetId, targetNameFromDropdown] = targetSelect.split('|');
             
                     if (!targetId || !targetNameFromDropdown) {
@@ -1834,9 +1488,8 @@
                         return;
                     }
             
-                    if (geoMessage) geoMessage.textContent = '⏱️ Requesting device location... (Allow up to 15 seconds for GPS lock)';
+                    if (geoMessage) geoMessage.textContent = '⏱️ Requesting device location...';
             
-                    // Get geolocation
                     const location = await new Promise(resolve => {
                         if (!navigator.geolocation) return resolve({ lat: FALLBACK_LAT, lon: FALLBACK_LON, acc: FALLBACK_ACCURACY, friendly: 'GPS unavailable' });
                         navigator.geolocation.getCurrentPosition(
@@ -1844,12 +1497,8 @@
                             () => resolve({ lat: FALLBACK_LAT, lon: FALLBACK_LON, acc: FALLBACK_ACCURACY, friendly: 'GPS denied/timeout' }),
                             { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
                         );
-                    });
+                    );
             
-                    // Validate GPS location
-                    await validateGPSLocation(location.lat, location.lon, location.acc);
-            
-                    // Reverse-geocode for friendly name
                     if (!location.friendly) {
                         try {
                             const res = await fetch(`${LOCATIONIQ_API_URL}?key=${LOCATIONIQ_API_KEY}&lat=${location.lat}&lon=${location.lon}&format=json`);
@@ -1861,11 +1510,9 @@
                             }
                         } catch (err) {
                             location.friendly = `Lat:${location.lat.toFixed(4)}, Lon:${location.lon.toFixed(4)} (Geo-API error)`;
-                            console.warn('Reverse geocoding error:', err);
                         }
                     }
             
-                    // Find the target entry to get coordinates and the CORRECT name
                     let targetEntry = sessionType === 'Clinical'
                         ? cachedClinicalAreas.find(c => c.id === targetId)
                         : cachedCourses.find(c => c.id === targetId);
@@ -1879,7 +1526,6 @@
                     let targetNameToLog = targetNameFromDropdown;
                     let selectedCourseId = null;
             
-                    // Set name and ID for logging based on type
                     if (sessionType === 'Class') {
                         targetNameToLog = targetEntry.name; 
                         selectedCourseId = targetEntry.id;
@@ -1888,8 +1534,7 @@
                         dbTargetId = targetEntry.id;
                     }
             
-                    // Haversine distance calculation
-                    const R = 6371000; // Earth radius in meters
+                    const R = 6371000;
                     const toRad = x => x * Math.PI / 180;
                     const dLat = toRad(location.lat - targetEntry.latitude);
                     const dLon = toRad(location.lon - targetEntry.longitude);
@@ -1900,7 +1545,6 @@
                     const distanceMeters = R * c;
                     const isVerified = distanceMeters <= MAX_DISTANCE_RADIUS;
             
-                    // RPC call to insert check-in
                     const { error } = await sb.rpc('check_in_and_defer_fk', {
                         p_student_id: currentUserId,
                         p_check_in_time: checkInTime,
@@ -1924,9 +1568,7 @@
                         console.error('Check-in failed:', error);
                         if (geoMessage) geoMessage.textContent = `Check-in failed: ${error.message}`;
                     } else {
-                        // ✅ UPDATED: Simplified success message
                         if (geoMessage) geoMessage.innerHTML = `✅ Check-in complete! ${isVerified ? 'Verified successfully' : 'Pending verification'}`;
-                        Analytics.trackCheckIn(sessionType, isVerified);
                         loadGeoAttendanceHistory(currentUserId);
                     }
             
@@ -1937,16 +1579,12 @@
                     if (button) button.disabled = false;
                 }
             }
-            
-            // *************************************************************************
-            // *** COURSES, EXAMS, AND RESOURCES ***
-            // *************************************************************************
-            
-            // Load courses - FIXED VERSION
+
+            // Courses, Exams, and Resources
             async function loadCourses() {
                 const tableBody = document.getElementById('courses-table');
                 if (!tableBody) return;
-                AppUtils.showLoading(tableBody, 'Loading courses...', true);
+                AppUtils.showLoading(tableBody, 'Loading courses...');
 
                 if (!currentUserProfile) await loadProfile(currentUserId); 
                 
@@ -1954,14 +1592,6 @@
                 const department = currentUserProfile?.department;
                 const block = currentUserProfile?.block;
                 const intakeYear = currentUserProfile?.intake_year;
-
-                // Debug info
-                console.log('User Profile:', {
-                    program: program,
-                    department: department,
-                    block: block,
-                    intakeYear: intakeYear
-                });
 
                 if ((!program && !department) || !intakeYear) {
                     tableBody.innerHTML = `<tr><td colspan="4">
@@ -1978,41 +1608,26 @@
                 try {
                     const blockFilter = `block.eq.${block},block.is.null,block.eq.General`;
 
-                    // Determine the correct target_program filter (REMOVED General since it doesn't exist)
                     let programFilter;
                     
-                    // TVET students - check all possible combinations
                     if (program === 'TVET' || department === 'TVET') {
-                        programFilter = `target_program.eq.TVET`; // Removed ,target_program.eq.General
-                        console.log('Filtering for TVET courses only');
+                        programFilter = `target_program.eq.TVET`;
                     } 
-                    // KRCHN students have program = 'KRCHN'
                     else if (program === 'KRCHN') {
-                        programFilter = `target_program.eq.KRCHN`; // Removed ,target_program.eq.General
-                        console.log('Filtering for KRCHN courses only');
+                        programFilter = `target_program.eq.KRCHN`;
                     }
-                    // Nursing department students
                     else if (department === 'Nursing') {
-                        programFilter = `target_program.eq.Nursing`; // Removed ,target_program.eq.General
-                        console.log('Filtering for Nursing courses only');
+                        programFilter = `target_program.eq.Nursing`;
                     }
-                    // Clinical Medicine department
                     else if (department === 'Clinical Medicine') {
-                        programFilter = `target_program.eq.Clinical Medicine`; // Removed ,target_program.eq.General
-                        console.log('Filtering for Clinical Medicine courses only');
+                        programFilter = `target_program.eq.Clinical Medicine`;
                     }
-                    // Management department
                     else if (department === 'Management') {
-                        programFilter = `target_program.eq.Management`; // Removed ,target_program.eq.General
-                        console.log('Filtering for Management courses only');
+                        programFilter = `target_program.eq.Management`;
                     }
                     else {
-                        // Fallback: use program field if available
-                        programFilter = `target_program.eq.${program}`; // Removed ,target_program.eq.General
-                        console.log('Filtering for program:', program);
+                        programFilter = `target_program.eq.${program}`;
                     }
-
-                    console.log('Final program filter:', programFilter);
 
                     const { data: courses, error } = await sb
                         .from('courses')
@@ -2025,9 +1640,6 @@
                     if (error) throw error;
 
                     cachedCourses = courses || [];
-                    
-                    console.log('Found courses:', cachedCourses.length);
-                    console.log('Courses for', program || department, ':', cachedCourses);
                     
                     tableBody.innerHTML = '';
                     if (cachedCourses.length > 0) {
@@ -2046,8 +1658,6 @@
                             No courses found for: ${program || department} 
                             (Program: ${program || 'undefined'}, Department: ${department || 'undefined'})
                             <br>Intake Year: ${intakeYear}, Block: ${block}
-                            <br>Filter used: ${programFilter}
-                            <br><small>Check if courses exist with target_program = '${program || department}' and intake_year = '${intakeYear}'</small>
                         </td></tr>`;
                     }
 
@@ -2078,7 +1688,7 @@
                 const tableBody = document.getElementById('exams-table');
                 if (!tableBody) return;
             
-                AppUtils.showLoading(tableBody, 'Loading your exams and grades...', true);
+                AppUtils.showLoading(tableBody, 'Loading your exams and grades...');
             
                 if (!currentUserProfile) await loadProfile(currentUserId);
                 const program = currentUserProfile?.program || currentUserProfile?.department;
@@ -2220,7 +1830,6 @@
                 document.getElementById('transcript-status').style.color = statusColor;
             
                 document.getElementById('transcript-modal').style.display = 'flex';
-                Analytics.track('transcript_viewed', { exam_id: examId });
             }
             
             // Close transcript modal
@@ -2355,8 +1964,6 @@
                         Download File
                     </a>
                 `;
-
-                Analytics.track('resource_viewed', { resource_id: resourceId, file_type: ext });
             }
             
             // Load resources
@@ -2365,7 +1972,7 @@
             
                 const resourceListContainer = document.getElementById('resources-list');
                 if (!resourceListContainer) return;
-                AppUtils.showLoading(resourceListContainer, 'Loading resources...', true);
+                AppUtils.showLoading(resourceListContainer, 'Loading resources...');
                 cachedResources = [];
             
                 try {
@@ -2424,10 +2031,7 @@
                 }
             }
             
-            // *************************************************************************
-            // *** ACADEMIC CALENDAR ***
-            // *************************************************************************
-            
+            // Academic Calendar
             async function fetchAllScheduleData() {
                 if (!currentUserProfile || !currentUserProfile.program && !currentUserProfile.department || !currentUserProfile.intake_year) {
                     await loadProfile(currentUserId); 
@@ -2471,7 +2075,7 @@
             async function loadAcademicCalendar() {
                 const tableBody = document.getElementById('calendar-table');
                 if (!tableBody) return;
-                AppUtils.showLoading(tableBody, 'Loading academic schedule...', true);
+                AppUtils.showLoading(tableBody, 'Loading academic schedule...');
             
                 try {
                     const allEvents = await fetchAllScheduleData();
@@ -2506,10 +2110,7 @@
                 }
             }
             
-            // *************************************************************************
-            // *** MESSAGES SYSTEM ***
-            // *************************************************************************
-            
+            // Messages System
             async function loadStudentMessagesAndAnnouncements() {
                 if (!currentUserProfile || (!currentUserProfile.program && !currentUserProfile.department)) {
                     await loadProfile(currentUserId);
@@ -2519,7 +2120,7 @@
                 const messageContainer = document.getElementById('messages-list');
                 if (!messageContainer) return;
             
-                AppUtils.showLoading(messageContainer, 'Loading messages...', true);
+                AppUtils.showLoading(messageContainer, 'Loading messages...');
             
                 try {
                     // Load personal messages
@@ -2563,7 +2164,7 @@
             
                         messageContainer.innerHTML += `
                             <div class="message-item ${isRead}" style="border-left: 4px solid ${borderColor}; padding: 15px; margin-bottom: 10px; background-color: white; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-                                <div class="message-header" style="display: flex; justify-content: space-between; font-weight: bold; color: #4C1D95;">
+                                <div class="message-header" style="display: flex; justify-content: between; font-weight: bold; color: #4C1D95;">
                                     <span class="message-title">${escapeHtml(title)}</span>
                                     <span class="message-date" style="font-weight: normal; color: #6B7280;">${createdAt}</span>
                                 </div>
@@ -2578,11 +2179,46 @@
                     AppUtils.showError(messageContainer, 'Error loading messages and announcements.');
                 }
             }
+
+            // Message form submission
+            const messageForm = document.getElementById('message-form');
+            if (messageForm) {
+                messageForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const messageBody = document.getElementById('student-message-body').value;
+                    const messageStatus = document.getElementById('message-status');
+
+                    if (!messageBody.trim()) {
+                        messageStatus.textContent = 'Please write a message.';
+                        return;
+                    }
+
+                    messageStatus.textContent = 'Sending message...';
+
+                    try {
+                        const { error } = await sb
+                            .from('student_messages')
+                            .insert([
+                                {
+                                    student_id: currentUserId,
+                                    message_body: messageBody,
+                                    created_at: new Date().toISOString()
+                                }
+                            ]);
+
+                        if (error) throw error;
+
+                        messageStatus.textContent = 'Message sent successfully!';
+                        document.getElementById('student-message-body').value = '';
+                        loadStudentMessagesAndAnnouncements();
+                    } catch (error) {
+                        console.error('Error sending message:', error);
+                        messageStatus.textContent = 'Failed to send message. Please try again.';
+                    }
+                });
+            }
             
-            // *************************************************************************
-            // *** GLOBAL EVENT LISTENERS ***
-            // *************************************************************************
-            
+            // Global Event Listeners
             document.addEventListener('DOMContentLoaded', async () => {
                 // Setup global error handlers
                 window.addEventListener('error', (event) => {
@@ -2629,7 +2265,6 @@
             initializeApplication();
         } else {
             document.addEventListener('DOMContentLoaded', function() {
-                // Give config.js a moment to load
                 setTimeout(() => {
                     if (window.APP_CONFIG) {
                         initializeApplication();
