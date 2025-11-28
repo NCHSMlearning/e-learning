@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-  <link rel="stylesheet" href="indexstyle.css">
+    <link rel="stylesheet" href="indexstyle.css">
 </head>
 <body>
     <!-- Mobile Header -->
@@ -303,31 +303,58 @@
                 </div>
             </section>
 
-          <!-- Resources Tab -->
-<section id="resources" class="tab-content">
-    <div class="resources-header">
-        <h2 style="color: var(--color-primary); margin-bottom: 8px;">Learning Resources</h2>
-        <p class="subtitle" style="margin-bottom: 20px;">Access your course materials and study resources</p>
-    </div>
-    
-    <div class="resources-container">
-        <div id="resources-list" class="resources-sidebar">
-            <div class="resources-count">
-                <strong id="resources-count">0</strong> resources available
-            </div>
-            <!-- Resources will be loaded here dynamically -->
-            <div class="loading-state">Loading resources...</div>
-        </div>
+            <!-- Enhanced Resources Tab -->
+            <section id="resources" class="tab-content">
+                <div class="resources-header">
+                    <h2 style="color: var(--color-primary); margin-bottom: 8px;">Learning Resources</h2>
+                    <p class="subtitle" style="margin-bottom: 20px;">Access your course materials and study resources</p>
+                    
+                    <!-- Mobile-Optimized Controls -->
+                    <div class="resources-controls">
+                        <div class="search-box">
+                            <i class="fas fa-search"></i>
+                            <input type="text" id="resource-search" placeholder="Search resources...">
+                        </div>
+                        
+                        <div class="filter-group">
+                            <select id="resource-filter">
+                                <option value="all">All Resources</option>
+                                <option value="pdf">PDF Notes</option>
+                                <option value="video">Video Lectures</option>
+                                <option value="slides">Presentation Slides</option>
+                                <option value="assignment">Assignments</option>
+                            </select>
+                            
+                            <select id="course-filter">
+                                <option value="all">All Courses</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Mobile-First Resources Grid -->
+                <div class="resources-grid" id="resources-grid">
+                    <!-- Resources will be loaded here dynamically -->
+                    <div class="loading-state">Loading resources...</div>
+                </div>
 
-        <div id="resource-viewer" class="resource-preview">
-            <div class="preview-placeholder">
-                <i class="fas fa-file-alt"></i>
-                <h3>Select a Resource</h3>
-                <p>Choose a resource from the list to view its content</p>
-            </div>
-        </div>
-    </div>
-</section>
+                <!-- Mobile Reader View -->
+                <div id="mobile-reader" class="mobile-reader" style="display: none;">
+                    <div class="reader-header">
+                        <button class="reader-back" onclick="closeReader()">
+                            <i class="fas fa-arrow-left"></i>
+                        </button>
+                        <h3 id="reader-title">Resource Title</h3>
+                        <button class="reader-download" onclick="downloadCurrentResource()">
+                            <i class="fas fa-download"></i>
+                        </button>
+                    </div>
+                    <div class="reader-content" id="reader-content">
+                        <!-- Resource content will be loaded here -->
+                    </div>
+                </div>
+            </section>
+
             <!-- Messages Tab -->
             <section id="messages" class="tab-content">
                 <h2 style="color: var(--color-primary);">Message Admin / Instructor</h2>
@@ -378,10 +405,11 @@
         // *************************************************************************
 
         // Hides the .html extension in the URL
-if (window.location.pathname.endsWith('.html')) {
-    const cleanPath = window.location.pathname.replace(/\.html$/, '');
-    window.history.replaceState({}, '', cleanPath);
-}
+        if (window.location.pathname.endsWith('.html')) {
+            const cleanPath = window.location.pathname.replace(/\.html$/, '');
+            window.history.replaceState({}, '', cleanPath);
+        }
+
         // Configuration validation
         function validateConfig() {
             if (!window.APP_CONFIG) {
@@ -1510,9 +1538,8 @@ if (window.location.pathname.endsWith('.html')) {
                         p_device_id: deviceId,
                         p_is_verified: isVerified,
                         p_course_id: selectedCourseId,
-                       // ADD THIS NEW PARAMETER:
-    p_student_name: studentProfile.full_name || studentProfile.name || 'Unknown Student'
-});
+                        p_student_name: studentProfile.full_name || studentProfile.name || 'Unknown Student'
+                    });
             
                     if (error) {
                         console.error('Check-in failed:', error);
@@ -1535,137 +1562,137 @@ if (window.location.pathname.endsWith('.html')) {
             // *** COURSES, EXAMS, AND RESOURCES ***
             // *************************************************************************
             
-           // Load courses - FIXED VERSION
-async function loadCourses() {
-    const tableBody = document.getElementById('courses-table');
-    if (!tableBody) return;
-    AppUtils.showLoading(tableBody, 'Loading courses...');
+            // Load courses - FIXED VERSION
+            async function loadCourses() {
+                const tableBody = document.getElementById('courses-table');
+                if (!tableBody) return;
+                AppUtils.showLoading(tableBody, 'Loading courses...');
 
-    if (!currentUserProfile) await loadProfile(currentUserId); 
-    
-    const program = currentUserProfile?.program;
-    const department = currentUserProfile?.department;
-    const block = currentUserProfile?.block;
-    const intakeYear = currentUserProfile?.intake_year;
+                if (!currentUserProfile) await loadProfile(currentUserId); 
+                
+                const program = currentUserProfile?.program;
+                const department = currentUserProfile?.department;
+                const block = currentUserProfile?.block;
+                const intakeYear = currentUserProfile?.intake_year;
 
-    // Debug info
-    console.log('User Profile:', {
-        program: program,
-        department: department,
-        block: block,
-        intakeYear: intakeYear
-    });
+                // Debug info
+                console.log('User Profile:', {
+                    program: program,
+                    department: department,
+                    block: block,
+                    intakeYear: intakeYear
+                });
 
-    if ((!program && !department) || !intakeYear) {
-        tableBody.innerHTML = `<tr><td colspan="4">
-            Missing program/department or intake year info. 
-            Program: ${program || 'undefined'}, 
-            Department: ${department || 'undefined'},
-            Intake Year: ${intakeYear || 'undefined'}
-            Cannot load courses.
-        </td></tr>`;
-        cachedCourses = [];
-        return;
-    }
+                if ((!program && !department) || !intakeYear) {
+                    tableBody.innerHTML = `<tr><td colspan="4">
+                        Missing program/department or intake year info. 
+                        Program: ${program || 'undefined'}, 
+                        Department: ${department || 'undefined'},
+                        Intake Year: ${intakeYear || 'undefined'}
+                        Cannot load courses.
+                    </td></tr>`;
+                    cachedCourses = [];
+                    return;
+                }
 
-    try {
-        const blockFilter = `block.eq.${block},block.is.null,block.eq.General`;
+                try {
+                    const blockFilter = `block.eq.${block},block.is.null,block.eq.General`;
 
-        // Determine the correct target_program filter (REMOVED General since it doesn't exist)
-        let programFilter;
-        
-        // TVET students - check all possible combinations
-        if (program === 'TVET' || department === 'TVET') {
-            programFilter = `target_program.eq.TVET`; // Removed ,target_program.eq.General
-            console.log('Filtering for TVET courses only');
-        } 
-        // KRCHN students have program = 'KRCHN'
-        else if (program === 'KRCHN') {
-            programFilter = `target_program.eq.KRCHN`; // Removed ,target_program.eq.General
-            console.log('Filtering for KRCHN courses only');
-        }
-        // Nursing department students
-        else if (department === 'Nursing') {
-            programFilter = `target_program.eq.Nursing`; // Removed ,target_program.eq.General
-            console.log('Filtering for Nursing courses only');
-        }
-        // Clinical Medicine department
-        else if (department === 'Clinical Medicine') {
-            programFilter = `target_program.eq.Clinical Medicine`; // Removed ,target_program.eq.General
-            console.log('Filtering for Clinical Medicine courses only');
-        }
-        // Management department
-        else if (department === 'Management') {
-            programFilter = `target_program.eq.Management`; // Removed ,target_program.eq.General
-            console.log('Filtering for Management courses only');
-        }
-        else {
-            // Fallback: use program field if available
-            programFilter = `target_program.eq.${program}`; // Removed ,target_program.eq.General
-            console.log('Filtering for program:', program);
-        }
+                    // Determine the correct target_program filter (REMOVED General since it doesn't exist)
+                    let programFilter;
+                    
+                    // TVET students - check all possible combinations
+                    if (program === 'TVET' || department === 'TVET') {
+                        programFilter = `target_program.eq.TVET`; // Removed ,target_program.eq.General
+                        console.log('Filtering for TVET courses only');
+                    } 
+                    // KRCHN students have program = 'KRCHN'
+                    else if (program === 'KRCHN') {
+                        programFilter = `target_program.eq.KRCHN`; // Removed ,target_program.eq.General
+                        console.log('Filtering for KRCHN courses only');
+                    }
+                    // Nursing department students
+                    else if (department === 'Nursing') {
+                        programFilter = `target_program.eq.Nursing`; // Removed ,target_program.eq.General
+                        console.log('Filtering for Nursing courses only');
+                    }
+                    // Clinical Medicine department
+                    else if (department === 'Clinical Medicine') {
+                        programFilter = `target_program.eq.Clinical Medicine`; // Removed ,target_program.eq.General
+                        console.log('Filtering for Clinical Medicine courses only');
+                    }
+                    // Management department
+                    else if (department === 'Management') {
+                        programFilter = `target_program.eq.Management`; // Removed ,target_program.eq.General
+                        console.log('Filtering for Management courses only');
+                    }
+                    else {
+                        // Fallback: use program field if available
+                        programFilter = `target_program.eq.${program}`; // Removed ,target_program.eq.General
+                        console.log('Filtering for program:', program);
+                    }
 
-        console.log('Final program filter:', programFilter);
+                    console.log('Final program filter:', programFilter);
 
-        const { data: courses, error } = await sb
-            .from('courses')
-            .select('*')
-            .or(programFilter)
-            .eq('intake_year', intakeYear)
-            .or(blockFilter)
-            .order('course_name', { ascending: true });
+                    const { data: courses, error } = await sb
+                        .from('courses')
+                        .select('*')
+                        .or(programFilter)
+                        .eq('intake_year', intakeYear)
+                        .or(blockFilter)
+                        .order('course_name', { ascending: true });
 
-        if (error) throw error;
+                    if (error) throw error;
 
-        cachedCourses = courses || [];
-        
-        console.log('Found courses:', cachedCourses.length);
-        console.log('Courses for', program || department, ':', cachedCourses);
-        
-        tableBody.innerHTML = '';
-        if (cachedCourses.length > 0) {
-            cachedCourses.forEach(c => {
-                tableBody.innerHTML += `
-                    <tr>
-                        <td>${escapeHtml(c.course_name) || 'N/A'}</td>
-                        <td>${escapeHtml(c.unit_code) || 'N/A'}</td>
-                        <td>${escapeHtml(c.description) || 'N/A'}</td>
-                        <td>${escapeHtml(c.status) || 'N/A'}</td>
-                    </tr>
-                `;
-            });
-        } else {
-            tableBody.innerHTML = `<tr><td colspan="4">
-                No courses found for: ${program || department} 
-                (Program: ${program || 'undefined'}, Department: ${department || 'undefined'})
-                <br>Intake Year: ${intakeYear}, Block: ${block}
-                <br>Filter used: ${programFilter}
-                <br><small>Check if courses exist with target_program = '${program || department}' and intake_year = '${intakeYear}'</small>
-            </td></tr>`;
-        }
+                    cachedCourses = courses || [];
+                    
+                    console.log('Found courses:', cachedCourses.length);
+                    console.log('Courses for', program || department, ':', cachedCourses);
+                    
+                    tableBody.innerHTML = '';
+                    if (cachedCourses.length > 0) {
+                        cachedCourses.forEach(c => {
+                            tableBody.innerHTML += `
+                                <tr>
+                                    <td>${escapeHtml(c.course_name) || 'N/A'}</td>
+                                    <td>${escapeHtml(c.unit_code) || 'N/A'}</td>
+                                    <td>${escapeHtml(c.description) || 'N/A'}</td>
+                                    <td>${escapeHtml(c.status) || 'N/A'}</td>
+                                </tr>
+                            `;
+                        });
+                    } else {
+                        tableBody.innerHTML = `<tr><td colspan="4">
+                            No courses found for: ${program || department} 
+                            (Program: ${program || 'undefined'}, Department: ${department || 'undefined'})
+                            <br>Intake Year: ${intakeYear}, Block: ${block}
+                            <br>Filter used: ${programFilter}
+                            <br><small>Check if courses exist with target_program = '${program || department}' and intake_year = '${intakeYear}'</small>
+                        </td></tr>`;
+                    }
 
-    } catch (error) {
-        console.error("❌ Failed to load courses:", error);
-        AppUtils.showError(tableBody, `Error loading courses: ${error.message}`);
-        cachedCourses = [];
-    }
+                } catch (error) {
+                    console.error("❌ Failed to load courses:", error);
+                    AppUtils.showError(tableBody, `Error loading courses: ${error.message}`);
+                    cachedCourses = [];
+                }
 
-    if (typeof loadDashboardMetrics === "function") {
-        loadDashboardMetrics(currentUserId);
-    }
-}
+                if (typeof loadDashboardMetrics === "function") {
+                    loadDashboardMetrics(currentUserId);
+                }
+            }
 
-// Utility to safely escape HTML
-function escapeHtml(str) {
-    if (!str) return '';
-    return String(str)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-}
-            
+            // Utility to safely escape HTML
+            function escapeHtml(str) {
+                if (!str) return '';
+                return String(str)
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;")
+                    .replace(/'/g, "&#039;");
+            }
+                        
             // Load exams
             async function loadExams() {
                 const tableBody = document.getElementById('exams-table');
@@ -1819,201 +1846,372 @@ function escapeHtml(str) {
             function closeTranscriptModal() {
                 document.getElementById('transcript-modal').style.display = 'none';
             }
-            
-            // View resource
-            async function viewResource(resourceId) {
-                const resourceViewer = document.getElementById('resource-viewer');
-                const resource = cachedResources.find(r => r.id == resourceId);
-            
-                if (!resource || !resourceViewer) {
-                    if (resourceViewer) resourceViewer.innerHTML = 'Resource not found.';
-                    return;
-                }
-            
-                const fileUrl = resource.file_url;
-                const filePath = resource.file_path;
-                const ext = (filePath || '').split('.').pop().toLowerCase();
-            
-                // Clear viewer and add header
-                resourceViewer.innerHTML = `
-                    <h3 style="color: var(--color-primary); margin-bottom: 5px;">
-                        ${escapeHtml(resource.title)}
-                    </h3>
-                    <p style="font-size: 0.9em; color: #6B7280; margin-bottom: 15px;">
-                        Uploaded by: ${escapeHtml(resource.uploaded_by_name || 'Admin')}
-                        on ${new Date(resource.created_at).toLocaleDateString()}
-                    </p>
-                `;
-            
-                // PDF files
-                if (ext === 'pdf') {
-                    resourceViewer.innerHTML += `
-                        <div id="pdf-container" style="width:100%; max-height:80vh; overflow:auto;">
-                            <canvas id="pdf-canvas" style="width:100%; height:auto; border:1px solid #ddd; border-radius:6px;"></canvas>
-                        </div>
-            
-                        <div id="pdf-controls" style="margin-top:15px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:center;">
-                            <button id="prev-page" class="profile-button" style="padding:8px 15px; font-size:0.9em;">Prev</button>
-                            <button id="next-page" class="profile-button" style="padding:8px 15px; font-size:0.9em;">Next</button>
-                            <span style="font-weight:600;">Page: <span id="page-num"></span> / <span id="page-count"></span></span>
-                        </div>
-                    `;
-            
-                    const canvas = document.getElementById('pdf-canvas');
-                    const ctx = canvas.getContext('2d');
-                    let pdfDoc = null;
-                    let pageNum = 1;
-            
-                    pdfjsLib.getDocument(fileUrl).promise
-                        .then(pdf => {
-                            pdfDoc = pdf;
-                            document.getElementById('page-count').textContent = pdf.numPages;
-                            renderPage(pageNum);
-                        })
-                        .catch(err => {
-                            resourceViewer.innerHTML += `<p style="color:#EF4444;">Failed to load PDF: ${err.message}</p>`;
-                        });
-            
-                    function renderPage(num) {
-                        pdfDoc.getPage(num).then(page => {
-                            const containerWidth = document.getElementById('pdf-container').clientWidth;
-                            const baseViewport = page.getViewport({ scale: 1 });
-                            const pixelRatio = window.devicePixelRatio || 1;
-                            const scale = (containerWidth / baseViewport.width) * pixelRatio;
-                            const viewport = page.getViewport({ scale });
-            
-                            canvas.width = viewport.width;
-                            canvas.height = viewport.height;
-                            canvas.style.width = `${viewport.width / pixelRatio}px`;
-                            canvas.style.height = `${viewport.height / pixelRatio}px`;
-            
-                            const renderContext = { canvasContext: ctx, viewport };
-                            page.render(renderContext).promise.then(() => {
-                                document.getElementById('page-num').textContent = num;
-                            });
-                        });
-                    }
-            
-                    document.getElementById('prev-page').onclick = () => {
-                        if (pageNum > 1) {
-                            pageNum--;
-                            renderPage(pageNum);
-                        }
-                    };
-            
-                    document.getElementById('next-page').onclick = () => {
-                        if (pageNum < pdfDoc.numPages) {
-                            pageNum++;
-                            renderPage(pageNum);
-                        }
-                    };
-            
-                    return;
-                }
-            
-                // Office files
-                if (['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'].includes(ext)) {
-                    try {
-                        // Generate a signed URL (1 hour)
-                        const { data: signed } = await sb.storage
-                            .from(RESOURCES_BUCKET)
-                            .createSignedUrl(filePath, 3600);
-            
-                        if (!signed?.signedUrl) {
-                            resourceViewer.innerHTML += `<p style="color:#EF4444;">Unable to load file.</p>`;
-                            return;
-                        }
-            
-                        const encoded = encodeURIComponent(signed.signedUrl);
-            
-                        resourceViewer.innerHTML += `
-                            <iframe 
-                                src="https://view.officeapps.live.com/op/embed.aspx?src=${encoded}"
-                                width="100%"
-                                height="75vh"
-                                style="border:none; min-height:500px; border-radius:6px;">
-                            </iframe>`;
-                    } catch (err) {
-                        resourceViewer.innerHTML += `<p style="color:#EF4444;">Failed to load file: ${err.message}</p>`;
-                    }
-            
-                    return;
-                }
-            
-                // Unsupported files
-                resourceViewer.innerHTML += `
-                    <p>This file type (<strong>.${ext}</strong>) cannot be previewed.</p>
-                    <a href="${fileUrl}" download class="profile-button" style="margin-top:10px; display:inline-block;">
-                        Download File
-                    </a>
-                `;
-            }
-            
-            // Load resources
+
+            // *************************************************************************
+            // *** ENHANCED RESOURCES SYSTEM ***
+            // *************************************************************************
+
+            let currentResources = [];
+            let filteredResources = [];
+            let currentReaderResource = null;
+
+            // Enhanced loadResources function
             async function loadResources() {
                 if (!currentUserProfile) await loadProfile(currentUserId);
-            
-                const resourceListContainer = document.getElementById('resources-list');
-                if (!resourceListContainer) return;
-                AppUtils.showLoading(resourceListContainer, 'Loading resources...');
-                cachedResources = [];
-            
+                
+                const resourcesGrid = document.getElementById('resources-grid');
+                if (!resourcesGrid) return;
+                
+                AppUtils.showLoading(resourcesGrid, 'Loading resources...');
+                currentResources = [];
+
                 try {
                     const program = currentUserProfile?.program;
                     const block = currentUserProfile?.block;
                     const intakeYear = currentUserProfile?.intake_year;
-            
+
                     if (!program || !intakeYear || !block) {
-                        resourceListContainer.innerHTML = '<p>Missing enrollment details (program, block, or intake year).</p>';
+                        resourcesGrid.innerHTML = '<div class="error-state">Missing enrollment details</div>';
                         return;
                     }
-            
+
                     const { data: resources, error } = await sb
                         .from('resources')
-                        .select('id, title, file_path, file_url, program_type, block, intake, uploaded_by_name, created_at')
+                        .select('id, title, file_path, file_url, program_type, block, intake, uploaded_by_name, created_at, description, file_type')
                         .eq('program_type', program)
                         .eq('block', block)
                         .eq('intake', intakeYear)
                         .order('created_at', { ascending: false });
-            
+
                     if (error) throw error;
-            
-                    cachedResources = resources || [];
-                    resourceListContainer.innerHTML = '';
-            
-                    if (!cachedResources.length) {
-                        resourceListContainer.innerHTML = `<p>No learning resources found for your program, block, and intake.</p>`;
-                        return;
-                    }
-            
-                    cachedResources.forEach(res => {
-                        const displayDate = new Date(res.created_at).toLocaleDateString();
-                        const itemDiv = document.createElement('div');
-                        itemDiv.className = 'resource-item';
-                        itemDiv.innerHTML = `
-                            <strong>${escapeHtml(res.title)}</strong>
-                            <p>Uploaded: ${displayDate} (${escapeHtml(res.program_type)})</p>
-                        `;
-                        itemDiv.addEventListener('click', () => viewResource(res.id));
-                        resourceListContainer.appendChild(itemDiv);
-                    });
-            
-                    if (cachedResources.length > 0) {
-                        viewResource(cachedResources[0].id);
-                    } else {
-                        document.getElementById('resource-viewer').innerHTML = 'Select a resource to view.';
-                    }
-            
+
+                    currentResources = resources || [];
+                    filteredResources = [...currentResources];
+                    
+                    renderResourcesGrid();
+                    populateCourseFilter();
+
                 } catch (err) {
                     console.error("Error loading resources:", err);
-                    AppUtils.showError(resourceListContainer, `Error loading resources: ${err.message}`);
+                    AppUtils.showError(resourcesGrid, `Error loading resources: ${err.message}`);
                 }
-            
+
                 if (typeof loadDashboardMetrics === 'function') {
                     loadDashboardMetrics(currentUserId);
                 }
             }
-            
+
+            // Render mobile-optimized resources grid
+            function renderResourcesGrid() {
+                const resourcesGrid = document.getElementById('resources-grid');
+                if (!resourcesGrid) return;
+
+                if (filteredResources.length === 0) {
+                    resourcesGrid.innerHTML = `
+                        <div class="empty-state">
+                            <i class="fas fa-folder-open"></i>
+                            <h3>No Resources Found</h3>
+                            <p>No resources match your current filters</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                resourcesGrid.innerHTML = filteredResources.map(resource => `
+                    <div class="resource-card" data-type="${getFileType(resource.file_path)}" data-course="${resource.program_type}">
+                        <div class="card-header">
+                            <div class="file-icon ${getFileType(resource.file_path)}">
+                                <i class="${getFileIcon(resource.file_path)}"></i>
+                            </div>
+                            <div class="card-title">
+                                <h3>${escapeHtml(resource.title)}</h3>
+                                <span class="file-type">${getFileType(resource.file_path).toUpperCase()}</span>
+                            </div>
+                        </div>
+                        
+                        <div class="card-body">
+                            <p class="card-description">${escapeHtml(resource.description || 'No description available')}</p>
+                            
+                            <div class="card-meta">
+                                <div class="meta-item">
+                                    <i class="fas fa-calendar"></i>
+                                    <span>${new Date(resource.created_at).toLocaleDateString()}</span>
+                                </div>
+                                <div class="meta-item">
+                                    <i class="fas fa-user"></i>
+                                    <span>${escapeHtml(resource.uploaded_by_name || 'Admin')}</span>
+                                </div>
+                                <div class="meta-item">
+                                    <i class="fas fa-book"></i>
+                                    <span>${escapeHtml(resource.program_type)}</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="card-footer">
+                            <button class="card-btn primary" onclick="openResource(${resource.id})">
+                                <i class="fas fa-eye"></i> View
+                            </button>
+                            <button class="card-btn secondary" onclick="downloadResource('${resource.file_url}', '${resource.title}')">
+                                <i class="fas fa-download"></i> Download
+                            </button>
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            // Open resource in mobile-optimized reader
+            async function openResource(resourceId) {
+                const resource = currentResources.find(r => r.id == resourceId);
+                if (!resource) return;
+
+                currentReaderResource = resource;
+
+                const reader = document.getElementById('mobile-reader');
+                const readerTitle = document.getElementById('reader-title');
+                const readerContent = document.getElementById('reader-content');
+
+                if (!reader || !readerTitle || !readerContent) return;
+
+                // Show reader
+                reader.style.display = 'block';
+                readerTitle.textContent = resource.title;
+
+                // Load content based on file type
+                const fileType = getFileType(resource.file_path);
+                
+                if (fileType === 'pdf') {
+                    await loadPDFInReader(resource, readerContent);
+                } else if (['doc', 'docx', 'ppt', 'pptx'].includes(fileType)) {
+                    loadOfficeInReader(resource, readerContent);
+                } else if (fileType === 'video') {
+                    loadVideoInReader(resource, readerContent);
+                } else {
+                    loadFallbackView(resource, readerContent);
+                }
+            }
+
+            // Close mobile reader
+            function closeReader() {
+                const reader = document.getElementById('mobile-reader');
+                if (reader) {
+                    reader.style.display = 'none';
+                    currentReaderResource = null;
+                }
+            }
+
+            // Download current resource in reader
+            function downloadCurrentResource() {
+                if (currentReaderResource) {
+                    downloadResource(currentReaderResource.file_url, currentReaderResource.title);
+                }
+            }
+
+            // Download resource
+            function downloadResource(url, filename) {
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = filename;
+                link.click();
+            }
+
+            // Filter resources
+            function filterResources() {
+                const searchTerm = document.getElementById('resource-search').value.toLowerCase();
+                const typeFilter = document.getElementById('resource-filter').value;
+                const courseFilter = document.getElementById('course-filter').value;
+
+                filteredResources = currentResources.filter(resource => {
+                    const matchesSearch = resource.title.toLowerCase().includes(searchTerm) || 
+                                        (resource.description && resource.description.toLowerCase().includes(searchTerm));
+                    const matchesType = typeFilter === 'all' || getFileType(resource.file_path) === typeFilter;
+                    const matchesCourse = courseFilter === 'all' || resource.program_type === courseFilter;
+
+                    return matchesSearch && matchesType && matchesCourse;
+                });
+
+                renderResourcesGrid();
+            }
+
+            // Populate course filter
+            function populateCourseFilter() {
+                const courseFilter = document.getElementById('course-filter');
+                if (!courseFilter) return;
+
+                const courses = [...new Set(currentResources.map(r => r.program_type))];
+                
+                courseFilter.innerHTML = '<option value="all">All Courses</option>';
+                courses.forEach(course => {
+                    const option = document.createElement('option');
+                    option.value = course;
+                    option.textContent = course;
+                    courseFilter.appendChild(option);
+                });
+            }
+
+            // Utility functions for resources
+            function getFileType(filePath) {
+                if (!filePath) return 'unknown';
+                const ext = filePath.split('.').pop().toLowerCase();
+                
+                if (ext === 'pdf') return 'pdf';
+                if (['doc', 'docx'].includes(ext)) return 'doc';
+                if (['ppt', 'pptx'].includes(ext)) return 'slides';
+                if (['mp4', 'avi', 'mov', 'wmv'].includes(ext)) return 'video';
+                if (['jpg', 'jpeg', 'png', 'gif'].includes(ext)) return 'image';
+                
+                return 'file';
+            }
+
+            function getFileIcon(filePath) {
+                const type = getFileType(filePath);
+                
+                switch(type) {
+                    case 'pdf': return 'fas fa-file-pdf';
+                    case 'doc': return 'fas fa-file-word';
+                    case 'slides': return 'fas fa-file-powerpoint';
+                    case 'video': return 'fas fa-file-video';
+                    case 'image': return 'fas fa-file-image';
+                    default: return 'fas fa-file';
+                }
+            }
+
+            // PDF loading for mobile
+            async function loadPDFInReader(resource, container) {
+                container.innerHTML = `
+                    <div class="pdf-mobile-viewer">
+                        <div class="pdf-controls-mobile">
+                            <button onclick="changePDFPage(-1)" class="pdf-nav-btn">
+                                <i class="fas fa-chevron-left"></i>
+                            </button>
+                            <span class="pdf-page-info">Page: <span id="current-page">1</span></span>
+                            <button onclick="changePDFPage(1)" class="pdf-nav-btn">
+                                <i class="fas fa-chevron-right"></i>
+                            </button>
+                        </div>
+                        <div class="pdf-container-mobile">
+                            <canvas id="pdf-canvas-mobile"></canvas>
+                        </div>
+                        <div class="pdf-actions">
+                            <button onclick="downloadResource('${resource.file_url}', '${resource.title}')" class="action-btn">
+                                <i class="fas fa-download"></i> Download PDF
+                            </button>
+                        </div>
+                    </div>
+                `;
+
+                try {
+                    const pdfDoc = await pdfjsLib.getDocument(resource.file_url).promise;
+                    let currentPage = 1;
+                    
+                    function renderPage(pageNum) {
+                        pdfDoc.getPage(pageNum).then(page => {
+                            const canvas = document.getElementById('pdf-canvas-mobile');
+                            const ctx = canvas.getContext('2d');
+                            const container = document.querySelector('.pdf-container-mobile');
+                            const containerWidth = container.clientWidth - 40; // Account for padding
+                            
+                            const viewport = page.getViewport({ scale: 1 });
+                            const scale = containerWidth / viewport.width;
+                            const scaledViewport = page.getViewport({ scale });
+                            
+                            canvas.width = scaledViewport.width;
+                            canvas.height = scaledViewport.height;
+                            
+                            const renderContext = {
+                                canvasContext: ctx,
+                                viewport: scaledViewport
+                            };
+                            
+                            page.render(renderContext).promise.then(() => {
+                                document.getElementById('current-page').textContent = pageNum;
+                            });
+                        });
+                    }
+                    
+                    window.changePDFPage = function(delta) {
+                        const newPage = currentPage + delta;
+                        if (newPage >= 1 && newPage <= pdfDoc.numPages) {
+                            currentPage = newPage;
+                            renderPage(currentPage);
+                        }
+                    };
+                    
+                    renderPage(currentPage);
+                    
+                } catch (error) {
+                    container.innerHTML = `
+                        <div class="error-state">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <h3>Failed to load PDF</h3>
+                            <p>${error.message}</p>
+                            <button onclick="downloadResource('${resource.file_url}', '${resource.title}')" class="profile-button">
+                                <i class="fas fa-download"></i> Download Instead
+                            </button>
+                        </div>
+                    `;
+                }
+            }
+
+            // Office files viewer
+            function loadOfficeInReader(resource, container) {
+                container.innerHTML = `
+                    <div class="office-viewer">
+                        <div class="viewer-message">
+                            <i class="fas fa-file-word" style="font-size: 3rem; color: #1D4ED8; margin-bottom: 15px;"></i>
+                            <h3>Office Document</h3>
+                            <p>This document can be viewed using the online Office viewer or downloaded to your device.</p>
+                            <div class="viewer-actions">
+                                <button onclick="window.open('https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(resource.file_url)}', '_blank')" class="profile-button primary">
+                                    <i class="fas fa-external-link-alt"></i> Open Online Viewer
+                                </button>
+                                <button onclick="downloadResource('${resource.file_url}', '${resource.title}')" class="profile-button secondary">
+                                    <i class="fas fa-download"></i> Download File
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Video viewer
+            function loadVideoInReader(resource, container) {
+                container.innerHTML = `
+                    <div class="video-viewer">
+                        <video controls style="width: 100%; max-height: 70vh; border-radius: 8px;">
+                            <source src="${resource.file_url}" type="video/mp4">
+                            Your browser does not support the video tag.
+                        </video>
+                        <div class="video-actions" style="margin-top: 15px;">
+                            <button onclick="downloadResource('${resource.file_url}', '${resource.title}')" class="profile-button">
+                                <i class="fas fa-download"></i> Download Video
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Fallback viewer for unsupported files
+            function loadFallbackView(resource, container) {
+                container.innerHTML = `
+                    <div class="fallback-viewer">
+                        <div class="viewer-message">
+                            <i class="fas fa-file" style="font-size: 3rem; color: #6B7280; margin-bottom: 15px;"></i>
+                            <h3>File Preview Not Available</h3>
+                            <p>This file type cannot be previewed in the browser.</p>
+                            <button onclick="downloadResource('${resource.file_url}', '${resource.title}')" class="profile-button">
+                                <i class="fas fa-download"></i> Download File
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Set up event listeners for resources
+            document.getElementById('resource-search').addEventListener('input', filterResources);
+            document.getElementById('resource-filter').addEventListener('change', filterResources);
+            document.getElementById('course-filter').addEventListener('change', filterResources);
+
             // *************************************************************************
             // *** ACADEMIC CALENDAR ***
             // *************************************************************************
@@ -2211,7 +2409,11 @@ function escapeHtml(str) {
             window.updateTargetSelect = updateTargetSelect;
             window.viewProvisionalTranscript = viewProvisionalTranscript;
             window.closeTranscriptModal = closeTranscriptModal;
-            window.viewResource = viewResource;
+            window.openResource = openResource;
+            window.closeReader = closeReader;
+            window.downloadCurrentResource = downloadCurrentResource;
+            window.downloadResource = downloadResource;
+            window.filterResources = filterResources;
         }
 
         // Start application when config is ready
