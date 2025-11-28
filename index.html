@@ -303,11 +303,11 @@
                 </div>
             </section>
 
-            <!-- Enhanced Resources Tab -->
+            <!-- Enhanced Resources Tab - VIEW ONLY -->
             <section id="resources" class="tab-content">
                 <div class="resources-header">
                     <h2 style="color: var(--color-primary); margin-bottom: 8px;">Learning Resources</h2>
-                    <p class="subtitle" style="margin-bottom: 20px;">Access your course materials and study resources</p>
+                    <p class="subtitle" style="margin-bottom: 20px;">View your course materials and study resources</p>
                     
                     <!-- Mobile-Optimized Controls -->
                     <div class="resources-controls">
@@ -322,7 +322,6 @@
                                 <option value="pdf">PDF Notes</option>
                                 <option value="video">Video Lectures</option>
                                 <option value="slides">Presentation Slides</option>
-                                <option value="assignment">Assignments</option>
                             </select>
                             
                             <select id="course-filter">
@@ -345,9 +344,9 @@
                             <i class="fas fa-arrow-left"></i>
                         </button>
                         <h3 id="reader-title">Resource Title</h3>
-                        <button class="reader-download" onclick="downloadCurrentResource()">
-                            <i class="fas fa-download"></i>
-                        </button>
+                        <div class="view-only-badge">
+                            <i class="fas fa-eye"></i> View Only
+                        </div>
                     </div>
                     <div class="reader-content" id="reader-content">
                         <!-- Resource content will be loaded here -->
@@ -1848,7 +1847,7 @@
             }
 
             // *************************************************************************
-            // *** ENHANCED RESOURCES SYSTEM ***
+            // *** ENHANCED RESOURCES SYSTEM - VIEW ONLY ***
             // *************************************************************************
 
             let currentResources = [];
@@ -1901,7 +1900,7 @@
                 }
             }
 
-            // Render mobile-optimized resources grid
+            // Render mobile-optimized resources grid - VIEW ONLY
             function renderResourcesGrid() {
                 const resourcesGrid = document.getElementById('resources-grid');
                 if (!resourcesGrid) return;
@@ -1950,17 +1949,14 @@
                         
                         <div class="card-footer">
                             <button class="card-btn primary" onclick="openResource(${resource.id})">
-                                <i class="fas fa-eye"></i> View
-                            </button>
-                            <button class="card-btn secondary" onclick="downloadResource('${resource.file_url}', '${resource.title}')">
-                                <i class="fas fa-download"></i> Download
+                                <i class="fas fa-eye"></i> View Resource
                             </button>
                         </div>
                     </div>
                 `).join('');
             }
 
-            // Open resource in mobile-optimized reader
+            // Open resource in mobile-optimized reader - VIEW ONLY
             async function openResource(resourceId) {
                 const resource = currentResources.find(r => r.id == resourceId);
                 if (!resource) return;
@@ -1998,21 +1994,6 @@
                     reader.style.display = 'none';
                     currentReaderResource = null;
                 }
-            }
-
-            // Download current resource in reader
-            function downloadCurrentResource() {
-                if (currentReaderResource) {
-                    downloadResource(currentReaderResource.file_url, currentReaderResource.title);
-                }
-            }
-
-            // Download resource
-            function downloadResource(url, filename) {
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = filename;
-                link.click();
             }
 
             // Filter resources
@@ -2076,10 +2057,14 @@
                 }
             }
 
-            // PDF loading for mobile
+            // PDF loading for mobile - VIEW ONLY
             async function loadPDFInReader(resource, container) {
                 container.innerHTML = `
                     <div class="pdf-mobile-viewer">
+                        <div class="view-only-notice">
+                            <i class="fas fa-eye"></i>
+                            <span>View Only - Content cannot be downloaded</span>
+                        </div>
                         <div class="pdf-controls-mobile">
                             <button onclick="changePDFPage(-1)" class="pdf-nav-btn">
                                 <i class="fas fa-chevron-left"></i>
@@ -2091,11 +2076,6 @@
                         </div>
                         <div class="pdf-container-mobile">
                             <canvas id="pdf-canvas-mobile"></canvas>
-                        </div>
-                        <div class="pdf-actions">
-                            <button onclick="downloadResource('${resource.file_url}', '${resource.title}')" class="action-btn">
-                                <i class="fas fa-download"></i> Download PDF
-                            </button>
                         </div>
                     </div>
                 `;
@@ -2145,63 +2125,67 @@
                             <i class="fas fa-exclamation-triangle"></i>
                             <h3>Failed to load PDF</h3>
                             <p>${error.message}</p>
-                            <button onclick="downloadResource('${resource.file_url}', '${resource.title}')" class="profile-button">
-                                <i class="fas fa-download"></i> Download Instead
-                            </button>
+                            <p class="view-only-message">This resource is view-only and cannot be downloaded.</p>
                         </div>
                     `;
                 }
             }
 
-            // Office files viewer
+            // Office files viewer - VIEW ONLY
             function loadOfficeInReader(resource, container) {
                 container.innerHTML = `
                     <div class="office-viewer">
+                        <div class="view-only-notice">
+                            <i class="fas fa-eye"></i>
+                            <span>View Only - Content cannot be downloaded</span>
+                        </div>
                         <div class="viewer-message">
                             <i class="fas fa-file-word" style="font-size: 3rem; color: #1D4ED8; margin-bottom: 15px;"></i>
                             <h3>Office Document</h3>
-                            <p>This document can be viewed using the online Office viewer or downloaded to your device.</p>
+                            <p>This document can be viewed using the online Office viewer.</p>
                             <div class="viewer-actions">
                                 <button onclick="window.open('https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(resource.file_url)}', '_blank')" class="profile-button primary">
                                     <i class="fas fa-external-link-alt"></i> Open Online Viewer
                                 </button>
-                                <button onclick="downloadResource('${resource.file_url}', '${resource.title}')" class="profile-button secondary">
-                                    <i class="fas fa-download"></i> Download File
-                                </button>
                             </div>
+                            <p class="view-only-message">This resource is view-only and cannot be downloaded.</p>
                         </div>
                     </div>
                 `;
             }
 
-            // Video viewer
+            // Video viewer - VIEW ONLY
             function loadVideoInReader(resource, container) {
                 container.innerHTML = `
                     <div class="video-viewer">
+                        <div class="view-only-notice">
+                            <i class="fas fa-eye"></i>
+                            <span>View Only - Content cannot be downloaded</span>
+                        </div>
                         <video controls style="width: 100%; max-height: 70vh; border-radius: 8px;">
                             <source src="${resource.file_url}" type="video/mp4">
                             Your browser does not support the video tag.
                         </video>
-                        <div class="video-actions" style="margin-top: 15px;">
-                            <button onclick="downloadResource('${resource.file_url}', '${resource.title}')" class="profile-button">
-                                <i class="fas fa-download"></i> Download Video
-                            </button>
-                        </div>
+                        <p class="view-only-message" style="text-align: center; margin-top: 15px; color: #6B7280;">
+                            <i class="fas fa-info-circle"></i> This video is view-only and cannot be downloaded.
+                        </p>
                     </div>
                 `;
             }
 
-            // Fallback viewer for unsupported files
+            // Fallback viewer for unsupported files - VIEW ONLY
             function loadFallbackView(resource, container) {
                 container.innerHTML = `
                     <div class="fallback-viewer">
+                        <div class="view-only-notice">
+                            <i class="fas fa-eye"></i>
+                            <span>View Only - Content cannot be downloaded</span>
+                        </div>
                         <div class="viewer-message">
                             <i class="fas fa-file" style="font-size: 3rem; color: #6B7280; margin-bottom: 15px;"></i>
                             <h3>File Preview Not Available</h3>
                             <p>This file type cannot be previewed in the browser.</p>
-                            <button onclick="downloadResource('${resource.file_url}', '${resource.title}')" class="profile-button">
-                                <i class="fas fa-download"></i> Download File
-                            </button>
+                            <p class="view-only-message">This resource is view-only and cannot be downloaded.</p>
                         </div>
                     </div>
                 `;
@@ -2411,8 +2395,6 @@
             window.closeTranscriptModal = closeTranscriptModal;
             window.openResource = openResource;
             window.closeReader = closeReader;
-            window.downloadCurrentResource = downloadCurrentResource;
-            window.downloadResource = downloadResource;
             window.filterResources = filterResources;
         }
 
