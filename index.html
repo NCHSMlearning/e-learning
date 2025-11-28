@@ -434,7 +434,7 @@
             document.body.innerHTML = `
                 <div style="padding: 40px; text-align: center; font-family: 'Inter', sans-serif; background: #f8f8f8; height: 100vh; display: flex; align-items: center; justify-content: center;">
                     <div style="max-width: 500px; background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
-                        <h2 style="color: #EF4444; margin-bottom: 20px;">🚫 Configuration Error</h2>
+                        <h2 style="color: #EF4444; margin-bottom: 20px;">🚫 Configuration Error</hh2>
                         <p style="color: #6B7280; margin-bottom: 20px;">The application failed to load configuration.</p>
                         <div style="background: #FEF2F2; padding: 15px; border-radius: 6px; margin-bottom: 20px; text-align: left;">
                             <strong>Possible issues:</strong>
@@ -2057,7 +2057,7 @@
                 }
             }
 
-            // PDF loading for mobile - VIEW ONLY - FIXED NAVIGATION POSITION
+            // PDF loading for mobile - VIEW ONLY - HIGH QUALITY + FIXED NAVIGATION
             async function loadPDFInReader(resource, container) {
                 container.innerHTML = `
                     <div class="pdf-mobile-viewer">
@@ -2074,7 +2074,7 @@
                             <button onclick="changePDFPage(-1)" class="pdf-nav-btn">
                                 <i class="fas fa-chevron-left"></i>
                             </button>
-                            <span class="pdf-page-info">Page: <span id="current-page">1</span></span>
+                            <span class="pdf-page-info">Page: <span id="current-page">1</span> of <span id="total-pages">1</span></span>
                             <button onclick="changePDFPage(1)" class="pdf-nav-btn">
                                 <i class="fas fa-chevron-right"></i>
                             </button>
@@ -2085,29 +2085,64 @@
                 try {
                     const pdfDoc = await pdfjsLib.getDocument(resource.file_url).promise;
                     let currentPage = 1;
+                    let pdfScale = 1.8; // High quality scale for crisp text
+                    
+                    // Update total pages
+                    document.getElementById('total-pages').textContent = pdfDoc.numPages;
                     
                     function renderPage(pageNum) {
                         pdfDoc.getPage(pageNum).then(page => {
                             const canvas = document.getElementById('pdf-canvas-mobile');
                             const ctx = canvas.getContext('2d');
                             const container = document.querySelector('.pdf-container-mobile');
-                            const containerWidth = container.clientWidth - 40; // Account for padding
                             
+                            // Get container dimensions with padding consideration
+                            const containerWidth = container.clientWidth - 40;
+                            const maxContainerHeight = window.innerHeight * 0.7; // Limit height for mobile
+                            
+                            // Get PDF page viewport
                             const viewport = page.getViewport({ scale: 1 });
-                            const scale = containerWidth / viewport.width;
-                            const scaledViewport = page.getViewport({ scale });
                             
+                            // Calculate optimal scale for high quality
+                            const scaleX = containerWidth / viewport.width;
+                            const scaleY = maxContainerHeight / viewport.height;
+                            const optimalScale = Math.min(scaleX, scaleY, pdfScale) * (window.devicePixelRatio || 1);
+                            
+                            // Apply the scale
+                            const scaledViewport = page.getViewport({ scale: optimalScale });
+                            
+                            // Set canvas size with high DPI for crisp rendering
                             canvas.width = scaledViewport.width;
                             canvas.height = scaledViewport.height;
                             
+                            // Set CSS size for proper display
+                            canvas.style.width = (scaledViewport.width / (window.devicePixelRatio || 1)) + 'px';
+                            canvas.style.height = (scaledViewport.height / (window.devicePixelRatio || 1)) + 'px';
+                            
+                            // High-quality rendering settings
                             const renderContext = {
                                 canvasContext: ctx,
-                                viewport: scaledViewport
+                                viewport: scaledViewport,
+                                enableWebGL: true,
+                                intent: 'display',
+                                renderInteractiveForms: false,
+                                imageLayer: false
                             };
                             
+                            // Render the page with high quality
                             page.render(renderContext).promise.then(() => {
                                 document.getElementById('current-page').textContent = pageNum;
+                                console.log(`Rendered page ${pageNum} at ${optimalScale.toFixed(2)}x scale`);
                             });
+                        }).catch(error => {
+                            console.error('Error rendering page:', error);
+                            container.innerHTML = `
+                                <div class="error-state">
+                                    <i class="fas fa-exclamation-triangle"></i>
+                                    <h3>Failed to render PDF page</h3>
+                                    <p>${error.message}</p>
+                                </div>
+                            `;
                         });
                     }
                     
@@ -2119,15 +2154,43 @@
                         }
                     };
                     
+                    // Add zoom controls for better usability
+                    window.zoomPDF = function(zoomIn) {
+                        if (zoomIn) {
+                            pdfScale = Math.min(pdfScale + 0.25, 3.0); // Max 3x zoom
+                        } else {
+                            pdfScale = Math.max(pdfScale - 0.25, 0.5); // Min 0.5x zoom
+                        }
+                        renderPage(currentPage);
+                    };
+                    
+                    // Initial render
                     renderPage(currentPage);
                     
+                    // Add keyboard navigation
+                    document.addEventListener('keydown', function(e) {
+                        if (e.key === 'ArrowLeft') {
+                            changePDFPage(-1);
+                        } else if (e.key === 'ArrowRight') {
+                            changePDFPage(1);
+                        } else if (e.key === '+' || e.key === '=') {
+                            zoomPDF(true);
+                        } else if (e.key === '-' || e.key === '_') {
+                            zoomPDF(false);
+                        }
+                    });
+                    
                 } catch (error) {
+                    console.error('PDF loading error:', error);
                     container.innerHTML = `
                         <div class="error-state">
                             <i class="fas fa-exclamation-triangle"></i>
                             <h3>Failed to load PDF</h3>
                             <p>${error.message}</p>
                             <p class="view-only-message">This resource is view-only and cannot be downloaded.</p>
+                            <button onclick="window.open('${resource.file_url}', '_blank')" class="profile-button" style="margin-top: 15px;">
+                                <i class="fas fa-external-link-alt"></i> Open in New Tab
+                            </button>
                         </div>
                     `;
                 }
@@ -2398,6 +2461,8 @@
             window.openResource = openResource;
             window.closeReader = closeReader;
             window.filterResources = filterResources;
+            window.changePDFPage = function() {}; // Placeholder
+            window.zoomPDF = function() {}; // Placeholder
         }
 
         // Start application when config is ready
