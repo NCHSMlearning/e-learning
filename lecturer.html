@@ -2689,190 +2689,122 @@ function updateCoursesTable(courses) {
 
             $('past-attendance-count').textContent = visibleCount;
         }
+// =================================================================
+// === 10. EXAMS/CATS MANAGEMENT - ENHANCED VERSION ===
+// =================================================================
 
-        // =================================================================
-        // === 10. EXAMS/CATS MANAGEMENT - ENHANCED VERSION ===
-        // =================================================================
+// Initialize exams section
+function populateExamFormSelects() {
+    const targetProgram = lecturerTargetProgram;
+    const programs = targetProgram ? [{ id: targetProgram, name: targetProgram }] : [];
+    
+    // Program select
+    const programSelect = $('exam_program');
+    populateSelect(programSelect, programs, 'id', 'name', 'Select Program');
+    if (targetProgram) {
+        programSelect.value = targetProgram;
+        programSelect.disabled = true; // Lecturer can only create for their program
+    }
 
-        // Initialize exams section
-        function populateExamFormSelects() {
-            const targetProgram = lecturerTargetProgram;
-            const programs = targetProgram ? [{ id: targetProgram, name: targetProgram }] : [];
-            
-            // Program select
-            const programSelect = $('exam_program');
-            populateSelect(programSelect, programs, 'id', 'name', 'Select Program');
-            if (targetProgram) {
-                programSelect.value = targetProgram;
-                programSelect.disabled = true; // Lecturer can only create for their program
-            }
+    // Intake years
+    populateSelect($('exam_intake'), allIntakes, 'id', 'name', 'Select Intake Year');
+    
+    // Block/Term based on program
+    const blockSelect = $('exam_block_term');
+    if (targetProgram && ACADEMIC_STRUCTURE[targetProgram]) {
+        const blocks = ACADEMIC_STRUCTURE[targetProgram].map(name => ({ id: name, name: name }));
+        populateSelect(blockSelect, blocks, 'id', 'name', `Select ${targetProgram} Block/Term`);
+    } else {
+        blockSelect.innerHTML = '<option value="">-- Select Program First --</option>';
+    }
 
-            // Intake years
-            populateSelect($('exam_intake'), allIntakes, 'id', 'name', 'Select Intake Year');
-            
-            // Block/Term based on program
-            const blockSelect = $('exam_block_term');
-            if (targetProgram && ACADEMIC_STRUCTURE[targetProgram]) {
-                const blocks = ACADEMIC_STRUCTURE[targetProgram].map(name => ({ id: name, name: name }));
-                populateSelect(blockSelect, blocks, 'id', 'name', `Select ${targetProgram} Block/Term`);
-            } else {
-                blockSelect.innerHTML = '<option value="">-- Select Program First --</option>';
-            }
+    // Courses for the lecturer's program
+    populateExamCourseSelects();
+}
 
-            // Courses for the lecturer's program
-            populateExamCourseSelects();
+// Populate courses based on selected program
+async function populateExamCourseSelects(courses = null) {
+    const courseSelect = $('exam_course_id');
+    const program = $('exam_program').value;
+
+    let filteredCourses = [];
+    if (!program) {
+        filteredCourses = [];
+    } else {
+        if (!courses) {
+            // Use cached courses filtered by program
+            filteredCourses = allCourses.filter(c => c.target_program === program);
+        } else {
+            filteredCourses = courses.filter(c => c.target_program === program);
         }
+    }
 
-        // Populate courses based on selected program
-        async function populateExamCourseSelects(courses = null) {
-            const courseSelect = $('exam_course_id');
-            const program = $('exam_program').value;
+    populateSelect(courseSelect, filteredCourses, 'id', 'unit_code', 'Select Course (Optional)');
+}
 
-            let filteredCourses = [];
-            if (!program) {
-                filteredCourses = [];
-            } else {
-                if (!courses) {
-                    // Use cached courses filtered by program
-                    filteredCourses = allCourses.filter(c => c.target_program === program);
-                } else {
-                    filteredCourses = courses.filter(c => c.target_program === program);
-                }
-            }
+// Create new exam
+async function handleAddExam(e) {
+    e.preventDefault();
+    const button = e.submitter;
+    setButtonLoading(button, true, 'Create Exam Record');
+    
+    const formData = {
+        title: $('exam_title').value,
+        date: $('exam_date').value,
+        type: $('exam_type').value,
+        program: $('exam_program').value,
+        intake: $('exam_intake').value,
+        block_term: $('exam_block_term').value,
+        course_id: $('exam_course_id').value,
+        start_time: $('exam_start_time').value,
+        duration: $('exam_duration_minutes').value,
+        link: $('exam_link').value,
+        status: $('exam_status').value
+    };
 
-            populateSelect(courseSelect, filteredCourses, 'id', 'unit_code', 'Select Course (Optional)');
+    // Validation
+    if (Object.values(formData).some((v, i) => i < 6 && !v)) { // First 6 fields are required
+        showFeedback('Please fill in all required fields (Title, Date, Type, Program, Intake, Block/Term, Duration).', 'error');
+        setButtonLoading(button, false);
+        return;
+    }
+
+    try {
+        const { error } = await sb.from('exams').insert({
+            exam_name: formData.title,
+            exam_date: formData.date,
+            exam_start_time: formData.start_time || null,
+            exam_type: formData.type,
+            online_link: formData.link || null,
+            duration_minutes: parseInt(formData.duration),
+            target_program: formData.program,
+            course_id: formData.course_id || null,
+            intake_year: formData.intake,
+            block_term: formData.block_term,
+            status: formData.status,
+            created_by: currentUserProfile.user_id
+        });
+
+        if (error) throw error;
+
+        showFeedback(`✅ ${formData.type} "${formData.title}" created successfully!`, 'success');
+        e.target.reset();
+        // Reset program to lecturer's program
+        if (lecturerTargetProgram) {
+            $('exam_program').value = lecturerTargetProgram;
         }
+        loadLecturerExams();
+        
+    } catch (error) {
+        console.error('Exam creation failed:', error);
+        showFeedback(`Failed to create exam: ${error.message}`, 'error');
+    } finally {
+        setButtonLoading(button, false);
+    }
+}
 
-        // Create new exam
-        async function handleAddExam(e) {
-            e.preventDefault();
-            const button = e.submitter;
-            setButtonLoading(button, true, 'Create Exam Record');
-            
-            const formData = {
-                title: $('exam_title').value,
-                date: $('exam_date').value,
-                type: $('exam_type').value,
-                program: $('exam_program').value,
-                intake: $('exam_intake').value,
-                block_term: $('exam_block_term').value,
-                course_id: $('exam_course_id').value,
-                start_time: $('exam_start_time').value,
-                duration: $('exam_duration_minutes').value,
-                link: $('exam_link').value,
-                status: $('exam_status').value
-            };
-
-            // Validation
-            if (Object.values(formData).some((v, i) => i < 6 && !v)) { // First 6 fields are required
-                showFeedback('Please fill in all required fields (Title, Date, Type, Program, Intake, Block/Term, Duration).', 'error');
-                setButtonLoading(button, false);
-                return;
-            }
-
-            try {
-                const { error } = await sb.from('exams').insert({
-                    exam_name: formData.title,
-                    exam_date: formData.date,
-                    exam_start_time: formData.start_time || null,
-                    exam_type: formData.type,
-                    online_link: formData.link || null,
-                    duration_minutes: parseInt(formData.duration),
-                    target_program: formData.program,
-                    course_id: formData.course_id || null,
-                    intake_year: formData.intake,
-                    block_term: formData.block_term,
-                    status: formData.status,
-                    created_by: currentUserProfile.user_id
-                });
-
-                if (error) throw error;
-
-                showFeedback(`✅ ${formData.type} "${formData.title}" created successfully!`, 'success');
-                e.target.reset();
-                // Reset program to lecturer's program
-                if (lecturerTargetProgram) {
-                    $('exam_program').value = lecturerTargetProgram;
-                }
-                loadLecturerExams();
-                
-            } catch (error) {
-                console.error('Exam creation failed:', error);
-                showFeedback(`Failed to create exam: ${error.message}`, 'error');
-            } finally {
-                setButtonLoading(button, false);
-            }
-        }
-
-        // Load lecturer's exams
-        async function loadLecturerExams() {
-            const tbody = $('exams-table');
-            if (!tbody) return;
-            
-            tbody.innerHTML = '<tr><td colspan="8">Loading your exams...</td></tr>';
-
-            try {
-                const { data: exams, error } = await fetchData(
-                    'exams',
-                    '*, course:course_id(course_name, unit_code)',
-                    { created_by: currentUserProfile.user_id },
-                    'exam_date',
-                    false
-                );
-
-                if (error) throw error;
-
-                if (!exams || exams.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="8">No exams found. Create your first exam above.</td></tr>';
-                    return;
-                }
-
-                tbody.innerHTML = exams.map(exam => {
-                    const courseName = exam.course?.course_name || 'General';
-                    const dateTime = exam.exam_date ? 
-                        new Date(exam.exam_date).toLocaleDateString() + 
-                        (exam.exam_start_time ? ` ${exam.exam_start_time}` : '') : 'N/A';
-                    
-                    const duration = exam.duration_minutes ? `${exam.duration_minutes} mins` : 'N/A';
-
-                    return `
-                        <tr>
-                            <td><span class="exam-type-badge">${exam.exam_type || 'N/A'}</span></td>
-                            <td><strong>${exam.exam_name || 'N/A'}</strong></td>
-                            <td>${courseName}</td>
-                            <td>${exam.target_program || 'N/A'}/${exam.block_term || 'N/A'}</td>
-                            <td>${dateTime}</td>
-                            <td>${duration}</td>
-                            <td><span class="status status-${(exam.status || 'Scheduled').toLowerCase()}">${exam.status}</span></td>
-                            <td>
-                                <div class="action-buttons">
-                                    <button class="btn-action" onclick="openEditExamModal('${exam.id}')" title="Edit">
-                                        <i class="fas fa-edit"></i>
-                                    </button>
-                                    <button class="btn-action btn-grade-exam" onclick="openGradeModal('${exam.id}')" title="Grade">
-                                        <i class="fas fa-check-circle"></i>
-                                    </button>
-                                    ${exam.online_link ? `
-                                        <a href="${exam.online_link}" target="_blank" class="btn-action" title="Open Link">
-                                            <i class="fas fa-external-link-alt"></i>
-                                        </a>
-                                    ` : ''}
-                                    <button class="btn-action delete" onclick="deleteExam('${exam.id}', '${exam.exam_name?.replace(/'/g, "\\'") || ''}')" title="Delete">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                    `;
-                }).join('');
-            } catch (error) {
-                console.error('Failed to load exams:', error);
-                tbody.innerHTML = `<tr><td colspan="8">Error loading exams: ${error.message}</td></tr>`;
-            }
-        }
-
-        // =================================================================
-// === GRADE MANAGEMENT FUNCTIONS ===
+// =================================================================
+// === GRADE MANAGEMENT FUNCTIONS - MOVED ABOVE loadLecturerExams ===
 // =================================================================
 
 // Open grade modal for an exam
@@ -3203,103 +3135,170 @@ function escapeHtml(unsafe) {
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
 }
-        // Delete exam
-        async function deleteExam(examId, examName) {
-            if (!confirm(`Are you sure you want to delete "${examName}"?`)) return;
 
-            try {
-                const { error } = await sb.from('exams')
-                    .delete()
-                    .eq('id', examId)
-                    .eq('created_by', currentUserProfile.user_id); // Security: only delete own exams
+// Load lecturer's exams - MOVED AFTER grade functions
+async function loadLecturerExams() {
+    const tbody = $('exams-table');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '<tr><td colspan="8">Loading your exams...</td></tr>';
 
-                if (error) throw error;
+    try {
+        const { data: exams, error } = await fetchData(
+            'exams',
+            '*, course:course_id(course_name, unit_code)',
+            { created_by: currentUserProfile.user_id },
+            'exam_date',
+            false
+        );
 
-                showFeedback('✅ Exam deleted successfully!', 'success');
-                loadLecturerExams();
-            } catch (error) {
-                console.error('Delete failed:', error);
-                showFeedback(`Delete failed: ${error.message}`, 'error');
-            }
+        if (error) throw error;
+
+        if (!exams || exams.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8">No exams found. Create your first exam above.</td></tr>';
+            return;
         }
 
-        // Edit exam modal
-        async function openEditExamModal(examId) {
-            try {
-                const { data: exam, error } = await sb
-                    .from('exams')
-                    .select('*')
-                    .eq('id', examId)
-                    .eq('created_by', currentUserProfile.user_id) // Security: only edit own exams
-                    .single();
+        tbody.innerHTML = exams.map(exam => {
+            const courseName = exam.course?.course_name || 'General';
+            const dateTime = exam.exam_date ? 
+                new Date(exam.exam_date).toLocaleDateString() + 
+                (exam.exam_start_time ? ` ${exam.exam_start_time}` : '') : 'N/A';
+            
+            const duration = exam.duration_minutes ? `${exam.duration_minutes} mins` : 'N/A';
 
-                if (error || !exam) {
-                    showFeedback('Exam not found or access denied.', 'error');
-                    return;
-                }
+            return `
+                <tr>
+                    <td><span class="exam-type-badge">${exam.exam_type || 'N/A'}</span></td>
+                    <td><strong>${exam.exam_name || 'N/A'}</strong></td>
+                    <td>${courseName}</td>
+                    <td>${exam.target_program || 'N/A'}/${exam.block_term || 'N/A'}</td>
+                    <td>${dateTime}</td>
+                    <td>${duration}</td>
+                    <td><span class="status status-${(exam.status || 'Scheduled').toLowerCase()}">${exam.status}</span></td>
+                    <td>
+                        <div class="action-buttons">
+                            <button class="btn-action" onclick="openEditExamModal('${exam.id}')" title="Edit">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="btn-action btn-grade-exam" onclick="openGradeModal('${exam.id}')" title="Grade">
+                                <i class="fas fa-check-circle"></i>
+                            </button>
+                            ${exam.online_link ? `
+                                <a href="${exam.online_link}" target="_blank" class="btn-action" title="Open Link">
+                                    <i class="fas fa-external-link-alt"></i>
+                                </a>
+                            ` : ''}
+                            <button class="btn-action delete" onclick="deleteExam('${exam.id}', '${exam.exam_name?.replace(/'/g, "\\'") || ''}')" title="Delete">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    } catch (error) {
+        console.error('Failed to load exams:', error);
+        tbody.innerHTML = `<tr><td colspan="8">Error loading exams: ${error.message}</td></tr>`;
+    }
+}
 
-                // Populate form
-                $('edit_exam_id').value = exam.id;
-                $('edit_exam_title').value = exam.exam_name || '';
-                $('edit_exam_date').value = exam.exam_date || '';
-                $('edit_exam_status').value = exam.status || 'Scheduled';
+// Delete exam
+async function deleteExam(examId, examName) {
+    if (!confirm(`Are you sure you want to delete "${examName}"?`)) return;
 
-                // Show modal
-                $('examEditModal').classList.add('active');
-                
-            } catch (error) {
-                console.error('Error opening edit modal:', error);
-                showFeedback('Failed to load exam details.', 'error');
-            }
+    try {
+        const { error } = await sb.from('exams')
+            .delete()
+            .eq('id', examId)
+            .eq('created_by', currentUserProfile.user_id); // Security: only delete own exams
+
+        if (error) throw error;
+
+        showFeedback('✅ Exam deleted successfully!', 'success');
+        loadLecturerExams();
+    } catch (error) {
+        console.error('Delete failed:', error);
+        showFeedback(`Delete failed: ${error.message}`, 'error');
+    }
+}
+
+// Edit exam modal
+async function openEditExamModal(examId) {
+    try {
+        const { data: exam, error } = await sb
+            .from('exams')
+            .select('*')
+            .eq('id', examId)
+            .eq('created_by', currentUserProfile.user_id) // Security: only edit own exams
+            .single();
+
+        if (error || !exam) {
+            showFeedback('Exam not found or access denied.', 'error');
+            return;
         }
 
-        // Close edit modal
-        function closeEditExamModal() {
-            $('examEditModal').classList.remove('active');
-        }
+        // Populate form
+        $('edit_exam_id').value = exam.id;
+        $('edit_exam_title').value = exam.exam_name || '';
+        $('edit_exam_date').value = exam.exam_date || '';
+        $('edit_exam_status').value = exam.status || 'Scheduled';
 
-        // Save edited exam
-        async function saveEditedExam(e) {
-            e.preventDefault();
-            const button = e.submitter;
-            setButtonLoading(button, true, 'Save Changes');
+        // Show modal
+        $('examEditModal').classList.add('active');
+        
+    } catch (error) {
+        console.error('Error opening edit modal:', error);
+        showFeedback('Failed to load exam details.', 'error');
+    }
+}
 
-            const examId = $('edit_exam_id').value;
-            const title = $('edit_exam_title').value;
-            const date = $('edit_exam_date').value;
-            const status = $('edit_exam_status').value;
+// Close edit modal
+function closeEditExamModal() {
+    $('examEditModal').classList.remove('active');
+}
 
-            if (!title || !date) {
-                showFeedback('Title and date are required.', 'error');
-                setButtonLoading(button, false);
-                return;
-            }
+// Save edited exam
+async function saveEditedExam(e) {
+    e.preventDefault();
+    const button = e.submitter;
+    setButtonLoading(button, true, 'Save Changes');
 
-            try {
-                const { error } = await sb.from('exams')
-                    .update({
-                        exam_name: title,
-                        exam_date: date,
-                        status: status,
-                        updated_at: new Date().toISOString()
-                    })
-                    .eq('id', examId)
-                    .eq('created_by', currentUserProfile.user_id); // Security: only update own exams
+    const examId = $('edit_exam_id').value;
+    const title = $('edit_exam_title').value;
+    const date = $('edit_exam_date').value;
+    const status = $('edit_exam_status').value;
 
-                if (error) throw error;
+    if (!title || !date) {
+        showFeedback('Title and date are required.', 'error');
+        setButtonLoading(button, false);
+        return;
+    }
 
-                showFeedback('✅ Exam updated successfully!', 'success');
-                closeEditExamModal();
-                loadLecturerExams();
-                
-            } catch (error) {
-                console.error('Error saving exam:', error);
-                showFeedback(`Failed to update exam: ${error.message}`, 'error');
-            } finally {
-                setButtonLoading(button, false);
-            }
-        }
+    try {
+        const { error } = await sb.from('exams')
+            .update({
+                exam_name: title,
+                exam_date: date,
+                status: status,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', examId)
+            .eq('created_by', currentUserProfile.user_id); // Security: only update own exams
 
+        if (error) throw error;
+
+        showFeedback('✅ Exam updated successfully!', 'success');
+        closeEditExamModal();
+        loadLecturerExams();
+        
+    } catch (error) {
+        console.error('Error saving exam:', error);
+        showFeedback(`Failed to update exam: ${error.message}`, 'error');
+    } finally {
+        setButtonLoading(button, false);
+    }
+}
         // =================================================================
         // === 11. RESOURCES MANAGEMENT ===
         // =================================================================
