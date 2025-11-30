@@ -13,6 +13,146 @@
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
         crossorigin=""></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* Attendance Metrics Dashboard */
+        .attendance-metrics-dashboard {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .attendance-metrics-dashboard h3 {
+            margin-bottom: 15px;
+            color: #4C1D95;
+            font-size: 1.2em;
+        }
+
+        .metrics-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .metric-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .metric-value {
+            font-size: 2em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .metric-label {
+            font-size: 0.9em;
+            opacity: 0.9;
+            margin-bottom: 5px;
+        }
+
+        .metric-subtext {
+            font-size: 0.8em;
+            opacity: 0.7;
+        }
+
+        /* Past Attendance Section */
+        .past-attendance-section {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .past-attendance-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        .past-attendance-table th {
+            background: #f8f9fa;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            color: #374151;
+            border-bottom: 2px solid #e5e7eb;
+        }
+
+        .past-attendance-table td {
+            padding: 12px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .past-attendance-table tr:hover {
+            background: #f9fafb;
+        }
+
+        /* Session Type Badges */
+        .session-type-badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            font-weight: 500;
+        }
+
+        .session-type-badge.type-class {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .session-type-badge.type-clinical {
+            background: #f0fdf4;
+            color: #166534;
+        }
+
+        .session-type-badge.type-exam {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .session-type-badge.type-lecturer {
+            background: #f3e8ff;
+            color: #7e22ce;
+        }
+
+        /* Table Footer */
+        .table-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        .pagination-info {
+            color: #6b7280;
+            font-size: 0.9em;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .metrics-cards {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .past-attendance-table {
+                font-size: 0.9em;
+            }
+            
+            .past-attendance-table th,
+            .past-attendance-table td {
+                padding: 8px 4px;
+            }
+        }
+    </style>
 </head>
 <body>
     <button class="menu-toggle" id="menu-toggle">☰</button>
@@ -326,6 +466,33 @@
             <section id="attendance-content" class="tab-content">
                 <h2><i class="fas fa-clipboard-check"></i> Attendance Management</h2>
                 
+                <!-- ADDED: Attendance Metrics Dashboard -->
+                <div class="attendance-metrics-dashboard">
+                    <h3><i class="fas fa-chart-bar"></i> Attendance Overview</h3>
+                    <div class="metrics-cards">
+                        <div class="metric-card">
+                            <div class="metric-value" id="today-attendance-total">0</div>
+                            <div class="metric-label">Today's Total</div>
+                            <div class="metric-subtext" id="today-date-display"></div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value" id="weekly-attendance-total">0</div>
+                            <div class="metric-label">This Week</div>
+                            <div class="metric-subtext">Students Present</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value" id="monthly-attendance-rate">0%</div>
+                            <div class="metric-label">Monthly Rate</div>
+                            <div class="metric-subtext">Attendance</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value" id="overall-attendance-total">0</div>
+                            <div class="metric-label">Overall Total</div>
+                            <div class="metric-subtext">All Time Records</div>
+                        </div>
+                    </div>
+                </div>
+                
                 <div class="check-in-controls">
                     <h4>Lecturer Geo-Check-in</h4>
                     <p>Mark your own attendance for record-keeping.</p>
@@ -370,9 +537,62 @@
                     <button type="submit"><i class="fas fa-user-check"></i> Mark Student Present</button>
                 </form>
 
-                <h3>Attendance Logs</h3>
+                <!-- ADDED: Past Attendance Records Table -->
+                <div class="past-attendance-section">
+                    <h3><i class="fas fa-history"></i> Past Attendance Records</h3>
+                    
+                    <div class="filter-controls">
+                        <div class="filter-row">
+                            <div class="filter-group">
+                                <label for="past-attendance-date-filter">Filter by Date:</label>
+                                <input type="date" id="past-attendance-date-filter" onchange="filterPastAttendance()">
+                            </div>
+                            <div class="filter-group">
+                                <label for="past-attendance-type-filter">Session Type:</label>
+                                <select id="past-attendance-type-filter" onchange="filterPastAttendance()">
+                                    <option value="all">All Types</option>
+                                    <option value="Class">Class</option>
+                                    <option value="Clinical">Clinical</option>
+                                    <option value="Exam">Exam</option>
+                                    <option value="Lecturer Check-in">Lecturer</option>
+                                </select>
+                            </div>
+                            <div class="filter-group">
+                                <label for="past-attendance-search">Search:</label>
+                                <input type="text" id="past-attendance-search" placeholder="Search records..." onkeyup="filterPastAttendance()">
+                            </div>
+                        </div>
+                    </div>
+
+                    <table class="past-attendance-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Name</th>
+                                <th>Reg. No.</th>
+                                <th>Session Type</th>
+                                <th>Course</th>
+                                <th>Time</th>
+                                <th>Location</th>
+                                <th>Status</th>
+                                <th>Recorded By</th>
+                            </tr>
+                        </thead>
+                        <tbody id="past-attendance-table">
+                            <tr><td colspan="9">Loading past attendance records...</td></tr>
+                        </tbody>
+                    </table>
+                    
+                    <div class="table-footer">
+                        <div class="pagination-info" id="past-attendance-pagination">
+                            Showing <span id="past-attendance-count">0</span> records
+                        </div>
+                    </div>
+                </div>
+
+                <h3>Today's Attendance Logs</h3>
                 <div class="search-container">
-                    <input type="text" id="attendance-search" placeholder="Filter attendance logs...">
+                    <input type="text" id="attendance-search" placeholder="Filter today's logs...">
                     <button onclick="filterTable('attendance-search', 'attendance-table', [0, 1, 2, 3])"><i class="fas fa-search"></i> Filter</button>
                 </div>
 
@@ -1108,7 +1328,11 @@
                 case 'my-courses': loadLecturerCourses(); break; 
                 case 'my-students': loadLecturerStudents(); break; 
                 case 'sessions': loadLecturerSessions(); populateSessionFormSelects(); break;
-                case 'attendance': loadTodaysAttendanceRecords(); loadAttendanceSelects(); break;
+                case 'attendance': 
+                    loadTodaysAttendanceRecords(); 
+                    loadAttendanceSelects(); 
+                    loadAttendanceMetricsAndPastRecords(); // ADDED: Load metrics and past records
+                    break;
                 case 'cats': loadLecturerExams(); populateExamFormSelects(); break;
                 case 'resources': loadLecturerResources(); populateResourceFormSelects(); break;
                 case 'messages': loadLecturerMessages(); populateMessageFormSelects(); break;
@@ -1781,347 +2005,579 @@
             }).join('');
         }
 
-  // =================================================================
-// === 8. ATTENDANCE MANAGEMENT - COMPLETE FIXED VERSION ===
-// =================================================================
+        // =================================================================
+        // === 8. ATTENDANCE MANAGEMENT - COMPLETE FIXED VERSION ===
+        // =================================================================
 
-function loadAttendanceSelects() {
-    console.log('🔄 Loading attendance form selects...');
-    
-    try {
-        // Populate student dropdown
-        if (allStudents && allStudents.length > 0) {
-            populateSelect($('att_student_id'), allStudents, 'user_id', 'full_name', 'Select Student');
-            console.log(`✅ Loaded ${allStudents.length} students into dropdown`);
-        } else {
-            console.warn('⚠️ No students available for attendance dropdown');
-            $('att_student_id').innerHTML = '<option value="">No students available</option>';
-        }
-
-        // Populate course dropdown
-        const filteredCourses = allCourses.filter(c => c.target_program === lecturerTargetProgram);
-        if (filteredCourses.length > 0) {
-            populateSelect($('att_course_id'), filteredCourses, 'unit_code', 'course_name', 'Select Course (Optional)');
-            console.log(`✅ Loaded ${filteredCourses.length} courses into dropdown`);
-        } else {
-            console.warn('⚠️ No courses available for attendance dropdown');
-            $('att_course_id').innerHTML = '<option value="">No courses available</option>';
-        }
-    } catch (error) {
-        console.error('❌ Error loading attendance selects:', error);
-    }
-}
-
-async function lecturerCheckIn() {
-    const button = $('lecturer-checkin-btn');
-    setButtonLoading(button, true, 'Marking Attendance...');
-
-    if (!navigator.geolocation) {
-        showFeedback('Geolocation is not supported by your browser.', 'error');
-        setButtonLoading(button, false);
-        return;
-    }
-
-    navigator.geolocation.getCurrentPosition(async (position) => {
-        const { latitude, longitude } = position.coords;
-        const checkinTime = new Date().toISOString();
-        const locationDetails = `Lecturer Check-in: Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)}`;
-
-        try {
-            const { error } = await sb.from('geo_attendance_logs').insert({
-                user_id: currentUserProfile.user_id,
-                user_role: 'lecturer',
-                session_type: 'Lecturer Check-in',
-                check_in_time: checkinTime,
-                latitude: latitude,
-                longitude: longitude,
-                location_details: locationDetails,
-                status: 'Present',
-                recorded_by_id: currentUserProfile.user_id,
-                recorded_by_name: currentUserProfile.full_name,
-                student_name: currentUserProfile.full_name,
-                program: lecturerTargetProgram,
-                is_manual_entry: false
-            });
-
-            if (error) throw error;
-
-            showFeedback('✅ Your attendance has been logged successfully!', 'success');
-            loadTodaysAttendanceRecords();
-
-        } catch (error) {
-            console.error('Check-in failed:', error);
-            showFeedback(`Check-in failed: ${error.message}`, 'error');
-        } finally {
-            setButtonLoading(button, false);
-        }
-
-    }, (error) => {
-        console.error('Geolocation Error:', error);
-        showFeedback(`Geolocation failed: ${error.message}.`, 'error');
-        setButtonLoading(button, false);
-    });
-}
-
-async function handleManualAttendance(e) {
-    e.preventDefault();
-    const button = e.submitter;
-    setButtonLoading(button, true, 'Mark Student Present');
-
-    const formData = {
-        student_id: $('att_student_id').value,
-        session_type: $('att_session_type').value,
-        course_id: $('att_course_id').value,
-        location: $('att_location').value,
-        date: $('att_date').value,
-        time: $('att_time').value
-    };
-
-    if (!formData.student_id || !formData.session_type || !formData.date) {
-        showFeedback('Please fill in Student, Session Type, and Date.', 'error');
-        setButtonLoading(button, false);
-        return;
-    }
-
-    const studentProfile = allStudents.find(s => s.user_id === formData.student_id);
-    if (!studentProfile) {
-        showFeedback('Selected student profile not found.', 'error');
-        setButtonLoading(button, false);
-        return;
-    }
-
-    const checkinDateTime = `${formData.date}T${formData.time || '12:00'}:00.000Z`;
-
-    try {
-        const { error } = await sb.from('geo_attendance_logs').insert({
-            user_id: formData.student_id,
-            user_role: 'student',
-            session_type: formData.session_type,
-            check_in_time: checkinDateTime,
-            course_id: formData.course_id || null,
-            location_details: `MANUAL ENTRY: ${formData.location || 'N/A'} (By ${currentUserProfile.full_name})`,
-            status: 'Present',
-            recorded_by_id: currentUserProfile.user_id,
-            recorded_by_name: currentUserProfile.full_name,
-            student_name: studentProfile.full_name,
-            student_email: studentProfile.email,
-            program: studentProfile.program,
-            block: studentProfile.block,
-            intake_year: studentProfile.intake_year,
-            is_manual_entry: true
-        });
-
-        if (error) throw error;
-
-        showFeedback(`✅ Attendance for ${studentProfile.full_name} marked present successfully!`, 'success');
-        e.target.reset();
-        loadTodaysAttendanceRecords();
-    } catch (error) {
-        console.error('Manual attendance failed:', error);
-        showFeedback(`Manual attendance failed: ${error.message}`, 'error');
-    } finally {
-        setButtonLoading(button, false);
-    }
-}
-// Enhanced version to handle NULL user_id records better
-async function loadTodaysAttendanceRecords() {
-    const tbody = document.getElementById('attendance-table');
-    if (!tbody) return;
-
-    tbody.innerHTML = '<tr><td colspan="8">Loading today\'s records...</td></tr>';
-
-    try {
-        // Get today's date range
-        const today = new Date();
-        const startOfDay = new Date(today.setHours(0, 0, 0, 0)).toISOString();
-        const endOfDay = new Date(today.setHours(23, 59, 59, 999)).toISOString();
-
-        // Fetch ALL attendance records for today
-        const { data: logs, error } = await sb
-            .from('geo_attendance_logs')
-            .select('*')
-            .gte('check_in_time', startOfDay)
-            .lte('check_in_time', endOfDay)
-            .order('check_in_time', { ascending: false });
-
-        if (error) throw error;
-        if (!logs || logs.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8">No attendance records found for today.</td></tr>';
-            return;
-        }
-
-        console.log(`📊 Found ${logs.length} total attendance records for today`);
-
-        // NEW: Get student names for NULL user_id records by matching program
-        let studentDetails = {};
-        
-        // Get student user IDs from logs
-        const studentUserIds = logs
-            .filter(log => log.user_id && log.user_role === 'student')
-            .map(log => log.user_id);
-
-        // Fetch student details for user_id records
-        if (studentUserIds.length > 0) {
-            const { data: students, error: studentError } = await sb
-                .from('consolidated_user_profiles_table')
-                .select('user_id, full_name, student_id, program, email, block, intake_year, role')
-                .in('user_id', studentUserIds);
-
-            if (!studentError && students) {
-                students.forEach(student => {
-                    studentDetails[student.user_id] = student;
-                });
-            }
-        }
-
-        // NEW: For NULL user_id records, try to find students by program
-        const nullUserIdLogs = logs.filter(log => !log.user_id && log.program === lecturerTargetProgram);
-        if (nullUserIdLogs.length > 0) {
-            // Get all students from the lecturer's program
-            const programStudents = allStudents.filter(s => s.program === lecturerTargetProgram);
+        function loadAttendanceSelects() {
+            console.log('🔄 Loading attendance form selects...');
             
-            // For each NULL user_id log, try to find a matching student
-            nullUserIdLogs.forEach(log => {
-                // If we can't find a match, at least we know it's from our program
-                if (!studentDetails[log.id]) {
-                    studentDetails[log.id] = {
-                        full_name: 'Student',
-                        student_id: 'N/A',
-                        program: log.program
-                    };
+            try {
+                // Populate student dropdown
+                if (allStudents && allStudents.length > 0) {
+                    populateSelect($('att_student_id'), allStudents, 'user_id', 'full_name', 'Select Student');
+                    console.log(`✅ Loaded ${allStudents.length} students into dropdown`);
+                } else {
+                    console.warn('⚠️ No students available for attendance dropdown');
+                    $('att_student_id').innerHTML = '<option value="">No students available</option>';
                 }
+
+                // Populate course dropdown
+                const filteredCourses = allCourses.filter(c => c.target_program === lecturerTargetProgram);
+                if (filteredCourses.length > 0) {
+                    populateSelect($('att_course_id'), filteredCourses, 'unit_code', 'course_name', 'Select Course (Optional)');
+                    console.log(`✅ Loaded ${filteredCourses.length} courses into dropdown`);
+                } else {
+                    console.warn('⚠️ No courses available for attendance dropdown');
+                    $('att_course_id').innerHTML = '<option value="">No courses available</option>';
+                }
+            } catch (error) {
+                console.error('❌ Error loading attendance selects:', error);
+            }
+        }
+
+        async function lecturerCheckIn() {
+            const button = $('lecturer-checkin-btn');
+            setButtonLoading(button, true, 'Marking Attendance...');
+
+            if (!navigator.geolocation) {
+                showFeedback('Geolocation is not supported by your browser.', 'error');
+                setButtonLoading(button, false);
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(async (position) => {
+                const { latitude, longitude } = position.coords;
+                const checkinTime = new Date().toISOString();
+                const locationDetails = `Lecturer Check-in: Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)}`;
+
+                try {
+                    const { error } = await sb.from('geo_attendance_logs').insert({
+                        user_id: currentUserProfile.user_id,
+                        user_role: 'lecturer',
+                        session_type: 'Lecturer Check-in',
+                        check_in_time: checkinTime,
+                        latitude: latitude,
+                        longitude: longitude,
+                        location_details: locationDetails,
+                        status: 'Present',
+                        recorded_by_id: currentUserProfile.user_id,
+                        recorded_by_name: currentUserProfile.full_name,
+                        student_name: currentUserProfile.full_name,
+                        program: lecturerTargetProgram,
+                        is_manual_entry: false
+                    });
+
+                    if (error) throw error;
+
+                    showFeedback('✅ Your attendance has been logged successfully!', 'success');
+                    loadTodaysAttendanceRecords();
+
+                } catch (error) {
+                    console.error('Check-in failed:', error);
+                    showFeedback(`Check-in failed: ${error.message}`, 'error');
+                } finally {
+                    setButtonLoading(button, false);
+                }
+
+            }, (error) => {
+                console.error('Geolocation Error:', error);
+                showFeedback(`Geolocation failed: ${error.message}.`, 'error');
+                setButtonLoading(button, false);
             });
         }
 
-        // Filter logs (using the fixed logic from before)
-        const filteredLogs = logs.filter(log => {
-            if (log.user_id === currentUserProfile.user_id) return true;
-            if (log.recorded_by_id === currentUserProfile.user_id) return true;
-            if (log.program === lecturerTargetProgram) return true;
-            if (log.user_id && log.user_role === 'student') {
-                const user = studentDetails[log.user_id];
-                return user && user.program === lecturerTargetProgram;
-            }
-            return false;
-        });
+        async function handleManualAttendance(e) {
+            e.preventDefault();
+            const button = e.submitter;
+            setButtonLoading(button, true, 'Mark Student Present');
 
-        console.log(`👨‍🏫 Showing ${filteredLogs.length} filtered records for lecturer`);
+            const formData = {
+                student_id: $('att_student_id').value,
+                session_type: $('att_session_type').value,
+                course_id: $('att_course_id').value,
+                location: $('att_location').value,
+                date: $('att_date').value,
+                time: $('att_time').value
+            };
 
-        // Display the filtered logs
-        tbody.innerHTML = '';
-        filteredLogs.forEach(log => {
-            let userName, regNo, userProgram, userRole;
-            
-            if (log.user_role === 'lecturer') {
-                userName = currentUserProfile.full_name || 'Lecturer';
-                regNo = currentUserProfile.employee_id || 'N/A';
-                userProgram = lecturerTargetProgram || 'N/A';
-                userRole = 'lecturer';
-            } else {
-                // ✅ FIXED: Use database student_name first, then student details
-                const student = studentDetails[log.user_id] || studentDetails[log.id];
-                userName = log.student_name || student?.full_name || 'Student';
-                regNo = student?.student_id || 'N/A';
-                userProgram = student?.program || log.program || 'N/A';
-                userRole = student?.role || log.user_role || 'student';
+            if (!formData.student_id || !formData.session_type || !formData.date) {
+                showFeedback('Please fill in Student, Session Type, and Date.', 'error');
+                setButtonLoading(button, false);
+                return;
             }
 
-            // IMPROVED: Better course name detection
-            const courseName = allCourses.find(c => 
-                c.unit_code === log.course_id || 
-                c.id === log.course_id
-            )?.course_name || log.course_id || 'General';
+            const studentProfile = allStudents.find(s => s.user_id === formData.student_id);
+            if (!studentProfile) {
+                showFeedback('Selected student profile not found.', 'error');
+                setButtonLoading(button, false);
+                return;
+            }
 
-            const dateTime = log.check_in_time ? new Date(log.check_in_time).toLocaleString() : 'N/A';
-            
-            // ✅ FIXED: Use location_friendly_name instead of location_details
-            const locationText = log.location_friendly_name || log.location_details || 'N/A';
-            
-            const geoId = `geo-${log.id}`;
-            const statusText = log.status || 'Present';
-            const isRecordedByLecturer = log.recorded_by_id === currentUserProfile.user_id;
-            const hasLocation = log.latitude && log.longitude;
-            const isSelfCheckIn = !log.recorded_by_id && (log.user_role === 'student' || !log.user_role);
+            const checkinDateTime = `${formData.date}T${formData.time || '12:00'}:00.000Z`;
 
-            tbody.innerHTML += `
-                <tr>
-                    <td>
-                        ${userName}
-                        ${isRecordedByLecturer ? 
-                          '<span style="color: #10B981; margin-left: 5px;" title="Recorded by you">✓</span>' : ''}
-                        ${isSelfCheckIn ? 
-                          '<span style="color: #3B82F6; margin-left: 5px;" title="Student self-check-in">👤</span>' : ''}
-                    </td>
-                    <td>${regNo}</td>
-                    <td>${log.session_type || 'N/A'}</td>
-                    <td>${courseName}</td>
-                    <td>${dateTime}</td>
-                    <td id="${geoId}">${locationText}</td>
-                    <td>
-                        <span class="status status-${statusText.toLowerCase()}">
-                            ${statusText}
-                            ${userRole === 'student' ? ' (Student)' : ' (Lecturer)'}
-                        </span>
-                    </td>
-                    <td>
-                        <button
-                            onclick="viewCheckInMap(${log.latitude || 0}, ${log.longitude || 0}, '${encodeURIComponent(userName)}', '${geoId}')"
-                            class="btn-action"
-                            ${!hasLocation ? 'disabled title="No Geo-location recorded"' : ''}>
-                            ${hasLocation ? 'View Map' : 'No Location'}
-                        </button>
-                    </td>
-                </tr>
-            `;
-        });
+            try {
+                const { error } = await sb.from('geo_attendance_logs').insert({
+                    user_id: formData.student_id,
+                    user_role: 'student',
+                    session_type: formData.session_type,
+                    check_in_time: checkinDateTime,
+                    course_id: formData.course_id || null,
+                    location_details: `MANUAL ENTRY: ${formData.location || 'N/A'} (By ${currentUserProfile.full_name})`,
+                    status: 'Present',
+                    recorded_by_id: currentUserProfile.user_id,
+                    recorded_by_name: currentUserProfile.full_name,
+                    student_name: studentProfile.full_name,
+                    student_email: studentProfile.email,
+                    program: studentProfile.program,
+                    block: studentProfile.block,
+                    intake_year: studentProfile.intake_year,
+                    is_manual_entry: true
+                });
 
-    } catch (error) {
-        console.error('Unexpected error loading attendance:', error);
-        tbody.innerHTML = `<tr><td colspan="8">Unexpected error: ${error.message}</td></tr>`;
-    }
-}
-function viewCheckInMap(lat, lng, nameEncoded, locationElementId) {
-    // Only show map if we have valid coordinates
-    if (!lat || !lng || lat === 0 || lng === 0) {
-        showFeedback('No location data available for this check-in.', 'info');
-        return;
-    }
+                if (error) throw error;
 
-    const name = decodeURIComponent(nameEncoded);
-    const mapModal = $('mapModal');
-    mapModal.classList.add('active');
+                showFeedback(`✅ Attendance for ${studentProfile.full_name} marked present successfully!`, 'success');
+                e.target.reset();
+                loadTodaysAttendanceRecords();
+            } catch (error) {
+                console.error('Manual attendance failed:', error);
+                showFeedback(`Manual attendance failed: ${error.message}`, 'error');
+            } finally {
+                setButtonLoading(button, false);
+            }
+        }
 
-    const mapContainer = $('mapbox-map');
-    if (!mapContainer) {
-        showFeedback("Error: Map container not found.", "error");
-        return;
-    }
+        // Enhanced version to handle NULL user_id records better
+        async function loadTodaysAttendanceRecords() {
+            const tbody = document.getElementById('attendance-table');
+            if (!tbody) return;
 
-    if (attendanceMap) attendanceMap.remove();
+            tbody.innerHTML = '<tr><td colspan="8">Loading today\'s records...</td></tr>';
 
-    const locationText = $(locationElementId)?.textContent || 'N/A';
-    $('map-details').textContent = `Location for ${name}: ${locationText}`;
+            try {
+                // Get today's date range
+                const today = new Date();
+                const startOfDay = new Date(today.setHours(0, 0, 0, 0)).toISOString();
+                const endOfDay = new Date(today.setHours(23, 59, 59, 999)).toISOString();
 
-    attendanceMap = L.map('mapbox-map').setView([lat, lng], 16);
+                // Fetch ALL attendance records for today
+                const { data: logs, error } = await sb
+                    .from('geo_attendance_logs')
+                    .select('*')
+                    .gte('check_in_time', startOfDay)
+                    .lte('check_in_time', endOfDay)
+                    .order('check_in_time', { ascending: false });
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(attendanceMap);
+                if (error) throw error;
+                if (!logs || logs.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="8">No attendance records found for today.</td></tr>';
+                    return;
+                }
 
-    L.marker([lat, lng]).addTo(attendanceMap)
-        .bindPopup(`<b>${name}'s Check-in Location</b><br>${locationText}`)
-        .openPopup();
+                console.log(`📊 Found ${logs.length} total attendance records for today`);
 
-    setTimeout(() => attendanceMap.invalidateSize(), 300);
-}
+                // NEW: Get student names for NULL user_id records by matching program
+                let studentDetails = {};
+                
+                // Get student user IDs from logs
+                const studentUserIds = logs
+                    .filter(log => log.user_id && log.user_role === 'student')
+                    .map(log => log.user_id);
 
-function closeMapModal() {
-    const mapModal = $('mapModal');
-    mapModal.classList.remove('active');
-}
+                // Fetch student details for user_id records
+                if (studentUserIds.length > 0) {
+                    const { data: students, error: studentError } = await sb
+                        .from('consolidated_user_profiles_table')
+                        .select('user_id, full_name, student_id, program, email, block, intake_year, role')
+                        .in('user_id', studentUserIds);
+
+                    if (!studentError && students) {
+                        students.forEach(student => {
+                            studentDetails[student.user_id] = student;
+                        });
+                    }
+                }
+
+                // NEW: For NULL user_id records, try to find students by program
+                const nullUserIdLogs = logs.filter(log => !log.user_id && log.program === lecturerTargetProgram);
+                if (nullUserIdLogs.length > 0) {
+                    // Get all students from the lecturer's program
+                    const programStudents = allStudents.filter(s => s.program === lecturerTargetProgram);
+                    
+                    // For each NULL user_id log, try to find a matching student
+                    nullUserIdLogs.forEach(log => {
+                        // If we can't find a match, at least we know it's from our program
+                        if (!studentDetails[log.id]) {
+                            studentDetails[log.id] = {
+                                full_name: 'Student',
+                                student_id: 'N/A',
+                                program: log.program
+                            };
+                        }
+                    });
+                }
+
+                // Filter logs (using the fixed logic from before)
+                const filteredLogs = logs.filter(log => {
+                    if (log.user_id === currentUserProfile.user_id) return true;
+                    if (log.recorded_by_id === currentUserProfile.user_id) return true;
+                    if (log.program === lecturerTargetProgram) return true;
+                    if (log.user_id && log.user_role === 'student') {
+                        const user = studentDetails[log.user_id];
+                        return user && user.program === lecturerTargetProgram;
+                    }
+                    return false;
+                });
+
+                console.log(`👨‍🏫 Showing ${filteredLogs.length} filtered records for lecturer`);
+
+                // Display the filtered logs
+                tbody.innerHTML = '';
+                filteredLogs.forEach(log => {
+                    let userName, regNo, userProgram, userRole;
+                    
+                    if (log.user_role === 'lecturer') {
+                        userName = currentUserProfile.full_name || 'Lecturer';
+                        regNo = currentUserProfile.employee_id || 'N/A';
+                        userProgram = lecturerTargetProgram || 'N/A';
+                        userRole = 'lecturer';
+                    } else {
+                        // ✅ FIXED: Use database student_name first, then student details
+                        const student = studentDetails[log.user_id] || studentDetails[log.id];
+                        userName = log.student_name || student?.full_name || 'Student';
+                        regNo = student?.student_id || 'N/A';
+                        userProgram = student?.program || log.program || 'N/A';
+                        userRole = student?.role || log.user_role || 'student';
+                    }
+
+                    // IMPROVED: Better course name detection
+                    const courseName = allCourses.find(c => 
+                        c.unit_code === log.course_id || 
+                        c.id === log.course_id
+                    )?.course_name || log.course_id || 'General';
+
+                    const dateTime = log.check_in_time ? new Date(log.check_in_time).toLocaleString() : 'N/A';
+                    
+                    // ✅ FIXED: Use location_friendly_name instead of location_details
+                    const locationText = log.location_friendly_name || log.location_details || 'N/A';
+                    
+                    const geoId = `geo-${log.id}`;
+                    const statusText = log.status || 'Present';
+                    const isRecordedByLecturer = log.recorded_by_id === currentUserProfile.user_id;
+                    const hasLocation = log.latitude && log.longitude;
+                    const isSelfCheckIn = !log.recorded_by_id && (log.user_role === 'student' || !log.user_role);
+
+                    tbody.innerHTML += `
+                        <tr>
+                            <td>
+                                ${userName}
+                                ${isRecordedByLecturer ? 
+                                  '<span style="color: #10B981; margin-left: 5px;" title="Recorded by you">✓</span>' : ''}
+                                ${isSelfCheckIn ? 
+                                  '<span style="color: #3B82F6; margin-left: 5px;" title="Student self-check-in">👤</span>' : ''}
+                            </td>
+                            <td>${regNo}</td>
+                            <td>${log.session_type || 'N/A'}</td>
+                            <td>${courseName}</td>
+                            <td>${dateTime}</td>
+                            <td id="${geoId}">${locationText}</td>
+                            <td>
+                                <span class="status status-${statusText.toLowerCase()}">
+                                    ${statusText}
+                                    ${userRole === 'student' ? ' (Student)' : ' (Lecturer)'}
+                                </span>
+                            </td>
+                            <td>
+                                <button
+                                    onclick="viewCheckInMap(${log.latitude || 0}, ${log.longitude || 0}, '${encodeURIComponent(userName)}', '${geoId}')"
+                                    class="btn-action"
+                                    ${!hasLocation ? 'disabled title="No Geo-location recorded"' : ''}>
+                                    ${hasLocation ? 'View Map' : 'No Location'}
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
+
+            } catch (error) {
+                console.error('Unexpected error loading attendance:', error);
+                tbody.innerHTML = `<tr><td colspan="8">Unexpected error: ${error.message}</td></tr>`;
+            }
+        }
+
+        function viewCheckInMap(lat, lng, nameEncoded, locationElementId) {
+            // Only show map if we have valid coordinates
+            if (!lat || !lng || lat === 0 || lng === 0) {
+                showFeedback('No location data available for this check-in.', 'info');
+                return;
+            }
+
+            const name = decodeURIComponent(nameEncoded);
+            const mapModal = $('mapModal');
+            mapModal.classList.add('active');
+
+            const mapContainer = $('mapbox-map');
+            if (!mapContainer) {
+                showFeedback("Error: Map container not found.", "error");
+                return;
+            }
+
+            if (attendanceMap) attendanceMap.remove();
+
+            const locationText = $(locationElementId)?.textContent || 'N/A';
+            $('map-details').textContent = `Location for ${name}: ${locationText}`;
+
+            attendanceMap = L.map('mapbox-map').setView([lat, lng], 16);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(attendanceMap);
+
+            L.marker([lat, lng]).addTo(attendanceMap)
+                .bindPopup(`<b>${name}'s Check-in Location</b><br>${locationText}`)
+                .openPopup();
+
+            setTimeout(() => attendanceMap.invalidateSize(), 300);
+        }
+
+        function closeMapModal() {
+            const mapModal = $('mapModal');
+            mapModal.classList.remove('active');
+        }
 
         // =================================================================
-        // === 9. EXAMS/CATS MANAGEMENT - ENHANCED VERSION ===
+        // === 9. ATTENDANCE METRICS & PAST RECORDS FUNCTIONS ===
+        // =================================================================
+
+        // Load attendance metrics and past records
+        async function loadAttendanceMetricsAndPastRecords() {
+            await loadAttendanceMetrics();
+            await loadPastAttendanceRecords();
+        }
+
+        // Load attendance metrics dashboard
+        async function loadAttendanceMetrics() {
+            try {
+                const today = new Date();
+                const startOfToday = new Date(today.setHours(0, 0, 0, 0)).toISOString();
+                const endOfToday = new Date(today.setHours(23, 59, 59, 999)).toISOString();
+                
+                // Calculate start of week (Monday)
+                const startOfWeek = new Date(today);
+                const day = today.getDay();
+                const diff = today.getDate() - day + (day === 0 ? -6 : 1);
+                startOfWeek.setDate(diff);
+                startOfWeek.setHours(0, 0, 0, 0);
+                
+                // Calculate start of month
+                const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+                
+                // Fetch today's attendance
+                const { data: todayData, error: todayError } = await sb
+                    .from('geo_attendance_logs')
+                    .select('*')
+                    .gte('check_in_time', startOfToday)
+                    .lte('check_in_time', endOfToday);
+
+                if (!todayError && todayData) {
+                    // Filter for lecturer's program
+                    const filteredToday = todayData.filter(log => 
+                        log.program === lecturerTargetProgram || 
+                        log.recorded_by_id === currentUserProfile.user_id
+                    );
+                    $('today-attendance-total').textContent = filteredToday.length;
+                }
+
+                // Fetch weekly attendance
+                const { data: weeklyData, error: weeklyError } = await sb
+                    .from('geo_attendance_logs')
+                    .select('*')
+                    .gte('check_in_time', startOfWeek.toISOString())
+                    .lte('check_in_time', endOfToday);
+
+                if (!weeklyError && weeklyData) {
+                    const filteredWeekly = weeklyData.filter(log => 
+                        log.program === lecturerTargetProgram || 
+                        log.recorded_by_id === currentUserProfile.user_id
+                    );
+                    $('weekly-attendance-total').textContent = filteredWeekly.length;
+                }
+
+                // Fetch monthly attendance rate
+                const { data: monthlyData, error: monthlyError } = await sb
+                    .from('geo_attendance_logs')
+                    .select('*')
+                    .gte('check_in_time', startOfMonth.toISOString())
+                    .lte('check_in_time', endOfToday);
+
+                if (!monthlyError && monthlyData) {
+                    const filteredMonthly = monthlyData.filter(log => 
+                        log.program === lecturerTargetProgram || 
+                        log.recorded_by_id === currentUserProfile.user_id
+                    );
+                    
+                    // Calculate unique students for the month
+                    const uniqueStudents = [...new Set(filteredMonthly.map(log => log.user_id))].length;
+                    const totalStudents = allStudents.length;
+                    const attendanceRate = totalStudents > 0 ? Math.round((uniqueStudents / totalStudents) * 100) : 0;
+                    
+                    $('monthly-attendance-rate').textContent = `${attendanceRate}%`;
+                }
+
+                // Fetch overall attendance total
+                const { data: overallData, error: overallError } = await sb
+                    .from('geo_attendance_logs')
+                    .select('*');
+
+                if (!overallError && overallData) {
+                    const filteredOverall = overallData.filter(log => 
+                        log.program === lecturerTargetProgram || 
+                        log.recorded_by_id === currentUserProfile.user_id
+                    );
+                    $('overall-attendance-total').textContent = filteredOverall.length;
+                }
+
+                // Update today's date display
+                $('today-date-display').textContent = new Date().toLocaleDateString('en-GB', {
+                    day: 'numeric',
+                    month: 'short',
+                    year: 'numeric'
+                });
+
+            } catch (error) {
+                console.error('Error loading attendance metrics:', error);
+                showFeedback('Failed to load attendance metrics', 'error');
+            }
+        }
+
+        // Load past attendance records
+        async function loadPastAttendanceRecords() {
+            const tbody = $('past-attendance-table');
+            if (!tbody) return;
+
+            try {
+                // Fetch all attendance records (not just today's)
+                const { data: allRecords, error } = await sb
+                    .from('geo_attendance_logs')
+                    .select('*')
+                    .order('check_in_time', { ascending: false })
+                    .limit(100); // Limit to 100 most recent records
+
+                if (error) throw error;
+
+                if (!allRecords || allRecords.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="9">No past attendance records found.</td></tr>';
+                    return;
+                }
+
+                // Filter records for lecturer's program
+                const filteredRecords = allRecords.filter(log => 
+                    log.program === lecturerTargetProgram || 
+                    log.recorded_by_id === currentUserProfile.user_id ||
+                    log.user_id === currentUserProfile.user_id
+                );
+
+                displayPastAttendanceRecords(filteredRecords);
+
+            } catch (error) {
+                console.error('Error loading past attendance records:', error);
+                tbody.innerHTML = '<tr><td colspan="9">Error loading past attendance records.</td></tr>';
+            }
+        }
+
+        // Display past attendance records
+        function displayPastAttendanceRecords(records) {
+            const tbody = $('past-attendance-table');
+            
+            if (!records || records.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9">No records match your filters.</td></tr>';
+                $('past-attendance-count').textContent = '0';
+                return;
+            }
+
+            tbody.innerHTML = records.map(log => {
+                const dateTime = log.check_in_time ? new Date(log.check_in_time) : new Date();
+                const dateStr = dateTime.toLocaleDateString('en-GB');
+                const timeStr = dateTime.toLocaleTimeString('en-GB', { 
+                    hour: '2-digit', 
+                    minute: '2-digit' 
+                });
+
+                // Get student details
+                let studentName = log.student_name || 'Lecturer';
+                let regNo = log.user_role === 'lecturer' ? 
+                    (currentUserProfile.employee_id || 'N/A') : 
+                    (allStudents.find(s => s.user_id === log.user_id)?.student_id || 'N/A');
+
+                // Get course name
+                const courseName = allCourses.find(c => 
+                    c.unit_code === log.course_id || c.id === log.course_id
+                )?.course_name || log.course_id || 'General';
+
+                return `
+                    <tr>
+                        <td>${dateStr}</td>
+                        <td>${studentName}</td>
+                        <td>${regNo}</td>
+                        <td>
+                            <span class="session-type-badge type-${(log.session_type || 'Class').toLowerCase()}">
+                                ${log.session_type || 'Class'}
+                            </span>
+                        </td>
+                        <td>${courseName}</td>
+                        <td>${timeStr}</td>
+                        <td>${log.location_friendly_name || log.location_details || 'N/A'}</td>
+                        <td>
+                            <span class="status status-${(log.status || 'Present').toLowerCase()}">
+                                ${log.status || 'Present'}
+                            </span>
+                        </td>
+                        <td>${log.recorded_by_name || 'Self'}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            $('past-attendance-count').textContent = records.length;
+        }
+
+        // Filter past attendance records
+        function filterPastAttendance() {
+            const dateFilter = $('past-attendance-date-filter').value;
+            const typeFilter = $('past-attendance-type-filter').value;
+            const searchFilter = $('past-attendance-search').value.toLowerCase();
+
+            const rows = document.querySelectorAll('#past-attendance-table tr');
+            let visibleCount = 0;
+
+            rows.forEach(row => {
+                if (row.cells.length === 0) return;
+
+                const date = row.cells[0]?.textContent || '';
+                const name = row.cells[1]?.textContent?.toLowerCase() || '';
+                const regNo = row.cells[2]?.textContent?.toLowerCase() || '';
+                const sessionType = row.cells[3]?.textContent?.toLowerCase() || '';
+                const course = row.cells[4]?.textContent?.toLowerCase() || '';
+
+                const matchesDate = !dateFilter || date === new Date(dateFilter).toLocaleDateString('en-GB');
+                const matchesType = typeFilter === 'all' || sessionType.includes(typeFilter.toLowerCase());
+                const matchesSearch = !searchFilter || 
+                                    name.includes(searchFilter) || 
+                                    regNo.includes(searchFilter) || 
+                                    course.includes(searchFilter) ||
+                                    sessionType.includes(searchFilter);
+
+                const shouldShow = matchesDate && matchesType && matchesSearch;
+                row.style.display = shouldShow ? '' : 'none';
+                
+                if (shouldShow) visibleCount++;
+            });
+
+            $('past-attendance-count').textContent = visibleCount;
+        }
+
+        // =================================================================
+        // === 10. EXAMS/CATS MANAGEMENT - ENHANCED VERSION ===
         // =================================================================
 
         // Initialize exams section
@@ -2398,337 +2854,8 @@ function closeMapModal() {
             }
         }
 
-        // Enhanced Grade Modal for Lecturers
-        async function openGradeModal(examId) {
-            try {
-                // Show loading state
-                showFeedback('Loading grading interface...', 'info');
-
-                // Get current user
-                const currentUser = await getCurrentUser();
-                if (!currentUser || !currentUser.user_id) {
-                    showFeedback('Authentication required for grading.', 'error');
-                    return;
-                }
-
-                // Fetch exam details
-                const { data: exam, error: examError } = await sb
-                    .from('exams')
-                    .select('*, course:course_id(course_name)')
-                    .eq('id', examId)
-                    .eq('created_by', currentUserProfile.user_id) // Security: only grade own exams
-                    .single();
-
-                if (examError || !exam) {
-                    showFeedback('Exam not found or access denied.', 'error');
-                    return;
-                }
-
-                // Fetch students for this exam
-                const { data: students, error: studentError } = await sb
-                    .from('consolidated_user_profiles_table')
-                    .select('user_id, full_name, email, student_id')
-                    .eq('program', exam.target_program)
-                    .eq('intake_year', exam.intake_year)
-                    .eq('block', exam.block_term)
-                    .order('full_name');
-
-                if (studentError) {
-                    showFeedback('Error loading students.', 'error');
-                    return;
-                }
-
-                if (!students || students.length === 0) {
-                    showFeedback('No students found for this exam.', 'warning');
-                    return;
-                }
-
-                // Fetch existing grades
-                const { data: existingGrades } = await sb
-                    .from('exam_grades')
-                    .select('*')
-                    .eq('exam_id', examId);
-
-                // Build grade modal HTML
-                const modalHtml = `
-                    <div class="modal-header">
-                        <h3><i class="fas fa-check-circle"></i> Grade: ${escapeHtml(exam.exam_name)}</h3>
-                        <span class="close-btn" onclick="closeGradeModal()">&times;</span>
-                    </div>
-                    <div class="modal-body">
-                        <div class="exam-info-card">
-                            <h4>Exam Details</h4>
-                            <p><strong>Course:</strong> ${escapeHtml(exam.course?.course_name || 'General')}</p>
-                            <p><strong>Program:</strong> ${escapeHtml(exam.target_program)} | Block ${escapeHtml(exam.block_term)} | ${escapeHtml(exam.intake_year)}</p>
-                            <p><strong>Type:</strong> ${escapeHtml(exam.exam_type)}</p>
-                            <p><strong>Date:</strong> ${new Date(exam.exam_date).toLocaleDateString()}</p>
-                        </div>
-
-                        <div class="search-container">
-                            <input type="text" id="gradeSearch" placeholder="Search students..." oninput="filterGradeStudents()">
-                            <button class="btn-action" onclick="exportGrades('${examId}')"><i class="fas fa-download"></i> Export</button>
-                        </div>
-
-                        <div class="table-container">
-                            <table class="grade-table">
-                                <thead>
-                                    <tr>
-                                        <th>Student Name</th>
-                                        <th>Student ID</th>
-                                        <th>CAT 1<br><small>(/30)</small></th>
-                                        <th>CAT 2<br><small>(/30)</small></th>
-                                        <th>Final Exam<br><small>(/100)</small></th>
-                                        <th>Total<br><small>(/100)</small></th>
-                                        <th>Grade</th>
-                                        <th>Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="gradeTableBody">
-                                    ${students.map(student => {
-                                        const grade = existingGrades?.find(g => g.student_id === student.user_id) || {};
-                                        const cat1 = grade.cat_1_score || '';
-                                        const cat2 = grade.cat_2_score || '';
-                                        const final = grade.exam_score || '';
-                                        const total = grade.total_score || '';
-                                        
-                                        return `
-                                            <tr data-name="${student.full_name.toLowerCase()}" data-id="${student.student_id.toLowerCase()}">
-                                                <td>${escapeHtml(student.full_name)}</td>
-                                                <td>${escapeHtml(student.student_id)}</td>
-                                                <td><input type="number" min="0" max="30" step="0.5" 
-                                                       id="cat1-${student.user_id}" value="${cat1}" 
-                                                       oninput="calculateStudentGrade('${student.user_id}')"
-                                                       class="grade-input"></td>
-                                                <td><input type="number" min="0" max="30" step="0.5"
-                                                       id="cat2-${student.user_id}" value="${cat2}"
-                                                       oninput="calculateStudentGrade('${student.user_id}')"
-                                                       class="grade-input"></td>
-                                                <td><input type="number" min="0" max="100" step="0.5"
-                                                       id="final-${student.user_id}" value="${final}"
-                                                       oninput="calculateStudentGrade('${student.user_id}')"
-                                                       class="grade-input"></td>
-                                                <td><input type="number" id="total-${student.user_id}" 
-                                                       value="${total}" readonly class="total-score"></td>
-                                                <td><span id="grade-${student.user_id}" class="grade-letter">${calculateGradeLetter(total)}</span></td>
-                                                <td>
-                                                    <select id="status-${student.user_id}" class="status-select">
-                                                        <option value="Scheduled" ${grade.result_status === 'Scheduled' ? 'selected' : ''}>Scheduled</option>
-                                                        <option value="InProgress" ${grade.result_status === 'InProgress' ? 'selected' : ''}>In Progress</option>
-                                                        <option value="Graded" ${grade.result_status === 'Graded' ? 'selected' : ''}>Graded</option>
-                                                        <option value="Final" ${grade.result_status === 'Final' ? 'selected' : ''}>Final</option>
-                                                    </select>
-                                                </td>
-                                            </tr>
-                                        `;
-                                    }).join('')}
-                                </tbody>
-                            </table>
-                        </div>
-
-                        <div class="modal-actions">
-                            <button class="btn-action" onclick="saveAllGrades('${examId}')">
-                                <i class="fas fa-save"></i> Save All Grades
-                            </button>
-                            <button class="btn-action btn-cancel" onclick="closeGradeModal()">
-                                <i class="fas fa-times"></i> Cancel
-                            </button>
-                        </div>
-                    </div>
-                `;
-
-                // Show modal
-                const modal = $('gradeModal');
-                modal.innerHTML = modalHtml;
-                modal.classList.add('active');
-
-                // Calculate initial grades
-                students.forEach(student => calculateStudentGrade(student.user_id));
-                
-                showFeedback('Grading interface loaded successfully', 'success');
-
-            } catch (error) {
-                console.error('Error opening grade modal:', error);
-                showFeedback('Failed to load grading interface: ' + error.message, 'error');
-            }
-        }
-
-        // Calculate student grade
-        function calculateStudentGrade(studentId) {
-            const cat1 = parseFloat($(`#cat1-${studentId}`).value) || 0;
-            const cat2 = parseFloat($(`#cat2-${studentId}`).value) || 0;
-            const final = parseFloat($(`#final-${studentId}`).value) || 0;
-            
-            // Calculate total (CATs are 30% each, final is 40%)
-            const total = (cat1 * 0.3) + (cat2 * 0.3) + (final * 0.4);
-            
-            $(`#total-${studentId}`).value = total.toFixed(1);
-            $(`#grade-${studentId}`).textContent = calculateGradeLetter(total);
-            $(`#grade-${studentId}`).className = `grade-letter ${getGradeClass(total)}`;
-        }
-
-        // Calculate grade letter
-        function calculateGradeLetter(score) {
-            if (!score) return '-';
-            if (score >= 80) return 'A';
-            if (score >= 75) return 'A-';
-            if (score >= 70) return 'B+';
-            if (score >= 65) return 'B';
-            if (score >= 60) return 'B-';
-            if (score >= 55) return 'C+';
-            if (score >= 50) return 'C';
-            if (score >= 45) return 'C-';
-            if (score >= 40) return 'D+';
-            if (score >= 35) return 'D';
-            return 'E';
-        }
-
-        // Get grade CSS class
-        function getGradeClass(score) {
-            if (!score) return 'grade-pending';
-            if (score >= 50) return 'grade-pass';
-            return 'grade-fail';
-        }
-
-        // Filter students in grade modal
-        function filterGradeStudents() {
-            const searchTerm = $('#gradeSearch').value.toLowerCase();
-            const rows = document.querySelectorAll('#gradeTableBody tr');
-            
-            rows.forEach(row => {
-                const name = row.getAttribute('data-name') || '';
-                const id = row.getAttribute('data-id') || '';
-                const matches = name.includes(searchTerm) || id.includes(searchTerm);
-                row.style.display = matches ? '' : 'none';
-            });
-        }
-
-        // Save all grades
-        async function saveAllGrades(examId) {
-            try {
-                const rows = document.querySelectorAll('#gradeTableBody tr');
-                const grades = [];
-                let hasChanges = false;
-
-                for (const row of rows) {
-                    if (row.style.display === 'none') continue;
-                    
-                    const studentId = row.querySelector('input[id^="cat1-"]')?.id.replace('cat1-', '');
-                    if (!studentId) continue;
-
-                    const cat1 = $(`#cat1-${studentId}`).value;
-                    const cat2 = $(`#cat2-${studentId}`).value;
-                    const final = $(`#final-${studentId}`).value;
-                    const status = $(`#status-${studentId}`).value;
-                    const total = $(`#total-${studentId}`).value;
-
-                    // Only save if there are values
-                    if (cat1 || cat2 || final) {
-                        hasChanges = true;
-                        grades.push({
-                            exam_id: parseInt(examId),
-                            student_id: studentId,
-                            cat_1_score: cat1 ? parseFloat(cat1) : null,
-                            cat_2_score: cat2 ? parseFloat(cat2) : null,
-                            exam_score: final ? parseFloat(final) : null,
-                            total_score: total ? parseFloat(total) : null,
-                            result_status: status,
-                            graded_by: currentUserProfile.user_id,
-                            question_id: '00000000-0000-0000-0000-000000000000', // Required field
-                            updated_at: new Date().toISOString()
-                        });
-                    }
-                }
-
-                if (!hasChanges) {
-                    showFeedback('No grade changes to save.', 'info');
-                    return;
-                }
-
-                const { error } = await sb.from('exam_grades').upsert(grades, {
-                    onConflict: 'exam_id,student_id,question_id'
-                });
-
-                if (error) throw error;
-
-                showFeedback(`✅ Successfully saved grades for ${grades.length} students!`, 'success');
-                
-            } catch (error) {
-                console.error('Error saving grades:', error);
-                showFeedback(`Failed to save grades: ${error.message}`, 'error');
-            }
-        }
-
-        // Close grade modal
-        function closeGradeModal() {
-            $('gradeModal').classList.remove('active');
-        }
-
-        // Export grades to CSV
-        async function exportGrades(examId) {
-            try {
-                const { data: grades, error } = await sb
-                    .from('exam_grades')
-                    .select(`
-                        *,
-                        student:student_id(full_name, student_id),
-                        exam:exam_id(exam_name)
-                    `)
-                    .eq('exam_id', examId);
-
-                if (error) throw error;
-
-                if (!grades || grades.length === 0) {
-                    showFeedback('No grades to export.', 'info');
-                    return;
-                }
-
-                // Create CSV content
-                let csv = 'Student Name,Student ID,CAT 1,CAT 2,Final Exam,Total Score,Grade,Status\n';
-                
-                grades.forEach(grade => {
-                    const student = grade.student;
-                    const gradeLetter = calculateGradeLetter(grade.total_score);
-                    csv += `"${student.full_name}","${student.student_id}",${grade.cat_1_score || ''},${grade.cat_2_score || ''},${grade.exam_score || ''},${grade.total_score || ''},${gradeLetter},${grade.result_status}\n`;
-                });
-
-                // Create download link
-                const blob = new Blob([csv], { type: 'text/csv' });
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `grades_${examId}_${new Date().toISOString().split('T')[0]}.csv`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                window.URL.revokeObjectURL(url);
-
-                showFeedback('Grades exported successfully!', 'success');
-                
-            } catch (error) {
-                console.error('Error exporting grades:', error);
-                showFeedback('Failed to export grades.', 'error');
-            }
-        }
-
-        // Utility function to escape HTML
-        function escapeHtml(unsafe) {
-            if (unsafe === null || unsafe === undefined) return '';
-            return unsafe.toString()
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/"/g, "&quot;")
-                .replace(/'/g, "&#039;");
-        }
-
-        // Get current user
-        async function getCurrentUser() {
-            const { data: { user } } = await sb.auth.getUser();
-            return user;
-        }
-
         // =================================================================
-        // === 10. RESOURCES MANAGEMENT ===
+        // === 11. RESOURCES MANAGEMENT ===
         // =================================================================
 
         function populateResourceFormSelects() {
@@ -2906,7 +3033,7 @@ function closeMapModal() {
         }
 
         // =================================================================
-        // === 11. MESSAGES MANAGEMENT - FIXED VERSION ===
+        // === 12. MESSAGES MANAGEMENT - FIXED VERSION ===
         // =================================================================
 
         function populateMessageFormSelects(selectedUserId = null, selectedUserName = null) {
@@ -3069,7 +3196,7 @@ function closeMapModal() {
         }
 
         // =================================================================
-        // === 12. REPORTS & SETTINGS ===
+        // === 13. REPORTS & SETTINGS ===
         // =================================================================
 
         async function handleGenerateReport(e) {
@@ -3140,7 +3267,7 @@ function closeMapModal() {
         }
 
         // =================================================================
-        // === 13. BASIC UI FUNCTIONS ===
+        // === 14. BASIC UI FUNCTIONS ===
         // =================================================================
 
         function saveResourceEdits() { 
