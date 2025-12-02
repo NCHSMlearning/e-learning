@@ -1129,3 +1129,320 @@ function addStyles() {
 
 // Initialize styles when page loads
 addStyles();
+// ========== REAL-TIME EDIT FUNCTIONS ==========
+
+// Initialize shared manager
+let sharedManager = null;
+
+async function initializeSharedManager() {
+    if (!window.sharedSupabaseManager) {
+        // Load the shared manager
+        const script = document.createElement('script');
+        script.src = 'shared-supabase-manager.js';
+        document.head.appendChild(script);
+        
+        // Wait for it to load
+        await new Promise(resolve => {
+            script.onload = resolve;
+        });
+    }
+    
+    sharedManager = window.sharedSupabaseManager;
+}
+
+// When editing a tracker from admin
+async function syncEditToDisplay(trackerId, field, value) {
+    if (!sharedManager) await initializeSharedManager();
+    
+    const success = await sharedManager.syncTrackerEdit(trackerId, field, value);
+    
+    if (success) {
+        showSuccess(`Change synced to display page`);
+    } else {
+        showError('Failed to sync change');
+    }
+}
+
+// Bulk update to all display pages
+async function broadcastToAllDisplays(updateData) {
+    if (!sharedManager) await initializeSharedManager();
+    
+    const success = await sharedManager.pushUpdateToDisplay({
+        hodId: 'all',
+        action: 'global_update',
+        data: updateData
+    });
+    
+    return success;
+}
+
+// Update display settings (theme, refresh rate, etc.)
+async function updateDisplaySettings(settings) {
+    if (!sharedManager) await initializeSharedManager();
+    
+    const success = await sharedManager.saveDisplaySettings(settings);
+    
+    if (success) {
+        showSuccess('Display settings updated');
+        // Log this action
+        await logAdminAction('update_display_settings', { settings });
+    }
+    
+    return success;
+}
+
+// ========== ENHANCED EDIT TRACKER FUNCTION ==========
+
+async function editTracker(trackerId) {
+    const tracker = allTrackers.find(t => t.id === trackerId);
+    if (!tracker) {
+        showError('Tracker not found');
+        return;
+    }
+    
+    // Open edit modal instead of new window
+    openEditModal(tracker);
+}
+
+function openEditModal(tracker) {
+    const modal = document.createElement('div');
+    modal.id = 'editTrackerModal';
+    modal.innerHTML = `
+        <div class="modal-overlay" onclick="closeEditModal()"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Edit: ${tracker.name}</h3>
+                <button class="close-btn" onclick="closeEditModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Progress (%)</label>
+                    <input type="range" id="editProgress" min="0" max="100" value="${tracker.progress}" 
+                           oninput="updateProgressValue(this.value)">
+                    <span id="progressValue">${tracker.progress}%</span>
+                </div>
+                
+                <div class="form-group">
+                    <label>Status</label>
+                    <select id="editStatus">
+                        <option value="active" ${tracker.status === 'active' ? 'selected' : ''}>Active</option>
+                        <option value="completed" ${tracker.status === 'completed' ? 'selected' : ''}>Completed</option>
+                        <option value="overdue" ${tracker.status === 'overdue' ? 'selected' : ''}>Overdue</option>
+                        <option value="not-started" ${tracker.status === 'not-started' ? 'selected' : ''}>Not Started</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea id="editNotes" rows="4" placeholder="Add admin notes..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeEditModal()">Cancel</button>
+                <button class="btn-primary" onclick="saveTrackerEdit('${tracker.id}')">Save & Sync</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    addModalStyles();
+}
+
+function updateProgressValue(value) {
+    document.getElementById('progressValue').textContent = value + '%';
+}
+
+async function saveTrackerEdit(trackerId) {
+    const progress = document.getElementById('editProgress').value;
+    const status = document.getElementById('editStatus').value;
+    const notes = document.getElementById('editNotes').value;
+    
+    try {
+        // Update in database
+        const { error } = await supabase
+            .from('hod_tracker_data')
+            .upsert({
+                user_id: trackerId,
+                progress: progress,
+                last_updated: new Date().toISOString()
+            }, {
+                onConflict: 'user_id'
+            });
+        
+        if (error) throw error;
+        
+        // Sync to display page in real-time
+        if (sharedManager) {
+            await sharedManager.pushUpdateToDisplay({
+                hodId: trackerId,
+                action: 'progress_update',
+                data: { progress, status, notes, updatedAt: new Date().toISOString() }
+            });
+        }
+        
+        // Update local data
+        const trackerIndex = allTrackers.findIndex(t => t.id === trackerId);
+        if (trackerIndex !== -1) {
+            allTrackers[trackerIndex].progress = progress;
+            allTrackers[trackerIndex].status = status;
+            allTrackers[trackerIndex].lastUpdated = new Date().toISOString();
+        }
+        
+        // Refresh display
+        renderTrackersTable();
+        updateDashboard();
+        updateQuickStats();
+        
+        showSuccess('Changes saved and synced to display');
+        closeEditModal();
+        
+    } catch (error) {
+        console.error('Error saving edit:', error);
+        showError('Failed to save changes');
+    }
+}
+
+function closeEditModal() {
+    const modal = document.getElementById('editTrackerModal');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+function addModalStyles() {
+    const style = document.createElement('style');
+    style.textContent = `
+        #editTrackerModal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+        }
+        
+        .modal-content {
+            background: white;
+            border-radius: 8px;
+            width: 500px;
+            max-width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            z-index: 10001;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        
+        .modal-header {
+            padding: 20px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .modal-header h3 {
+            margin: 0;
+            color: #1a237e;
+        }
+        
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #666;
+        }
+        
+        .modal-body {
+            padding: 20px;
+        }
+        
+        .modal-footer {
+            padding: 20px;
+            border-top: 1px solid #eee;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #333;
+        }
+        
+        .form-group input[type="range"] {
+            width: 100%;
+        }
+        
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .form-group textarea {
+            font-family: inherit;
+        }
+        
+        #progressValue {
+            display: inline-block;
+            margin-left: 10px;
+            font-weight: bold;
+            color: #1a237e;
+        }
+        
+        .btn-primary {
+            background: #1a237e;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        
+        .btn-secondary {
+            background: #f5f5f5;
+            color: #333;
+            border: 1px solid #ddd;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        .btn-primary:hover {
+            background: #0d1b6b;
+        }
+        
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+    `;
+    
+    // Only add once
+    if (!document.querySelector('style[data-modal-styles]')) {
+        style.setAttribute('data-modal-styles', 'true');
+        document.head.appendChild(style);
+    }
+}
