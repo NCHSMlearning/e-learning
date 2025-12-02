@@ -1289,7 +1289,205 @@
                 })
             };
         }
+// Add to hod-tracker.html after supabase initialization
 
+let displaySubscription = null;
+
+// Function to listen for admin updates
+async function setupAdminSync() {
+    // Get HOD ID from URL or localStorage
+    const hodId = getHodId();
+    if (!hodId) return;
+    
+    // Initialize shared manager
+    if (!window.sharedSupabaseManager) {
+        const script = document.createElement('script');
+        script.src = 'shared-supabase-manager.js';
+        document.head.appendChild(script);
+        
+        await new Promise(resolve => {
+            script.onload = resolve;
+        });
+    }
+    
+    const sharedManager = window.sharedSupabaseManager;
+    
+    // Subscribe to admin updates
+    displaySubscription = sharedManager.subscribeToAdminUpdates(hodId, (update) => {
+        console.log('Received admin update:', update);
+        
+        // Handle different update types
+        if (update.message_type === 'tracker_update') {
+            handleTrackerUpdate(update.update_data);
+        } else if (update.setting_type === 'display') {
+            handleDisplaySettingsUpdate(update);
+        }
+    });
+    
+    // Also poll for updates as backup
+    startUpdatePolling(hodId);
+}
+
+function getHodId() {
+    // Try to get from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const hodId = urlParams.get('hod_id') || 
+                  urlParams.get('edit_hod_id') || 
+                  urlParams.get('view_hod_id');
+    
+    if (hodId) {
+        localStorage.setItem('current_hod_id', hodId);
+        return hodId;
+    }
+    
+    // Try from localStorage
+    return localStorage.getItem('current_hod_id');
+}
+
+function handleTrackerUpdate(updateData) {
+    // Show notification
+    showUpdateNotification(updateData);
+    
+    // Update UI based on update type
+    if (updateData.progress !== undefined) {
+        updateProgressBar(updateData.progress);
+    }
+    
+    if (updateData.status) {
+        updateStatusDisplay(updateData.status);
+    }
+    
+    // Refresh data
+    loadTrackerData();
+}
+
+function handleDisplaySettingsUpdate(settings) {
+    // Apply display settings
+    if (settings.setting_key === 'theme') {
+        document.body.setAttribute('data-theme', settings.setting_value);
+    }
+    
+    if (settings.setting_key === 'refresh_rate') {
+        // Update polling interval
+        updateRefreshRate(settings.setting_value);
+    }
+}
+
+function showUpdateNotification(updateData) {
+    const notification = document.createElement('div');
+    notification.className = 'update-notification';
+    notification.innerHTML = `
+        <div class="update-content">
+            <span class="update-icon">🔄</span>
+            <div>
+                <strong>Admin Update</strong>
+                <p>Progress updated to ${updateData.progress || 'N/A'}%</p>
+                <small>Just now</small>
+            </div>
+            <button class="dismiss-btn" onclick="this.parentElement.parentElement.remove()">×</button>
+        </div>
+    `;
+    
+    notification.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: white;
+        border-left: 4px solid #1a237e;
+        padding: 15px;
+        border-radius: 4px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        z-index: 10000;
+        animation: slideUp 0.3s ease;
+        max-width: 300px;
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (notification.parentElement) {
+            notification.remove();
+        }
+    }, 5000);
+}
+
+function startUpdatePolling(hodId) {
+    // Poll for updates every 30 seconds
+    setInterval(async () => {
+        try {
+            const { data: updates } = await supabase
+                .from('broadcast_messages')
+                .select('*')
+                .eq('target_hod_id', hodId)
+                .order('created_at', { ascending: false })
+                .limit(1);
+            
+            if (updates && updates.length > 0) {
+                const latestUpdate = updates[0];
+                // Check if this update is newer than last processed
+                const lastUpdateTime = localStorage.getItem('last_update_time');
+                
+                if (!lastUpdateTime || new Date(latestUpdate.created_at) > new Date(lastUpdateTime)) {
+                    handleTrackerUpdate(latestUpdate.update_data);
+                    localStorage.setItem('last_update_time', latestUpdate.created_at);
+                }
+            }
+        } catch (error) {
+            console.error('Error polling for updates:', error);
+        }
+    }, 30000); // 30 seconds
+}
+
+// Add to your existing loadTrackerData function
+async function loadTrackerData() {
+    try {
+        // Load from cache first for immediate response
+        const cachedData = await checkCache();
+        if (cachedData) {
+            updateUI(cachedData);
+        }
+        
+        // Then load fresh from database
+        const freshData = await loadFreshData();
+        updateUI(freshData);
+        
+    } catch (error) {
+        console.error('Error loading tracker data:', error);
+    }
+}
+
+async function checkCache() {
+    const hodId = getHodId();
+    if (!hodId) return null;
+    
+    const { data: cache } = await supabase
+        .from('hod_tracker_cache')
+        .select('*')
+        .eq('hod_id', hodId)
+        .single();
+    
+    return cache?.cache_data;
+}
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', () => {
+    if (displaySubscription) {
+        // Unsubscribe from updates
+        const sharedManager = window.sharedSupabaseManager;
+        if (sharedManager) {
+            sharedManager.unsubscribe(getHodId());
+        }
+    }
+});
+
+// Initialize when page loads
+document.addEventListener('DOMContentLoaded', () => {
+    // ... existing code ...
+    
+    // Setup admin sync
+    setupAdminSync();
+});
         // Setup event listeners for auto-save
         function setupEventListeners() {
             // Auto-save when checkboxes change
