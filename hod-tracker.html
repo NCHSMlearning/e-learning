@@ -205,6 +205,9 @@
             <button class="tab" onclick="showTab('compliance')">Compliance & Academics</button>
             <button class="tab" onclick="showTab('kpi')">KPI Dashboard</button>
             <button class="tab" onclick="showTab('smart-goals')">SMART Goals</button>
+            <button class="btn btn-success" onclick="manualSync()" id="syncBtn">
+    🔄 Sync to Admin
+</button>
         </div>
         
         <!-- Days 1-30 Tab -->
@@ -1253,6 +1256,187 @@
             setupEventListeners();
             checkUserRole();
         });
+        // ============================================
+// SYNC TO DATABASE FUNCTIONS
+// ============================================
+
+// Manual sync function
+async function manualSync() {
+    const syncBtn = document.getElementById('syncBtn');
+    const originalText = syncBtn.innerHTML;
+    
+    try {
+        syncBtn.innerHTML = '<span class="spinner"></span> Syncing...';
+        syncBtn.disabled = true;
+        
+        const result = await syncToDatabase();
+        
+        if (result.success) {
+            showNotification('✅ Data synced to admin panel successfully!', 'success');
+        } else {
+            showNotification('❌ Sync failed: ' + result.error, 'error');
+        }
+        
+    } catch (error) {
+        console.error('Sync error:', error);
+        showNotification('❌ Sync error: ' + error.message, 'error');
+    } finally {
+        setTimeout(() => {
+            syncBtn.innerHTML = originalText;
+            syncBtn.disabled = false;
+        }, 2000);
+    }
+}
+
+// Main sync function
+async function syncToDatabase() {
+    try {
+        console.log('🔄 Syncing data to database...');
+        
+        // 1. Get current user/profile data
+        const hodProfile = {
+            full_name: document.getElementById('userName').textContent.trim(),
+            employee_number: document.getElementById('employeeNumber').textContent.trim(),
+            department: document.getElementById('department').textContent.trim(),
+            email: document.getElementById('userEmail').textContent.trim() || 'unknown@nchsm.ac.ke',
+            start_date: document.getElementById('startDate').textContent || new Date().toISOString().split('T')[0]
+        };
+        
+        // 2. Collect all task data
+        const taskData = {};
+        const completedTasks = {};
+        let totalTasks = 0;
+        let completedCount = 0;
+        
+        // Collect from all week tables
+        const weekIds = ['week1-2', 'week3-4', 'week5-6', 'week7-8', 'week9-10', 'week11-13'];
+        
+        weekIds.forEach(weekId => {
+            const table = document.getElementById(`${weekId}-tasks`);
+            if (table) {
+                const rows = table.querySelectorAll('tbody tr');
+                rows.forEach((row, index) => {
+                    const cells = row.querySelectorAll('td');
+                    if (cells.length >= 8) {
+                        const taskId = `task-${weekId}-${index}`;
+                        const activity = cells[1]?.textContent?.trim() || `Task ${index}`;
+                        const isCompleted = cells[0]?.querySelector('input[type="checkbox"]')?.checked || false;
+                        const status = cells[6]?.querySelector('select')?.value || 'not-started';
+                        const actualValue = cells[4]?.querySelector('input')?.value || '0';
+                        
+                        taskData[taskId] = {
+                            activity: activity,
+                            week: weekId,
+                            days: cells[2]?.textContent?.trim() || '',
+                            target: cells[3]?.textContent?.trim() || '',
+                            actual: actualValue,
+                            priority: cells[5]?.querySelector('.priority')?.textContent?.trim() || 'medium',
+                            status: status,
+                            dueDate: cells[7]?.querySelector('input[type="date"]')?.value || ''
+                        };
+                        
+                        completedTasks[taskId] = isCompleted;
+                        
+                        totalTasks++;
+                        if (isCompleted || status === 'completed') {
+                            completedCount++;
+                        }
+                    }
+                });
+            }
+        });
+        
+        // 3. Calculate progress
+        const progress = totalTasks > 0 ? Math.round((completedCount / totalTasks) * 100) : 0;
+        
+        // 4. Create tracker data object
+        const trackerData = {
+            hod_profile: hodProfile,
+            task_data: taskData,
+            completed_tasks: completedTasks,
+            progress: progress,
+            statistics: {
+                totalTasks: totalTasks,
+                completedTasks: completedCount,
+                completionRate: progress,
+                daysRemaining: parseInt(document.getElementById('daysRemaining').textContent) || 90
+            },
+            last_updated: new Date().toISOString()
+        };
+        
+        // 5. Generate a unique user ID
+        const userId = hodProfile.email || `hod-${hodProfile.employee_number.replace(/\s+/g, '-')}`;
+        
+        // 6. Save to hod_profiles table
+        const { error: profileError } = await supabase
+            .from('hod_profiles')
+            .upsert({
+                id: userId,
+                full_name: hodProfile.full_name,
+                employee_number: hodProfile.employee_number,
+                department: hodProfile.department,
+                email: hodProfile.email,
+                start_date: hodProfile.start_date,
+                updated_at: new Date().toISOString()
+            }, {
+                onConflict: 'id'
+            });
+        
+        if (profileError) {
+            console.error('❌ Error saving HOD profile:', profileError);
+            throw new Error('Failed to save profile: ' + profileError.message);
+        }
+        
+        // 7. Save to hod_tracker_data table
+        const { error: trackerError } = await supabase
+            .from('hod_tracker_data')
+            .upsert({
+                user_id: userId,
+                progress: trackerData.progress,
+                task_data: trackerData.task_data,
+                completed_tasks: trackerData.completed_tasks,
+                statistics: trackerData.statistics,
+                last_updated: trackerData.last_updated
+            }, {
+                onConflict: 'user_id'
+            });
+        
+        if (trackerError) {
+            console.error('❌ Error saving tracker data:', trackerError);
+            throw new Error('Failed to save tracker data: ' + trackerError.message);
+        }
+        
+        // 8. Store user ID for future syncs
+        localStorage.setItem('current_hod_id', userId);
+        
+        console.log('✅ Sync completed successfully');
+        return { success: true, userId: userId };
+        
+    } catch (error) {
+        console.error('❌ Sync error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+// Batch sync existing data
+async function batchSyncAllData() {
+    try {
+        console.log('🔄 Starting batch sync of all data...');
+        
+        const result = await syncToDatabase();
+        
+        if (result.success) {
+            showNotification('✅ All existing data synced to admin panel!', 'success');
+            alert(`Data synced successfully!\n\nYour HOD ID: ${result.userId}\n\nYou can now view this data in the admin panel.`);
+        } else {
+            showNotification('❌ Sync failed', 'error');
+        }
+        
+    } catch (error) {
+        console.error('❌ Batch sync error:', error);
+        showNotification('❌ Error syncing data: ' + error.message, 'error');
+    }
+}
 
         // Initialize Supabase
         function initializeSupabase() {
@@ -1651,27 +1835,31 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Save data to Supabase or local storage
-        async function saveData() {
-            try {
-                const trackerData = collectAllData();
-                
-                if (currentUser) {
-                    // Save to Supabase
-                    const { error } = await supabase
-                        .from('hod_tracker_data')
-                        .upsert({
-                            user_id: currentUser.id,
-                            task_data: trackerData,
-                            last_updated: new Date()
-                        });
-
-                    if (error) {
-                        console.error('Error saving to Supabase:', error);
-                        updateSyncStatus('error', 'Sync failed - using local storage');
-                        saveToLocalStorage();
-                    } else {
-                        updateSyncStatus('saved', 'Saved to cloud');
-                    }
+       // Save data to Supabase or local storage
+async function saveData() {
+    try {
+        console.log('💾 Saving data...');
+        
+        // 1. Save to localStorage (original functionality)
+        const data = collectAllData();
+        localStorage.setItem('hodTrackerData', JSON.stringify(data));
+        localStorage.setItem('startDate', document.getElementById('startDate').textContent);
+        
+        // 2. Auto-sync to database
+        const syncResult = await syncToDatabase();
+        if (syncResult.success) {
+            updateSyncStatus('saved', '✅ Saved & synced to admin');
+            return true;
+        } else {
+            updateSyncStatus('saved', '💾 Saved locally');
+            return true;
+        }
+        
+    } catch (error) {
+        console.error('❌ Save error:', error);
+        updateSyncStatus('error', '❌ Save failed');
+        return false;
+    }
                 } else {
                     // Save to local storage
                     saveToLocalStorage();
