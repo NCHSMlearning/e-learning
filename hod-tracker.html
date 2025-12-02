@@ -6,700 +6,7 @@
     <title>Enhanced HOD Action Plan Tracker - NCHSM</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="icon" type="image/png" href="https://raw.githubusercontent.com/NCHSMlearning/e-learning/main/images/Logo_NCHSM.png" sizes="32x32">
-    <style>
-        :root {
-            --primary: #0A3D62;
-            --primary-dark: #073450;
-            --secondary: #38A169;
-            --secondary-dark: #2F855A;
-            --accent: #667eea;
-            --danger: #ef4444;
-            --warning: #f59e0b;
-            --success: #10b981;
-            --light: #f8fafc;
-            --dark: #1e293b;
-            --gray: #64748b;
-            --border: #e2e8f0;
-        }
-        
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: var(--light);
-            color: var(--dark);
-            line-height: 1.6;
-        }
-        
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        
-        /* Header Styles */
-        .header {
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-            color: white;
-            padding: 30px;
-            border-radius: 12px;
-            margin-bottom: 25px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .header::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            right: 0;
-            width: 200px;
-            height: 200px;
-            background: url('https://raw.githubusercontent.com/NCHSMlearning/e-learning/main/images/Logo_NCHSM.png') no-repeat center/contain;
-            opacity: 0.1;
-        }
-        
-        .header h1 {
-            font-size: 28px;
-            margin-bottom: 8px;
-            font-weight: 700;
-        }
-        
-        .header p {
-            opacity: 0.9;
-            font-size: 14px;
-            margin-bottom: 4px;
-        }
-        
-        /* Profile Section */
-        .profile-section {
-            display: flex;
-            align-items: center;
-            gap: 20px;
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
-            margin-bottom: 25px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.08);
-        }
-        
-        .profile-picture {
-            width: 100px;
-            height: 100px;
-            border-radius: 50%;
-            object-fit: cover;
-            border: 4px solid var(--secondary);
-            cursor: pointer;
-            transition: transform 0.3s;
-        }
-        
-        .profile-picture:hover {
-            transform: scale(1.05);
-        }
-        
-        .profile-info {
-            flex: 1;
-        }
-        
-        .profile-info h2 {
-            font-size: 22px;
-            margin-bottom: 5px;
-            color: var(--primary);
-        }
-        
-        .profile-info p {
-            margin-bottom: 4px;
-            color: var(--gray);
-        }
-        
-        .profile-actions {
-            display: flex;
-            gap: 10px;
-        }
-        
-        /* User Info Section */
-        .user-info {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 15px 20px;
-            background: var(--light);
-            border-radius: 8px;
-            margin-bottom: 20px;
-            border-left: 4px solid var(--secondary);
-        }
-        
-        .user-details {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        
-        .user-email {
-            font-weight: 600;
-            color: var(--primary);
-        }
-        
-        .user-role {
-            background: var(--secondary);
-            color: white;
-            padding: 4px 10px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 600;
-        }
-        
-        /* Dashboard Metrics */
-        .dashboard {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-        
-        .metric-card {
-            background: white;
-            padding: 25px;
-            border-radius: 10px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.08);
-            border-left: 4px solid var(--primary);
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .metric-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.12);
-        }
-        
-        .metric-card h3 {
-            font-size: 13px;
-            color: var(--gray);
-            margin-bottom: 10px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            font-weight: 600;
-        }
-        
-        .metric-value {
-            font-size: 32px;
-            font-weight: bold;
-            color: var(--dark);
-            margin-bottom: 5px;
-        }
-        
-        .metric-target {
-            font-size: 12px;
-            color: #94a3b8;
-        }
-        
-        .progress-bar {
-            background: var(--border);
-            height: 8px;
-            border-radius: 4px;
-            margin-top: 12px;
-            overflow: hidden;
-        }
-        
-        .progress-fill {
-            background: linear-gradient(90deg, var(--secondary) 0%, var(--secondary-dark) 100%);
-            height: 100%;
-            border-radius: 4px;
-            transition: width 0.3s ease;
-        }
-        
-        /* Action Buttons */
-        .action-buttons {
-            display: flex;
-            gap: 12px;
-            margin-bottom: 25px;
-            flex-wrap: wrap;
-        }
-        
-        button.btn {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-        
-        .btn-primary {
-            background: var(--primary);
-            color: white;
-        }
-        
-        .btn-primary:hover {
-            background: var(--primary-dark);
-            transform: translateY(-1px);
-        }
-        
-        .btn-secondary {
-            background: #f1f5f9;
-            color: #475569;
-            border: 1px solid var(--border);
-        }
-        
-        .btn-secondary:hover {
-            background: #e2e8f0;
-            transform: translateY(-1px);
-        }
-        
-        .btn-success {
-            background: var(--success);
-            color: white;
-        }
-        
-        .btn-success:hover {
-            background: #059669;
-            transform: translateY(-1px);
-        }
-        
-        .btn-danger {
-            background: var(--danger);
-            color: white;
-        }
-        
-        .btn-danger:hover {
-            background: #dc2626;
-            transform: translateY(-1px);
-        }
-        
-        .btn-warning {
-            background: var(--warning);
-            color: white;
-        }
-        
-        .btn-warning:hover {
-            background: #d97706;
-            transform: translateY(-1px);
-        }
-        
-        /* Tabs */
-        .tabs {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 20px;
-            border-bottom: 2px solid var(--border);
-            flex-wrap: wrap;
-        }
-        
-        .tab {
-            padding: 12px 24px;
-            background: none;
-            border: none;
-            color: var(--gray);
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            border-bottom: 3px solid transparent;
-            transition: all 0.3s;
-            border-radius: 6px 6px 0 0;
-        }
-        
-        .tab:hover {
-            color: var(--primary);
-            background: var(--light);
-        }
-        
-        .tab.active {
-            color: var(--primary);
-            border-bottom-color: var(--primary);
-            background: var(--light);
-        }
-        
-        .tab-content {
-            display: none;
-        }
-        
-        .tab-content.active {
-            display: block;
-        }
-        
-        /* Tracker Tables */
-        .week-section {
-            margin-bottom: 30px;
-        }
-        
-        .week-header {
-            background: var(--primary);
-            color: white;
-            padding: 16px 20px;
-            border-radius: 8px 8px 0 0;
-            font-size: 16px;
-            font-weight: 600;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .admin-controls {
-            display: flex;
-            gap: 10px;
-        }
-        
-        .tracker-table {
-            background: white;
-            border-radius: 0 0 8px 8px;
-            overflow: hidden;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.08);
-            margin-bottom: 20px;
-        }
-        
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        
-        thead {
-            background: var(--light);
-        }
-        
-        th {
-            padding: 16px;
-            text-align: left;
-            font-size: 12px;
-            font-weight: 600;
-            color: #475569;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            border-bottom: 2px solid var(--border);
-        }
-        
-        td {
-            padding: 16px;
-            border-bottom: 1px solid #f1f5f9;
-            font-size: 14px;
-            color: var(--dark);
-        }
-        
-        tr:hover {
-            background: #f8fafc;
-        }
-        
-        /* Status and Priority Indicators */
-        .status {
-            display: inline-block;
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-size: 11px;
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-        
-        .status.not-started {
-            background: #fee2e2;
-            color: #991b1b;
-        }
-        
-        .status.in-progress {
-            background: #fef3c7;
-            color: #92400e;
-        }
-        
-        .status.completed {
-            background: #d1fae5;
-            color: #065f46;
-        }
-        
-        .status.on-hold {
-            background: #e0e7ff;
-            color: #3730a3;
-        }
-        
-        .priority {
-            display: inline-block;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 11px;
-            font-weight: 600;
-        }
-        
-        .priority.high {
-            background: #fee2e2;
-            color: #991b1b;
-        }
-        
-        .priority.medium {
-            background: #fef3c7;
-            color: #92400e;
-        }
-        
-        .priority.low {
-            background: #e0e7ff;
-            color: #3730a3;
-        }
-        
-        /* Form Elements */
-        .checkbox {
-            width: 20px;
-            height: 20px;
-            cursor: pointer;
-            accent-color: var(--secondary);
-        }
-        
-        input[type="date"], input[type="number"], input[type="text"], select, textarea {
-            padding: 8px 12px;
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            font-size: 13px;
-            width: 100%;
-            transition: border-color 0.2s;
-            font-family: inherit;
-        }
-        
-        input:focus, select:focus, textarea:focus {
-            outline: none;
-            border-color: var(--secondary);
-            box-shadow: 0 0 0 3px rgba(56, 161, 105, 0.1);
-        }
-        
-        textarea {
-            min-height: 80px;
-            resize: vertical;
-        }
-        
-        /* Sync Status */
-        .sync-status {
-            padding: 8px 12px;
-            border-radius: 4px;
-            font-size: 12px;
-            margin-left: 10px;
-            font-weight: 500;
-        }
-        
-        .sync-saved {
-            background: #d1fae5;
-            color: #065f46;
-            border: 1px solid #a7f3d0;
-        }
-        
-        .sync-pending {
-            background: #fef3c7;
-            color: #92400e;
-            border: 1px solid #fde68a;
-        }
-        
-        .sync-error {
-            background: #fee2e2;
-            color: #991b1b;
-            border: 1px solid #fecaca;
-        }
-        
-        /* Modal Styles */
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.5);
-            z-index: 1000;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .modal-content {
-            background: white;
-            border-radius: 10px;
-            width: 90%;
-            max-width: 500px;
-            max-height: 90vh;
-            overflow-y: auto;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-        }
-        
-        .modal-header {
-            padding: 20px;
-            border-bottom: 1px solid var(--border);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .modal-header h3 {
-            margin: 0;
-            color: var(--primary);
-        }
-        
-        .modal-body {
-            padding: 20px;
-        }
-        
-        .modal-footer {
-            padding: 15px 20px;
-            border-top: 1px solid var(--border);
-            display: flex;
-            justify-content: flex-end;
-            gap: 10px;
-        }
-        
-        .close-modal {
-            background: none;
-            border: none;
-            font-size: 24px;
-            cursor: pointer;
-            color: var(--gray);
-        }
-        
-        .close-modal:hover {
-            color: var(--dark);
-        }
-        
-        /* SMART Goals Section */
-        .smart-goals {
-            background: white;
-            border-radius: 10px;
-            padding: 20px;
-            margin-bottom: 25px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.08);
-        }
-        
-        .smart-goals h3 {
-            color: var(--primary);
-            margin-bottom: 15px;
-            font-size: 18px;
-        }
-        
-        .smart-criteria {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin-bottom: 20px;
-        }
-        
-        .smart-criterion {
-            background: var(--light);
-            padding: 15px;
-            border-radius: 8px;
-            border-left: 4px solid var(--accent);
-        }
-        
-        .smart-criterion h4 {
-            color: var(--primary);
-            margin-bottom: 8px;
-            font-size: 14px;
-        }
-        
-        .smart-criterion p {
-            font-size: 13px;
-            color: var(--gray);
-        }
-        
-        /* Admin Panel */
-        .admin-panel {
-            background: white;
-            border-radius: 10px;
-            padding: 20px;
-            margin-bottom: 25px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.08);
-            border-left: 4px solid var(--warning);
-        }
-        
-        .admin-panel h3 {
-            color: var(--primary);
-            margin-bottom: 15px;
-            font-size: 18px;
-        }
-        
-        .admin-controls-panel {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 15px;
-        }
-        
-        .admin-control {
-            background: var(--light);
-            padding: 15px;
-            border-radius: 8px;
-        }
-        
-        .admin-control h4 {
-            color: var(--primary);
-            margin-bottom: 10px;
-            font-size: 14px;
-        }
-        
-        /* Responsive Design */
-        @media (max-width: 768px) {
-            .container {
-                padding: 10px;
-            }
-            
-            .header {
-                padding: 20px;
-            }
-            
-            .header h1 {
-                font-size: 24px;
-            }
-            
-            .profile-section {
-                flex-direction: column;
-                text-align: center;
-            }
-            
-            .profile-actions {
-                justify-content: center;
-            }
-            
-            .dashboard {
-                grid-template-columns: 1fr;
-                gap: 15px;
-            }
-            
-            .action-buttons {
-                gap: 8px;
-            }
-            
-            button.btn {
-                padding: 8px 16px;
-                font-size: 13px;
-            }
-            
-            .tabs {
-                gap: 4px;
-            }
-            
-            .tab {
-                padding: 10px 16px;
-                font-size: 13px;
-            }
-            
-            th, td {
-                padding: 12px 8px;
-            }
-            
-            .smart-criteria {
-                grid-template-columns: 1fr;
-            }
-            
-            .admin-controls-panel {
-                grid-template-columns: 1fr;
-            }
-        }
-        
-        @media print {
-            body {
-                background: white;
-            }
-            .action-buttons, .user-info, .admin-panel, .profile-actions {
-                display: none;
-            }
-        }
-    </style>
+  <link rel="stylesheet" href="hod-tracker style.css">      
 </head>
 <body>
     <div class="container">
@@ -2484,18 +1791,363 @@
         }
 
         // Export data to JSON file
-        function exportData() {
-            const data = collectAllData();
-            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'hod-tracker-backup.json';
-            a.click();
-            URL.revokeObjectURL(url);
-            
-            alert('Data exported successfully!');
+      // Enhanced export function that captures ALL data
+function exportData() {
+    // Collect comprehensive data from the entire tracker
+    const exportData = {
+        metadata: {
+            exportDate: new Date().toISOString(),
+            applicationName: "Enhanced 90-Day Strategic Action Plan Tracker",
+            institution: "Nakuru College of Health Science and Management",
+            department: document.getElementById('department').textContent,
+            hodName: document.getElementById('userName').textContent,
+            employeeNumber: document.getElementById('employeeNumber').textContent,
+            version: "1.0"
+        },
+        
+        profile: {
+            name: document.getElementById('userName').textContent,
+            employeeNumber: document.getElementById('employeeNumber').textContent,
+            department: document.getElementById('department').textContent,
+            role: document.getElementById('userRole').textContent,
+            email: document.getElementById('userEmail').textContent || '',
+            startDate: document.getElementById('startDate').textContent,
+            daysRemaining: document.getElementById('daysRemaining').textContent
+        },
+        
+        dashboardMetrics: {
+            overallProgress: document.getElementById('overallProgress').textContent,
+            tasksCompleted: document.getElementById('tasksCompleted').textContent,
+            daysRemaining: document.getElementById('daysRemaining').textContent,
+            targetsMet: document.getElementById('targetsMet').textContent
+        },
+        
+        // Collect all tasks from every week section
+        weekSections: {
+            week1_2: collectWeekTasks('week1-2'),
+            week3_4: collectWeekTasks('week3-4'),
+            week5_6: collectWeekTasks('week5-6'),
+            week7_8: collectWeekTasks('week7-8'),
+            week9_10: collectWeekTasks('week9-10'),
+            week11_13: collectWeekTasks('week11-13')
+        },
+        
+        // Collect compliance tasks
+        complianceTasks: collectTabTasks('compliance'),
+        
+        // Collect KPI data
+        kpiDashboard: collectTabTasks('kpi'),
+        
+        // Collect SMART Goals
+        smartGoals: collectTabTasks('smart-goals'),
+        
+        // Collect all task statistics
+        statistics: {
+            totalTasks: document.querySelectorAll('.task-check').length,
+            completedTasks: document.querySelectorAll('.task-check:checked').length,
+            inProgressTasks: document.querySelectorAll('.status-select option[value="in-progress"]:checked').length,
+            notStartedTasks: document.querySelectorAll('.status-select option[value="not-started"]:checked').length,
+            highPriorityTasks: document.querySelectorAll('.priority.high').length,
+            mediumPriorityTasks: document.querySelectorAll('.priority.medium').length,
+            lowPriorityTasks: document.querySelectorAll('.priority.low').length
+        },
+        
+        // Collect progress by week
+        progressByWeek: calculateProgressByWeek(),
+        
+        // Capture any additional data
+        additionalData: {
+            profilePicture: localStorage.getItem('profilePicture') ? 'Yes' : 'No',
+            lastSync: document.getElementById('syncStatus').textContent,
+            userSettings: JSON.parse(localStorage.getItem('userProfile') || '{}'),
+            currentTab: document.querySelector('.tab.active').textContent
         }
+    };
+    
+    // Helper function to collect tasks from a specific week
+    function collectWeekTasks(weekId) {
+        const tasks = [];
+        const table = document.getElementById(`${weekId}-tasks`);
+        
+        if (table) {
+            const rows = table.querySelectorAll('tr');
+            rows.forEach((row, index) => {
+                const cells = row.querySelectorAll('td');
+                if (cells.length > 0) {
+                    tasks.push({
+                        activity: cells[1]?.textContent?.trim() || '',
+                        days: cells[2]?.textContent?.trim() || '',
+                        target: cells[3]?.textContent?.trim() || '',
+                        actual: cells[4]?.querySelector('input')?.value || cells[4]?.textContent?.trim() || '',
+                        priority: cells[5]?.querySelector('.priority')?.textContent?.trim() || '',
+                        status: cells[6]?.querySelector('select')?.value || '',
+                        dueDate: cells[7]?.querySelector('input')?.value || '',
+                        completed: cells[0]?.querySelector('input')?.checked || false,
+                        rowIndex: index
+                    });
+                }
+            });
+        }
+        
+        return {
+            weekName: document.querySelector(`#${weekId.replace('-', '_')} .week-header`)?.textContent?.split(':')[0] || weekId,
+            totalTasks: tasks.length,
+            completedTasks: tasks.filter(t => t.completed).length,
+            tasks: tasks
+        };
+    }
+    
+    // Helper function to collect tasks from other tabs
+    function collectTabTasks(tabId) {
+        const tabContent = document.getElementById(tabId);
+        if (!tabContent) return [];
+        
+        const tasks = [];
+        const tables = tabContent.querySelectorAll('table');
+        
+        tables.forEach((table, tableIndex) => {
+            const rows = table.querySelectorAll('tbody tr');
+            rows.forEach((row, rowIndex) => {
+                const cells = row.querySelectorAll('td');
+                if (cells.length > 0) {
+                    const task = {
+                        tableIndex: tableIndex,
+                        rowIndex: rowIndex
+                    };
+                    
+                    // Handle different table structures
+                    if (tabId === 'kpi') {
+                        task.kpi = cells[1]?.textContent?.trim() || '';
+                        task.target = cells[2]?.textContent?.trim() || '';
+                        task.current = cells[3]?.querySelector('input')?.value || '';
+                        task.progress = cells[4]?.querySelector('.progress-fill')?.style.width || '';
+                        task.status = cells[5]?.querySelector('select')?.value || '';
+                    } else if (tabId === 'smart-goals') {
+                        task.goal = cells[1]?.textContent?.trim() || '';
+                        task.specific = cells[2]?.textContent?.trim() || '';
+                        task.measurable = cells[3]?.textContent?.trim() || '';
+                        task.achievable = cells[4]?.textContent?.trim() || '';
+                        task.relevant = cells[5]?.textContent?.trim() || '';
+                        task.timeBound = cells[6]?.textContent?.trim() || '';
+                        task.status = cells[7]?.querySelector('select')?.value || '';
+                    } else {
+                        // Default structure for compliance
+                        for (let i = 0; i < cells.length; i++) {
+                            task[`col${i}`] = cells[i]?.textContent?.trim() || 
+                                              cells[i]?.querySelector('input')?.value || 
+                                              cells[i]?.querySelector('select')?.value || '';
+                        }
+                    }
+                    
+                    tasks.push(task);
+                }
+            });
+        });
+        
+        return tasks;
+    }
+    
+    // Helper function to calculate progress by week
+    function calculateProgressByWeek() {
+        const progress = {};
+        const weekIds = ['week1-2', 'week3-4', 'week5-6', 'week7-8', 'week9-10', 'week11-13'];
+        
+        weekIds.forEach(weekId => {
+            const table = document.getElementById(`${weekId}-tasks`);
+            if (table) {
+                const totalTasks = table.querySelectorAll('tr').length;
+                const completedTasks = table.querySelectorAll('tr .task-check:checked').length;
+                progress[weekId] = {
+                    totalTasks: totalTasks,
+                    completedTasks: completedTasks,
+                    completionRate: totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
+                };
+            }
+        });
+        
+        return progress;
+    }
+    
+    // Create formatted JSON with indentation
+    const jsonData = JSON.stringify(exportData, null, 2);
+    
+    // Also create CSV versions for easier spreadsheet import
+    const csvData = createCSVExport(exportData);
+    
+    // Create a comprehensive export object
+    const comprehensiveExport = {
+        json: jsonData,
+        csv: csvData,
+        timestamp: new Date().toISOString()
+    };
+    
+    // Create download with multiple formats
+    downloadComprehensiveExport(comprehensiveExport);
+    
+    updateSyncStatus('saved', 'Data exported successfully!');
+    
+    return exportData;
+}
+
+// Create CSV export for all data
+function createCSVExport(data) {
+    const csvExports = {};
+    
+    // 1. Main Tasks CSV
+    let mainTasksCSV = "Week,Activity,Days,Target,Actual,Priority,Status,Due Date,Completed\n";
+    
+    Object.keys(data.weekSections).forEach(weekKey => {
+        const week = data.weekSections[weekKey];
+        week.tasks.forEach(task => {
+            mainTasksCSV += `"${week.weekName}","${task.activity}","${task.days}","${task.target}","${task.actual}","${task.priority}","${task.status}","${task.dueDate}","${task.completed ? 'Yes' : 'No'}"\n`;
+        });
+    });
+    csvExports.tasks = mainTasksCSV;
+    
+    // 2. KPI Dashboard CSV
+    let kpiCSV = "KPI,Target,Current,Progress,Status\n";
+    data.kpiDashboard.forEach(kpi => {
+        kpiCSV += `"${kpi.kpi}","${kpi.target}","${kpi.current}","${kpi.progress}","${kpi.status}"\n`;
+    });
+    csvExports.kpis = kpiCSV;
+    
+    // 3. SMART Goals CSV
+    let smartGoalsCSV = "Goal,Specific,Measurable,Achievable,Relevant,Time-bound,Status\n";
+    data.smartGoals.forEach(goal => {
+        smartGoalsCSV += `"${goal.goal}","${goal.specific}","${goal.measurable}","${goal.achievable}","${goal.relevant}","${goal.timeBound}","${goal.status}"\n`;
+    });
+    csvExports.smartGoals = smartGoalsCSV;
+    
+    // 4. Summary CSV
+    let summaryCSV = "Metric,Value\n";
+    summaryCSV += `HOD Name,${data.profile.name}\n`;
+    summaryCSV += `Department,${data.profile.department}\n`;
+    summaryCSV += `Overall Progress,${data.dashboardMetrics.overallProgress}\n`;
+    summaryCSV += `Tasks Completed,${data.dashboardMetrics.tasksCompleted}\n`;
+    summaryCSV += `Days Remaining,${data.dashboardMetrics.daysRemaining}\n`;
+    summaryCSV += `Targets Met,${data.dashboardMetrics.targetsMet}\n`;
+    summaryCSV += `Total Tasks,${data.statistics.totalTasks}\n`;
+    summaryCSV += `Completed Tasks,${data.statistics.completedTasks}\n`;
+    summaryCSV += `In Progress Tasks,${data.statistics.inProgressTasks}\n`;
+    summaryCSV += `Not Started Tasks,${data.statistics.notStartedTasks}\n`;
+    csvExports.summary = summaryCSV;
+    
+    return csvExports;
+}
+
+// Download comprehensive export with multiple files
+function downloadComprehensiveExport(exportData) {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
+    const hodName = document.getElementById('userName').textContent.replace(/\s+/g, '_');
+    const baseFilename = `HOD_Action_Plan_${hodName}_${timestamp}`;
+    
+    // Create a ZIP file with all exports
+    if (typeof JSZip !== 'undefined') {
+        createZippedExport(baseFilename, exportData);
+    } else {
+        // Fallback: download JSON file
+        downloadFile(`${baseFilename}.json`, exportData.json, 'application/json');
+        
+        // Also download main tasks CSV
+        if (exportData.csv.tasks) {
+            downloadFile(`${baseFilename}_tasks.csv`, exportData.csv.tasks, 'text/csv');
+        }
+    }
+}
+
+// Create zipped export (requires JSZip library)
+function createZippedExport(baseFilename, exportData) {
+    const zip = new JSZip();
+    
+    // Add JSON file
+    zip.file(`${baseFilename}.json`, exportData.json);
+    
+    // Add CSV files
+    if (exportData.csv.tasks) {
+        zip.file(`${baseFilename}_tasks.csv`, exportData.csv.tasks);
+    }
+    if (exportData.csv.kpis) {
+        zip.file(`${baseFilename}_kpis.csv`, exportData.csv.kpis);
+    }
+    if (exportData.csv.smartGoals) {
+        zip.file(`${baseFilename}_smart_goals.csv`, exportData.csv.smartGoals);
+    }
+    if (exportData.csv.summary) {
+        zip.file(`${baseFilename}_summary.csv`, exportData.csv.summary);
+    }
+    
+    // Generate and download ZIP
+    zip.generateAsync({type: "blob"})
+        .then(function(content) {
+            downloadFile(`${baseFilename}.zip`, content, 'application/zip');
+        });
+}
+
+// Generic file download function
+function downloadFile(filename, content, contentType) {
+    const blob = new Blob([content], { type: contentType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+// Add this to your export button click handler for better UX
+function enhancedExportData() {
+    // Show loading indicator
+    const originalText = event.target.innerHTML;
+    event.target.innerHTML = '<span class="spinner"></span> Exporting...';
+    event.target.disabled = true;
+    
+    try {
+        // Perform export
+        const result = exportData();
+        
+        // Show success message
+        showNotification('Export completed successfully! Files downloaded.', 'success');
+        
+        // Optional: Log export event
+        console.log('Export completed:', {
+            timestamp: new Date().toISOString(),
+            totalTasks: result.statistics.totalTasks,
+            completedTasks: result.statistics.completedTasks
+        });
+        
+    } catch (error) {
+        console.error('Export error:', error);
+        showNotification('Error during export: ' + error.message, 'error');
+    } finally {
+        // Restore button state
+        setTimeout(() => {
+            event.target.innerHTML = originalText;
+            event.target.disabled = false;
+        }, 1000);
+    }
+}
+
+// Notification function
+function showNotification(message, type) {
+    const notification = document.createElement('div');
+    notification.className = `notification ${type}`;
+    notification.innerHTML = `
+        <span>${message}</span>
+        <button onclick="this.parentElement.remove()">&times;</button>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (notification.parentElement) {
+            notification.remove();
+        }
+    }, 5000);
+}
+
 
         // Import data from JSON file
         function importData() {
