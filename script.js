@@ -1788,10 +1788,12 @@ async function deleteExam(examId, examName) {
     }
 }
 
-// Exam Modal Functions - Complete Implementation
+// Exam Modal Functions - Complete Implementation with Exam Type
 // Open Exam Edit Modal (Admin Editable)
 async function openEditExamModal(examId) {
   try {
+    console.log('📝 Opening edit modal for exam ID:', examId);
+    
     const { data: exam, error } = await sb
       .from('exams')
       .select('*, course:course_id(course_name)')
@@ -1802,6 +1804,9 @@ async function openEditExamModal(examId) {
       showFeedback(`Error loading exam details: ${error?.message || 'Not found.'}`, 'error');
       return;
     }
+
+    console.log('📊 Exam data for editing:', exam);
+    console.log('📊 Exam type value:', exam.exam_type);
 
     // Wait for modal to be ready and check if elements exist
     const modal = document.getElementById('examEditModal');
@@ -1815,33 +1820,51 @@ async function openEditExamModal(examId) {
     const titleInput = document.getElementById('edit_exam_title');
     const dateInput = document.getElementById('edit_exam_date');
     const statusInput = document.getElementById('edit_exam_status');
+    const startTimeInput = document.getElementById('edit_exam_start_time');
+    const durationInput = document.getElementById('edit_exam_duration');
+    const linkInput = document.getElementById('edit_exam_link');
 
     if (examIdInput) examIdInput.value = exam.id;
     if (titleInput) titleInput.value = exam.exam_name || '';
     if (dateInput) dateInput.value = exam.exam_date || '';
+    if (startTimeInput) startTimeInput.value = exam.exam_start_time || '09:00';
+    if (durationInput) durationInput.value = exam.duration_minutes || 60;
+    if (linkInput) linkInput.value = exam.online_link || '';
     if (statusInput) statusInput.value = exam.status || 'Upcoming';
 
-    // Add optional editable fields dynamically if not in HTML
+    // Handle exam_type field
     let form = document.getElementById('edit-exam-form');
     if (form) {
-      if (!document.getElementById('edit_exam_type')) {
+      // Check if exam_type field already exists in HTML
+      const existingExamTypeField = document.getElementById('edit_exam_type');
+      
+      if (existingExamTypeField) {
+        // Update existing field value
+        existingExamTypeField.value = exam.exam_type || 'CAT';
+        console.log('✅ Updated existing exam_type field to:', exam.exam_type);
+      } else {
+        // Create exam_type field dynamically
+        console.log('➕ Creating exam_type field dynamically');
         form.insertAdjacentHTML('beforeend', `
           <div class="form-group">
-            <label>Type</label>
-            <select id="edit_exam_type" class="form-input">
-              <option value="CAT" ${exam.exam_type === 'CAT' ? 'selected' : ''}>CAT</option>
-              <option value="Exam" ${exam.exam_type === 'Exam' ? 'selected' : ''}>Exam</option>
-              <option value="Practical" ${exam.exam_type === 'Practical' ? 'selected' : ''}>Practical</option>
+            <label>Exam Type *</label>
+            <select id="edit_exam_type" class="form-input" required>
+              <option value="CAT_1" ${exam.exam_type === 'CAT_1' ? 'selected' : ''}>CAT 1</option>
+              <option value="CAT_2" ${exam.exam_type === 'CAT_2' ? 'selected' : ''}>CAT 2</option>
+              <option value="CAT" ${exam.exam_type === 'CAT' || !exam.exam_type ? 'selected' : ''}>CAT (Generic)</option>
+              <option value="EXAM" ${exam.exam_type === 'EXAM' ? 'selected' : ''}>Final Exam</option>
+              <option value="ASSIGNMENT" ${exam.exam_type === 'ASSIGNMENT' ? 'selected' : ''}>Assignment</option>
             </select>
           </div>
         `);
       }
 
+      // Add other optional fields if not in HTML
       if (!document.getElementById('edit_exam_duration')) {
         form.insertAdjacentHTML('beforeend', `
           <div class="form-group">
-            <label>Duration (minutes)</label>
-            <input type="number" id="edit_exam_duration" min="1" value="${exam.duration_minutes || 60}" class="form-input">
+            <label>Duration (minutes) *</label>
+            <input type="number" id="edit_exam_duration" min="1" value="${exam.duration_minutes || 60}" class="form-input" required>
           </div>
         `);
       }
@@ -1858,9 +1881,10 @@ async function openEditExamModal(examId) {
 
     // Open modal
     modal.style.display = 'block';
+    console.log('✅ Exam edit modal opened');
 
   } catch (err) {
-    console.error('Error in openEditExamModal:', err);
+    console.error('❌ Error in openEditExamModal:', err);
     showFeedback(`Unexpected error: ${err.message}`, 'error');
   }
 }
@@ -1868,11 +1892,13 @@ async function openEditExamModal(examId) {
 // Save Edited Exam
 async function saveEditedExam(e) {
   e.preventDefault();
+  console.log('💾 Saving edited exam...');
 
   // Safely get values with null checks
   const examIdInput = document.getElementById('edit_exam_id');
   const titleInput = document.getElementById('edit_exam_title');
   const dateInput = document.getElementById('edit_exam_date');
+  const startTimeInput = document.getElementById('edit_exam_start_time');
   const durationInput = document.getElementById('edit_exam_duration');
   const statusInput = document.getElementById('edit_exam_status');
   const typeInput = document.getElementById('edit_exam_type');
@@ -1886,10 +1912,13 @@ async function saveEditedExam(e) {
   const examId = examIdInput.value.trim();
   const title = titleInput.value.trim();
   const date = dateInput.value;
-  const duration = durationInput ? parseInt(durationInput.value) || 0 : 0;
+  const startTime = startTimeInput ? startTimeInput.value : '09:00';
+  const duration = durationInput ? parseInt(durationInput.value) || 60 : 60;
   const status = statusInput ? statusInput.value : 'Upcoming';
-  const type = typeInput ? typeInput.value : null;
+  const type = typeInput ? typeInput.value : 'CAT'; // Default to CAT if not found
   const link = linkInput ? linkInput.value.trim() : null;
+
+  console.log('📋 Form values:', { title, date, startTime, duration, status, type, link });
 
   if (!title || !date || !duration) {
     showFeedback('❌ Title, Date, and Duration are required.', 'error');
@@ -1899,26 +1928,38 @@ async function saveEditedExam(e) {
   try {
     const updateData = {
       exam_name: title,
+      exam_type: type, // ⭐ CRITICAL - Save exam type
       exam_date: date,
+      exam_start_time: startTime,
       duration_minutes: duration,
-      status: status
+      status: status,
+      updated_at: new Date().toISOString()
     };
 
-    // Only add optional fields if they exist
-    if (type) updateData.exam_type = type;
-    if (link) updateData.online_link = link;
+    // Only add online_link if provided
+    if (link && link !== '') {
+      updateData.online_link = link;
+    }
+
+    console.log('📤 Update data:', updateData);
 
     const { error } = await sb
       .from('exams')
       .update(updateData)
       .eq('id', examId);
 
-    if (error) throw error;
+    if (error) {
+      console.error('❌ Database error:', error);
+      throw error;
+    }
 
     showFeedback('✅ Exam updated successfully!', 'success');
+    console.log('✅ Exam updated, type:', type);
 
-    // Refresh data + close modal
+    // Refresh data
     await loadExams();
+    
+    // Refresh calendar if exists
     try { 
       if (typeof renderFullCalendar === 'function') {
         renderFullCalendar(); 
@@ -1927,20 +1968,38 @@ async function saveEditedExam(e) {
       console.log('Calendar refresh skipped:', e.message);
     }
 
+    // Close modal
     document.getElementById('examEditModal').style.display = 'none';
+
+    // Show confirmation of exam type change
+    const examTypeLabels = {
+      'CAT_1': 'CAT 1',
+      'CAT_2': 'CAT 2', 
+      'CAT': 'CAT',
+      'EXAM': 'Final Exam',
+      'ASSIGNMENT': 'Assignment'
+    };
+    
+    setTimeout(() => {
+      showFeedback(`✅ Exam type set to: ${examTypeLabels[type] || type}`, 'success');
+    }, 500);
+
   } catch (err) {
-    console.error('Error saving exam:', err);
+    console.error('❌ Error saving exam:', err);
     showFeedback(`Failed to update exam: ${err.message}`, 'error');
   }
 }
 
 // Initialize event listeners when DOM is ready
 document.addEventListener('DOMContentLoaded', function() {
+  console.log('🔧 Initializing exam edit modal...');
+  
   // Close modal on X click
   const closeBtn = document.querySelector('#examEditModal .close');
   if (closeBtn) {
     closeBtn.addEventListener('click', () => {
       document.getElementById('examEditModal').style.display = 'none';
+      console.log('❌ Exam edit modal closed');
     });
   }
 
@@ -1948,18 +2007,31 @@ document.addEventListener('DOMContentLoaded', function() {
   const editForm = document.getElementById('edit-exam-form');
   if (editForm) {
     editForm.addEventListener('submit', saveEditedExam);
+    console.log('✅ Exam edit form submit handler attached');
   } else {
-    console.warn('edit-exam-form not found in HTML');
+    console.warn('⚠️ edit-exam-form not found in HTML');
   }
+
+  // Close modal when clicking outside
+  window.addEventListener('click', function(event) {
+    const modal = document.getElementById('examEditModal');
+    if (event.target === modal) {
+      modal.style.display = 'none';
+      console.log('❌ Exam edit modal closed (outside click)');
+    }
+  });
 });
 
-// Alternative: Safe element getter with fallback
-function getSafeElement(id) {
-  const element = document.getElementById(id);
-  if (!element) {
-    console.warn(`Element with id '${id}' not found`);
-  }
-  return element;
+// Utility function to get exam type label
+function getExamTypeLabel(examType) {
+  const labels = {
+    'CAT_1': 'CAT 1',
+    'CAT_2': 'CAT 2',
+    'CAT': 'CAT',
+    'EXAM': 'Final Exam',
+    'ASSIGNMENT': 'Assignment'
+  };
+  return labels[examType] || examType;
 }
 
 // Utility function to escape HTML
