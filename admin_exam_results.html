@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Dashboard - All Students</title>
+    <title>Admin Dashboard - All Students & Exams</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
@@ -20,7 +20,7 @@
         }
 
         .container {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
             padding: 20px;
         }
@@ -77,6 +77,37 @@
             background: rgba(255, 255, 255, 0.3);
         }
 
+        /* Tabs */
+        .tabs {
+            display: flex;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+            margin-bottom: 25px;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 15px;
+            border: none;
+            background: #F1F5F9;
+            color: #64748B;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 0.95rem;
+        }
+
+        .tab-btn:hover {
+            background: #E2E8F0;
+        }
+
+        .tab-btn.active {
+            background: #0A3D62;
+            color: white;
+        }
+
         /* Stats Cards */
         .stats-container {
             display: grid;
@@ -108,6 +139,10 @@
 
         .stat-card.avg {
             border-color: #F59E0B;
+        }
+
+        .stat-card.pending {
+            border-color: #4299E1;
         }
 
         .stat-value {
@@ -247,13 +282,27 @@
             transform: translateY(-2px);
         }
 
-        /* Results Table */
+        .btn-info {
+            background: #4299E1;
+            color: white;
+        }
+
+        .btn-info:hover {
+            background: #3182CE;
+            transform: translateY(-2px);
+        }
+
+        /* Tables Container */
+        .tables-container {
+            display: grid;
+            gap: 25px;
+        }
+
         .table-container {
             background: white;
             border-radius: 12px;
             overflow: hidden;
             box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-            margin-bottom: 25px;
         }
 
         .table-header {
@@ -328,9 +377,37 @@
             font-size: 0.85rem;
         }
 
+        .status-pending {
+            background: #DBEAFE;
+            color: #1E40AF;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.85rem;
+        }
+
+        .status-completed {
+            background: #D1FAE5;
+            color: #065F46;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.85rem;
+        }
+
+        .status-not-started {
+            background: #FEF3C7;
+            color: #92400E;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.85rem;
+        }
+
         .action-buttons-cell {
             display: flex;
             gap: 8px;
+            flex-wrap: wrap;
         }
 
         .action-btn {
@@ -341,6 +418,7 @@
             font-weight: 600;
             cursor: pointer;
             transition: all 0.2s;
+            white-space: nowrap;
         }
 
         .btn-view {
@@ -368,6 +446,15 @@
 
         .btn-delete:hover {
             background: #B91C1C;
+        }
+
+        .btn-assign {
+            background: #38A169;
+            color: white;
+        }
+
+        .btn-assign:hover {
+            background: #2F855A;
         }
 
         /* Loading State */
@@ -432,7 +519,7 @@
             padding: 30px;
             border-radius: 12px;
             width: 100%;
-            max-width: 800px;
+            max-width: 900px;
             max-height: 80vh;
             overflow-y: auto;
             position: relative;
@@ -449,6 +536,21 @@
 
         .close-modal:hover {
             color: #DC2626;
+        }
+
+        /* Progress Bar */
+        .progress-bar {
+            height: 8px;
+            background: #E2E8F0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 5px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: #38A169;
+            transition: width 0.3s;
         }
 
         /* Responsive */
@@ -478,6 +580,10 @@
             .action-buttons-cell {
                 flex-direction: column;
             }
+            
+            .tabs {
+                flex-direction: column;
+            }
         }
     </style>
 </head>
@@ -485,133 +591,196 @@
     <div class="container">
         <!-- Header -->
         <div class="header">
-            <h1>Admin Dashboard - All Students</h1>
-            <p>View and manage all student exam results across the system</p>
+            <h1>Admin Dashboard - All Students & Exams</h1>
+            <p>Comprehensive view of all students, exams, and results</p>
             <div class="admin-info">
                 <div class="user" id="adminName">Loading admin info...</div>
                 <button class="logout-btn" onclick="logout()">Logout</button>
             </div>
         </div>
 
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('students')">👥 Students with Results</button>
+            <button class="tab-btn" onclick="switchTab('allStudents')">📚 All Registered Students</button>
+            <button class="tab-btn" onclick="switchTab('exams')">📝 All Exams</button>
+        </div>
+
         <!-- Statistics -->
         <div class="stats-container" id="statsContainer">
-            <div class="stat-card total">
-                <div class="stat-value" id="totalStudents">0</div>
-                <div class="stat-label">Total Students</div>
-            </div>
-            <div class="stat-card passed">
-                <div class="stat-value" id="passedExams">0</div>
-                <div class="stat-label">Passed Exams</div>
-            </div>
-            <div class="stat-card failed">
-                <div class="stat-value" id="failedExams">0</div>
-                <div class="stat-label">Failed Exams</div>
-            </div>
-            <div class="stat-card avg">
-                <div class="stat-value" id="avgScore">0%</div>
-                <div class="stat-label">Average Score</div>
-            </div>
+            <!-- Stats will be loaded here -->
         </div>
 
         <!-- Filters -->
-        <div class="filters-container">
-            <h2>Filter Results</h2>
-            <div class="filters-grid">
-                <div class="filter-group">
-                    <label>Select Exam:</label>
-                    <select id="examFilter">
-                        <option value="">All Exams</option>
-                    </select>
-                </div>
-                <div class="filter-group">
-                    <label>Program:</label>
-                    <select id="programFilter">
-                        <option value="">All Programs</option>
-                    </select>
-                </div>
-                <div class="filter-group">
-                    <label>Result Status:</label>
-                    <select id="statusFilter">
-                        <option value="">All Results</option>
-                        <option value="PASS">PASS</option>
-                        <option value="FAIL">FAIL</option>
-                    </select>
-                </div>
-                <div class="filter-group">
-                    <label>Date From:</label>
-                    <input type="date" id="dateFrom">
-                </div>
-                <div class="filter-group">
-                    <label>Date To:</label>
-                    <input type="date" id="dateTo">
-                </div>
-            </div>
-            
-            <div class="search-box">
-                <input type="text" id="searchInput" placeholder="Search by student name, email, or ID...">
-                <button class="btn btn-primary" onclick="loadResults()">🔍 Search</button>
-                <button class="btn btn-danger" onclick="resetFilters()">🔄 Reset</button>
-            </div>
+        <div class="filters-container" id="filtersContainer">
+            <!-- Filters will be loaded based on tab -->
         </div>
 
-        <!-- Results Table -->
-        <div class="table-container">
-            <div class="table-header">
-                <h2>Student Exam Results</h2>
-                <div class="table-actions">
-                    <button class="btn btn-secondary" onclick="exportToExcel()">📥 Export Excel</button>
-                    <button class="btn btn-warning" onclick="printResults()">🖨️ Print</button>
+        <!-- Tables Container -->
+        <div class="tables-container">
+            <!-- STUDENTS WITH RESULTS TABLE -->
+            <div class="table-container" id="studentsTableContainer" style="display: block;">
+                <div class="table-header">
+                    <h2>Students with Exam Results</h2>
+                    <div class="table-actions">
+                        <button class="btn btn-secondary" onclick="exportToExcel('students')">📥 Export Excel</button>
+                        <button class="btn btn-warning" onclick="printTable('students')">🖨️ Print</button>
+                    </div>
                 </div>
+                
+                <div id="studentsLoading" class="loading">Loading student results...</div>
+                
+                <table id="studentsTable" style="display: none;">
+                    <thead>
+                        <tr>
+                            <th>Student</th>
+                            <th>Email</th>
+                            <th>Program</th>
+                            <th>Block</th>
+                            <th>Exam</th>
+                            <th>Type</th>
+                            <th>Score</th>
+                            <th>Percentage</th>
+                            <th>Status</th>
+                            <th>Date Taken</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="studentsBody">
+                        <!-- Results will be loaded here -->
+                    </tbody>
+                </table>
+                <div class="pagination" id="studentsPagination"></div>
             </div>
-            
-            <div id="tableLoading" class="loading">Loading student results...</div>
-            
-            <table id="resultsTable" style="display: none;">
-                <thead>
-                    <tr>
-                        <th>Student</th>
-                        <th>Email</th>
-                        <th>Program</th>
-                        <th>Block</th>
-                        <th>Exam</th>
-                        <th>Type</th>
-                        <th>Score</th>
-                        <th>Percentage</th>
-                        <th>Status</th>
-                        <th>Date Taken</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="resultsBody">
-                    <!-- Results will be loaded here -->
-                </tbody>
-            </table>
-        </div>
 
-        <!-- Pagination -->
-        <div class="pagination" id="pagination"></div>
+            <!-- ALL REGISTERED STUDENTS TABLE -->
+            <div class="table-container" id="allStudentsTableContainer" style="display: none;">
+                <div class="table-header">
+                    <h2>All Registered Students</h2>
+                    <div class="table-actions">
+                        <button class="btn btn-info" onclick="assignExamToStudent()">➕ Assign Exam</button>
+                        <button class="btn btn-secondary" onclick="exportToExcel('allStudents')">📥 Export Excel</button>
+                    </div>
+                </div>
+                
+                <div id="allStudentsLoading" class="loading">Loading all students...</div>
+                
+                <table id="allStudentsTable" style="display: none;">
+                    <thead>
+                        <tr>
+                            <th>Student ID</th>
+                            <th>Full Name</th>
+                            <th>Email</th>
+                            <th>Program</th>
+                            <th>Block</th>
+                            <th>Intake</th>
+                            <th>Exams Taken</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="allStudentsBody">
+                        <!-- All students will be loaded here -->
+                    </tbody>
+                </table>
+                <div class="pagination" id="allStudentsPagination"></div>
+            </div>
+
+            <!-- ALL EXAMS TABLE -->
+            <div class="table-container" id="examsTableContainer" style="display: none;">
+                <div class="table-header">
+                    <h2>All Available Exams</h2>
+                    <div class="table-actions">
+                        <button class="btn btn-info" onclick="createNewExam()">➕ Create New Exam</button>
+                        <button class="btn btn-secondary" onclick="exportToExcel('exams')">📥 Export Excel</button>
+                    </div>
+                </div>
+                
+                <div id="examsLoading" class="loading">Loading all exams...</div>
+                
+                <table id="examsTable" style="display: none;">
+                    <thead>
+                        <tr>
+                            <th>Exam ID</th>
+                            <th>Exam Name</th>
+                            <th>Type</th>
+                            <th>Course</th>
+                            <th>Program</th>
+                            <th>Duration</th>
+                            <th>Questions</th>
+                            <th>Students Assigned</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="examsBody">
+                        <!-- Exams will be loaded here -->
+                    </tbody>
+                </table>
+                <div class="pagination" id="examsPagination"></div>
+            </div>
+        </div>
     </div>
 
     <!-- Student Details Modal -->
     <div id="studentModal" class="modal">
         <div class="modal-content">
             <span class="close-modal" onclick="closeModal()">&times;</span>
-            <h2 id="modalTitle">Student Exam Details</h2>
+            <h2 id="modalTitle">Student Details</h2>
             <div id="modalContent">
                 <!-- Details will be loaded here -->
             </div>
         </div>
     </div>
 
+    <!-- Assign Exam Modal -->
+    <div id="assignExamModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeAssignModal()">&times;</span>
+            <h2>Assign Exam to Student</h2>
+            <div id="assignExamContent">
+                <div class="filter-group">
+                    <label>Select Student:</label>
+                    <select id="assignStudentSelect" style="width: 100%; padding: 10px; margin-bottom: 15px;">
+                        <!-- Students will be loaded here -->
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Select Exam:</label>
+                    <select id="assignExamSelect" style="width: 100%; padding: 10px; margin-bottom: 15px;">
+                        <!-- Exams will be loaded here -->
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Due Date (Optional):</label>
+                    <input type="datetime-local" id="assignDueDate" style="width: 100%; padding: 10px;">
+                </div>
+                <div style="margin-top: 20px; display: flex; gap: 10px; justify-content: flex-end;">
+                    <button class="btn btn-danger" onclick="closeAssignModal()">Cancel</button>
+                    <button class="btn btn-primary" onclick="confirmAssignExam()">Assign Exam</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
-        // Supabase Configuration
+        // Initialize Supabase FIRST
         const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
         
-        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        let currentResults = [];
-        let currentPage = 1;
-        const itemsPerPage = 20;
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        
+        // Global variables
+        let currentTab = 'students';
+        let studentsResults = [];
+        let allStudents = [];
+        let allExams = [];
+        let currentPage = {
+            students: 1,
+            allStudents: 1,
+            exams: 1
+        };
+        const itemsPerPage = 15;
 
         // Admin Authentication
         function checkAdminAuth() {
@@ -646,55 +815,173 @@
             }
         }
 
+        // Tab Switching
+        function switchTab(tabName) {
+            currentTab = tabName;
+            
+            // Update active tab button
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            // Show/hide tables
+            document.getElementById('studentsTableContainer').style.display = 'none';
+            document.getElementById('allStudentsTableContainer').style.display = 'none';
+            document.getElementById('examsTableContainer').style.display = 'none';
+            
+            // Load appropriate data
+            if (tabName === 'students') {
+                document.getElementById('studentsTableContainer').style.display = 'block';
+                loadStudentsWithResults();
+            } else if (tabName === 'allStudents') {
+                document.getElementById('allStudentsTableContainer').style.display = 'block';
+                loadAllStudents();
+            } else if (tabName === 'exams') {
+                document.getElementById('examsTableContainer').style.display = 'block';
+                loadAllExams();
+            }
+            
+            updateFilters();
+            updateStats();
+        }
+
+        // Update Filters based on Tab
+        function updateFilters() {
+            const filtersContainer = document.getElementById('filtersContainer');
+            
+            if (currentTab === 'students') {
+                filtersContainer.innerHTML = `
+                    <h2>Filter Student Results</h2>
+                    <div class="filters-grid">
+                        <div class="filter-group">
+                            <label>Select Exam:</label>
+                            <select id="examFilter">
+                                <option value="">All Exams</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label>Program:</label>
+                            <select id="programFilter">
+                                <option value="">All Programs</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label>Result Status:</label>
+                            <select id="statusFilter">
+                                <option value="">All Results</option>
+                                <option value="PASS">PASS</option>
+                                <option value="FAIL">FAIL</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label>Date From:</label>
+                            <input type="date" id="dateFrom">
+                        </div>
+                        <div class="filter-group">
+                            <label>Date To:</label>
+                            <input type="date" id="dateTo">
+                        </div>
+                    </div>
+                    
+                    <div class="search-box">
+                        <input type="text" id="searchInput" placeholder="Search by student name, email, or ID...">
+                        <button class="btn btn-primary" onclick="loadStudentsWithResults()">🔍 Search</button>
+                        <button class="btn btn-danger" onclick="resetFilters()">🔄 Reset</button>
+                    </div>
+                `;
+                loadFilterOptions();
+            } else if (currentTab === 'allStudents') {
+                filtersContainer.innerHTML = `
+                    <h2>Filter All Students</h2>
+                    <div class="filters-grid">
+                        <div class="filter-group">
+                            <label>Program:</label>
+                            <select id="studentProgramFilter">
+                                <option value="">All Programs</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label>Block:</label>
+                            <select id="studentBlockFilter">
+                                <option value="">All Blocks</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label>Intake:</label>
+                            <select id="studentIntakeFilter">
+                                <option value="">All Intakes</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="search-box">
+                        <input type="text" id="studentSearchInput" placeholder="Search by student name or email...">
+                        <button class="btn btn-primary" onclick="loadAllStudents()">🔍 Search</button>
+                        <button class="btn btn-danger" onclick="resetStudentFilters()">🔄 Reset</button>
+                    </div>
+                `;
+                loadStudentFilterOptions();
+            } else if (currentTab === 'exams') {
+                filtersContainer.innerHTML = `
+                    <h2>Filter Exams</h2>
+                    <div class="filters-grid">
+                        <div class="filter-group">
+                            <label>Exam Type:</label>
+                            <select id="examTypeFilter">
+                                <option value="">All Types</option>
+                                <option value="CAT_1">CAT 1</option>
+                                <option value="CAT_2">CAT 2</option>
+                                <option value="EXAM">Final Exam</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label>Program:</label>
+                            <select id="examProgramFilter">
+                                <option value="">All Programs</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label>Course:</label>
+                            <input type="text" id="examCourseFilter" placeholder="Filter by course...">
+                        </div>
+                    </div>
+                    
+                    <div class="search-box">
+                        <input type="text" id="examSearchInput" placeholder="Search by exam name...">
+                        <button class="btn btn-primary" onclick="loadAllExams()">🔍 Search</button>
+                        <button class="btn btn-danger" onclick="resetExamFilters()">🔄 Reset</button>
+                    </div>
+                `;
+            }
+        }
+
         // Load Initial Data
         async function loadInitialData() {
             if (!checkAdminAuth()) return;
-
-            // Load exams dropdown
-            const { data: exams } = await supabase
-                .from('exams')
-                .select('id, exam_name, exam_type')
-                .order('exam_name');
-
-            const examSelect = document.getElementById('examFilter');
-            exams?.forEach(exam => {
-                const option = document.createElement('option');
-                option.value = exam.id;
-                option.textContent = `${exam.exam_name} (${exam.exam_type})`;
-                examSelect.appendChild(option);
-            });
-
-            // Load programs
-            const { data: programs } = await supabase
-                .from('student_profiles')
-                .select('program')
-                .not('program', 'is', null);
-
-            const programSelect = document.getElementById('programFilter');
-            const uniquePrograms = [...new Set(programs?.map(p => p.program))];
-            uniquePrograms?.forEach(program => {
-                if (program) {
-                    const option = document.createElement('option');
-                    option.value = program;
-                    option.textContent = program;
-                    programSelect.appendChild(option);
-                }
-            });
-
-            loadResults();
+            
+            // Load all data initially
+            await Promise.all([
+                loadStudentsWithResults(),
+                loadAllStudents(),
+                loadAllExams()
+            ]);
+            
+            // Update stats
+            updateStats();
         }
 
-        // Load Results
-        async function loadResults() {
-            const examId = document.getElementById('examFilter').value;
-            const program = document.getElementById('programFilter').value;
-            const status = document.getElementById('statusFilter').value;
-            const dateFrom = document.getElementById('dateFrom').value;
-            const dateTo = document.getElementById('dateTo').value;
-            const search = document.getElementById('searchInput').value;
+        // 1. LOAD STUDENTS WITH EXAM RESULTS
+        async function loadStudentsWithResults() {
+            const examId = document.getElementById('examFilter')?.value || '';
+            const program = document.getElementById('programFilter')?.value || '';
+            const status = document.getElementById('statusFilter')?.value || '';
+            const dateFrom = document.getElementById('dateFrom')?.value || '';
+            const dateTo = document.getElementById('dateTo')?.value || '';
+            const search = document.getElementById('searchInput')?.value || '';
 
-            document.getElementById('tableLoading').style.display = 'block';
-            document.getElementById('resultsTable').style.display = 'none';
+            document.getElementById('studentsLoading').style.display = 'block';
+            document.getElementById('studentsTable').style.display = 'none';
 
             try {
                 // Get overall exam grades (question_id = 00000000...)
@@ -702,8 +989,8 @@
                     .from('exam_grades')
                     .select(`
                         *,
-                        exams!inner(exam_name, exam_type),
-                        student_profiles!inner(full_name, email, program, block)
+                        exams!inner(exam_name, exam_type, course, program),
+                        student_profiles!inner(full_name, email, program, block, intake)
                     `)
                     .eq('question_id', '00000000-0000-0000-0000-000000000000')
                     .order('graded_at', { ascending: false });
@@ -718,7 +1005,7 @@
                     query = query.or(`
                         student_profiles.full_name.ilike.%${search}%,
                         student_profiles.email.ilike.%${search}%,
-                        selected_answer.ilike.%${search}%
+                        student_profiles.program.ilike.%${search}%
                     `);
                 }
 
@@ -726,26 +1013,24 @@
                 
                 if (error) throw error;
 
-                currentResults = results || [];
-                displayResults();
-                updateStats();
+                studentsResults = results || [];
+                displayStudentsResults();
                 
-                document.getElementById('tableLoading').style.display = 'none';
-                document.getElementById('resultsTable').style.display = 'table';
+                document.getElementById('studentsLoading').style.display = 'none';
+                document.getElementById('studentsTable').style.display = 'table';
                 
             } catch (error) {
-                console.error('Error loading results:', error);
-                document.getElementById('tableLoading').innerHTML = 
+                console.error('Error loading student results:', error);
+                document.getElementById('studentsLoading').innerHTML = 
                     `<div style="color: #DC2626;">❌ Error loading results: ${error.message}</div>`;
             }
         }
 
-        // Display Results in Table
-        function displayResults() {
-            const startIndex = (currentPage - 1) * itemsPerPage;
+        function displayStudentsResults() {
+            const startIndex = (currentPage.students - 1) * itemsPerPage;
             const endIndex = startIndex + itemsPerPage;
-            const pageResults = currentResults.slice(startIndex, endIndex);
-            const tbody = document.getElementById('resultsBody');
+            const pageResults = studentsResults.slice(startIndex, endIndex);
+            const tbody = document.getElementById('studentsBody');
 
             if (pageResults.length === 0) {
                 tbody.innerHTML = `
@@ -755,7 +1040,7 @@
                         </td>
                     </tr>
                 `;
-                document.getElementById('pagination').innerHTML = '';
+                document.getElementById('studentsPagination').innerHTML = '';
                 return;
             }
 
@@ -791,28 +1076,366 @@
             });
 
             tbody.innerHTML = html;
-            renderPagination();
+            renderPagination('students', studentsResults.length);
+        }
+
+        // 2. LOAD ALL REGISTERED STUDENTS
+        async function loadAllStudents() {
+            const program = document.getElementById('studentProgramFilter')?.value || '';
+            const block = document.getElementById('studentBlockFilter')?.value || '';
+            const intake = document.getElementById('studentIntakeFilter')?.value || '';
+            const search = document.getElementById('studentSearchInput')?.value || '';
+
+            document.getElementById('allStudentsLoading').style.display = 'block';
+            document.getElementById('allStudentsTable').style.display = 'none';
+
+            try {
+                let query = supabase
+                    .from('student_profiles')
+                    .select('*')
+                    .order('full_name', { ascending: true });
+
+                // Apply filters
+                if (program) query = query.eq('program', program);
+                if (block) query = query.eq('block', block);
+                if (intake) query = query.eq('intake', intake);
+                if (search) {
+                    query = query.or(`
+                        full_name.ilike.%${search}%,
+                        email.ilike.%${search}%,
+                        program.ilike.%${search}%
+                    `);
+                }
+
+                const { data: students, error } = await query;
+                
+                if (error) throw error;
+
+                allStudents = students || [];
+                
+                // For each student, get their exam count
+                for (let student of allStudents) {
+                    const { count } = await supabase
+                        .from('exam_grades')
+                        .select('*', { count: 'exact', head: true })
+                        .eq('student_id', student.id)
+                        .neq('question_id', '00000000-0000-0000-0000-000000000000');
+                    
+                    student.examsTaken = count || 0;
+                }
+
+                displayAllStudents();
+                
+                document.getElementById('allStudentsLoading').style.display = 'none';
+                document.getElementById('allStudentsTable').style.display = 'table';
+                
+            } catch (error) {
+                console.error('Error loading all students:', error);
+                document.getElementById('allStudentsLoading').innerHTML = 
+                    `<div style="color: #DC2626;">❌ Error loading students: ${error.message}</div>`;
+            }
+        }
+
+        function displayAllStudents() {
+            const startIndex = (currentPage.allStudents - 1) * itemsPerPage;
+            const endIndex = startIndex + itemsPerPage;
+            const pageResults = allStudents.slice(startIndex, endIndex);
+            const tbody = document.getElementById('allStudentsBody');
+
+            if (pageResults.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="9" style="text-align: center; padding: 40px; color: #64748B;">
+                            No students found.
+                        </td>
+                    </tr>
+                `;
+                document.getElementById('allStudentsPagination').innerHTML = '';
+                return;
+            }
+
+            let html = '';
+            pageResults.forEach(student => {
+                const status = student.examsTaken > 0 ? 'status-completed' : 'status-not-started';
+                const statusText = student.examsTaken > 0 ? `Taken: ${student.examsTaken}` : 'Not Started';
+                
+                html += `
+                    <tr>
+                        <td><small>${student.id.substring(0, 8)}...</small></td>
+                        <td><strong>${student.full_name || 'N/A'}</strong></td>
+                        <td>${student.email || 'N/A'}</td>
+                        <td>${student.program || 'N/A'}</td>
+                        <td>${student.block || 'N/A'}</td>
+                        <td>${student.intake || 'N/A'}</td>
+                        <td><strong>${student.examsTaken || 0}</strong> exams</td>
+                        <td><span class="${status}">${statusText}</span></td>
+                        <td class="action-buttons-cell">
+                            <button class="action-btn btn-view" onclick="viewStudentProfile('${student.id}')">
+                                👁️ Profile
+                            </button>
+                            <button class="action-btn btn-assign" onclick="assignExamToStudent('${student.id}')">
+                                📝 Assign Exam
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            tbody.innerHTML = html;
+            renderPagination('allStudents', allStudents.length);
+        }
+
+        // 3. LOAD ALL EXAMS
+        async function loadAllExams() {
+            const examType = document.getElementById('examTypeFilter')?.value || '';
+            const program = document.getElementById('examProgramFilter')?.value || '';
+            const course = document.getElementById('examCourseFilter')?.value || '';
+            const search = document.getElementById('examSearchInput')?.value || '';
+
+            document.getElementById('examsLoading').style.display = 'block';
+            document.getElementById('examsTable').style.display = 'none';
+
+            try {
+                let query = supabase
+                    .from('exams')
+                    .select('*')
+                    .order('created_at', { ascending: false });
+
+                // Apply filters
+                if (examType) query = query.eq('exam_type', examType);
+                if (program) query = query.eq('program', program);
+                if (course) query = query.ilike('course', `%${course}%`);
+                if (search) query = query.ilike('exam_name', `%${search}%`);
+
+                const { data: exams, error } = await query;
+                
+                if (error) throw error;
+
+                allExams = exams || [];
+                
+                // For each exam, get student count
+                for (let exam of allExams) {
+                    const { count } = await supabase
+                        .from('exam_grades')
+                        .select('*', { count: 'exact', head: true })
+                        .eq('exam_id', exam.id)
+                        .neq('question_id', '00000000-0000-0000-0000-000000000000');
+                    
+                    exam.studentsAssigned = count || 0;
+                    
+                    // Get question count
+                    const { count: questionCount } = await supabase
+                        .from('exam_questions')
+                        .select('*', { count: 'exact', head: true })
+                        .eq('exam_id', exam.id);
+                    
+                    exam.questionsCount = questionCount || 0;
+                }
+
+                displayAllExams();
+                
+                document.getElementById('examsLoading').style.display = 'none';
+                document.getElementById('examsTable').style.display = 'table';
+                
+            } catch (error) {
+                console.error('Error loading all exams:', error);
+                document.getElementById('examsLoading').innerHTML = 
+                    `<div style="color: #DC2626;">❌ Error loading exams: ${error.message}</div>`;
+            }
+        }
+
+        function displayAllExams() {
+            const startIndex = (currentPage.exams - 1) * itemsPerPage;
+            const endIndex = startIndex + itemsPerPage;
+            const pageResults = allExams.slice(startIndex, endIndex);
+            const tbody = document.getElementById('examsBody');
+
+            if (pageResults.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="10" style="text-align: center; padding: 40px; color: #64748B;">
+                            No exams found.
+                        </td>
+                    </tr>
+                `;
+                document.getElementById('examsPagination').innerHTML = '';
+                return;
+            }
+
+            let html = '';
+            pageResults.forEach(exam => {
+                const status = exam.studentsAssigned > 0 ? 'status-completed' : 'status-pending';
+                const statusText = exam.studentsAssigned > 0 ? 'Active' : 'Draft';
+                
+                html += `
+                    <tr>
+                        <td><small>${exam.id}</small></td>
+                        <td><strong>${exam.exam_name || 'N/A'}</strong></td>
+                        <td>${exam.exam_type || 'N/A'}</td>
+                        <td>${exam.course || 'N/A'}</td>
+                        <td>${exam.program || 'N/A'}</td>
+                        <td>${exam.duration_minutes || 0} min</td>
+                        <td><strong>${exam.questionsCount || 0}</strong> questions</td>
+                        <td><strong>${exam.studentsAssigned || 0}</strong> students</td>
+                        <td><span class="${status}">${statusText}</span></td>
+                        <td class="action-buttons-cell">
+                            <button class="action-btn btn-view" onclick="viewExamDetails(${exam.id})">
+                                👁️ View
+                            </button>
+                            <button class="action-btn btn-assign" onclick="assignStudentsToExam(${exam.id})">
+                                👥 Assign Students
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            tbody.innerHTML = html;
+            renderPagination('exams', allExams.length);
+        }
+
+        // Filter Options Loading
+        async function loadFilterOptions() {
+            // Load exams dropdown
+            const { data: exams } = await supabase
+                .from('exams')
+                .select('id, exam_name, exam_type')
+                .order('exam_name');
+
+            const examSelect = document.getElementById('examFilter');
+            if (examSelect) {
+                examSelect.innerHTML = '<option value="">All Exams</option>';
+                exams?.forEach(exam => {
+                    const option = document.createElement('option');
+                    option.value = exam.id;
+                    option.textContent = `${exam.exam_name} (${exam.exam_type})`;
+                    examSelect.appendChild(option);
+                });
+            }
+
+            // Load programs
+            const { data: programs } = await supabase
+                .from('student_profiles')
+                .select('program')
+                .not('program', 'is', null);
+
+            const programSelect = document.getElementById('programFilter');
+            if (programSelect) {
+                programSelect.innerHTML = '<option value="">All Programs</option>';
+                const uniquePrograms = [...new Set(programs?.map(p => p.program))];
+                uniquePrograms?.forEach(program => {
+                    if (program) {
+                        const option = document.createElement('option');
+                        option.value = program;
+                        option.textContent = program;
+                        programSelect.appendChild(option);
+                    }
+                });
+            }
+        }
+
+        async function loadStudentFilterOptions() {
+            // Load programs
+            const { data: programs } = await supabase
+                .from('student_profiles')
+                .select('program')
+                .not('program', 'is', null);
+
+            const programSelect = document.getElementById('studentProgramFilter');
+            if (programSelect) {
+                programSelect.innerHTML = '<option value="">All Programs</option>';
+                const uniquePrograms = [...new Set(programs?.map(p => p.program))];
+                uniquePrograms?.forEach(program => {
+                    if (program) {
+                        const option = document.createElement('option');
+                        option.value = program;
+                        option.textContent = program;
+                        programSelect.appendChild(option);
+                    }
+                });
+            }
+
+            // Load blocks
+            const { data: blocks } = await supabase
+                .from('student_profiles')
+                .select('block')
+                .not('block', 'is', null);
+
+            const blockSelect = document.getElementById('studentBlockFilter');
+            if (blockSelect) {
+                blockSelect.innerHTML = '<option value="">All Blocks</option>';
+                const uniqueBlocks = [...new Set(blocks?.map(b => b.block))];
+                uniqueBlocks?.forEach(block => {
+                    if (block) {
+                        const option = document.createElement('option');
+                        option.value = block;
+                        option.textContent = block;
+                        blockSelect.appendChild(option);
+                    }
+                });
+            }
+
+            // Load intakes
+            const { data: intakes } = await supabase
+                .from('student_profiles')
+                .select('intake')
+                .not('intake', 'is', null);
+
+            const intakeSelect = document.getElementById('studentIntakeFilter');
+            if (intakeSelect) {
+                intakeSelect.innerHTML = '<option value="">All Intakes</option>';
+                const uniqueIntakes = [...new Set(intakes?.map(i => i.intake))];
+                uniqueIntakes?.forEach(intake => {
+                    if (intake) {
+                        const option = document.createElement('option');
+                        option.value = intake;
+                        option.textContent = intake;
+                        intakeSelect.appendChild(option);
+                    }
+                });
+            }
         }
 
         // Update Statistics
         function updateStats() {
-            const total = currentResults.length;
-            const passed = currentResults.filter(r => r.result_status === 'PASS').length;
-            const failed = currentResults.filter(r => r.result_status === 'FAIL').length;
-            const avgScore = total > 0 
-                ? (currentResults.reduce((sum, r) => sum + (r.total_score || 0), 0) / total).toFixed(2)
+            const totalStudents = allStudents.length;
+            const totalExams = allExams.length;
+            const passedExams = studentsResults.filter(r => r.result_status === 'PASS').length;
+            const failedExams = studentsResults.filter(r => r.result_status === 'FAIL').length;
+            const pendingStudents = allStudents.filter(s => s.examsTaken === 0).length;
+            
+            const avgScore = studentsResults.length > 0 
+                ? (studentsResults.reduce((sum, r) => sum + (r.total_score || 0), 0) / studentsResults.length).toFixed(2)
                 : 0;
 
-            document.getElementById('totalStudents').textContent = total;
-            document.getElementById('passedExams').textContent = passed;
-            document.getElementById('failedExams').textContent = failed;
-            document.getElementById('avgScore').textContent = `${avgScore}%`;
+            document.getElementById('statsContainer').innerHTML = `
+                <div class="stat-card total">
+                    <div class="stat-value">${totalStudents}</div>
+                    <div class="stat-label">Total Students</div>
+                </div>
+                <div class="stat-card passed">
+                    <div class="stat-value">${passedExams}</div>
+                    <div class="stat-label">Passed Exams</div>
+                </div>
+                <div class="stat-card failed">
+                    <div class="stat-value">${failedExams}</div>
+                    <div class="stat-label">Failed Exams</div>
+                </div>
+                <div class="stat-card avg">
+                    <div class="stat-value">${avgScore}%</div>
+                    <div class="stat-label">Avg Score</div>
+                </div>
+                <div class="stat-card pending">
+                    <div class="stat-value">${pendingStudents}</div>
+                    <div class="stat-label">Pending Students</div>
+                </div>
+            `;
         }
 
         // Pagination
-        function renderPagination() {
-            const totalPages = Math.ceil(currentResults.length / itemsPerPage);
-            const pagination = document.getElementById('pagination');
+        function renderPagination(type, totalItems) {
+            const totalPages = Math.ceil(totalItems / itemsPerPage);
+            const pagination = document.getElementById(type + 'Pagination');
             
             if (totalPages <= 1) {
                 pagination.innerHTML = '';
@@ -822,26 +1445,34 @@
             let html = '';
             
             // Previous button
-            html += `<button class="page-btn" ${currentPage === 1 ? 'disabled' : ''} onclick="changePage(${currentPage - 1})">‹ Previous</button>`;
+            html += `<button class="page-btn" ${currentPage[type] === 1 ? 'disabled' : ''} onclick="changePage('${type}', ${currentPage[type] - 1})">‹ Previous</button>`;
             
             // Page numbers
             for (let i = 1; i <= totalPages; i++) {
-                if (i === 1 || i === totalPages || (i >= currentPage - 2 && i <= currentPage + 2)) {
-                    html += `<button class="page-btn ${i === currentPage ? 'active' : ''}" onclick="changePage(${i})">${i}</button>`;
-                } else if (i === currentPage - 3 || i === currentPage + 3) {
+                if (i === 1 || i === totalPages || (i >= currentPage[type] - 2 && i <= currentPage[type] + 2)) {
+                    html += `<button class="page-btn ${i === currentPage[type] ? 'active' : ''}" onclick="changePage('${type}', ${i})">${i}</button>`;
+                } else if (i === currentPage[type] - 3 || i === currentPage[type] + 3) {
                     html += `<span style="padding: 8px 15px;">...</span>`;
                 }
             }
             
             // Next button
-            html += `<button class="page-btn" ${currentPage === totalPages ? 'disabled' : ''} onclick="changePage(${currentPage + 1})">Next ›</button>`;
+            html += `<button class="page-btn" ${currentPage[type] === totalPages ? 'disabled' : ''} onclick="changePage('${type}', ${currentPage[type] + 1})">Next ›</button>`;
             
             pagination.innerHTML = html;
         }
 
-        function changePage(page) {
-            currentPage = page;
-            displayResults();
+        function changePage(type, page) {
+            currentPage[type] = page;
+            
+            if (type === 'students') {
+                displayStudentsResults();
+            } else if (type === 'allStudents') {
+                displayAllStudents();
+            } else if (type === 'exams') {
+                displayAllExams();
+            }
+            
             window.scrollTo({ top: document.querySelector('.table-container').offsetTop - 100, behavior: 'smooth' });
         }
 
@@ -940,6 +1571,213 @@
             }
         }
 
+        async function viewStudentProfile(studentId) {
+            try {
+                // Get student details
+                const { data: student } = await supabase
+                    .from('student_profiles')
+                    .select('*')
+                    .eq('id', studentId)
+                    .single();
+
+                // Get all exams taken by this student
+                const { data: studentExams } = await supabase
+                    .from('exam_grades')
+                    .select(`
+                        *,
+                        exams!inner(exam_name, exam_type, course),
+                        exam_questions!inner(question_text)
+                    `)
+                    .eq('student_id', studentId)
+                    .order('graded_at', { ascending: false });
+
+                let detailsHTML = `
+                    <div style="background: #F8FAFC; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                        <h3 style="color: #0A3D62; margin-bottom: 15px;">👤 Student Profile</h3>
+                        <p><strong>Name:</strong> ${student?.full_name || 'N/A'}</p>
+                        <p><strong>Email:</strong> ${student?.email || 'N/A'}</p>
+                        <p><strong>Program:</strong> ${student?.program || 'N/A'}</p>
+                        <p><strong>Block:</strong> ${student?.block || 'N/A'}</p>
+                        <p><strong>Intake:</strong> ${student?.intake || 'N/A'}</p>
+                        <p><strong>Registration Date:</strong> ${new Date(student?.created_at).toLocaleDateString()}</p>
+                    </div>
+                `;
+
+                // Group exams by exam_id
+                const examMap = new Map();
+                studentExams?.forEach(record => {
+                    if (record.exam_id && record.exams) {
+                        if (!examMap.has(record.exam_id)) {
+                            examMap.set(record.exam_id, {
+                                exam: record.exams,
+                                records: []
+                            });
+                        }
+                        examMap.get(record.exam_id).records.push(record);
+                    }
+                });
+
+                if (examMap.size > 0) {
+                    detailsHTML += `
+                        <h3 style="color: #0A3D62; margin: 20px 0 15px 0;">📊 Exams Taken</h3>
+                    `;
+
+                    for (let [examId, data] of examMap) {
+                        const exam = data.exam;
+                        const records = data.records;
+                        
+                        // Find overall grade
+                        const overallGrade = records.find(r => r.question_id === '00000000-0000-0000-0000-000000000000');
+                        
+                        detailsHTML += `
+                            <div style="border: 1px solid #E2E8F0; border-radius: 8px; padding: 15px; margin-bottom: 15px; background: white;">
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                                    <strong style="color: #0A3D62;">${exam.exam_name} (${exam.exam_type})</strong>
+                                    ${overallGrade ? `
+                                        <span class="${overallGrade.result_status === 'PASS' ? 'status-pass' : 'status-fail'}">
+                                            ${overallGrade.result_status} - ${overallGrade.total_score?.toFixed(2)}%
+                                        </span>
+                                    ` : ''}
+                                </div>
+                                <p><strong>Course:</strong> ${exam.course || 'N/A'}</p>
+                                <p><strong>Questions Attempted:</strong> ${records.filter(r => r.question_id !== '00000000-0000-0000-0000-000000000000').length}</p>
+                                ${overallGrade ? `<p><strong>Date Taken:</strong> ${new Date(overallGrade.graded_at).toLocaleDateString()}</p>` : ''}
+                                <div style="margin-top: 10px;">
+                                    <button class="action-btn btn-view" onclick="viewStudentDetails('${studentId}', ${examId})">
+                                        View Exam Details
+                                    </button>
+                                    <button class="action-btn btn-reset" onclick="resetStudentExam('${studentId}', ${examId})">
+                                        Allow Retake
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                    }
+                } else {
+                    detailsHTML += `
+                        <div style="text-align: center; padding: 20px; color: #64748B;">
+                            <p>No exams taken yet.</p>
+                            <button class="btn btn-assign" onclick="assignExamToStudent('${studentId}')">
+                                Assign First Exam
+                            </button>
+                        </div>
+                    `;
+                }
+
+                document.getElementById('modalTitle').textContent = `Profile: ${student?.full_name || 'Student'}`;
+                document.getElementById('modalContent').innerHTML = detailsHTML;
+                document.getElementById('studentModal').style.display = 'flex';
+                
+            } catch (error) {
+                console.error('Error loading student profile:', error);
+                alert('Error loading student profile. Please try again.');
+            }
+        }
+
+        async function viewExamDetails(examId) {
+            try {
+                // Get exam details
+                const { data: exam } = await supabase
+                    .from('exams')
+                    .select('*')
+                    .eq('id', examId)
+                    .single();
+
+                // Get questions for this exam
+                const { data: questions } = await supabase
+                    .from('exam_questions')
+                    .select('*')
+                    .eq('exam_id', examId)
+                    .order('question_number');
+
+                // Get students who took this exam
+                const { data: studentResults } = await supabase
+                    .from('exam_grades')
+                    .select(`
+                        *,
+                        student_profiles!inner(full_name, email)
+                    `)
+                    .eq('exam_id', examId)
+                    .eq('question_id', '00000000-0000-0000-0000-000000000000');
+
+                let detailsHTML = `
+                    <div style="background: #F8FAFC; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                        <h3 style="color: #0A3D62; margin-bottom: 15px;">📝 Exam Details</h3>
+                        <p><strong>Exam Name:</strong> ${exam?.exam_name || 'N/A'}</p>
+                        <p><strong>Type:</strong> ${exam?.exam_type || 'N/A'}</p>
+                        <p><strong>Course:</strong> ${exam?.course || 'N/A'}</p>
+                        <p><strong>Program:</strong> ${exam?.program || 'N/A'}</p>
+                        <p><strong>Duration:</strong> ${exam?.duration_minutes || 0} minutes</p>
+                        <p><strong>Pass Mark:</strong> ${exam?.pass_mark || 60}%</p>
+                        <p><strong>Created:</strong> ${new Date(exam?.created_at).toLocaleDateString()}</p>
+                    </div>
+                `;
+
+                if (questions && questions.length > 0) {
+                    detailsHTML += `
+                        <h3 style="color: #0A3D62; margin: 20px 0 15px 0;">❓ Questions (${questions.length})</h3>
+                        <div style="max-height: 200px; overflow-y: auto; margin-bottom: 20px;">
+                    `;
+
+                    questions.forEach((q, index) => {
+                        detailsHTML += `
+                            <div style="border: 1px solid #E2E8F0; border-radius: 6px; padding: 10px; margin-bottom: 8px; background: white;">
+                                <strong>Q${index + 1}:</strong> ${q.question_text?.substring(0, 80)}...
+                            </div>
+                        `;
+                    });
+
+                    detailsHTML += `</div>`;
+                }
+
+                if (studentResults && studentResults.length > 0) {
+                    detailsHTML += `
+                        <h3 style="color: #0A3D62; margin: 20px 0 15px 0;">👥 Students who took this exam (${studentResults.length})</h3>
+                        <div style="max-height: 200px; overflow-y: auto;">
+                    `;
+
+                    studentResults.forEach(result => {
+                        const student = result.student_profiles;
+                        const statusClass = result.result_status === 'PASS' ? 'status-pass' : 'status-fail';
+                        
+                        detailsHTML += `
+                            <div style="border: 1px solid #E2E8F0; border-radius: 6px; padding: 10px; margin-bottom: 8px; background: white; display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <strong>${student?.full_name || 'N/A'}</strong><br>
+                                    <small>${student?.email || 'N/A'}</small>
+                                </div>
+                                <div style="text-align: right;">
+                                    <span class="${statusClass}">${result.result_status}</span><br>
+                                    <small>${result.total_score?.toFixed(2)}%</small>
+                                </div>
+                            </div>
+                        `;
+                    });
+
+                    detailsHTML += `</div>`;
+                }
+
+                detailsHTML += `
+                    <div style="margin-top: 20px; display: flex; gap: 10px; justify-content: center;">
+                        <button class="btn btn-assign" onclick="assignStudentsToExam(${examId})">
+                            👥 Assign More Students
+                        </button>
+                        <button class="btn btn-warning" onclick="editExam(${examId})">
+                            ✏️ Edit Exam
+                        </button>
+                    </div>
+                `;
+
+                document.getElementById('modalTitle').textContent = `Exam: ${exam?.exam_name || 'N/A'}`;
+                document.getElementById('modalContent').innerHTML = detailsHTML;
+                document.getElementById('studentModal').style.display = 'flex';
+                
+            } catch (error) {
+                console.error('Error loading exam details:', error);
+                alert('Error loading exam details. Please try again.');
+            }
+        }
+
         // RESET/ALLOW RETAKE - This is the key function!
         async function resetStudentExam(studentId, examId) {
             if (!confirm('Are you sure you want to allow this student to retake the exam?\n\n⚠️ This will delete all their current exam data including scores.')) {
@@ -966,7 +1804,10 @@
                 alert(`✅ Success! ${student?.full_name || 'Student'} can now retake the exam.\n\nTheir previous scores have been deleted.`);
 
                 // Refresh results
-                loadResults();
+                if (currentTab === 'students') {
+                    loadStudentsWithResults();
+                }
+                loadAllStudents(); // Refresh all students list too
                 
             } catch (error) {
                 console.error('Error resetting exam:', error);
@@ -974,12 +1815,129 @@
             }
         }
 
+        // Assign Exam to Student
+        async function assignExamToStudent(studentId = null) {
+            // Load students dropdown
+            const { data: students } = await supabase
+                .from('student_profiles')
+                .select('id, full_name, email')
+                .order('full_name');
+
+            const studentSelect = document.getElementById('assignStudentSelect');
+            studentSelect.innerHTML = '';
+            students?.forEach(student => {
+                const option = document.createElement('option');
+                option.value = student.id;
+                option.textContent = `${student.full_name} (${student.email})`;
+                if (studentId && student.id === studentId) {
+                    option.selected = true;
+                }
+                studentSelect.appendChild(option);
+            });
+
+            // Load exams dropdown
+            const { data: exams } = await supabase
+                .from('exams')
+                .select('id, exam_name, exam_type')
+                .order('exam_name');
+
+            const examSelect = document.getElementById('assignExamSelect');
+            examSelect.innerHTML = '<option value="">Select an exam</option>';
+            exams?.forEach(exam => {
+                const option = document.createElement('option');
+                option.value = exam.id;
+                option.textContent = `${exam.exam_name} (${exam.exam_type})`;
+                examSelect.appendChild(option);
+            });
+
+            document.getElementById('assignExamModal').style.display = 'flex';
+        }
+
+        async function confirmAssignExam() {
+            const studentId = document.getElementById('assignStudentSelect').value;
+            const examId = document.getElementById('assignExamSelect').value;
+            const dueDate = document.getElementById('assignDueDate').value;
+
+            if (!studentId || !examId) {
+                alert('Please select both a student and an exam.');
+                return;
+            }
+
+            try {
+                // Check if student already has this exam
+                const { data: existing } = await supabase
+                    .from('exam_grades')
+                    .select('id')
+                    .eq('student_id', studentId)
+                    .eq('exam_id', examId)
+                    .neq('question_id', '00000000-0000-0000-0000-000000000000')
+                    .limit(1);
+
+                if (existing && existing.length > 0) {
+                    if (!confirm('This student already has this exam. Do you want to reset it first?')) {
+                        return;
+                    }
+                    // Delete existing exam data
+                    await supabase
+                        .from('exam_grades')
+                        .delete()
+                        .eq('student_id', studentId)
+                        .eq('exam_id', examId);
+                }
+
+                // Get student and exam details
+                const { data: student } = await supabase
+                    .from('student_profiles')
+                    .select('full_name')
+                    .eq('id', studentId)
+                    .single();
+
+                const { data: exam } = await supabase
+                    .from('exams')
+                    .select('exam_name')
+                    .eq('id', examId)
+                    .single();
+
+                alert(`✅ Exam assigned successfully!\n\n${student?.full_name} can now take "${exam?.exam_name}"`);
+
+                closeAssignModal();
+                
+                // Refresh data
+                if (currentTab === 'students') {
+                    loadStudentsWithResults();
+                }
+                loadAllStudents();
+                loadAllExams();
+                
+            } catch (error) {
+                console.error('Error assigning exam:', error);
+                alert('❌ Error assigning exam. Please try again.');
+            }
+        }
+
+        function closeAssignModal() {
+            document.getElementById('assignExamModal').style.display = 'none';
+        }
+
+        async function assignStudentsToExam(examId) {
+            alert('Feature: Assign multiple students to exam.\n\nThis would open a modal to select multiple students from the list and assign them to this exam.');
+            // Implementation would be similar to assignExamToStudent but with multiple selection
+        }
+
+        function createNewExam() {
+            window.location.href = 'create_exam.html'; // You need to create this page
+        }
+
+        function editExam(examId) {
+            window.location.href = `edit_exam.html?id=${examId}`; // You need to create this page
+        }
+
         // Close Modal
         function closeModal() {
             document.getElementById('studentModal').style.display = 'none';
         }
 
-        // Reset Filters
+        // Filter Resets
         function resetFilters() {
             document.getElementById('examFilter').value = '';
             document.getElementById('programFilter').value = '';
@@ -987,63 +1945,119 @@
             document.getElementById('dateFrom').value = '';
             document.getElementById('dateTo').value = '';
             document.getElementById('searchInput').value = '';
-            currentPage = 1;
-            loadResults();
+            currentPage.students = 1;
+            loadStudentsWithResults();
         }
 
-        // Export to Excel
-        function exportToExcel() {
-            if (currentResults.length === 0) {
+        function resetStudentFilters() {
+            document.getElementById('studentProgramFilter').value = '';
+            document.getElementById('studentBlockFilter').value = '';
+            document.getElementById('studentIntakeFilter').value = '';
+            document.getElementById('studentSearchInput').value = '';
+            currentPage.allStudents = 1;
+            loadAllStudents();
+        }
+
+        function resetExamFilters() {
+            document.getElementById('examTypeFilter').value = '';
+            document.getElementById('examProgramFilter').value = '';
+            document.getElementById('examCourseFilter').value = '';
+            document.getElementById('examSearchInput').value = '';
+            currentPage.exams = 1;
+            loadAllExams();
+        }
+
+        // Export Functions
+        function exportToExcel(type) {
+            let data = [];
+            let filename = '';
+            
+            if (type === 'students') {
+                data = studentsResults.map(r => ({
+                    'Student Name': r.student_profiles?.full_name,
+                    'Student Email': r.student_profiles?.email,
+                    'Program': r.student_profiles?.program,
+                    'Block': r.student_profiles?.block,
+                    'Exam Name': r.exams?.exam_name,
+                    'Exam Type': r.exams?.exam_type,
+                    'Score': r.marks,
+                    'Percentage': `${r.total_score?.toFixed(2)}%`,
+                    'Status': r.result_status,
+                    'Date Taken': new Date(r.graded_at).toLocaleDateString(),
+                    'Time Taken': new Date(r.graded_at).toLocaleTimeString()
+                }));
+                filename = `students_with_results_${new Date().toISOString().split('T')[0]}.xlsx`;
+            } else if (type === 'allStudents') {
+                data = allStudents.map(s => ({
+                    'Student ID': s.id,
+                    'Full Name': s.full_name,
+                    'Email': s.email,
+                    'Program': s.program,
+                    'Block': s.block,
+                    'Intake': s.intake,
+                    'Exams Taken': s.examsTaken || 0,
+                    'Registration Date': new Date(s.created_at).toLocaleDateString()
+                }));
+                filename = `all_students_${new Date().toISOString().split('T')[0]}.xlsx`;
+            } else if (type === 'exams') {
+                data = allExams.map(e => ({
+                    'Exam ID': e.id,
+                    'Exam Name': e.exam_name,
+                    'Type': e.exam_type,
+                    'Course': e.course,
+                    'Program': e.program,
+                    'Duration (min)': e.duration_minutes,
+                    'Questions': e.questionsCount || 0,
+                    'Students Assigned': e.studentsAssigned || 0,
+                    'Pass Mark': e.pass_mark || 60,
+                    'Created Date': new Date(e.created_at).toLocaleDateString()
+                }));
+                filename = `all_exams_${new Date().toISOString().split('T')[0]}.xlsx`;
+            }
+
+            if (data.length === 0) {
                 alert('No data to export.');
                 return;
             }
 
-            const worksheet = XLSX.utils.json_to_sheet(currentResults.map(r => ({
-                'Student Name': r.student_profiles?.full_name,
-                'Student Email': r.student_profiles?.email,
-                'Program': r.student_profiles?.program,
-                'Block': r.student_profiles?.block,
-                'Exam Name': r.exams?.exam_name,
-                'Exam Type': r.exams?.exam_type,
-                'Score': r.marks,
-                'Percentage': `${r.total_score?.toFixed(2)}%`,
-                'Status': r.result_status,
-                'Date Taken': new Date(r.graded_at).toLocaleDateString(),
-                'Time Taken': new Date(r.graded_at).toLocaleTimeString()
-            })));
-
+            const worksheet = XLSX.utils.json_to_sheet(data);
             const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, worksheet, 'Student Exam Results');
-            XLSX.writeFile(workbook, `student_exam_results_${new Date().toISOString().split('T')[0]}.xlsx`);
+            XLSX.utils.book_append_sheet(workbook, worksheet, 'Data');
+            XLSX.writeFile(workbook, filename);
         }
 
-        // Print Results
-        function printResults() {
-            const printWindow = window.open('', '_blank');
-            const tableContent = document.getElementById('resultsTable').outerHTML;
+        function printTable(type) {
+            const tableId = type === 'students' ? 'studentsTable' : 
+                           type === 'allStudents' ? 'allStudentsTable' : 'examsTable';
+            const table = document.getElementById(tableId);
             
+            const printWindow = window.open('', '_blank');
             printWindow.document.write(`
                 <html>
                 <head>
-                    <title>Student Exam Results - NCHSM</title>
+                    <title>${type === 'students' ? 'Students with Results' : 
+                              type === 'allStudents' ? 'All Registered Students' : 
+                              'All Exams'} - NCHSM</title>
                     <style>
                         body { font-family: Arial, sans-serif; padding: 20px; }
                         h1 { color: #0A3D62; border-bottom: 2px solid #0A3D62; padding-bottom: 10px; }
                         table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-                        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+                        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 12px; }
                         th { background: #f0f0f0; }
-                        .status-pass { background: #D1FAE5; color: #065F46; padding: 2px 6px; border-radius: 10px; }
-                        .status-fail { background: #FEE2E2; color: #7F1D1D; padding: 2px 6px; border-radius: 10px; }
                         @media print {
                             button { display: none; }
                         }
                     </style>
                 </head>
                 <body>
-                    <h1>Student Exam Results - NCHSM</h1>
+                    <h1>${type === 'students' ? 'Students with Exam Results' : 
+                           type === 'allStudents' ? 'All Registered Students' : 
+                           'All Available Exams'} - NCHSM</h1>
                     <p><strong>Generated:</strong> ${new Date().toLocaleString()}</p>
-                    <p><strong>Total Records:</strong> ${currentResults.length}</p>
-                    ${tableContent}
+                    <p><strong>Total Records:</strong> ${type === 'students' ? studentsResults.length : 
+                                                        type === 'allStudents' ? allStudents.length : 
+                                                        allExams.length}</p>
+                    ${table.outerHTML}
                 </body>
                 </html>
             `);
@@ -1054,25 +2068,32 @@
         // Initialize
         window.addEventListener('DOMContentLoaded', loadInitialData);
 
-        // Close modal when clicking outside
+        // Close modals when clicking outside
         window.addEventListener('click', (event) => {
-            const modal = document.getElementById('studentModal');
-            if (event.target === modal) {
-                closeModal();
-            }
+            const modals = ['studentModal', 'assignExamModal'];
+            modals.forEach(modalId => {
+                const modal = document.getElementById(modalId);
+                if (event.target === modal) {
+                    if (modalId === 'studentModal') closeModal();
+                    if (modalId === 'assignExamModal') closeAssignModal();
+                }
+            });
         });
 
-        // Allow Enter key in search
-        document.getElementById('searchInput').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                loadResults();
+        // Allow Enter key in search inputs
+        document.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && e.target.matches('input[type="text"]')) {
+                if (currentTab === 'students') loadStudentsWithResults();
+                if (currentTab === 'allStudents') loadAllStudents();
+                if (currentTab === 'exams') loadAllExams();
             }
         });
 
         // Auto-load today's date in dateTo
         window.addEventListener('load', () => {
             const today = new Date().toISOString().split('T')[0];
-            document.getElementById('dateTo').value = today;
+            const dateTo = document.getElementById('dateTo');
+            if (dateTo) dateTo.value = today;
         });
     </script>
 </body>
