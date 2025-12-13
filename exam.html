@@ -584,51 +584,31 @@ function updateProgressUI() {
     document.getElementById('next-btn').disabled = (currentIndex === questions.length - 1);
 }
 
-// --- PERSISTENCE AND SUBMISSION ---
+// --- ANSWER SAVING ---
 async function saveAnswer(selectedAnswerValue) {
     const q = questions[currentIndex];
     const answer = selectedAnswerValue;
     
-    console.log('=== SAVE ANSWER DEBUG ===');
+    console.log('=== SAVE ANSWER (LOCAL) ===');
     console.log('Question:', currentIndex + 1);
     console.log('Question ID:', q.id);
     console.log('Selected Answer:', answer);
     console.log('Correct Answer:', q.correct_answer);
     
+    // Save answer locally only during exam
     answers[q.id] = answer; 
 
+    // Show save confirmation
     document.getElementById('answer-saved').style.display = 'block';
     setTimeout(() => { 
         document.getElementById('answer-saved').style.display = 'none'; 
     }, 1000);
 
-    const marks = answer === q.correct_answer ? (q.marks || 1) : 0;
-    console.log('Marks calculated:', marks);
-    
-    try {
-        console.log('Attempting to save to database...');
-        const { data, error } = await sb.from('exam_grades').upsert(
-            [{
-                student_id: studentId, 
-                exam_id: EXAM_ID, 
-                question_id: q.id, 
-                selected_answer: answer, 
-                marks, 
-                graded_at: new Date()
-            }],
-            { onConflict: ['student_id', 'exam_id', 'question_id'] }
-        );
-        
-        if (error) {
-            console.error('❌ Database save error:', error);
-            document.getElementById('error').innerText = 'Warning: Could not save answer to server!';
-        } else {
-            console.log('✅ Answer saved successfully to database');
-        }
-    } catch (err) { 
-        console.error('Error saving answer', err);
-        document.getElementById('error').innerText = 'Warning: Could not save answer to server!';
+    if (!hasAnsweredAtLeastOne) {
+        hasAnsweredAtLeastOne = true;
+        finalSubmitBtn.disabled = false;
     }
+    updateStatusTableUI();
 }
 
 function submitExam() {
@@ -652,7 +632,110 @@ function submitExam() {
     submissionModal.style.display = 'flex';
 }
 
-// MAIN SUBMISSION FUNCTION
+// --- SAVE ALL QUESTIONS TO DATABASE ---
+async function saveAllQuestions() {
+    try {
+        console.log('=== SAVING ALL QUESTIONS FOR FINAL SUBMISSION ===');
+        
+        const allEntries = [];
+        const answeredCount = Object.keys(answers).filter(qId => answers[qId] !== null).length;
+        
+        questions.forEach(q => {
+            const questionId = q.id;
+            const isAnswered = answers.hasOwnProperty(questionId) && answers[questionId] !== null;
+            
+            let entry = {
+                student_id: studentId, 
+                exam_id: EXAM_ID, 
+                question_id: questionId, 
+                graded_at: new Date().toISOString()
+            };
+            
+            if (isAnswered) {
+                // Calculate marks for answered questions
+                const isCorrect = answers[questionId] === q.correct_answer;
+                entry.selected_answer = answers[questionId];
+                entry.marks = isCorrect ? (q.marks || 1) : 0;
+            } else {
+                // Unanswered questions get 0 marks
+                entry.selected_answer = null;
+                entry.marks = 0;
+            }
+            
+            allEntries.push(entry);
+        });
+
+        console.log(`📝 Saving ${allEntries.length} total questions (${answeredCount} answered, ${allEntries.length - answeredCount} unanswered)`);
+
+        // Save ALL questions in batches
+        const batchSize = 20;
+        for (let i = 0; i < allEntries.length; i += batchSize) {
+            const batch = allEntries.slice(i, i + batchSize);
+            
+            const { error } = await sb.from('exam_grades').upsert(
+                batch,
+                { 
+                    onConflict: ['student_id', 'exam_id', 'question_id'] 
+                }
+            );
+            
+            if (error) {
+                console.error(`❌ Error saving batch ${i/batchSize + 1}:`, error);
+                // Try individual saves as fallback
+                for (const entry of batch) {
+                    try {
+                        await sb.from('exam_grades').upsert([entry], { 
+                            onConflict: ['student_id', 'exam_id', 'question_id'] 
+                        });
+                    } catch (singleError) {
+                        console.error(`❌ Failed to save question ${entry.question_id}:`, singleError);
+                    }
+                }
+            }
+        }
+        
+        console.log('✅ All questions saved to database');
+        
+        // Verify all questions were saved
+        await verifyQuestionSubmission();
+        
+    } catch (error) {
+        console.error('❌ Error saving all questions:', error);
+    }
+}
+
+// Verify that all questions were saved
+async function verifyQuestionSubmission() {
+    try {
+        const { data: savedQuestions, error } = await sb.from('exam_grades')
+            .select('question_id, marks, selected_answer')
+            .eq('student_id', studentId)
+            .eq('exam_id', EXAM_ID)
+            .neq('question_id', '00000000-0000-0000-0000-000000000000');
+        
+        if (error) {
+            console.error('❌ Error verifying submission:', error);
+            return;
+        }
+        
+        const savedCount = savedQuestions?.length || 0;
+        const answeredCount = savedQuestions?.filter(q => q.selected_answer !== null).length || 0;
+        const totalMarks = savedQuestions?.reduce((sum, q) => sum + (q.marks || 0), 0) || 0;
+        
+        console.log(`✅ Verification: ${savedCount}/${questions.length} questions saved`);
+        console.log(`✅ Answered: ${answeredCount} questions`);
+        console.log(`✅ Total marks in database: ${totalMarks}`);
+        
+        if (savedCount < questions.length) {
+            console.warn(`⚠️ Warning: Only ${savedCount}/${questions.length} questions saved to database`);
+        }
+        
+    } catch (error) {
+        console.error('Error verifying submission:', error);
+    }
+}
+
+// --- MAIN SUBMISSION FUNCTION ---
 async function executeSubmission() {
     // Disable all buttons to prevent double-clicks
     document.querySelectorAll('button').forEach(btn => btn.disabled = true);
@@ -665,25 +748,25 @@ async function executeSubmission() {
     console.log('Student ID:', studentId);
     console.log('Exam Type:', examType);
     console.log('Total Questions:', questions.length);
-    console.log('Answers saved locally:', Object.keys(answers).length);
+    console.log('Local answers:', Object.keys(answers).length);
     
-    // Save all unanswered questions as 0 marks FIRST
-    await saveUnansweredQuestions();
+    // STEP 1: Save ALL questions to database
+    await saveAllQuestions();
     
-    // Wait to ensure all answers are saved
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // STEP 2: Wait a moment to ensure database writes complete
+    await new Promise(resolve => setTimeout(resolve, 1500));
     
-    // Calculate and save final grade
+    // STEP 3: Calculate and save final grade
     await calculateAndSaveFinalGrade();
     
-    // Update success screen
+    // STEP 4: Update success screen
     showSuccessScreen('completed');
     
-    // Countdown before redirect
+    // STEP 5: Countdown before redirect
     let countdown = 5;
+    const countdownElement = document.querySelector('#countdown-number');
     const countdownInterval = setInterval(() => {
         countdown--;
-        const countdownElement = document.querySelector('#countdown-number');
         if (countdownElement) countdownElement.textContent = countdown;
         if (countdown <= 0) {
             clearInterval(countdownInterval);
@@ -692,37 +775,7 @@ async function executeSubmission() {
     }, 1000);
 }
 
-// Save unanswered questions as 0 marks
-async function saveUnansweredQuestions() {
-    const skippedEntries = [];
-    questions.forEach(q => {
-        const questionId = q.id;
-        if (!answers.hasOwnProperty(questionId) || answers[questionId] === null) {
-            skippedEntries.push({
-                student_id: studentId, 
-                exam_id: EXAM_ID, 
-                question_id: questionId, 
-                selected_answer: null, 
-                marks: 0, 
-                graded_at: new Date().toISOString()
-            });
-        }
-    });
-
-    if (skippedEntries.length > 0) {
-        console.log(`Saving ${skippedEntries.length} unanswered questions as 0 marks`);
-        const { error } = await sb.from('exam_grades').upsert(skippedEntries, { 
-            onConflict: ['student_id', 'exam_id', 'question_id'] 
-        });
-        if (error) {
-            console.error('Error saving skipped answers:', error);
-        } else {
-            console.log('✅ Unanswered questions saved as 0 marks');
-        }
-    }
-}
-
-// FIXED: Calculate and save final grade
+// --- FINAL GRADE CALCULATION ---
 async function calculateAndSaveFinalGrade() {
     try {
         console.log('=== CALCULATING FINAL GRADE ===');
@@ -753,17 +806,37 @@ async function calculateAndSaveFinalGrade() {
         
         console.log(`📊 Grade Summary: ${totalMarks} marks from ${totalQuestions} questions`);
         
-        // Calculate percentage
+        // Calculate percentage CORRECTLY
         let percentage = 0;
-        let totalPossible = 30; // Default for CAT exams
         
         if (examType === 'CAT_1' || examType === 'CAT_2' || examType === 'CAT') {
-            totalPossible = 30; // CAT exams are out of 30
+            // For CAT exams: each question is 1 mark, total out of 30
+            const totalPossible = Math.min(30, totalQuestions);
+            percentage = (totalMarks / totalPossible) * 100;
+            console.log(`📊 CAT Calculation: ${totalMarks}/${totalPossible} = ${percentage.toFixed(2)}%`);
         } else if (examType === 'EXAM') {
-            totalPossible = 100; // Final exams are out of 100
+            // For exams: get total possible marks from questions
+            const { data: questionData } = await sb.from('exam_questions')
+                .select('marks')
+                .eq('exam_id', EXAM_ID);
+            
+            let totalPossible = 0;
+            if (questionData && questionData.length > 0) {
+                totalPossible = questionData.reduce((sum, q) => sum + (q.marks || 1), 0);
+            } else {
+                totalPossible = totalQuestions; // Assume 1 mark per question
+            }
+            
+            percentage = (totalMarks / totalPossible) * 100;
+            console.log(`📊 EXAM Calculation: ${totalMarks}/${totalPossible} = ${percentage.toFixed(2)}%`);
+        } else {
+            // Default: assume 1 mark per question
+            percentage = (totalMarks / totalQuestions) * 100;
+            console.log(`📊 Default Calculation: ${totalMarks}/${totalQuestions} = ${percentage.toFixed(2)}%`);
         }
         
-        percentage = totalPossible > 0 ? ((totalMarks / totalPossible) * 100) : 0;
+        // Ensure percentage is valid
+        percentage = Math.min(100, Math.max(0, percentage));
         
         // Prepare grade data
         let gradeData = {
@@ -782,53 +855,50 @@ async function calculateAndSaveFinalGrade() {
         // Set appropriate score based on exam type
         if (examType === 'CAT_1' || examType === 'CAT') {
             gradeData.cat_1_score = totalMarks;
-            console.log(`✅ CAT 1 Grade: ${totalMarks}/${totalPossible} = ${gradeData.total_score}%`);
+            console.log(`✅ CAT 1 Grade: ${totalMarks}/30 = ${gradeData.total_score}% (Status: ${gradeData.result_status})`);
         } else if (examType === 'CAT_2') {
             gradeData.cat_2_score = totalMarks;
-            console.log(`✅ CAT 2 Grade: ${totalMarks}/${totalPossible} = ${gradeData.total_score}%`);
+            console.log(`✅ CAT 2 Grade: ${totalMarks}/30 = ${gradeData.total_score}% (Status: ${gradeData.result_status})`);
         } else if (examType === 'EXAM') {
             gradeData.exam_score = totalMarks;
-            console.log(`✅ Final Exam Grade: ${totalMarks}/${totalPossible} = ${gradeData.total_score}%`);
+            console.log(`✅ Final Exam Grade: ${totalMarks} marks = ${gradeData.total_score}% (Status: ${gradeData.result_status})`);
         } else {
-            console.log(`✅ Default Grade: ${totalMarks}/${totalQuestions} = ${gradeData.total_score}%`);
+            console.log(`✅ Default Grade: ${totalMarks} marks = ${gradeData.total_score}% (Status: ${gradeData.result_status})`);
         }
 
-        console.log(`📊 Result Status: ${gradeData.result_status}`);
+        // CRITICAL: Check if a grade record already exists and update it
+        const { data: existingGrade } = await sb.from('exam_grades')
+            .select('*')
+            .eq('student_id', studentId)
+            .eq('exam_id', EXAM_ID)
+            .eq('question_id', '00000000-0000-0000-0000-000000000000')
+            .single();
 
-        // Save the final grade to exam_grades table
-        console.log('📝 Saving final grade to database:', gradeData);
-        
-        const { data: savedGrade, error: gradeError } = await sb.from('exam_grades').upsert(
-            [gradeData],
-            { 
-                onConflict: 'student_id,exam_id,question_id'
-            }
-        );
-
-        if (gradeError) {
-            console.error('❌ Error saving final grade:', gradeError);
+        if (existingGrade) {
+            console.log('📝 Updating existing grade record...');
+            // Update existing record
+            const { error: updateError } = await sb.from('exam_grades')
+                .update(gradeData)
+                .eq('student_id', studentId)
+                .eq('exam_id', EXAM_ID)
+                .eq('question_id', '00000000-0000-0000-0000-000000000000');
             
-            // Try alternative: Delete existing and insert fresh
-            try {
-                await sb.from('exam_grades')
-                    .delete()
-                    .eq('student_id', studentId)
-                    .eq('exam_id', EXAM_ID)
-                    .eq('question_id', '00000000-0000-0000-0000-000000000000');
-                
-                const { error: insertError } = await sb.from('exam_grades')
-                    .insert([gradeData]);
-                    
-                if (insertError) {
-                    console.error('❌ Insert after delete also failed:', insertError);
-                } else {
-                    console.log('✅ Final grade saved via delete+insert');
-                }
-            } catch (deleteError) {
-                console.error('❌ Delete failed:', deleteError);
+            if (updateError) {
+                console.error('❌ Error updating grade:', updateError);
+                throw updateError;
             }
+            console.log('✅ Grade record updated successfully');
         } else {
-            console.log('✅ Final grade saved successfully to database');
+            console.log('📝 Creating new grade record...');
+            // Insert new record
+            const { error: insertError } = await sb.from('exam_grades')
+                .insert([gradeData]);
+            
+            if (insertError) {
+                console.error('❌ Error inserting grade:', insertError);
+                throw insertError;
+            }
+            console.log('✅ New grade record created successfully');
         }
         
     } catch (error) {
@@ -837,6 +907,7 @@ async function calculateAndSaveFinalGrade() {
     }
 }
 
+// --- SUCCESS SCREEN ---
 function showSuccessScreen(status) {
     clearInterval(timerInterval);
     
