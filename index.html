@@ -10,8 +10,416 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <link rel="stylesheet" href="indexstyle.css">
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#4C1D95">
+    
+    <!-- iOS PWA Support -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/NCHSMlearning/e-learning/main/images/Logo_NCHSM.png">
+    
+    <!-- Windows PWA Support -->
+    <meta name="msapplication-TileColor" content="#4C1D95">
+    <meta name="msapplication-TileImage" content="https://raw.githubusercontent.com/NCHSMlearning/e-learning/main/images/Logo_NCHSM.png">
+    
+    <!-- Mobile PWA Support -->
+    <meta name="mobile-web-app-capable" content="yes">
+    
+    <!-- Inline CSS for status and footer -->
+    <style>
+        /* Status Bar Styles */
+        .status-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #1F2937;
+            color: white;
+            padding: 8px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.85rem;
+            z-index: 1000;
+            border-top: 1px solid #374151;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+        }
+        
+        .status-left {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .status-right {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .status-icon {
+            font-size: 0.9rem;
+        }
+        
+        .status-online {
+            color: #10B981;
+        }
+        
+        .status-offline {
+            color: #EF4444;
+        }
+        
+        .status-sync {
+            color: #F59E0B;
+        }
+        
+        .sync-animation {
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .status-badge {
+            background: #374151;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        .status-badge.online {
+            background: #065F46;
+            color: #10B981;
+        }
+        
+        .status-badge.offline {
+            background: #7F1D1D;
+            color: #FCA5A5;
+        }
+        
+        .status-badge.syncing {
+            background: #78350F;
+            color: #FBBF24;
+        }
+        
+        /* Footer Styles */
+        .app-footer {
+            background: linear-gradient(135deg, #1F2937 0%, #111827 100%);
+            color: #E5E7EB;
+            padding: 30px 20px;
+            margin-top: 40px;
+            border-top: 1px solid #374151;
+        }
+        
+        .footer-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 30px;
+        }
+        
+        .footer-section h3 {
+            color: white;
+            font-size: 1.1rem;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+        
+        .footer-section p {
+            line-height: 1.6;
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+        
+        .footer-links {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .footer-links li {
+            margin-bottom: 10px;
+        }
+        
+        .footer-links a {
+            color: #D1D5DB;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: color 0.2s;
+            font-size: 0.9rem;
+        }
+        
+        .footer-links a:hover {
+            color: white;
+        }
+        
+        .footer-contact {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .contact-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.9rem;
+        }
+        
+        .footer-bottom {
+            max-width: 1200px;
+            margin: 30px auto 0;
+            padding-top: 20px;
+            border-top: 1px solid #374151;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+            font-size: 0.85rem;
+        }
+        
+        .copyright {
+            opacity: 0.8;
+        }
+        
+        .footer-social {
+            display: flex;
+            gap: 15px;
+        }
+        
+        .social-icon {
+            width: 36px;
+            height: 36px;
+            background: #374151;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            text-decoration: none;
+            transition: all 0.3s ease;
+        }
+        
+        .social-icon:hover {
+            background: #4C1D95;
+            transform: translateY(-2px);
+        }
+        
+        .install-prompt {
+            position: fixed;
+            bottom: 70px;
+            right: 20px;
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            z-index: 999;
+            display: none;
+            max-width: 300px;
+            border: 1px solid #E5E7EB;
+        }
+        
+        .install-prompt.show {
+            display: block;
+            animation: slideUp 0.3s ease;
+        }
+        
+        @keyframes slideUp {
+            from {
+                transform: translateY(20px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+        
+        .install-content {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .install-icon {
+            font-size: 24px;
+            color: #4C1D95;
+        }
+        
+        .install-text {
+            flex: 1;
+        }
+        
+        .install-text h4 {
+            margin: 0 0 5px 0;
+            color: #111827;
+        }
+        
+        .install-text p {
+            margin: 0;
+            font-size: 0.85rem;
+            color: #6B7280;
+        }
+        
+        .install-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .install-btn {
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-weight: 500;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+        
+        .install-btn.primary {
+            background: #4C1D95;
+            color: white;
+        }
+        
+        .install-btn.secondary {
+            background: #E5E7EB;
+            color: #374151;
+        }
+        
+        .install-btn:hover {
+            opacity: 0.9;
+        }
+        
+        .install-close {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: none;
+            border: none;
+            color: #9CA3AF;
+            cursor: pointer;
+            font-size: 1.2rem;
+        }
+        
+        /* Offline Queue Notification */
+        .offline-queue {
+            position: fixed;
+            top: 70px;
+            right: 20px;
+            background: #F59E0B;
+            color: #78350F;
+            padding: 10px 15px;
+            border-radius: 6px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 999;
+            display: none;
+            align-items: center;
+            gap: 10px;
+            font-weight: 500;
+        }
+        
+        .offline-queue.show {
+            display: flex;
+            animation: fadeIn 0.3s ease;
+        }
+        
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        /* Toast Notifications */
+        .toast {
+            position: fixed;
+            bottom: 70px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #374151;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 999;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 300px;
+            max-width: 90%;
+            animation: slideUp 0.3s ease;
+        }
+        
+        .toast.success {
+            background: #065F46;
+        }
+        
+        .toast.error {
+            background: #7F1D1D;
+        }
+        
+        .toast.warning {
+            background: #78350F;
+        }
+        
+        /* Offline Indicator */
+        .offline-indicator {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #7F1D1D;
+            color: white;
+            text-align: center;
+            padding: 10px;
+            font-weight: 500;
+            z-index: 1001;
+            animation: slideDown 0.3s ease;
+        }
+        
+        @keyframes slideDown {
+            from {
+                transform: translateY(-100%);
+            }
+            to {
+                transform: translateY(0);
+            }
+        }
+        
+        /* Main content padding adjustment for status bar */
+        main.main {
+            padding-bottom: 50px;
+        }
+    </style>
 </head>
 <body>
+    <!-- Offline Indicator -->
+    <div class="offline-indicator" id="offlineIndicator" style="display: none;">
+        <i class="fas fa-wifi-slash"></i> You are offline. Some features may be unavailable.
+    </div>
+
     <!-- Mobile Header -->
     <div class="mobile-header">
         <button class="menu-toggle" onclick="toggleMenu()">☰</button>
@@ -368,6 +776,131 @@
         </main>
     </div>
 
+    <!-- Install Prompt -->
+    <div class="install-prompt" id="installPrompt">
+        <button class="install-close" onclick="closeInstallPrompt()">×</button>
+        <div class="install-content">
+            <div class="install-icon">
+                <i class="fas fa-download"></i>
+            </div>
+            <div class="install-text">
+                <h4>Install NCHSM Portal</h4>
+                <p>Install on your device for offline access and faster loading</p>
+            </div>
+        </div>
+        <div class="install-actions">
+            <button class="install-btn secondary" onclick="closeInstallPrompt()">Not Now</button>
+            <button class="install-btn primary" onclick="installPWA()">Install</button>
+        </div>
+    </div>
+
+    <!-- Offline Queue Notification -->
+    <div class="offline-queue" id="offlineQueue">
+        <i class="fas fa-sync sync-animation"></i>
+        <span id="queueCount">0</span> pending actions
+    </div>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+        <div class="footer-content">
+            <div class="footer-section">
+                <h3>NCHSM Digital Portal</h3>
+                <p>Providing seamless digital access to academic resources, attendance tracking, and student services for NCHSM students.</p>
+                <div class="contact-item">
+                    <i class="fas fa-globe"></i>
+                    <span>nchsm.ac.ke</span>
+                </div>
+            </div>
+            
+            <div class="footer-section">
+                <h3>Quick Links</h3>
+                <ul class="footer-links">
+                    <li><a href="#" onclick="showTab('dashboard')"><i class="fas fa-home"></i> Dashboard</a></li>
+                    <li><a href="#" onclick="showTab('courses')"><i class="fas fa-book"></i> My Courses</a></li>
+                    <li><a href="#" onclick="showTab('resources')"><i class="fas fa-file-pdf"></i> Resources</a></li>
+                    <li><a href="#" onclick="showTab('calendar')"><i class="fas fa-calendar"></i> Academic Calendar</a></li>
+                </ul>
+            </div>
+            
+            <div class="footer-section">
+                <h3>Support</h3>
+                <ul class="footer-links">
+                    <li><a href="#" onclick="showTab('messages')"><i class="fas fa-question-circle"></i> Contact Admin</a></li>
+                    <li><a href="#" id="clearCacheBtn"><i class="fas fa-broom"></i> Clear Cache</a></li>
+                    <li><a href="#" id="exportDataBtn"><i class="fas fa-download"></i> Export Data</a></li>
+                    <li><a href="#" onclick="showSystemInfo()"><i class="fas fa-info-circle"></i> System Info</a></li>
+                </ul>
+            </div>
+            
+            <div class="footer-section">
+                <h3>Contact Info</h3>
+                <div class="footer-contact">
+                    <div class="contact-item">
+                        <i class="fas fa-envelope"></i>
+                        <span>portal@nchsm.ac.ke</span>
+                    </div>
+                    <div class="contact-item">
+                        <i class="fas fa-phone"></i>
+                        <span>+254 700 000 000</span>
+                    </div>
+                    <div class="contact-item">
+                        <i class="fas fa-clock"></i>
+                        <span>Mon - Fri: 8:00 AM - 5:00 PM</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer-bottom">
+            <div class="copyright">
+                © 2024 Nyeri County Hospital School of Medicine. All rights reserved.
+                <span id="appVersion" style="margin-left: 10px; opacity: 0.7;">v2.1</span>
+            </div>
+            <div class="footer-social">
+                <a href="https://facebook.com" class="social-icon" target="_blank" aria-label="Facebook">
+                    <i class="fab fa-facebook-f"></i>
+                </a>
+                <a href="https://twitter.com" class="social-icon" target="_blank" aria-label="Twitter">
+                    <i class="fab fa-twitter"></i>
+                </a>
+                <a href="https://instagram.com" class="social-icon" target="_blank" aria-label="Instagram">
+                    <i class="fab fa-instagram"></i>
+                </a>
+                <a href="mailto:portal@nchsm.ac.ke" class="social-icon" aria-label="Email">
+                    <i class="fas fa-envelope"></i>
+                </a>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Status Bar -->
+    <div class="status-bar" id="statusBar">
+        <div class="status-left">
+            <div class="status-item">
+                <i class="fas fa-wifi status-icon" id="connectionIcon"></i>
+                <span id="connectionStatus">Online</span>
+            </div>
+            <div class="status-item">
+                <i class="fas fa-database status-icon"></i>
+                <span id="cacheStatus">Cache: 0MB</span>
+            </div>
+            <div class="status-item">
+                <i class="fas fa-user status-icon"></i>
+                <span id="userStatus">Student</span>
+            </div>
+        </div>
+        <div class="status-right">
+            <div class="status-badge" id="syncStatus">
+                <i class="fas fa-sync"></i>
+                <span>Synced</span>
+            </div>
+            <div class="status-item">
+                <i class="fas fa-clock status-icon"></i>
+                <span id="currentTime">00:00:00</span>
+            </div>
+        </div>
+    </div>
+
     <!-- Provisional Transcript Modal -->
     <div id="transcript-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); justify-content:center; align-items:center; z-index:1000;">
         <div style="background:white; padding:20px; border-radius:8px; max-width:400px; width:90%; position:relative; box-shadow:0 4px 12px rgba(0,0,0,0.2);">
@@ -477,6 +1010,457 @@
             startMainApplication(sb, LOCATIONIQ_API_KEY, LOCATIONIQ_API_URL);
         }
 
+        // *************************************************************************
+        // *** OFFLINE SUPPORT & SERVICE WORKER ***
+        // *************************************************************************
+        
+        // Service Worker Registration
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                const swUrl = '/sw.js';
+                
+                navigator.serviceWorker.register(swUrl)
+                    .then(registration => {
+                        console.log('✅ Service Worker registered:', registration);
+                        
+                        // Check for updates
+                        registration.addEventListener('updatefound', () => {
+                            const newWorker = registration.installing;
+                            console.log('🔄 New Service Worker found:', newWorker.state);
+                            
+                            newWorker.addEventListener('statechange', () => {
+                                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                    showToast('New version available! Refresh to update.', 'info');
+                                }
+                            });
+                        });
+                    })
+                    .catch(error => {
+                        console.error('❌ Service Worker registration failed:', error);
+                    });
+            });
+        }
+
+        // Offline Support System
+        const OfflineManager = {
+            queue: [],
+            isOnline: navigator.onLine,
+            isSyncing: false,
+
+            init() {
+                this.loadQueue();
+                this.setupEventListeners();
+                this.startSyncInterval();
+                this.updateConnectionStatus();
+            },
+
+            loadQueue() {
+                const saved = localStorage.getItem('offlineQueue');
+                this.queue = saved ? JSON.parse(saved) : [];
+                this.updateQueueDisplay();
+            },
+
+            saveQueue() {
+                localStorage.setItem('offlineQueue', JSON.stringify(this.queue));
+                this.updateQueueDisplay();
+            },
+
+            addToQueue(action, data) {
+                const queueItem = {
+                    id: Date.now() + Math.random().toString(36).substr(2, 9),
+                    action,
+                    data,
+                    timestamp: new Date().toISOString(),
+                    attempts: 0,
+                    maxAttempts: 3
+                };
+
+                this.queue.push(queueItem);
+                this.saveQueue();
+                
+                if (this.isOnline) {
+                    this.processQueue();
+                } else {
+                    showToast('Action saved offline. Will sync when online.', 'warning');
+                }
+            },
+
+            async processQueue() {
+                if (this.isSyncing || this.queue.length === 0 || !this.isOnline) return;
+
+                this.isSyncing = true;
+                this.updateSyncStatus('syncing');
+
+                try {
+                    while (this.queue.length > 0) {
+                        const item = this.queue[0];
+                        const success = await this.executeAction(item);
+
+                        if (success) {
+                            this.queue.shift(); // Remove successful item
+                        } else {
+                            item.attempts++;
+                            if (item.attempts >= item.maxAttempts) {
+                                console.warn(`Failed after ${item.maxAttempts} attempts:`, item);
+                                this.queue.shift(); // Remove failed item
+                                showToast('Failed to sync action after multiple attempts', 'error');
+                            }
+                            break; // Stop processing on first failure
+                        }
+                        
+                        this.saveQueue();
+                    }
+                    
+                    if (this.queue.length === 0) {
+                        showToast('All offline actions synced', 'success');
+                    }
+                } catch (error) {
+                    console.error('Queue processing error:', error);
+                } finally {
+                    this.isSyncing = false;
+                    this.updateSyncStatus(this.queue.length > 0 ? 'offline' : 'idle');
+                }
+            },
+
+            async executeAction(item) {
+                try {
+                    // Simulate API call - replace with actual Supabase calls
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    return true;
+                } catch (error) {
+                    console.error('Action execution failed:', error);
+                    return false;
+                }
+            },
+
+            updateQueueDisplay() {
+                const queueElement = document.getElementById('offlineQueue');
+                const countElement = document.getElementById('queueCount');
+                
+                if (this.queue.length > 0) {
+                    if (queueElement) queueElement.classList.add('show');
+                    if (countElement) countElement.textContent = this.queue.length;
+                } else {
+                    if (queueElement) queueElement.classList.remove('show');
+                }
+            },
+
+            updateSyncStatus(status) {
+                const syncElement = document.getElementById('syncStatus');
+                if (!syncElement) return;
+
+                syncElement.className = 'status-badge';
+                
+                switch(status) {
+                    case 'syncing':
+                        syncElement.classList.add('syncing');
+                        syncElement.innerHTML = '<i class="fas fa-sync sync-animation"></i><span>Syncing...</span>';
+                        break;
+                    case 'idle':
+                        syncElement.classList.add('online');
+                        syncElement.innerHTML = '<i class="fas fa-check"></i><span>Synced</span>';
+                        break;
+                    case 'offline':
+                        syncElement.classList.add('offline');
+                        syncElement.innerHTML = '<i class="fas fa-cloud"></i><span>Offline</span>';
+                        break;
+                }
+            },
+
+            setupEventListeners() {
+                window.addEventListener('online', () => {
+                    this.isOnline = true;
+                    this.updateConnectionStatus();
+                    this.processQueue();
+                    showToast('You are back online', 'success');
+                });
+
+                window.addEventListener('offline', () => {
+                    this.isOnline = false;
+                    this.updateConnectionStatus();
+                    this.updateSyncStatus('offline');
+                    showToast('You are offline. Changes will sync when back online.', 'warning');
+                });
+            },
+
+            startSyncInterval() {
+                // Try to sync every 30 seconds when online
+                setInterval(() => {
+                    if (this.isOnline && this.queue.length > 0) {
+                        this.processQueue();
+                    }
+                }, 30000);
+            },
+
+            updateConnectionStatus() {
+                const statusElement = document.getElementById('connectionStatus');
+                const iconElement = document.getElementById('connectionIcon');
+                const offlineIndicator = document.getElementById('offlineIndicator');
+                
+                if (this.isOnline) {
+                    if (statusElement) statusElement.textContent = 'Online';
+                    if (iconElement) {
+                        iconElement.className = 'fas fa-wifi status-icon status-online';
+                    }
+                    if (offlineIndicator) offlineIndicator.style.display = 'none';
+                } else {
+                    if (statusElement) statusElement.textContent = 'Offline';
+                    if (iconElement) {
+                        iconElement.className = 'fas fa-wifi-slash status-icon status-offline';
+                    }
+                    if (offlineIndicator) offlineIndicator.style.display = 'block';
+                }
+            }
+        };
+
+        // Cache Manager
+        const CacheManager = {
+            async estimateCache() {
+                if ('storage' in navigator && 'estimate' in navigator.storage) {
+                    try {
+                        const estimate = await navigator.storage.estimate();
+                        const usedMB = (estimate.usage / (1024 * 1024)).toFixed(2);
+                        const quotaMB = (estimate.quota / (1024 * 1024)).toFixed(2);
+                        
+                        const cacheElement = document.getElementById('cacheStatus');
+                        if (cacheElement) {
+                            cacheElement.textContent = `Cache: ${usedMB}MB / ${quotaMB}MB`;
+                        }
+                    } catch (error) {
+                        console.error('Cache estimation failed:', error);
+                    }
+                }
+            },
+
+            async clearCache() {
+                if ('caches' in window) {
+                    try {
+                        const cacheNames = await caches.keys();
+                        await Promise.all(cacheNames.map(name => caches.delete(name)));
+                        
+                        // Clear localStorage except essential data
+                        const essentialKeys = ['offlineQueue', 'userPreferences'];
+                        Object.keys(localStorage).forEach(key => {
+                            if (!essentialKeys.includes(key)) {
+                                localStorage.removeItem(key);
+                            }
+                        });
+                        
+                        showToast('Cache cleared successfully', 'success');
+                        this.estimateCache();
+                    } catch (error) {
+                        console.error('Cache clearing failed:', error);
+                        showToast('Failed to clear cache', 'error');
+                    }
+                }
+            },
+
+            async exportData() {
+                try {
+                    const data = {
+                        profile: currentUserProfile || {},
+                        courses: cachedCourses || [],
+                        exams: cachedExams || [],
+                        resources: cachedResources || [],
+                        exportDate: new Date().toISOString()
+                    };
+
+                    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `nchsm-data-${new Date().toISOString().split('T')[0]}.json`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    
+                    showToast('Data exported successfully', 'success');
+                } catch (error) {
+                    console.error('Data export failed:', error);
+                    showToast('Failed to export data', 'error');
+                }
+            }
+        };
+
+        // PWA Installation
+        let deferredPrompt;
+        const installPrompt = document.getElementById('installPrompt');
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            
+            // Show install prompt after 5 seconds
+            setTimeout(() => {
+                if (deferredPrompt && !isAppInstalled()) {
+                    installPrompt.classList.add('show');
+                }
+            }, 5000);
+        });
+
+        function installPWA() {
+            if (!deferredPrompt) return;
+            
+            deferredPrompt.prompt();
+            deferredPrompt.userChoice.then((choiceResult) => {
+                if (choiceResult.outcome === 'accepted') {
+                    console.log('User accepted install');
+                    showToast('App installation started', 'success');
+                }
+                deferredPrompt = null;
+                closeInstallPrompt();
+            });
+        }
+
+        function closeInstallPrompt() {
+            installPrompt.classList.remove('show');
+        }
+
+        function isAppInstalled() {
+            return window.matchMedia('(display-mode: standalone)').matches || 
+                   window.navigator.standalone === true;
+        }
+
+        // System Info Modal
+        function showSystemInfo() {
+            const info = `
+                <div style="padding: 20px;">
+                    <h3 style="color: #4C1D95; margin-bottom: 15px;">System Information</h3>
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <tr>
+                            <td style="padding: 8px 0; border-bottom: 1px solid #E5E7EB;"><strong>App Version:</strong></td>
+                            <td style="padding: 8px 0; border-bottom: 1px solid #E5E7EB;">v2.1</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 8px 0; border-bottom: 1px solid #E5E7EB;"><strong>Browser:</strong></td>
+                            <td style="padding: 8px 0; border-bottom: 1px solid #E5E7EB;">${navigator.userAgent.split(' ')[0]}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 8px 0; border-bottom: 1px solid #E5E7EB;"><strong>Online:</strong></td>
+                            <td style="padding: 8px 0; border-bottom: 1px solid #E5E7EB;">${navigator.onLine ? 'Yes' : 'No'}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 8px 0; border-bottom: 1px solid #E5E7EB;"><strong>Service Worker:</strong></td>
+                            <td style="padding: 8px 0; border-bottom: 1px solid #E5E7EB;">${'serviceWorker' in navigator ? 'Active' : 'Not Supported'}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 8px 0; border-bottom: 1px solid #E5E7EB;"><strong>Cache Size:</strong></td>
+                            <td style="padding: 8px 0; border-bottom: 1px solid #E5E7EB;" id="cacheSizeInfo">Calculating...</td>
+                        </tr>
+                    </table>
+                    <div style="margin-top: 20px; text-align: center;">
+                        <button onclick="closeModal()" class="profile-button">Close</button>
+                    </div>
+                </div>
+            `;
+            
+            showModal('System Information', info);
+        }
+
+        function showModal(title, content) {
+            // Create modal dynamically
+            const modal = document.createElement('div');
+            modal.className = 'modal-overlay';
+            modal.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0,0,0,0.5);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                z-index: 1000;
+            `;
+            
+            modal.innerHTML = `
+                <div style="background: white; padding: 20px; border-radius: 10px; max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <h3 style="margin: 0; color: #4C1D95;">${title}</h3>
+                        <button onclick="this.closest('.modal-overlay').remove()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;">×</button>
+                    </div>
+                    <div>${content}</div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+        }
+
+        function closeModal() {
+            const modal = document.querySelector('.modal-overlay');
+            if (modal) modal.remove();
+        }
+
+        // Toast Notification System
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.innerHTML = `
+                <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'}"></i>
+                <span>${message}</span>
+            `;
+            
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.remove();
+            }, 4000);
+        }
+
+        // Real-time Clock
+        function updateClock() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('en-US', { 
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            
+            const timeElement = document.getElementById('currentTime');
+            if (timeElement) timeElement.textContent = timeString;
+        }
+
+        // Initialize all systems
+        function initializeSystems() {
+            // Start clock
+            updateClock();
+            setInterval(updateClock, 1000);
+            
+            // Initialize offline manager
+            OfflineManager.init();
+            
+            // Update cache size periodically
+            CacheManager.estimateCache();
+            setInterval(() => CacheManager.estimateCache(), 60000);
+            
+            // Setup footer button listeners
+            document.getElementById('clearCacheBtn')?.addEventListener('click', (e) => {
+                e.preventDefault();
+                if (confirm('Clear all cached data? This will not delete your submissions.')) {
+                    CacheManager.clearCache();
+                }
+            });
+            
+            document.getElementById('exportDataBtn')?.addEventListener('click', (e) => {
+                e.preventDefault();
+                CacheManager.exportData();
+            });
+            
+            // Update system info cache size
+            window.showSystemInfo = async function() {
+                await CacheManager.estimateCache();
+                const cacheElement = document.getElementById('cacheSizeInfo');
+                if (cacheElement) {
+                    const statusElement = document.getElementById('cacheStatus');
+                    cacheElement.textContent = statusElement.textContent;
+                }
+                showSystemInfo();
+            };
+        }
+
         // YOUR EXISTING APPLICATION CODE - MODIFIED FOR SECURITY
         async function startMainApplication(sb, LOCATIONIQ_API_KEY, LOCATIONIQ_API_URL) {
             // *************************************************************************
@@ -490,6 +1474,9 @@
             let cachedExams = [];
             let cachedClinicalAreas = [];
             let cachedResources = [];
+            
+            // Initialize offline systems
+            initializeSystems();
             
             // Constants
             const MAX_ALLOWED_ACCURACY = 30;
@@ -592,6 +1579,13 @@
                     
                     currentUserId = session.user.id;
                     console.log("✅ User authenticated:", currentUserId);
+                    
+                    // Update user status in status bar
+                    const userStatusElement = document.getElementById('userStatus');
+                    if (userStatusElement) {
+                        userStatusElement.textContent = 'Loading...';
+                    }
+                    
                     await checkAuthAndLoad();
                     
                 } catch (err) {
@@ -1062,6 +2056,12 @@
                 } else {
                     currentUserProfile = profile;
                     if (profileStatus) profileStatus.textContent = '';
+                    
+                    // Update user status in status bar
+                    const userStatusElement = document.getElementById('userStatus');
+                    if (userStatusElement && profile.full_name) {
+                        userStatusElement.textContent = profile.full_name;
+                    }
                 }
             
                 // Populate form fields
@@ -1420,7 +2420,7 @@
                 return deviceId;
             }
             
-            // Geo check-in function - UPDATED WITH SIMPLIFIED MESSAGE
+            // Geo check-in function - UPDATED WITH OFFLINE SUPPORT
             async function geoCheckIn() {
                 const button = document.getElementById('check-in-button');
                 const geoMessage = document.getElementById('geo-message');
@@ -1454,6 +2454,21 @@
             
                     if (!targetId || !targetNameFromDropdown) {
                         if (geoMessage) geoMessage.textContent = 'Error: Invalid target selected.';
+                        return;
+                    }
+            
+                    // Check if offline
+                    if (!navigator.onLine) {
+                        OfflineManager.addToQueue('checkIn', {
+                            sessionType,
+                            targetId,
+                            targetNameFromDropdown,
+                            studentProgram,
+                            checkInTime,
+                            deviceId
+                        });
+                        if (geoMessage) geoMessage.innerHTML = `✅ Check-in saved offline. Will sync when back online.`;
+                        if (button) button.disabled = false;
                         return;
                     }
             
@@ -1544,7 +2559,6 @@
                         console.error('Check-in failed:', error);
                         if (geoMessage) geoMessage.textContent = `Check-in failed: ${error.message}`;
                     } else {
-                        // ✅ UPDATED: Simplified success message
                         if (geoMessage) geoMessage.innerHTML = `✅ Check-in complete! ${isVerified ? 'Verified successfully' : 'Pending verification'}`;
                         loadGeoAttendanceHistory(currentUserId);
                     }
@@ -1561,7 +2575,7 @@
             // *** COURSES, EXAMS, AND RESOURCES ***
             // *************************************************************************
             
-            // Load courses - FIXED VERSION
+            // Load courses
             async function loadCourses() {
                 const tableBody = document.getElementById('courses-table');
                 if (!tableBody) return;
@@ -1573,14 +2587,6 @@
                 const department = currentUserProfile?.department;
                 const block = currentUserProfile?.block;
                 const intakeYear = currentUserProfile?.intake_year;
-
-                // Debug info
-                console.log('User Profile:', {
-                    program: program,
-                    department: department,
-                    block: block,
-                    intakeYear: intakeYear
-                });
 
                 if ((!program && !department) || !intakeYear) {
                     tableBody.innerHTML = `<tr><td colspan="4">
@@ -1597,41 +2603,21 @@
                 try {
                     const blockFilter = `block.eq.${block},block.is.null,block.eq.General`;
 
-                    // Determine the correct target_program filter (REMOVED General since it doesn't exist)
                     let programFilter;
                     
-                    // TVET students - check all possible combinations
                     if (program === 'TVET' || department === 'TVET') {
-                        programFilter = `target_program.eq.TVET`; // Removed ,target_program.eq.General
-                        console.log('Filtering for TVET courses only');
-                    } 
-                    // KRCHN students have program = 'KRCHN'
-                    else if (program === 'KRCHN') {
-                        programFilter = `target_program.eq.KRCHN`; // Removed ,target_program.eq.General
-                        console.log('Filtering for KRCHN courses only');
+                        programFilter = `target_program.eq.TVET`;
+                    } else if (program === 'KRCHN') {
+                        programFilter = `target_program.eq.KRCHN`;
+                    } else if (department === 'Nursing') {
+                        programFilter = `target_program.eq.Nursing`;
+                    } else if (department === 'Clinical Medicine') {
+                        programFilter = `target_program.eq.Clinical Medicine`;
+                    } else if (department === 'Management') {
+                        programFilter = `target_program.eq.Management`;
+                    } else {
+                        programFilter = `target_program.eq.${program}`;
                     }
-                    // Nursing department students
-                    else if (department === 'Nursing') {
-                        programFilter = `target_program.eq.Nursing`; // Removed ,target_program.eq.General
-                        console.log('Filtering for Nursing courses only');
-                    }
-                    // Clinical Medicine department
-                    else if (department === 'Clinical Medicine') {
-                        programFilter = `target_program.eq.Clinical Medicine`; // Removed ,target_program.eq.General
-                        console.log('Filtering for Clinical Medicine courses only');
-                    }
-                    // Management department
-                    else if (department === 'Management') {
-                        programFilter = `target_program.eq.Management`; // Removed ,target_program.eq.General
-                        console.log('Filtering for Management courses only');
-                    }
-                    else {
-                        // Fallback: use program field if available
-                        programFilter = `target_program.eq.${program}`; // Removed ,target_program.eq.General
-                        console.log('Filtering for program:', program);
-                    }
-
-                    console.log('Final program filter:', programFilter);
 
                     const { data: courses, error } = await sb
                         .from('courses')
@@ -1644,9 +2630,6 @@
                     if (error) throw error;
 
                     cachedCourses = courses || [];
-                    
-                    console.log('Found courses:', cachedCourses.length);
-                    console.log('Courses for', program || department, ':', cachedCourses);
                     
                     tableBody.innerHTML = '';
                     if (cachedCourses.length > 0) {
@@ -1665,8 +2648,6 @@
                             No courses found for: ${program || department} 
                             (Program: ${program || 'undefined'}, Department: ${department || 'undefined'})
                             <br>Intake Year: ${intakeYear}, Block: ${block}
-                            <br>Filter used: ${programFilter}
-                            <br><small>Check if courses exist with target_program = '${program || department}' and intake_year = '${intakeYear}'</small>
                         </td></tr>`;
                     }
 
@@ -1817,7 +2798,6 @@
                 const grade = exam.grade || {};
                 const totalScore = grade.total_score;
             
-                // Colors: red if <50%, green if final, gray if provisional
                 const cat1Color = grade.cat_1_score < 50 ? 'red' : 'black';
                 const cat2Color = grade.cat_2_score < 50 ? 'red' : 'black';
                 const finalColor = grade.exam_score < 50 ? 'red' : 'black';
@@ -2085,9 +3065,8 @@
                 try {
                     const pdfDoc = await pdfjsLib.getDocument(resource.file_url).promise;
                     let currentPage = 1;
-                    let pdfScale = 1.8; // High quality scale for crisp text
+                    let pdfScale = 1.8;
                     
-                    // Update total pages
                     document.getElementById('total-pages').textContent = pdfDoc.numPages;
                     
                     function renderPage(pageNum) {
@@ -2096,30 +3075,23 @@
                             const ctx = canvas.getContext('2d');
                             const container = document.querySelector('.pdf-container-mobile');
                             
-                            // Get container dimensions with padding consideration
                             const containerWidth = container.clientWidth - 40;
-                            const maxContainerHeight = window.innerHeight * 0.7; // Limit height for mobile
+                            const maxContainerHeight = window.innerHeight * 0.7;
                             
-                            // Get PDF page viewport
                             const viewport = page.getViewport({ scale: 1 });
                             
-                            // Calculate optimal scale for high quality
                             const scaleX = containerWidth / viewport.width;
                             const scaleY = maxContainerHeight / viewport.height;
                             const optimalScale = Math.min(scaleX, scaleY, pdfScale) * (window.devicePixelRatio || 1);
                             
-                            // Apply the scale
                             const scaledViewport = page.getViewport({ scale: optimalScale });
                             
-                            // Set canvas size with high DPI for crisp rendering
                             canvas.width = scaledViewport.width;
                             canvas.height = scaledViewport.height;
                             
-                            // Set CSS size for proper display
                             canvas.style.width = (scaledViewport.width / (window.devicePixelRatio || 1)) + 'px';
                             canvas.style.height = (scaledViewport.height / (window.devicePixelRatio || 1)) + 'px';
                             
-                            // High-quality rendering settings
                             const renderContext = {
                                 canvasContext: ctx,
                                 viewport: scaledViewport,
@@ -2129,10 +3101,8 @@
                                 imageLayer: false
                             };
                             
-                            // Render the page with high quality
                             page.render(renderContext).promise.then(() => {
                                 document.getElementById('current-page').textContent = pageNum;
-                                console.log(`Rendered page ${pageNum} at ${optimalScale.toFixed(2)}x scale`);
                             });
                         }).catch(error => {
                             console.error('Error rendering page:', error);
@@ -2154,20 +3124,17 @@
                         }
                     };
                     
-                    // Add zoom controls for better usability
                     window.zoomPDF = function(zoomIn) {
                         if (zoomIn) {
-                            pdfScale = Math.min(pdfScale + 0.25, 3.0); // Max 3x zoom
+                            pdfScale = Math.min(pdfScale + 0.25, 3.0);
                         } else {
-                            pdfScale = Math.max(pdfScale - 0.25, 0.5); // Min 0.5x zoom
+                            pdfScale = Math.max(pdfScale - 0.25, 0.5);
                         }
                         renderPage(currentPage);
                     };
                     
-                    // Initial render
                     renderPage(currentPage);
                     
-                    // Add keyboard navigation
                     document.addEventListener('keydown', function(e) {
                         if (e.key === 'ArrowLeft') {
                             changePDFPage(-1);
@@ -2284,7 +3251,6 @@
                     details: `${e.status || 'Scheduled'} - Block ${e.block_term}`
                 })));
             
-                // Holidays/Academic Events
                 const eventsPromise = sb
                     .from('calendar_events')
                     .select('event_name, event_date, type, description, target_program, target_block, target_intake_year')
@@ -2463,6 +3429,10 @@
             window.filterResources = filterResources;
             window.changePDFPage = function() {}; // Placeholder
             window.zoomPDF = function() {}; // Placeholder
+            window.installPWA = installPWA;
+            window.closeInstallPrompt = closeInstallPrompt;
+            window.showSystemInfo = showSystemInfo;
+            window.closeModal = closeModal;
         }
 
         // Start application when config is ready
