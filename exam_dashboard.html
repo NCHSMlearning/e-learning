@@ -18,6 +18,7 @@ h1 { color:#073450; }
 .grade-info { margin-top:15px; padding:10px; border-radius:8px; font-size:14px; }
 .grade-pass { background:#D1FAE5; border-left:4px solid #38A169; }
 .grade-fail { background:#FEF3C7; border-left:4px solid #DC2626; }
+.grade-pending { background:#F0F9FF; border-left:4px solid #0EA5E9; }
 .exam-actions { display:flex; gap:10px; margin-top:15px; }
 button { padding:10px 20px; border:none; border-radius:8px; font-weight:600; cursor:pointer; }
 .btn-start { background:#38A169; color:white; }
@@ -127,6 +128,24 @@ async function loadExams(showLoading = true) {
 
         console.log('Final grades loaded:', finalGrades);
 
+        // ALSO check if student has ANY answers for this exam (alternative detection method)
+        const { data: anyAnswers, error: anyAnswersError } = await sb
+            .from('exam_grades')
+            .select('exam_id, question_id')
+            .eq('student_id', currentUserId)
+            .neq('question_id', '00000000-0000-0000-0000-000000000000'); // Exclude the total record
+
+        console.log('Any answers found:', anyAnswers);
+
+        // Create a Set of exam IDs that have any answers
+        const examsWithAnswers = new Set();
+        if (anyAnswers && anyAnswers.length > 0) {
+            anyAnswers.forEach(answer => {
+                examsWithAnswers.add(answer.exam_id);
+            });
+        }
+        console.log('Exams with answers:', Array.from(examsWithAnswers));
+
         // Filter exams for this student
         const filteredExams = exams.filter(exam => {
             const examYear = String(exam.intake_year || '');
@@ -156,12 +175,13 @@ async function loadExams(showLoading = true) {
             const div = document.createElement('div');
             div.className = 'exam-card';
             
-            // Check if student has taken this exam
+            // IMPROVED: Check if student has taken this exam using multiple methods
             const finalGrade = finalGrades?.find(g => g.exam_id === exam.id);
-            const isTaken = !!finalGrade;
+            const hasAnyAnswers = examsWithAnswers.has(exam.id);
+            const isTaken = !!finalGrade || hasAnyAnswers;
             
             // Debug log
-            console.log(`Exam: ${exam.exam_name}, Taken: ${isTaken}, Grade:`, finalGrade);
+            console.log(`Exam: ${exam.exam_name}, Taken: ${isTaken}, FinalGrade: ${!!finalGrade}, HasAnswers: ${hasAnyAnswers}`);
             
             // Build exam card content
             let examContent = `
@@ -176,33 +196,46 @@ async function loadExams(showLoading = true) {
             `;
             
             // Add grade info if taken
-            if (isTaken && finalGrade) {
-                const percentage = finalGrade.total_score || 0;
-                const passFail = percentage >= 60 ? 'PASS' : 'FAIL';
-                const passClass = percentage >= 60 ? 'grade-pass' : 'grade-fail';
-                const passColor = percentage >= 60 ? '#38A169' : '#DC2626';
-                
-                // Get appropriate score based on exam type
-                let scoreDisplay = '';
-                if (exam.exam_type === 'CAT_1' && finalGrade.cat_1_score !== null) {
-                    scoreDisplay = `${finalGrade.cat_1_score}/30`;
-                } else if (exam.exam_type === 'CAT_2' && finalGrade.cat_2_score !== null) {
-                    scoreDisplay = `${finalGrade.cat_2_score}/30`;
-                } else if (exam.exam_type === 'EXAM' && finalGrade.exam_score !== null) {
-                    scoreDisplay = `${finalGrade.exam_score}/100`;
-                } else {
-                    scoreDisplay = `${percentage}%`;
+            if (isTaken) {
+                if (finalGrade) {
+                    // Has final grade - show detailed results
+                    const percentage = finalGrade.total_score || 0;
+                    const passFail = percentage >= 60 ? 'PASS' : 'FAIL';
+                    const passClass = percentage >= 60 ? 'grade-pass' : 'grade-fail';
+                    const passColor = percentage >= 60 ? '#38A169' : '#DC2626';
+                    
+                    // Get appropriate score based on exam type
+                    let scoreDisplay = '';
+                    if (exam.exam_type === 'CAT_1' && finalGrade.cat_1_score !== null) {
+                        scoreDisplay = `${finalGrade.cat_1_score}/30`;
+                    } else if (exam.exam_type === 'CAT_2' && finalGrade.cat_2_score !== null) {
+                        scoreDisplay = `${finalGrade.cat_2_score}/30`;
+                    } else if (exam.exam_type === 'EXAM' && finalGrade.exam_score !== null) {
+                        scoreDisplay = `${finalGrade.exam_score}/100`;
+                    } else {
+                        scoreDisplay = `${percentage}%`;
+                    }
+                    
+                    examContent += `
+                        <div class="grade-info ${passClass}">
+                            <strong>📊 Exam Results</strong><br>
+                            <small>Score: <strong>${scoreDisplay}</strong></small><br>
+                            <small>Percentage: <strong>${percentage}%</strong></small><br>
+                            <small>Result: <strong style="color:${passColor}">${passFail}</strong></small><br>
+                            <small>Graded: ${new Date(finalGrade.graded_at).toLocaleDateString()}</small>
+                        </div>
+                    `;
+                } else if (hasAnyAnswers) {
+                    // Has answers but no final grade yet (might be pending grading)
+                    examContent += `
+                        <div class="grade-info grade-pending">
+                            <strong>⏳ Exam Submitted</strong><br>
+                            <small>Your exam has been submitted and is pending final grading.</small><br>
+                            <small>Status: <strong>Under Review</strong></small><br>
+                            <small>Check back later for your results.</small>
+                        </div>
+                    `;
                 }
-                
-                examContent += `
-                    <div class="grade-info ${passClass}">
-                        <strong>📊 Exam Results</strong><br>
-                        <small>Score: <strong>${scoreDisplay}</strong></small><br>
-                        <small>Percentage: <strong>${percentage}%</strong></small><br>
-                        <small>Result: <strong style="color:${passColor}">${passFail}</strong></small><br>
-                        <small>Graded: ${new Date(finalGrade.graded_at).toLocaleDateString()}</small>
-                    </div>
-                `;
             }
             
             // Add action buttons
@@ -234,13 +267,37 @@ async function loadExams(showLoading = true) {
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.has('exam_completed')) {
             const examId = urlParams.get('exam_completed');
-            setTimeout(() => {
-                alert('Exam submitted successfully! Your results have been updated.');
-                // Remove the parameter from URL
-                window.history.replaceState({}, document.title, window.location.pathname);
-                // Refresh to show updated status
-                refreshExams();
-            }, 500);
+            const examType = urlParams.get('type');
+            
+            // Find the completed exam
+            const completedExam = filteredExams.find(exam => exam.id === examId);
+            
+            if (completedExam) {
+                // Show success message with exam details
+                setTimeout(() => {
+                    const successMessage = `
+                        ✅ <strong>${completedExam.exam_name} (${examType}) Submitted Successfully!</strong><br>
+                        <small>Your answers have been saved and the exam is being graded.</small><br>
+                        <small>Results will appear here once grading is complete.</small>
+                    `;
+                    
+                    // Show a nice toast notification instead of alert
+                    showToastNotification(successMessage, 'success');
+                    
+                    // Remove the parameter from URL
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                    
+                    // Refresh to show updated status
+                    setTimeout(refreshExams, 1500);
+                }, 500);
+            } else {
+                // Generic success message
+                setTimeout(() => {
+                    showToastNotification('✅ Exam submitted successfully! Your results have been updated.', 'success');
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                    setTimeout(refreshExams, 1000);
+                }, 500);
+            }
         }
 
     } catch (err) {
@@ -384,6 +441,63 @@ function logout() {
     window.location.href = 'exam_login.html';
 }
 
+// Show toast notification
+function showToastNotification(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: ${type === 'success' ? '#10B981' : type === 'error' ? '#EF4444' : '#3B82F6'};
+        color: white;
+        padding: 15px 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        z-index: 9999;
+        max-width: 400px;
+        animation: slideIn 0.3s ease;
+        font-family: 'Poppins', sans-serif;
+    `;
+    
+    toast.innerHTML = message;
+    document.body.appendChild(toast);
+    
+    // Remove after 5 seconds
+    setTimeout(() => {
+        toast.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => {
+            document.body.removeChild(toast);
+        }, 300);
+    }, 5000);
+}
+
+// Add CSS for toast animations
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes slideIn {
+        from {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+    
+    @keyframes slideOut {
+        from {
+            transform: translateX(0);
+            opacity: 1;
+        }
+        to {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+    }
+`;
+document.head.appendChild(style);
+
 // Auto-refresh when page becomes visible (if user returns from exam page)
 document.addEventListener('visibilitychange', function() {
     if (!document.hidden) {
@@ -398,15 +512,7 @@ window.addEventListener('focus', refreshExams);
 // Initial load
 window.addEventListener('DOMContentLoaded', () => {
     loadExams();
-    
-    // Check if we're returning from an exam
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.has('from_exam')) {
-        setTimeout(refreshExams, 1000); // Refresh after 1 second
-        // Clean URL
-        window.history.replaceState({}, document.title, window.location.pathname);
-    }
 });
 </script>
 </body>
-</html>
+    </html>
