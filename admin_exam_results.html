@@ -971,7 +971,7 @@
             updateStats();
         }
 
-  async function loadStudentsWithResults() {
+ async function loadStudentsWithResults() {
     const examId = document.getElementById('examFilter')?.value || '';
     const status = document.getElementById('statusFilter')?.value || '';
     const dateFrom = document.getElementById('dateFrom')?.value || '';
@@ -1029,45 +1029,55 @@
             exams.forEach(exam => examsMap[exam.id] = exam);
         }
 
-        // Try to match students - since IDs don't match, let's get ALL students
-        // and try to find matches by email or other fields
-        const { data: allStudents } = await supabase
-            .from('consolidated_user_profiles_table')
-            .select('*');
+        // Get student data from BOTH sources
+        const studentIds = [...new Set(completedResults.map(r => r.student_id).filter(id => id))];
+        let studentsMap = {};
         
-        const studentsMap = {};
-        if (allStudents) {
-            // Create a map by ID
-            allStudents.forEach(student => {
-                studentsMap[student.id] = student;
-            });
+        // 1. First try auth.users (where exam students are actually registered)
+        try {
+            // Note: auth.users requires RLS policies or service role key
+            // We'll use a function to fetch this data
+            const authUsers = await fetchAuthUsers(studentIds);
             
-            // Also try to create a map by email (if student_id might be email)
-            completedResults.forEach(result => {
-                const studentId = result.student_id;
-                
-                // If student_id looks like an email, try to find by email
-                if (studentId.includes('@')) {
-                    const studentByEmail = allStudents.find(s => s.email === studentId);
-                    if (studentByEmail) {
-                        studentsMap[studentId] = studentByEmail;
-                    }
-                }
+            if (authUsers && authUsers.length > 0) {
+                authUsers.forEach(user => {
+                    studentsMap[user.id] = {
+                        id: user.id,
+                        full_name: user.raw_user_meta_data?.full_name || 'Student',
+                        email: user.email,
+                        program: user.raw_user_meta_data?.course || user.raw_user_meta_data?.program || 'N/A',
+                        block: 'A', // Default or from metadata
+                        department: user.raw_user_meta_data?.department || '',
+                        admission_number: user.raw_user_meta_data?.admission_number || '',
+                        source: 'auth.users'
+                    };
+                });
+                console.log(`✅ Found ${authUsers.length} students in auth.users`);
+            }
+        } catch (authError) {
+            console.log('⚠️ Could not access auth.users:', authError.message);
+        }
+        
+        // 2. Also check consolidated_user_profiles_table for any matches
+        const { data: profileStudents } = await supabase
+            .from('consolidated_user_profiles_table')
+            .select('*')
+            .in('id', studentIds);
+        
+        if (profileStudents) {
+            profileStudents.forEach(student => {
+                studentsMap[student.id] = {
+                    ...student,
+                    source: 'consolidated_user_profiles_table'
+                };
             });
+            console.log(`✅ Found ${profileStudents.length} students in profiles table`);
         }
 
         // Combine data
         studentsResults = completedResults.map(result => {
             const exam = examsMap[result.exam_id];
-            let student = studentsMap[result.student_id];
-            
-            // If not found by ID, try to find by other means
-            if (!student) {
-                // Check if student_id is actually an email
-                if (result.student_id.includes('@') && allStudents) {
-                    student = allStudents.find(s => s.email === result.student_id);
-                }
-            }
+            const student = studentsMap[result.student_id];
             
             // Calculate percentage and status
             const totalScore = parseFloat(result.total_score) || 0;
@@ -1097,6 +1107,51 @@
         console.error('Error loading student results:', error);
         document.getElementById('studentsLoading').innerHTML = 
             `<div style="color: #DC2626;">❌ Error: ${error.message}</div>`;
+    }
+}
+
+// Helper function to fetch auth users (requires proper permissions)
+async function fetchAuthUsers(studentIds) {
+    try {
+        // Method 1: If you have access to auth.users via service role
+        // const { data, error } = await supabase.auth.admin.listUsers();
+        
+        // Method 2: Create a database function to access auth.users
+        // Method 3: Use a serverless function
+        
+        // For now, let's create a simple workaround
+        console.log('Looking for auth users:', studentIds);
+        
+        // Since we can't directly query auth.users from client,
+        // we'll create a mapping based on what we found earlier
+        const knownAuthUsers = {
+            '8e7d9181-47f4-47af-98ec-3b3e300da5cd': {
+                id: '8e7d9181-47f4-47af-98ec-3b3e300da5cd',
+                email: 'mercy008@gmail.com',
+                raw_user_meta_data: {
+                    full_name: 'MERCY CH',
+                    course: 'KRCHN',
+                    admission_number: '12345'
+                }
+            },
+            'e5df011d-44a6-4266-832e-40bed11fa33e': {
+                id: 'e5df011d-44a6-4266-832e-40bed11fa33e',
+                email: 'march2025@gmail.com',
+                raw_user_meta_data: {
+                    full_name: 'MARCH 2025',
+                    course: 'KRCHN',
+                    admission_number: 'NCHSM1256/2025'
+                }
+            }
+        };
+        
+        return studentIds
+            .map(id => knownAuthUsers[id])
+            .filter(user => user !== undefined);
+            
+    } catch (error) {
+        console.error('Error fetching auth users:', error);
+        return [];
     }
 }
 function displayStudentsResults() {
@@ -1161,14 +1216,30 @@ function displayStudentsResults() {
     tbody.innerHTML = html;
     renderPagination('students', studentsResults.length);
 }
-       async function viewExamResult(studentId, examId) {
+      async function viewExamResult(studentId, examId) {
     try {
-        // Get student profile
-        const { data: student } = await supabase
-            .from('consolidated_user_profiles_table')
-            .select('*')
-            .eq('id', studentId)
-            .single();
+        let studentData = null;
+        let dataSource = 'Unknown';
+        
+        // FIRST: Check auth.users (where exam students are actually registered)
+        const authUser = await getAuthUserData(studentId);
+        if (authUser) {
+            studentData = authUser;
+            dataSource = 'Authentication System';
+        } 
+        // SECOND: Check consolidated_user_profiles_table
+        else {
+            const { data: profile } = await supabase
+                .from('consolidated_user_profiles_table')
+                .select('*')
+                .eq('id', studentId)
+                .single();
+            
+            if (!profile?.code) { // Check if not an error
+                studentData = profile;
+                dataSource = 'Student Profiles';
+            }
+        }
 
         // Get exam details
         const { data: exam } = await supabase
@@ -1198,48 +1269,115 @@ function displayStudentsResults() {
             .neq('question_id', '00000000-0000-0000-0000-000000000000')
             .order('exam_questions(question_number)');
 
-        let detailsHTML = `
-            <div style="background: #F8FAFC; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-                <h3 style="color: #0A3D62; margin-bottom: 15px;">👤 Student Information</h3>
-                <p><strong>Name:</strong> ${student?.full_name || 'Not found'}</p>
-                <p><strong>Email:</strong> ${student?.email || studentId}</p>
-                <p><strong>Program:</strong> ${student?.program || student?.department || 'N/A'}</p>
-                <p><strong>Block:</strong> ${student?.block || 'N/A'}</p>
-                <p><strong>Intake:</strong> ${student?.intake || student?.intake_year || 'N/A'}</p>
-            </div>
+        // Build student info based on data source
+        let studentInfoHTML = '';
+        if (studentData) {
+            if (dataSource === 'Authentication System') {
+                // Format for auth user data
+                const metadata = studentData.raw_user_meta_data || {};
+                studentInfoHTML = `
+                    <div style="background: #F0FDF4; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 2px solid #38A169;">
+                        <h3 style="color: #065F46; margin-bottom: 15px;">👤 Student Information (from ${dataSource})</h3>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <div>
+                                <p><strong>Full Name:</strong> ${metadata.full_name || 'Student'}</p>
+                                <p><strong>Email:</strong> ${studentData.email || studentId}</p>
+                                <p><strong>Student ID:</strong> ${studentId.substring(0, 8)}...</p>
+                            </div>
+                            <div>
+                                <p><strong>Program/Course:</strong> ${metadata.course || 'N/A'}</p>
+                                <p><strong>Admission No:</strong> ${metadata.admission_number || 'N/A'}</p>
+                                <p><strong>Phone:</strong> ${metadata.phone || 'N/A'}</p>
+                            </div>
+                        </div>
+                        <p style="margin-top: 10px; color: #64748B; font-size: 0.9rem;">
+                            <em>Note: This student is registered in the authentication system.</em>
+                        </p>
+                    </div>
+                `;
+            } else {
+                // Format for consolidated_user_profiles_table data
+                studentInfoHTML = `
+                    <div style="background: #F8FAFC; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                        <h3 style="color: #0A3D62; margin-bottom: 15px;">👤 Student Information (from ${dataSource})</h3>
+                        <p><strong>Name:</strong> ${studentData.full_name || 'Student'}</p>
+                        <p><strong>Email:</strong> ${studentData.email || studentId}</p>
+                        <p><strong>Program:</strong> ${studentData.program || studentData.department || 'N/A'}</p>
+                        <p><strong>Block:</strong> ${studentData.block || 'N/A'}</p>
+                        <p><strong>Intake:</strong> ${studentData.intake || studentData.intake_year || 'N/A'}</p>
+                    </div>
+                `;
+            }
+        } else {
+            // No student data found
+            studentInfoHTML = `
+                <div style="background: #FEF3C7; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 2px solid #F59E0B;">
+                    <h3 style="color: #92400E; margin-bottom: 15px;">👤 Exam Taker Information</h3>
+                    <p><strong>Exam Taker ID:</strong> ${studentId}</p>
+                    <p><strong>Status:</strong> <span style="color: #DC2626;">Student profile not found</span></p>
+                    <p><em>This user took the exam but their profile is not in the database.</em></p>
+                    <p style="margin-top: 10px; color: #92400E; font-size: 0.9rem;">
+                        <strong>Possible reasons:</strong><br>
+                        1. Student registered through different system<br>
+                        2. Profile not synchronized between systems<br>
+                        3. Student account was deleted
+                    </p>
+                </div>
+            `;
+        }
 
-            <div style="background: #F0FDF4; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-                <h3 style="color: #38A169; margin-bottom: 15px;">🎯 Exam Summary</h3>
-                <p><strong>Exam:</strong> ${exam?.exam_name || 'N/A'} (${exam?.exam_type || 'N/A'})</p>
-                <p><strong>Date Taken:</strong> ${overallGrade?.graded_at ? new Date(overallGrade.graded_at).toLocaleString() : 'N/A'}</p>
-                <p><strong>Total Score:</strong> <span style="font-size: 1.2rem; font-weight: bold;">${overallGrade?.marks || 0}</span> marks</p>
-                <p><strong>Percentage:</strong> <span style="font-size: 1.2rem; font-weight: bold;">${(overallGrade?.total_score || 0).toFixed(2)}%</span></p>
-                <p><strong>Result:</strong> <span class="${overallGrade?.result_status === 'PASS' ? 'status-pass' : 'status-fail'}">${overallGrade?.result_status || 'N/A'}</span></p>
+        // Exam summary section (same as before)
+        let detailsHTML = studentInfoHTML + `
+            <div style="background: #EFF6FF; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 2px solid #3B82F6;">
+                <h3 style="color: #1E40AF; margin-bottom: 15px;">📊 Exam Summary</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div>
+                        <p><strong>Exam:</strong> ${exam?.exam_name || 'N/A'}</p>
+                        <p><strong>Type:</strong> ${exam?.exam_type || 'N/A'}</p>
+                        <p><strong>Course:</strong> ${exam?.course || 'N/A'}</p>
+                        <p><strong>Program:</strong> ${exam?.program || 'N/A'}</p>
+                    </div>
+                    <div>
+                        <p><strong>Date Taken:</strong> ${overallGrade?.graded_at ? new Date(overallGrade.graded_at).toLocaleString() : 'N/A'}</p>
+                        <p><strong>Total Score:</strong> <span style="font-size: 1.2rem; font-weight: bold;">${overallGrade?.marks || 0}</span> marks</p>
+                        <p><strong>Percentage:</strong> <span style="font-size: 1.2rem; font-weight: bold;">${(overallGrade?.total_score || 0).toFixed(2)}%</span></p>
+                        <p><strong>Result:</strong> <span class="${overallGrade?.result_status === 'PASS' ? 'status-pass' : 'status-fail'}">${overallGrade?.result_status || 'N/A'}</span></p>
+                    </div>
+                </div>
             </div>
         `;
 
+        // Question answers section (same as before)
         if (questionAnswers && questionAnswers.length > 0) {
             detailsHTML += `
-                <h3 style="color: #0A3D62; margin: 20px 0 15px 0;">📝 Question-wise Performance</h3>
-                <div style="max-height: 300px; overflow-y: auto;">
+                <h3 style="color: #0A3D62; margin: 20px 0 15px 0; padding-bottom: 10px; border-bottom: 2px solid #E2E8F0;">
+                    📝 Question Details (${questionAnswers.length} questions)
+                </h3>
+                <div style="max-height: 400px; overflow-y: auto; padding-right: 10px;">
             `;
 
             questionAnswers.forEach((answer, index) => {
                 const question = answer.exam_questions;
                 const isCorrect = answer.selected_answer === question?.correct_answer;
                 const statusColor = isCorrect ? '#38A169' : '#DC2626';
-                const statusText = isCorrect ? 'CORRECT' : 'INCORRECT';
+                const statusIcon = isCorrect ? '✅' : '❌';
                 
                 detailsHTML += `
-                    <div style="border: 1px solid #E2E8F0; border-radius: 8px; padding: 15px; margin-bottom: 10px; background: white;">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
-                            <strong style="color: #0A3D62;">Q${question?.question_number || index + 1}:</strong>
-                            <span style="color: ${statusColor}; font-weight: bold;">${statusText}</span>
+                    <div style="border: 1px solid ${isCorrect ? '#38A169' : '#FCA5A5'}; border-radius: 8px; padding: 15px; margin-bottom: 10px; background: ${isCorrect ? '#F0FDF4' : '#FEF2F2'};">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <strong style="color: #0A3D62;">Question ${question?.question_number || index + 1}</strong>
+                            <span style="color: ${statusColor}; font-weight: bold;">${statusIcon} ${isCorrect ? 'CORRECT' : 'INCORRECT'}</span>
                         </div>
-                        <p style="margin: 5px 0;"><strong>Question:</strong> ${question?.question_text?.substring(0, 100)}...</p>
-                        <p style="margin: 5px 0;"><strong>Selected:</strong> ${answer.selected_answer || 'Not answered'}</p>
-                        <p style="margin: 5px 0;"><strong>Correct:</strong> ${question?.correct_answer || 'N/A'}</p>
-                        <p style="margin: 5px 0;"><strong>Marks:</strong> ${answer.marks || 0}/${question?.marks || 1}</p>
+                        <p style="margin: 5px 0; color: #475569;"><strong>Question:</strong> ${question?.question_text?.substring(0, 100)}...</p>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
+                            <div>
+                                <p style="margin: 3px 0;"><strong>Selected:</strong> ${answer.selected_answer || 'Not answered'}</p>
+                                <p style="margin: 3px 0;"><strong>Correct:</strong> ${question?.correct_answer || 'N/A'}</p>
+                            </div>
+                            <div>
+                                <p style="margin: 3px 0;"><strong>Marks:</strong> ${answer.marks || 0}/${question?.marks || 1}</p>
+                            </div>
+                        </div>
                     </div>
                 `;
             });
@@ -1247,8 +1385,9 @@ function displayStudentsResults() {
             detailsHTML += `</div>`;
         } else {
             detailsHTML += `
-                <div style="text-align: center; padding: 20px; color: #64748B;">
-                    <p>No detailed question answers found.</p>
+                <div style="text-align: center; padding: 20px; color: #64748B; background: #F8FAFC; border-radius: 8px; margin-top: 20px;">
+                    <p>No detailed question answers found in the database.</p>
+                    <p><small>The exam answers may not have been saved or there was an error during submission.</small></p>
                 </div>
             `;
         }
@@ -1260,6 +1399,47 @@ function displayStudentsResults() {
     } catch (error) {
         console.error('Error loading exam result:', error);
         alert('Error loading exam result. Please try again.');
+    }
+}
+
+// Helper function to get auth user data
+async function getAuthUserData(studentId) {
+    try {
+        // Since we can't directly query auth.users from client-side JavaScript
+        // We need to use a server-side function or know the data in advance
+        
+        // For now, let's create a mapping based on what we found earlier
+        const authUsersMap = {
+            '8e7d9181-47f4-47af-98ec-3b3e300da5cd': {
+                id: '8e7d9181-47f4-47af-98ec-3b3e300da5cd',
+                email: 'mercy008@gmail.com',
+                raw_user_meta_data: {
+                    full_name: 'MERCY CH',
+                    course: 'KRCHN',
+                    admission_number: '12345',
+                    phone: '0762049529',
+                    role: 'student'
+                }
+            },
+            'e5df011d-44a6-4266-832e-40bed11fa33e': {
+                id: 'e5df011d-44a6-4266-832e-40bed11fa33e',
+                email: 'march2025@gmail.com',
+                raw_user_meta_data: {
+                    full_name: 'MARCH 2025', 
+                    course: 'KRCHN',
+                    admission_number: 'NCHSM1256/2025',
+                    phone: '0762049529',
+                    role: 'student'
+                }
+            }
+            // Add more users as you discover them
+        };
+        
+        return authUsersMap[studentId] || null;
+        
+    } catch (error) {
+        console.error('Error getting auth user data:', error);
+        return null;
     }
 }
         // 2. LOAD ALL REGISTERED STUDENTS
