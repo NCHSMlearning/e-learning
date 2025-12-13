@@ -399,57 +399,81 @@ async function loadExistingAnswers() {
         console.error('Error loading existing answers:', err);
     }
 }
-
 function renderQuestion(index = currentIndex) {
     currentIndex = index;
     const q = questions[currentIndex];
     const container = document.getElementById('exam-container');
     
+    // Clear container
     container.innerHTML = '';
 
+    // Create question text
     const questionText = document.createElement('div');
     questionText.className = 'question';
     questionText.innerHTML = `<p><strong>Q${currentIndex + 1}:</strong> ${q.question_text}</p>`;
     container.appendChild(questionText);
 
+    // Create options list
     const ul = document.createElement('ul'); 
     ul.className = 'options';
     
-    // Create options array from individual columns
+    // Create options array
     const options = [];
     if (q.option_a) options.push({ letter: 'A', text: q.option_a });
     if (q.option_b) options.push({ letter: 'B', text: q.option_b });
     if (q.option_c) options.push({ letter: 'C', text: q.option_c });
     if (q.option_d) options.push({ letter: 'D', text: q.option_d });
     
+    // Create radio buttons
     options.forEach(opt => {
         const li = document.createElement('li');
-        li.innerHTML = `<label><input type="radio" name="q${q.id}" value="${opt.letter}"> <span>${opt.letter}: ${opt.text}</span></label>`; 
+        const radioId = `q${q.id}_${opt.letter}`;
+        
+        li.innerHTML = `
+            <label for="${radioId}">
+                <input type="radio" id="${radioId}" name="question_${q.id}" value="${opt.letter}">
+                <span>${opt.letter}: ${opt.text}</span>
+            </label>
+        `; 
         ul.appendChild(li);
     });
     container.appendChild(ul);
 
-    // RESTORE STATE
+    // RESTORE PREVIOUS ANSWER
     if (answers[q.id]) {
-        const input = document.querySelector(`input[name="q${q.id}"][value="${answers[q.id]}"]`);
-        if (input) input.checked = true;
+        const input = document.querySelector(`input[name="question_${q.id}"][value="${answers[q.id]}"]`);
+        if (input) {
+            input.checked = true;
+            console.log(`Restored answer for Q${currentIndex + 1}: ${answers[q.id]}`);
+        }
     }
 
+    // Update UI
     updateProgressUI();
     updateStatusTableUI();
 
-    // Add event listener for auto-save and Submit button enablement
-    const radios = document.querySelectorAll(`input[name="q${q.id}"]`);
-    radios.forEach(r => {
-        r.addEventListener('change', () => { 
-            saveAnswer(r.value);
-            if (!hasAnsweredAtLeastOne) {
-                hasAnsweredAtLeastOne = true;
-                finalSubmitBtn.disabled = false;
-            }
-            updateStatusTableUI(); 
+    // FIXED: Add event listeners PROPERLY
+    setTimeout(() => {
+        const radios = document.querySelectorAll(`input[name="question_${q.id}"]`);
+        console.log(`Found ${radios.length} radio buttons for Q${currentIndex + 1}`);
+        
+        radios.forEach(r => {
+            // Remove any existing listeners first
+            const newRadio = r.cloneNode(true);
+            r.parentNode.replaceChild(newRadio, r);
+            
+            // Add new event listener
+            newRadio.addEventListener('change', (event) => { 
+                console.log(`Radio changed for Q${currentIndex + 1}:`, event.target.value);
+                saveAnswer(event.target.value);
+                if (!hasAnsweredAtLeastOne) {
+                    hasAnsweredAtLeastOne = true;
+                    finalSubmitBtn.disabled = false;
+                }
+                updateStatusTableUI(); 
+            });
         });
-    });
+    }, 100); // Small delay to ensure DOM is ready
 }
 
 // --- STATUS TABLE FUNCTIONS ---
@@ -506,16 +530,27 @@ async function saveAnswer(selectedAnswerValue) {
     const q = questions[currentIndex];
     const answer = selectedAnswerValue;
     
+    console.log('=== SAVE ANSWER DEBUG ===');
+    console.log('Question:', currentIndex + 1);
+    console.log('Question ID:', q.id);
+    console.log('Selected Answer:', answer);
+    console.log('Correct Answer:', q.correct_answer);
+    
     answers[q.id] = answer; 
 
+    // Show save confirmation
     document.getElementById('answer-saved').style.display = 'block';
-    setTimeout(() => { document.getElementById('answer-saved').style.display = 'none'; }, 1000);
+    setTimeout(() => { 
+        document.getElementById('answer-saved').style.display = 'none'; 
+    }, 1000);
 
     // Calculate marks based on correct answer
     const marks = answer === q.correct_answer ? (q.marks || 1) : 0;
+    console.log('Marks calculated:', marks);
     
     try {
-        await sb.from('exam_grades').upsert(
+        console.log('Attempting to save to database...');
+        const { data, error } = await sb.from('exam_grades').upsert(
             [{
                 student_id: studentId, 
                 exam_id: EXAM_ID, 
@@ -526,6 +561,13 @@ async function saveAnswer(selectedAnswerValue) {
             }],
             { onConflict: ['student_id', 'exam_id', 'question_id'] }
         );
+        
+        if (error) {
+            console.error('❌ Database save error:', error);
+            document.getElementById('error').innerText = 'Warning: Could not save answer to server!';
+        } else {
+            console.log('✅ Answer saved successfully to database');
+        }
     } catch (err) { 
         console.error('Error saving answer', err);
         document.getElementById('error').innerText = 'Warning: Could not save answer to server!';
