@@ -971,7 +971,7 @@
             updateStats();
         }
 
-    async function loadStudentsWithResults() {
+   async function loadStudentsWithResults() {
     const examId = document.getElementById('examFilter')?.value || '';
     const status = document.getElementById('statusFilter')?.value || '';
     const dateFrom = document.getElementById('dateFrom')?.value || '';
@@ -990,11 +990,17 @@
             .order('graded_at', { ascending: false });
 
         if (examId) query = query.eq('exam_id', examId);
-        if (status) query = query.eq('result_status', status);
+        if (status) {
+            // Handle different status values
+            if (status === 'PASS') {
+                query = query.eq('result_status', 'PASS');
+            } else if (status === 'FAIL') {
+                query = query.or('result_status.eq.FAIL,result_status.eq.Final');
+            }
+        }
         if (dateFrom) query = query.gte('graded_at', dateFrom);
         if (dateTo) query = query.lte('graded_at', dateTo + ' 23:59:59');
         if (search) {
-            // Search in student ID
             query = query.ilike('student_id', `%${search}%`);
         }
 
@@ -1004,10 +1010,14 @@
 
         console.log('📊 Found overall grades:', results?.length || 0);
 
-        // Get unique exam IDs for fetching exam details
+        // Get unique exam IDs and student IDs
         const examIds = [...new Set(results?.map(r => r.exam_id).filter(id => id))];
-        let examsMap = {};
+        const studentIds = [...new Set(results?.map(r => r.student_id).filter(id => id))];
         
+        let examsMap = {};
+        let studentsMap = {};
+        
+        // Fetch exam details
         if (examIds.length > 0) {
             const { data: exams, error: examsError } = await supabase
                 .from('exams')
@@ -1016,30 +1026,59 @@
             
             if (examsError) console.error('Error fetching exams:', examsError);
             
-            // Create a map for easy lookup
             if (exams) {
                 exams.forEach(exam => {
                     examsMap[exam.id] = exam;
                 });
             }
         }
+        
+        // Fetch student profiles
+        if (studentIds.length > 0) {
+            const { data: students, error: studentsError } = await supabase
+                .from('consolidated_user_profiles_table')
+                .select('*')
+                .in('id', studentIds);
+            
+            if (studentsError) console.error('Error fetching students:', studentsError);
+            
+            if (students) {
+                students.forEach(student => {
+                    studentsMap[student.id] = student;
+                });
+            }
+        }
 
-        // Combine results with exam data
+        // Combine all data
         const combinedResults = results?.map(result => {
+            const student = studentsMap[result.student_id];
+            const exam = examsMap[result.exam_id];
+            
+            // Determine status
+            let statusDisplay = result.result_status || 'N/A';
+            if (statusDisplay === 'Final' && result.total_score !== undefined) {
+                statusDisplay = result.total_score >= 60 ? 'PASS' : 'FAIL';
+            }
+            
             return {
                 ...result,
-                exam: examsMap[result.exam_id] || null
+                student_profile: student || null,
+                exam: exam || null,
+                display_status: statusDisplay
             };
         }) || [];
 
-        // Apply search filter again if needed (for exam name search)
+        // Apply search filter
         let filteredResults = combinedResults;
         if (search) {
             const searchLower = search.toLowerCase();
             filteredResults = combinedResults.filter(result => {
+                const student = result.student_profile;
                 const exam = result.exam;
                 return (
                     result.student_id?.toLowerCase().includes(searchLower) ||
+                    (student?.full_name?.toLowerCase().includes(searchLower)) ||
+                    (student?.email?.toLowerCase().includes(searchLower)) ||
                     (exam?.exam_name?.toLowerCase().includes(searchLower)) ||
                     (exam?.exam_type?.toLowerCase().includes(searchLower))
                 );
@@ -1079,23 +1118,32 @@ function displayStudentsResults() {
 
     let html = '';
     pageResults.forEach(result => {
+        const student = result.student_profile;
         const exam = result.exam;
         const percentage = result.total_score || result.score || 0;
-        const statusClass = result.result_status === 'PASS' ? 'status-pass' : 'status-fail';
+        
+        // Determine status class
+        let statusClass = 'status-pending';
+        if (result.display_status === 'PASS') {
+            statusClass = 'status-pass';
+        } else if (result.display_status === 'FAIL' || result.display_status === 'Final') {
+            statusClass = 'status-fail';
+        }
+        
         const studentId = result.student_id || '';
         const shortId = studentId.substring(0, 8) + (studentId.length > 8 ? '...' : '');
         
         html += `
             <tr>
-                <td><strong>${shortId}</strong></td>
-                <td>${studentId || 'N/A'}</td>
-                <td>${exam?.program || 'N/A'}</td>
-                <td>${exam?.block || 'N/A'}</td>
+                <td><strong>${student?.full_name || shortId}</strong></td>
+                <td>${student?.email || studentId || 'N/A'}</td>
+                <td>${student?.program || student?.department || exam?.program || 'N/A'}</td>
+                <td>${student?.block || exam?.block || 'N/A'}</td>
                 <td>${exam?.exam_name || 'N/A'}</td>
                 <td>${exam?.exam_type || 'N/A'}</td>
                 <td><strong>${result.marks || 0}</strong></td>
                 <td><strong>${percentage.toFixed(2)}%</strong></td>
-                <td><span class="${statusClass}">${result.result_status || 'N/A'}</span></td>
+                <td><span class="${statusClass}">${result.display_status || 'N/A'}</span></td>
                 <td>${result.graded_at ? new Date(result.graded_at).toLocaleDateString() : 'N/A'}</td>
                 <td class="action-buttons-cell">
                     <button class="action-btn btn-view" onclick="viewExamResult('${studentId}', ${result.exam_id})">
@@ -1112,8 +1160,15 @@ function displayStudentsResults() {
     tbody.innerHTML = html;
     renderPagination('students', studentsResults.length);
 }
-        async function viewExamResult(studentId, examId) {
+       async function viewExamResult(studentId, examId) {
     try {
+        // Get student profile
+        const { data: student } = await supabase
+            .from('consolidated_user_profiles_table')
+            .select('*')
+            .eq('id', studentId)
+            .single();
+
         // Get exam details
         const { data: exam } = await supabase
             .from('exams')
@@ -1145,16 +1200,19 @@ function displayStudentsResults() {
         let detailsHTML = `
             <div style="background: #F8FAFC; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
                 <h3 style="color: #0A3D62; margin-bottom: 15px;">👤 Student Information</h3>
-                <p><strong>Student ID:</strong> ${studentId}</p>
-                <p><strong>Note:</strong> Student profile not found in database</p>
+                <p><strong>Name:</strong> ${student?.full_name || 'Not found'}</p>
+                <p><strong>Email:</strong> ${student?.email || studentId}</p>
+                <p><strong>Program:</strong> ${student?.program || student?.department || 'N/A'}</p>
+                <p><strong>Block:</strong> ${student?.block || 'N/A'}</p>
+                <p><strong>Intake:</strong> ${student?.intake || student?.intake_year || 'N/A'}</p>
             </div>
 
             <div style="background: #F0FDF4; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
                 <h3 style="color: #38A169; margin-bottom: 15px;">🎯 Exam Summary</h3>
                 <p><strong>Exam:</strong> ${exam?.exam_name || 'N/A'} (${exam?.exam_type || 'N/A'})</p>
-                <p><strong>Date Taken:</strong> ${new Date(overallGrade?.graded_at).toLocaleString()}</p>
+                <p><strong>Date Taken:</strong> ${overallGrade?.graded_at ? new Date(overallGrade.graded_at).toLocaleString() : 'N/A'}</p>
                 <p><strong>Total Score:</strong> <span style="font-size: 1.2rem; font-weight: bold;">${overallGrade?.marks || 0}</span> marks</p>
-                <p><strong>Percentage:</strong> <span style="font-size: 1.2rem; font-weight: bold;">${overallGrade?.total_score?.toFixed(2) || 0}%</span></p>
+                <p><strong>Percentage:</strong> <span style="font-size: 1.2rem; font-weight: bold;">${(overallGrade?.total_score || 0).toFixed(2)}%</span></p>
                 <p><strong>Result:</strong> <span class="${overallGrade?.result_status === 'PASS' ? 'status-pass' : 'status-fail'}">${overallGrade?.result_status || 'N/A'}</span></p>
             </div>
         `;
@@ -1177,6 +1235,7 @@ function displayStudentsResults() {
                             <strong style="color: #0A3D62;">Q${question?.question_number || index + 1}:</strong>
                             <span style="color: ${statusColor}; font-weight: bold;">${statusText}</span>
                         </div>
+                        <p style="margin: 5px 0;"><strong>Question:</strong> ${question?.question_text?.substring(0, 100)}...</p>
                         <p style="margin: 5px 0;"><strong>Selected:</strong> ${answer.selected_answer || 'Not answered'}</p>
                         <p style="margin: 5px 0;"><strong>Correct:</strong> ${question?.correct_answer || 'N/A'}</p>
                         <p style="margin: 5px 0;"><strong>Marks:</strong> ${answer.marks || 0}/${question?.marks || 1}</p>
@@ -1185,6 +1244,12 @@ function displayStudentsResults() {
             });
 
             detailsHTML += `</div>`;
+        } else {
+            detailsHTML += `
+                <div style="text-align: center; padding: 20px; color: #64748B;">
+                    <p>No detailed question answers found.</p>
+                </div>
+            `;
         }
 
         document.getElementById('modalTitle').textContent = `Exam Result - ${exam?.exam_name || 'Unknown Exam'}`;
@@ -1195,7 +1260,7 @@ function displayStudentsResults() {
         console.error('Error loading exam result:', error);
         alert('Error loading exam result. Please try again.');
     }
-} 
+}
         // 2. LOAD ALL REGISTERED STUDENTS
         async function loadAllStudents() {
             const program = document.getElementById('studentProgramFilter')?.value || '';
@@ -1411,44 +1476,62 @@ function displayStudentsResults() {
             renderPagination('exams', allExams.length);
         }
 
-        // Filter Options Loading
-       async function loadFilterOptions() {
-    // Load exams dropdown
-    const { data: exams } = await supabase
-        .from('exams')
-        .select('id, exam_name, exam_type')
-        .order('exam_name');
+        async function loadFilterOptions() {
+    try {
+        // Load exams dropdown
+        const { data: exams, error: examsError } = await supabase
+            .from('exams')
+            .select('id, exam_name, exam_type, program, course')
+            .order('exam_name');
 
-    const examSelect = document.getElementById('examFilter');
-    if (examSelect) {
-        examSelect.innerHTML = '<option value="">All Exams</option>';
-        exams?.forEach(exam => {
-            const option = document.createElement('option');
-            option.value = exam.id;
-            option.textContent = `${exam.exam_name} (${exam.exam_type})`;
-            examSelect.appendChild(option);
-        });
-    }
+        if (examsError) console.error('Error loading exams:', examsError);
 
-    // Load programs - FIXED: Use consolidated_user_profiles_table
-    const { data: programs } = await supabase
-        .from('consolidated_user_profiles_table')
-        .select('program, department')
-        .not('program', 'is', null)
-        .not('department', 'is', null);
+        const examSelect = document.getElementById('examFilter');
+        if (examSelect) {
+            examSelect.innerHTML = '<option value="">All Exams</option>';
+            exams?.forEach(exam => {
+                const option = document.createElement('option');
+                option.value = exam.id;
+                option.textContent = `${exam.exam_name} (${exam.exam_type})`;
+                examSelect.appendChild(option);
+            });
+        }
 
-    const programSelect = document.getElementById('programFilter');
-    if (programSelect) {
-        programSelect.innerHTML = '<option value="">All Programs</option>';
-        const uniquePrograms = [...new Set(programs?.map(p => p.program || p.department))];
-        uniquePrograms?.forEach(program => {
-            if (program) {
+        // Load programs - FIXED: Use consolidated_user_profiles_table
+        const { data: programs, error: programsError } = await supabase
+            .from('consolidated_user_profiles_table')
+            .select('program, department')
+            .not('program', 'is', null);
+
+        const programSelect = document.getElementById('programFilter');
+        if (programSelect) {
+            programSelect.innerHTML = '<option value="">All Programs</option>';
+            const uniquePrograms = new Set();
+            
+            // Add programs from student profiles
+            programs?.forEach(p => {
+                if (p.program) uniquePrograms.add(p.program);
+                if (p.department) uniquePrograms.add(p.department);
+            });
+            
+            // Add programs from exams
+            exams?.forEach(e => {
+                if (e.program) uniquePrograms.add(e.program);
+            });
+            
+            // Sort and add options
+            Array.from(uniquePrograms).sort().forEach(program => {
                 const option = document.createElement('option');
                 option.value = program;
                 option.textContent = program;
                 programSelect.appendChild(option);
-            }
-        });
+            });
+        }
+        
+        console.log('✅ Filter options loaded successfully');
+        
+    } catch (error) {
+        console.error('Error loading filter options:', error);
     }
 }
 
