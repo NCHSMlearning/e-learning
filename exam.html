@@ -806,7 +806,7 @@ async function calculateAndSaveFinalGrade() {
         
         console.log(`📊 Grade Summary: ${totalMarks} marks from ${totalQuestions} questions`);
         
-        // Calculate percentage CORRECTLY
+        // Calculate percentage
         let percentage = 0;
         
         if (examType === 'CAT_1' || examType === 'CAT_2' || examType === 'CAT') {
@@ -836,37 +836,54 @@ async function calculateAndSaveFinalGrade() {
         }
         
         // Ensure percentage is valid
-        percentage = Math.min(100, Math.max(0, percentage));
+        percentage = Math.min(100, Math.max(0, parseFloat(percentage.toFixed(2))));
+        const resultStatus = percentage >= 60 ? 'PASS' : 'FAIL';
         
         // Prepare grade data
         let gradeData = {
             student_id: studentId,
-            exam_id: EXAM_ID,
+            exam_id: parseInt(EXAM_ID),
             question_id: '00000000-0000-0000-0000-000000000000',
-            total_score: parseFloat(percentage.toFixed(2)),
-            result_status: percentage >= 60 ? 'PASS' : 'FAIL',
+            total_score: percentage,
+            score: percentage,
+            marks: totalMarks,
+            result_status: resultStatus,
             graded_at: new Date().toISOString(),
-            graded_by: 'system_auto_grade',
-            cat_1_score: null,
-            cat_2_score: null,
-            exam_score: null
+            graded_by: null,
+            selected_answer: null,
+            remarks: `Auto-graded ${examType}. Score: ${totalMarks}/${totalQuestions} (${percentage.toFixed(2)}%)`,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
         };
-
-        // Set appropriate score based on exam type
+        
+        // Set CAT or EXAM specific scores
         if (examType === 'CAT_1' || examType === 'CAT') {
             gradeData.cat_1_score = totalMarks;
-            console.log(`✅ CAT 1 Grade: ${totalMarks}/30 = ${gradeData.total_score}% (Status: ${gradeData.result_status})`);
+            gradeData.cat_score = totalMarks;
+            gradeData.cat_2_score = null;
+            gradeData.exam_score = null;
+            console.log(`✅ CAT 1 Grade: ${totalMarks}/30 = ${gradeData.total_score}% (Status: ${resultStatus})`);
         } else if (examType === 'CAT_2') {
             gradeData.cat_2_score = totalMarks;
-            console.log(`✅ CAT 2 Grade: ${totalMarks}/30 = ${gradeData.total_score}% (Status: ${gradeData.result_status})`);
+            gradeData.cat_score = totalMarks;
+            gradeData.cat_1_score = null;
+            gradeData.exam_score = null;
+            console.log(`✅ CAT 2 Grade: ${totalMarks}/30 = ${gradeData.total_score}% (Status: ${resultStatus})`);
         } else if (examType === 'EXAM') {
             gradeData.exam_score = totalMarks;
-            console.log(`✅ Final Exam Grade: ${totalMarks} marks = ${gradeData.total_score}% (Status: ${gradeData.result_status})`);
+            gradeData.cat_1_score = null;
+            gradeData.cat_2_score = null;
+            gradeData.cat_score = null;
+            console.log(`✅ Final Exam Grade: ${totalMarks} marks = ${gradeData.total_score}% (Status: ${resultStatus})`);
         } else {
-            console.log(`✅ Default Grade: ${totalMarks} marks = ${gradeData.total_score}% (Status: ${gradeData.result_status})`);
+            gradeData.cat_1_score = null;
+            gradeData.cat_2_score = null;
+            gradeData.cat_score = null;
+            gradeData.exam_score = null;
+            console.log(`✅ Default Grade: ${totalMarks} marks = ${gradeData.total_score}% (Status: ${resultStatus})`);
         }
 
-        // CRITICAL: Check if a grade record already exists and update it
+        // Check if a grade record already exists and update it
         const { data: existingGrade } = await sb.from('exam_grades')
             .select('*')
             .eq('student_id', studentId)
@@ -904,6 +921,17 @@ async function calculateAndSaveFinalGrade() {
     } catch (error) {
         console.error('❌ Error calculating final grade:', error);
         console.error('Error details:', error.message);
+        
+        // Show error to user but continue with redirect
+        const errorElement = document.querySelector('.success-screen');
+        if (errorElement) {
+            errorElement.innerHTML += `
+                <div style="margin-top: 20px; padding: 10px; background: #FEE2E2; border-radius: 8px; border: 1px solid #FCA5A5;">
+                    <p style="color: #DC2626; margin: 0;">⚠️ Grade calculation had an issue, but your answers were saved.</p>
+                    <p style="color: #92400E; margin: 5px 0 0 0; font-size: 0.9rem;">Contact your instructor if needed.</p>
+                </div>
+            `;
+        }
     }
 }
 
@@ -1038,4 +1066,4 @@ cancelSubmitBtn.addEventListener('click', () => {
 window.addEventListener('DOMContentLoaded', initExam);
 </script>
 </body>
-</html>
+    </html>
