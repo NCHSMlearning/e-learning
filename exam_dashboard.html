@@ -130,6 +130,7 @@ async function loadExams() {
              Intake: <strong>${studentProfile.intake_year}</strong>`;
 
         console.log('Student Profile:', studentProfile);
+        console.log('Student intake_year type:', typeof studentProfile.intake_year);
 
         // Get ALL upcoming exams
         const { data: exams, error: examsError } = await sb
@@ -149,26 +150,68 @@ async function loadExams() {
         }
 
         console.log('All upcoming exams:', exams);
+        
+        // DEBUG: Check exam 44 specifically
+        const exam44 = exams.find(e => e.id === 44);
+        if (exam44) {
+            console.log('=== DEBUG EXAM 44 ===');
+            console.log('Exam 44 properties:', {
+                id: exam44.id,
+                name: exam44.exam_name,
+                intake_year: exam44.intake_year,
+                intake_year_type: typeof exam44.intake_year,
+                program_type: exam44.program_type,
+                block_term: exam44.block_term,
+                status: exam44.status
+            });
+            
+            console.log('Direct comparison (exam44.intake_year === studentProfile.intake_year):', 
+                exam44.intake_year === studentProfile.intake_year);
+            console.log('String comparison:', 
+                String(exam44.intake_year) === String(studentProfile.intake_year));
+        }
 
-        // Filter exams on client side
+        // FIXED: Filter exams with proper data type handling
         const filteredExams = exams.filter(exam => {
-            // 1. Check intake year
-            if (exam.intake_year !== studentProfile.intake_year) {
+            console.log(`\nChecking: ${exam.exam_name}`);
+            
+            // 1. Convert intake years to string for reliable comparison
+            const examYear = String(exam.intake_year || '');
+            const studentYear = String(studentProfile.intake_year || '');
+            
+            console.log(`  intake_year: exam=${examYear} student=${studentYear}`);
+            
+            if (examYear !== studentYear) {
+                console.log(`  ❌ intake_year mismatch`);
                 return false;
             }
+            console.log(`  ✅ intake_year matches`);
             
             // 2. Check program type
-            if (exam.program_type !== studentProfile.program && exam.program_type !== 'General') {
+            const examProgram = exam.program_type || '';
+            const studentProgram = studentProfile.program || '';
+            
+            console.log(`  program_type: exam=${examProgram} student=${studentProgram}`);
+            
+            if (examProgram !== studentProgram && examProgram !== 'General') {
+                console.log(`  ❌ program_type mismatch`);
                 return false;
             }
+            console.log(`  ✅ program_type matches`);
             
-            // 3. Check block term (if specified in exam)
-            if (exam.block_term && 
-                exam.block_term !== studentProfile.block && 
-                exam.block_term !== 'General') {
+            // 3. Check block term
+            const examBlock = exam.block_term || '';
+            const studentBlock = studentProfile.block || '';
+            
+            console.log(`  block_term: exam=${examBlock} student=${studentBlock}`);
+            
+            if (examBlock && examBlock !== studentBlock && examBlock !== 'General') {
+                console.log(`  ❌ block_term mismatch`);
                 return false;
             }
+            console.log(`  ✅ block_term matches`);
             
+            console.log(`  ✅ INCLUDED: ${exam.exam_name}`);
             return true;
         });
 
@@ -191,6 +234,12 @@ async function loadExams() {
                 <div class="exam-card">
                     <strong>No upcoming exams found</strong><br>
                     <small>Matching criteria: ${studentProfile.program}, ${studentProfile.intake_year}</small>
+                </div>
+                <div class="exam-card" style="background:#FEF3C7;">
+                    <strong>Debug Info:</strong><br>
+                    <small>Total upcoming exams in system: ${exams?.length || 0}</small><br>
+                    <small>Student: ${studentProfile.program}, Block ${studentProfile.block}, Intake ${studentProfile.intake_year}</small><br>
+                    <small>Check browser console for detailed filtering info</small>
                 </div>
             `;
             return;
@@ -223,7 +272,7 @@ async function loadExams() {
 
         // Update debug info after loading
         document.getElementById('debugInfo').innerHTML = showLocalStorageDebug() + 
-            `<br>Total exams: ${exams?.length || 0} | Filtered: ${filteredExams.length} | Taken: ${takenExamIds.length}`;
+            `<br>Total upcoming exams: ${exams?.length || 0} | Filtered for you: ${filteredExams.length} | Taken by you: ${takenExamIds.length}`;
 
     } catch (err) {
         console.error('Unexpected error:', err);
