@@ -17,6 +17,7 @@ h1 { color:#073450; }
 .exam-card button:disabled { background:#6B7280; cursor:not-allowed; }
 .filter-info { background:#E2E8F0; padding:10px; border-radius:8px; margin-bottom:20px; text-align:center; }
 .debug-info { background:#FEF3C7; padding:10px; border-radius:8px; margin-bottom:20px; font-size:12px; }
+.success-info { background:#D1FAE5; padding:10px; border-radius:8px; margin-bottom:20px; text-align:center; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -29,6 +30,7 @@ h1 { color:#073450; }
 
 <div class="exam-list">
     <div id="debugInfo" class="debug-info"></div>
+    <div id="successInfo" class="success-info" style="display:none;"></div>
     <div id="filterInfo" class="filter-info"></div>
     <div id="examList">Loading exams...</div>
 </div>
@@ -216,20 +218,29 @@ async function loadExams() {
         });
 
         console.log('Filtered exams for student:', filteredExams);
+        console.log('Filtered exams length:', filteredExams?.length || 0);
 
         // Check which exams the student has already taken
+        console.log('Checking taken exams for student:', currentUserId);
         const { data: takenExams, error: takenError } = await sb
             .from('exam_grades')
-            .select('exam_id')
-            .eq('student_id', currentUserId)
-            .eq('result_status', 'Final');
+            .select('exam_id, result_status, created_at')
+            .eq('student_id', currentUserId);
 
-        const takenExamIds = takenExams?.map(e => e.exam_id) || [];
+        console.log('All exam grades for student:', takenExams);
+        
+        const takenExamIds = takenExams
+            ?.filter(e => e.result_status === 'Final')
+            ?.map(e => e.exam_id) || [];
+            
+        console.log('Taken exam IDs (Final status):', takenExamIds);
 
         const container = document.getElementById('examList');
         container.innerHTML = '';
 
+        // Check if filteredExams exists and has items
         if (!filteredExams || filteredExams.length === 0) {
+            console.log('No exams found after filtering');
             container.innerHTML = `
                 <div class="exam-card">
                     <strong>No upcoming exams found</strong><br>
@@ -239,11 +250,18 @@ async function loadExams() {
                     <strong>Debug Info:</strong><br>
                     <small>Total upcoming exams in system: ${exams?.length || 0}</small><br>
                     <small>Student: ${studentProfile.program}, Block ${studentProfile.block}, Intake ${studentProfile.intake_year}</small><br>
-                    <small>Check browser console for detailed filtering info</small>
+                    <small>Filter found ${filteredExams?.length || 0} matching exams</small>
                 </div>
             `;
             return;
         }
+
+        console.log(`Displaying ${filteredExams.length} exams`);
+        
+        // Show success message
+        document.getElementById('successInfo').style.display = 'block';
+        document.getElementById('successInfo').innerHTML = 
+            `✅ Found <strong>${filteredExams.length}</strong> exam(s) matching your profile`;
 
         filteredExams.forEach(exam => {
             const div = document.createElement('div');
@@ -253,6 +271,8 @@ async function loadExams() {
             const isTaken = takenExamIds.includes(exam.id);
             const buttonText = isTaken ? 'View Results' : 'Start Exam';
             const buttonColor = isTaken ? '#6B7280' : '#38A169';
+            
+            console.log(`Creating card for ${exam.exam_name}, taken: ${isTaken}, button: ${buttonText}`);
             
             div.innerHTML = `
                 <div style="flex-grow:1;">
