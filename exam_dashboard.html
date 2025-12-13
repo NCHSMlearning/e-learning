@@ -21,6 +21,7 @@ h1 { color:#073450; }
 <header>
     <img src="https://raw.githubusercontent.com/NCHSMlearning/e-learning/main/images/Logo_NCHSM.png" width="80" alt="Logo">
     <h1>Exam Dashboard</h1>
+    <p id="userInfo">Loading user info...</p>
 </header>
 
 <div class="exam-list" id="examList">Loading exams...</div>
@@ -30,28 +31,113 @@ const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-async function loadExams(){
-    const userId = localStorage.getItem('currentUserId');
-    if(!userId){ window.location.href='exam_login.html'; return; }
+let currentUserId = null;
+let currentUserEmail = null;
 
-    try{
-        const { data: exams, error } = await sb.from('exams_with_courses').select('*').order('exam_date', {ascending:true});
-        if(error){ console.error(error); document.getElementById('examList').innerText='Failed to load exams.'; return; }
+async function loadExams() {
+    try {
+        // Get current user from localStorage
+        currentUserId = localStorage.getItem('currentUserId');
+        currentUserEmail = localStorage.getItem('studentEmail');
+        
+        if (!currentUserId || !currentUserEmail) {
+            window.location.href = 'exam_login.html';
+            return;
+        }
+
+        // Display user info
+        document.getElementById('userInfo').innerHTML = 
+            `Logged in as: <strong>${currentUserEmail}</strong> | 
+             <button onclick="logout()" style="background:#DC2626; padding:5px 10px; border-radius:4px; color:white; border:none; cursor:pointer;">Logout</button>`;
+
+        // Load available exams for this student
+        // First get student details from consolidated table
+        const { data: studentProfile, error: profileError } = await sb
+            .from('consolidated_user_profiles_table')
+            .select('program, block, intake_year')
+            .eq('user_id', currentUserId)
+            .single();
+
+        if (profileError) {
+            console.error('Error loading student profile:', profileError);
+            document.getElementById('examList').innerText = 'Error loading your student profile.';
+            return;
+        }
+
+        // Load exams that match student's program, block, and intake year
+        const { data: exams, error: examsError } = await sb
+            .from('exams_with_courses')
+            .select('*')
+            .or(`program_type.eq.${studentProfile.program}, program_type.eq.General`)
+            .or(`block_term.eq.${studentProfile.block}, block_term.is.null, block_term.eq.General`)
+            .eq('intake_year', studentProfile.intake_year)
+            .eq('status', 'Upcoming') // Only show upcoming exams
+            .order('exam_date', { ascending: true });
+
+        if (examsError) {
+            console.error('Error loading exams:', examsError);
+            document.getElementById('examList').innerText = 'Failed to load exams.';
+            return;
+        }
+
+        // Also check which exams the student has already taken
+        const { data: takenExams, error: takenError } = await sb
+            .from('exam_grades')
+            .select('exam_id, result_status')
+            .eq('student_id', currentUserId)
+            .eq('result_status', 'Final');
+
+        const takenExamIds = takenExams?.map(e => e.exam_id) || [];
 
         const container = document.getElementById('examList');
         container.innerHTML = '';
+
+        if (!exams || exams.length === 0) {
+            container.innerHTML = '<div class="exam-card">No upcoming exams found for your program.</div>';
+            return;
+        }
+
         exams.forEach(exam => {
             const div = document.createElement('div');
-            div.className='exam-card';
-            div.innerHTML = `<span>${exam.exam_name} - ${exam.course_name} (${exam.exam_date})</span>
-            <button onclick="startExam('${exam.id}')">Start Exam</button>`;
+            div.className = 'exam-card';
+            
+            // Check if exam already taken
+            const isTaken = takenExamIds.includes(exam.id);
+            const buttonText = isTaken ? 'View Results' : 'Start Exam';
+            const buttonColor = isTaken ? '#6B7280' : '#38A169';
+            const buttonDisabled = isTaken ? 'disabled' : '';
+            
+            div.innerHTML = `
+                <div>
+                    <strong>${exam.exam_name}</strong><br>
+                    <small>Course: ${exam.course_name || 'General'}</small><br>
+                    <small>Date: ${exam.exam_date} | Duration: ${exam.duration_minutes || 30} min</small>
+                </div>
+                <button onclick="startExam('${exam.id}')" 
+                        style="background:${buttonColor}" 
+                        ${buttonDisabled}>
+                    ${buttonText}
+                </button>
+            `;
             container.appendChild(div);
         });
-    } catch(err){ console.error(err); document.getElementById('examList').innerText='Error loading exams.'; }
+
+    } catch (err) {
+        console.error('Unexpected error:', err);
+        document.getElementById('examList').innerText = 'Error loading exams.';
+    }
 }
 
-function startExam(examId){
-    window.location.href = `exam.html?exam_id=${examId}`;
+function startExam(examId) {
+    // CRITICAL FIX: Pass user ID in the URL
+    const userId = localStorage.getItem('currentUserId');
+    window.location.href = `exam.html?exam_id=${examId}&user_id=${userId}`;
+}
+
+function logout() {
+    localStorage.removeItem('currentUserId');
+    localStorage.removeItem('studentEmail');
+    window.location.href = 'exam_login.html';
 }
 
 window.addEventListener('DOMContentLoaded', loadExams);
