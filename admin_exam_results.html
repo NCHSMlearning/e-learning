@@ -971,7 +971,7 @@
             updateStats();
         }
 
-      async function loadStudentsWithResults() {
+    async function loadStudentsWithResults() {
     const examId = document.getElementById('examFilter')?.value || '';
     const status = document.getElementById('statusFilter')?.value || '';
     const dateFrom = document.getElementById('dateFrom')?.value || '';
@@ -982,13 +982,10 @@
     document.getElementById('studentsTable').style.display = 'none';
 
     try {
-        // Get exam results without student join
+        // Get overall exam grades
         let query = supabase
             .from('exam_grades')
-            .select(`
-                *,
-                exams!inner(exam_name, exam_type, course, program)
-            `)
+            .select('*')
             .eq('question_id', '00000000-0000-0000-0000-000000000000')
             .order('graded_at', { ascending: false });
 
@@ -997,14 +994,59 @@
         if (dateFrom) query = query.gte('graded_at', dateFrom);
         if (dateTo) query = query.lte('graded_at', dateTo + ' 23:59:59');
         if (search) {
-            query = query.or(`exams.exam_name.ilike.%${search}%`);
+            // Search in student ID
+            query = query.ilike('student_id', `%${search}%`);
         }
 
         const { data: results, error } = await query;
         
         if (error) throw error;
 
-        studentsResults = results || [];
+        console.log('📊 Found overall grades:', results?.length || 0);
+
+        // Get unique exam IDs for fetching exam details
+        const examIds = [...new Set(results?.map(r => r.exam_id).filter(id => id))];
+        let examsMap = {};
+        
+        if (examIds.length > 0) {
+            const { data: exams, error: examsError } = await supabase
+                .from('exams')
+                .select('*')
+                .in('id', examIds);
+            
+            if (examsError) console.error('Error fetching exams:', examsError);
+            
+            // Create a map for easy lookup
+            if (exams) {
+                exams.forEach(exam => {
+                    examsMap[exam.id] = exam;
+                });
+            }
+        }
+
+        // Combine results with exam data
+        const combinedResults = results?.map(result => {
+            return {
+                ...result,
+                exam: examsMap[result.exam_id] || null
+            };
+        }) || [];
+
+        // Apply search filter again if needed (for exam name search)
+        let filteredResults = combinedResults;
+        if (search) {
+            const searchLower = search.toLowerCase();
+            filteredResults = combinedResults.filter(result => {
+                const exam = result.exam;
+                return (
+                    result.student_id?.toLowerCase().includes(searchLower) ||
+                    (exam?.exam_name?.toLowerCase().includes(searchLower)) ||
+                    (exam?.exam_type?.toLowerCase().includes(searchLower))
+                );
+            });
+        }
+
+        studentsResults = filteredResults;
         displayStudentsResults();
         
         document.getElementById('studentsLoading').style.display = 'none';
@@ -1037,27 +1079,29 @@ function displayStudentsResults() {
 
     let html = '';
     pageResults.forEach(result => {
-        const exam = result.exams;
-        const percentage = result.total_score || 0;
+        const exam = result.exam;
+        const percentage = result.total_score || result.score || 0;
         const statusClass = result.result_status === 'PASS' ? 'status-pass' : 'status-fail';
+        const studentId = result.student_id || '';
+        const shortId = studentId.substring(0, 8) + (studentId.length > 8 ? '...' : '');
         
         html += `
             <tr>
-                <td><strong>Student ID: ${result.student_id.substring(0, 8)}...</strong></td>
-                <td>${result.student_id.substring(0, 8)}...</td>
-                <td>Unknown</td>
-                <td>Unknown</td>
+                <td><strong>${shortId}</strong></td>
+                <td>${studentId || 'N/A'}</td>
+                <td>${exam?.program || 'N/A'}</td>
+                <td>${exam?.block || 'N/A'}</td>
                 <td>${exam?.exam_name || 'N/A'}</td>
                 <td>${exam?.exam_type || 'N/A'}</td>
                 <td><strong>${result.marks || 0}</strong></td>
                 <td><strong>${percentage.toFixed(2)}%</strong></td>
                 <td><span class="${statusClass}">${result.result_status || 'N/A'}</span></td>
-                <td>${new Date(result.graded_at).toLocaleDateString()}</td>
+                <td>${result.graded_at ? new Date(result.graded_at).toLocaleDateString() : 'N/A'}</td>
                 <td class="action-buttons-cell">
-                    <button class="action-btn btn-view" onclick="viewExamResult('${result.student_id}', ${result.exam_id})">
+                    <button class="action-btn btn-view" onclick="viewExamResult('${studentId}', ${result.exam_id})">
                         👁️ View
                     </button>
-                    <button class="action-btn btn-reset" onclick="resetStudentExam('${result.student_id}', ${result.exam_id})">
+                    <button class="action-btn btn-reset" onclick="resetStudentExam('${studentId}', ${result.exam_id})">
                         🔄 Retake
                     </button>
                 </td>
@@ -1068,7 +1112,6 @@ function displayStudentsResults() {
     tbody.innerHTML = html;
     renderPagination('students', studentsResults.length);
 }
-
         async function viewExamResult(studentId, examId) {
     try {
         // Get exam details
