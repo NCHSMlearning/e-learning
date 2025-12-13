@@ -971,7 +971,7 @@
             updateStats();
         }
 
-   async function loadStudentsWithResults() {
+  async function loadStudentsWithResults() {
     const examId = document.getElementById('examFilter')?.value || '';
     const status = document.getElementById('statusFilter')?.value || '';
     const dateFrom = document.getElementById('dateFrom')?.value || '';
@@ -982,110 +982,112 @@
     document.getElementById('studentsTable').style.display = 'none';
 
     try {
-        // Get overall exam grades
+        // Get completed exam results
         let query = supabase
             .from('exam_grades')
             .select('*')
             .eq('question_id', '00000000-0000-0000-0000-000000000000')
+            .not('result_status', 'eq', 'Scheduled')
             .order('graded_at', { ascending: false });
 
         if (examId) query = query.eq('exam_id', examId);
         if (status) {
-            // Handle different status values
-            if (status === 'PASS') {
-                query = query.eq('result_status', 'PASS');
-            } else if (status === 'FAIL') {
-                query = query.or('result_status.eq.FAIL,result_status.eq.Final');
-            }
+            if (status === 'PASS') query = query.eq('result_status', 'PASS');
+            else if (status === 'FAIL') query = query.or('result_status.eq.FAIL,result_status.eq.Final');
         }
         if (dateFrom) query = query.gte('graded_at', dateFrom);
         if (dateTo) query = query.lte('graded_at', dateTo + ' 23:59:59');
-        if (search) {
-            query = query.ilike('student_id', `%${search}%`);
-        }
+        if (search) query = query.ilike('student_id', `%${search}%`);
 
         const { data: results, error } = await query;
-        
         if (error) throw error;
 
-        console.log('📊 Found overall grades:', results?.length || 0);
+        // Filter for completed exams
+        const completedResults = results?.filter(result => {
+            const totalScore = parseFloat(result.total_score) || 0;
+            const marks = result.marks || 0;
+            return totalScore > 0 || marks > 0;
+        }) || [];
 
-        // Get unique exam IDs and student IDs
-        const examIds = [...new Set(results?.map(r => r.exam_id).filter(id => id))];
-        const studentIds = [...new Set(results?.map(r => r.student_id).filter(id => id))];
-        
-        let examsMap = {};
-        let studentsMap = {};
-        
-        // Fetch exam details
-        if (examIds.length > 0) {
-            const { data: exams, error: examsError } = await supabase
-                .from('exams')
-                .select('*')
-                .in('id', examIds);
-            
-            if (examsError) console.error('Error fetching exams:', examsError);
-            
-            if (exams) {
-                exams.forEach(exam => {
-                    examsMap[exam.id] = exam;
-                });
-            }
-        }
-        
-        // Fetch student profiles
-        if (studentIds.length > 0) {
-            const { data: students, error: studentsError } = await supabase
-                .from('consolidated_user_profiles_table')
-                .select('*')
-                .in('id', studentIds);
-            
-            if (studentsError) console.error('Error fetching students:', studentsError);
-            
-            if (students) {
-                students.forEach(student => {
-                    studentsMap[student.id] = student;
-                });
-            }
+        if (completedResults.length === 0) {
+            studentsResults = [];
+            displayStudentsResults();
+            document.getElementById('studentsLoading').style.display = 'none';
+            document.getElementById('studentsTable').style.display = 'table';
+            return;
         }
 
-        // Combine all data
-        const combinedResults = results?.map(result => {
-            const student = studentsMap[result.student_id];
+        // Get exam details
+        const examIds = [...new Set(completedResults.map(r => r.exam_id).filter(id => id))];
+        const { data: exams } = await supabase
+            .from('exams')
+            .select('*')
+            .in('id', examIds);
+        
+        const examsMap = {};
+        if (exams) {
+            exams.forEach(exam => examsMap[exam.id] = exam);
+        }
+
+        // Try to match students - since IDs don't match, let's get ALL students
+        // and try to find matches by email or other fields
+        const { data: allStudents } = await supabase
+            .from('consolidated_user_profiles_table')
+            .select('*');
+        
+        const studentsMap = {};
+        if (allStudents) {
+            // Create a map by ID
+            allStudents.forEach(student => {
+                studentsMap[student.id] = student;
+            });
+            
+            // Also try to create a map by email (if student_id might be email)
+            completedResults.forEach(result => {
+                const studentId = result.student_id;
+                
+                // If student_id looks like an email, try to find by email
+                if (studentId.includes('@')) {
+                    const studentByEmail = allStudents.find(s => s.email === studentId);
+                    if (studentByEmail) {
+                        studentsMap[studentId] = studentByEmail;
+                    }
+                }
+            });
+        }
+
+        // Combine data
+        studentsResults = completedResults.map(result => {
             const exam = examsMap[result.exam_id];
+            let student = studentsMap[result.student_id];
             
-            // Determine status
-            let statusDisplay = result.result_status || 'N/A';
-            if (statusDisplay === 'Final' && result.total_score !== undefined) {
-                statusDisplay = result.total_score >= 60 ? 'PASS' : 'FAIL';
+            // If not found by ID, try to find by other means
+            if (!student) {
+                // Check if student_id is actually an email
+                if (result.student_id.includes('@') && allStudents) {
+                    student = allStudents.find(s => s.email === result.student_id);
+                }
+            }
+            
+            // Calculate percentage and status
+            const totalScore = parseFloat(result.total_score) || 0;
+            const marks = result.marks || 0;
+            let displayStatus = result.result_status || 'N/A';
+            
+            if (displayStatus === 'Final') {
+                displayStatus = totalScore >= 60 ? 'PASS' : 'FAIL';
             }
             
             return {
                 ...result,
-                student_profile: student || null,
                 exam: exam || null,
-                display_status: statusDisplay
+                student_profile: student || null,
+                display_status: displayStatus,
+                parsed_total_score: totalScore,
+                parsed_marks: marks
             };
-        }) || [];
+        });
 
-        // Apply search filter
-        let filteredResults = combinedResults;
-        if (search) {
-            const searchLower = search.toLowerCase();
-            filteredResults = combinedResults.filter(result => {
-                const student = result.student_profile;
-                const exam = result.exam;
-                return (
-                    result.student_id?.toLowerCase().includes(searchLower) ||
-                    (student?.full_name?.toLowerCase().includes(searchLower)) ||
-                    (student?.email?.toLowerCase().includes(searchLower)) ||
-                    (exam?.exam_name?.toLowerCase().includes(searchLower)) ||
-                    (exam?.exam_type?.toLowerCase().includes(searchLower))
-                );
-            });
-        }
-
-        studentsResults = filteredResults;
         displayStudentsResults();
         
         document.getElementById('studentsLoading').style.display = 'none';
@@ -1094,10 +1096,9 @@
     } catch (error) {
         console.error('Error loading student results:', error);
         document.getElementById('studentsLoading').innerHTML = 
-            `<div style="color: #DC2626;">❌ Error loading results: ${error.message}</div>`;
+            `<div style="color: #DC2626;">❌ Error: ${error.message}</div>`;
     }
 }
-
 function displayStudentsResults() {
     const startIndex = (currentPage.students - 1) * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
