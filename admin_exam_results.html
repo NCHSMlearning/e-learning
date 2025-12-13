@@ -1,43 +1,578 @@
-<!-- Add retake button in exam details -->
-<button onclick="retakeExam(44)" class="retake-btn">Retake Exam</button>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Exam Results</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .header { background: #0A3D62; color: white; padding: 20px; border-radius: 10px 10px 0 0; margin-bottom: 20px; }
+        .controls { background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .filter-group { display: flex; flex-direction: column; }
+        label { font-weight: 600; margin-bottom: 5px; color: #333; }
+        select, input, button { padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }
+        button { background: #38A169; color: white; border: none; cursor: pointer; font-weight: 600; transition: background 0.3s; }
+        button:hover { background: #2F855A; }
+        .export-btn { background: #0A3D62; }
+        .export-btn:hover { background: #073450; }
+        .reset-btn { background: #DC2626; }
+        .reset-btn:hover { background: #B91C1C; }
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 20px 0; }
+        .stat-box { background: white; padding: 15px; border-radius: 8px; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .stat-box h3 { margin: 0 0 10px 0; color: #0A3D62; }
+        .stat-value { font-size: 24px; font-weight: bold; color: #38A169; }
+        .table-container { background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        table { width: 100%; border-collapse: collapse; }
+        thead { background: #E2E8F0; }
+        th { padding: 15px; text-align: left; font-weight: 600; color: #0A3D62; border-bottom: 2px solid #CBD5E0; }
+        td { padding: 12px 15px; border-bottom: 1px solid #E2E8F0; }
+        tr:hover { background: #F7FAFC; }
+        .pass { color: #38A169; font-weight: 600; }
+        .fail { color: #DC2626; font-weight: 600; }
+        .actions button { padding: 5px 10px; margin: 0 5px; font-size: 12px; }
+        .view-btn { background: #4299E1; }
+        .view-btn:hover { background: #3182CE; }
+        .pagination { display: flex; justify-content: center; gap: 10px; margin: 20px 0; }
+        .page-btn { padding: 8px 15px; background: #E2E8F0; color: #4A5568; }
+        .page-btn.active { background: #0A3D62; color: white; }
+        .loading { text-align: center; padding: 40px; font-size: 18px; color: #4A5568; }
+        .search-box { display: flex; gap: 10px; }
+        .search-box input { flex: 1; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; }
+        .modal-content { background: white; padding: 30px; border-radius: 10px; width: 90%; max-width: 800px; max-height: 80vh; overflow-y: auto; }
+        .close-modal { float: right; font-size: 24px; cursor: pointer; }
+        .detail-row { margin: 10px 0; padding: 10px; background: #F7FAFC; border-radius: 6px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 Exam Results Dashboard</h1>
+            <p>View and manage all student exam results</p>
+        </div>
 
-<script>
-async function retakeExam(examId) {
-    if (confirm('Are you sure you want to retake this exam? Your previous scores will be deleted.')) {
-        try {
-            // Delete existing exam data
-            const { error } = await supabase
-                .from('exam_grades')
-                .delete()
-                .eq('student_id', studentId) // Get from your auth
-                .eq('exam_id', examId);
-            
-            if (error) throw error;
-            
-            alert('Previous exam data deleted. You can now retake the exam.');
-            // Redirect to exam page
-            window.location.href = `exam.html?exam_id=${examId}&user_id=${studentId}`;
-        } catch (err) {
-            console.error('Error retaking exam:', err);
-            alert('Error: Could not reset exam. Please contact support.');
+        <div class="controls">
+            <div class="filters">
+                <div class="filter-group">
+                    <label>Select Exam:</label>
+                    <select id="examFilter">
+                        <option value="">All Exams</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Program:</label>
+                    <select id="programFilter">
+                        <option value="">All Programs</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Result Status:</label>
+                    <select id="statusFilter">
+                        <option value="">All Results</option>
+                        <option value="PASS">PASS</option>
+                        <option value="FAIL">FAIL</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Date Range:</label>
+                    <input type="date" id="dateFrom"> to <input type="date" id="dateTo">
+                </div>
+            </div>
+
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="Search by student name, email, or ID...">
+                <button onclick="loadResults()">Search</button>
+                <button onclick="resetFilters()" class="reset-btn">Reset</button>
+            </div>
+        </div>
+
+        <div class="stats" id="statsContainer">
+            <!-- Stats will be loaded here -->
+        </div>
+
+        <div class="controls">
+            <button onclick="exportToExcel()" class="export-btn">📥 Export to Excel</button>
+            <button onclick="exportToCSV()" class="export-btn">📥 Export to CSV</button>
+            <button onclick="exportToPDF()" class="export-btn">📥 Export to PDF</button>
+            <button onclick="printResults()" class="export-btn">🖨️ Print Results</button>
+        </div>
+
+        <div class="table-container">
+            <table id="resultsTable">
+                <thead>
+                    <tr>
+                        <th>Student</th>
+                        <th>Email</th>
+                        <th>Exam</th>
+                        <th>Type</th>
+                        <th>Score</th>
+                        <th>Percentage</th>
+                        <th>Status</th>
+                        <th>Date</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="resultsBody">
+                    <!-- Results will be loaded here -->
+                </tbody>
+            </table>
+        </div>
+
+        <div class="pagination" id="pagination">
+            <!-- Pagination will be loaded here -->
+        </div>
+    </div>
+
+    <!-- Student Details Modal -->
+    <div id="studentModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeModal()">&times;</span>
+            <h2 id="modalTitle">Student Exam Details</h2>
+            <div id="modalContent">
+                <!-- Details will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
+        
+        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        let currentResults = [];
+        let currentPage = 1;
+        const itemsPerPage = 20;
+
+        // Check if user is admin (add your own auth logic)
+        async function checkAdminAuth() {
+            const adminToken = localStorage.getItem('adminToken');
+            if (!adminToken) {
+                window.location.href = 'admin_login.html';
+                return false;
+            }
+            return true;
         }
-    }
-}
-</script>
 
-<style>
-.retake-btn {
-    background: #F59E0B;
-    color: white;
-    border: none;
-    padding: 8px 16px;
-    border-radius: 6px;
-    cursor: pointer;
-    margin-top: 10px;
-    font-weight: 600;
-}
+        async function loadInitialData() {
+            if (!await checkAdminAuth()) return;
 
-.retake-btn:hover {
-    background: #D97706;
-}
-</style>
+            // Load exams dropdown
+            const { data: exams } = await supabase
+                .from('exams')
+                .select('id, exam_name, exam_type')
+                .order('exam_name');
+
+            const examSelect = document.getElementById('examFilter');
+            exams?.forEach(exam => {
+                const option = document.createElement('option');
+                option.value = exam.id;
+                option.textContent = `${exam.exam_name} (${exam.exam_type})`;
+                examSelect.appendChild(option);
+            });
+
+            // Load programs
+            const { data: programs } = await supabase
+                .from('student_profiles')
+                .select('program')
+                .not('program', 'is', null);
+
+            const programSelect = document.getElementById('programFilter');
+            const uniquePrograms = [...new Set(programs?.map(p => p.program))];
+            uniquePrograms?.forEach(program => {
+                if (program) {
+                    const option = document.createElement('option');
+                    option.value = program;
+                    option.textContent = program;
+                    programSelect.appendChild(option);
+                }
+            });
+
+            loadResults();
+        }
+
+        async function loadResults() {
+            const examId = document.getElementById('examFilter').value;
+            const program = document.getElementById('programFilter').value;
+            const status = document.getElementById('statusFilter').value;
+            const dateFrom = document.getElementById('dateFrom').value;
+            const dateTo = document.getElementById('dateTo').value;
+            const search = document.getElementById('searchInput').value;
+
+            document.getElementById('resultsBody').innerHTML = '<tr><td colspan="9" class="loading">Loading results...</td></tr>';
+            
+            try {
+                // Build query for overall grades (question_id = 00000000...)
+                let query = supabase
+                    .from('exam_grades')
+                    .select(`
+                        *,
+                        exams!inner(exam_name, exam_type, program, block),
+                        student_profiles!inner(full_name, email, program, block)
+                    `)
+                    .eq('question_id', '00000000-0000-0000-0000-000000000000')
+                    .order('graded_at', { ascending: false });
+
+                // Apply filters
+                if (examId) query = query.eq('exam_id', examId);
+                if (program) query = query.eq('student_profiles.program', program);
+                if (status) query = query.eq('result_status', status);
+                if (dateFrom) query = query.gte('graded_at', dateFrom);
+                if (dateTo) query = query.lte('graded_at', dateTo + ' 23:59:59');
+                if (search) {
+                    query = query.or(`selected_answer.ilike.%${search}%,student_profiles.full_name.ilike.%${search}%,student_profiles.email.ilike.%${search}%`);
+                }
+
+                const { data: results, error } = await query;
+                
+                if (error) throw error;
+
+                currentResults = results || [];
+                displayResults();
+                updateStats();
+                
+            } catch (error) {
+                console.error('Error loading results:', error);
+                document.getElementById('resultsBody').innerHTML = 
+                    `<tr><td colspan="9" style="color: #DC2626;">Error loading results: ${error.message}</td></tr>`;
+            }
+        }
+
+        function displayResults() {
+            const startIndex = (currentPage - 1) * itemsPerPage;
+            const endIndex = startIndex + itemsPerPage;
+            const pageResults = currentResults.slice(startIndex, endIndex);
+            const tbody = document.getElementById('resultsBody');
+
+            if (pageResults.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 40px;">No results found</td></tr>';
+                document.getElementById('pagination').innerHTML = '';
+                return;
+            }
+
+            let html = '';
+            pageResults.forEach(result => {
+                const student = result.student_profiles;
+                const exam = result.exams;
+                const percentage = result.total_score || 0;
+                
+                html += `
+                    <tr>
+                        <td>${student?.full_name || 'N/A'}</td>
+                        <td>${student?.email || 'N/A'}</td>
+                        <td>${exam?.exam_name || 'N/A'}</td>
+                        <td>${exam?.exam_type || 'N/A'}</td>
+                        <td>${result.marks || 0}</td>
+                        <td>${percentage.toFixed(2)}%</td>
+                        <td class="${result.result_status === 'PASS' ? 'pass' : 'fail'}">
+                            ${result.result_status || 'N/A'}
+                        </td>
+                        <td>${new Date(result.graded_at).toLocaleDateString()}</td>
+                        <td>
+                            <button class="view-btn" onclick="viewStudentDetails('${result.student_id}', ${result.exam_id})">
+                                View Details
+                            </button>
+                            <button class="reset-btn" onclick="resetStudentExam('${result.student_id}', ${result.exam_id})">
+                                Reset
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            tbody.innerHTML = html;
+            renderPagination();
+        }
+
+        function updateStats() {
+            const stats = {
+                total: currentResults.length,
+                passed: currentResults.filter(r => r.result_status === 'PASS').length,
+                failed: currentResults.filter(r => r.result_status === 'FAIL').length,
+                avgScore: currentResults.length > 0 ? 
+                    (currentResults.reduce((sum, r) => sum + (r.total_score || 0), 0) / currentResults.length).toFixed(2) : 0
+            };
+
+            document.getElementById('statsContainer').innerHTML = `
+                <div class="stat-box">
+                    <h3>Total Attempts</h3>
+                    <div class="stat-value">${stats.total}</div>
+                </div>
+                <div class="stat-box">
+                    <h3>Passed</h3>
+                    <div class="stat-value" style="color: #38A169;">${stats.passed}</div>
+                </div>
+                <div class="stat-box">
+                    <h3>Failed</h3>
+                    <div class="stat-value" style="color: #DC2626;">${stats.failed}</div>
+                </div>
+                <div class="stat-box">
+                    <h3>Avg Score</h3>
+                    <div class="stat-value">${stats.avgScore}%</div>
+                </div>
+            `;
+        }
+
+        function renderPagination() {
+            const totalPages = Math.ceil(currentResults.length / itemsPerPage);
+            const pagination = document.getElementById('pagination');
+            
+            if (totalPages <= 1) {
+                pagination.innerHTML = '';
+                return;
+            }
+
+            let html = '';
+            
+            // Previous button
+            html += `<button class="page-btn" ${currentPage === 1 ? 'disabled' : ''} onclick="changePage(${currentPage - 1})">‹ Previous</button>`;
+            
+            // Page numbers
+            for (let i = 1; i <= totalPages; i++) {
+                if (i === 1 || i === totalPages || (i >= currentPage - 2 && i <= currentPage + 2)) {
+                    html += `<button class="page-btn ${i === currentPage ? 'active' : ''}" onclick="changePage(${i})">${i}</button>`;
+                } else if (i === currentPage - 3 || i === currentPage + 3) {
+                    html += `<span class="page-btn">...</span>`;
+                }
+            }
+            
+            // Next button
+            html += `<button class="page-btn" ${currentPage === totalPages ? 'disabled' : ''} onclick="changePage(${currentPage + 1})">Next ›</button>`;
+            
+            pagination.innerHTML = html;
+        }
+
+        function changePage(page) {
+            currentPage = page;
+            displayResults();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        async function viewStudentDetails(studentId, examId) {
+            try {
+                // Get overall grade
+                const { data: overallGrade } = await supabase
+                    .from('exam_grades')
+                    .select('*')
+                    .eq('student_id', studentId)
+                    .eq('exam_id', examId)
+                    .eq('question_id', '00000000-0000-0000-0000-000000000000')
+                    .single();
+
+                // Get all question answers
+                const { data: questionAnswers } = await supabase
+                    .from('exam_grades')
+                    .select(`
+                        *,
+                        exam_questions!inner(question_text, correct_answer, marks)
+                    `)
+                    .eq('student_id', studentId)
+                    .eq('exam_id', examId)
+                    .neq('question_id', '00000000-0000-0000-0000-000000000000');
+
+                // Get student profile
+                const { data: student } = await supabase
+                    .from('student_profiles')
+                    .select('*')
+                    .eq('id', studentId)
+                    .single();
+
+                // Get exam details
+                const { data: exam } = await supabase
+                    .from('exams')
+                    .select('*')
+                    .eq('id', examId)
+                    .single();
+
+                let detailsHTML = `
+                    <div class="detail-row">
+                        <strong>Student:</strong> ${student?.full_name || 'N/A'} (${student?.email || 'N/A'})<br>
+                        <strong>Program:</strong> ${student?.program || 'N/A'} | Block: ${student?.block || 'N/A'}
+                    </div>
+                    
+                    <div class="detail-row">
+                        <strong>Exam:</strong> ${exam?.exam_name || 'N/A'} (${exam?.exam_type || 'N/A'})<br>
+                        <strong>Date Taken:</strong> ${new Date(overallGrade?.graded_at).toLocaleString()}
+                    </div>
+                    
+                    <div class="detail-row">
+                        <strong>Overall Score:</strong> ${overallGrade?.marks || 0} marks<br>
+                        <strong>Percentage:</strong> ${overallGrade?.total_score?.toFixed(2) || 0}%<br>
+                        <strong>Status:</strong> <span class="${overallGrade?.result_status === 'PASS' ? 'pass' : 'fail'}">${overallGrade?.result_status || 'N/A'}</span>
+                    </div>
+                    
+                    <h3>Question-wise Details:</h3>
+                `;
+
+                if (questionAnswers && questionAnswers.length > 0) {
+                    questionAnswers.forEach((answer, index) => {
+                        const question = answer.exam_questions;
+                        const isCorrect = answer.selected_answer === question?.correct_answer;
+                        
+                        detailsHTML += `
+                            <div class="detail-row">
+                                <strong>Q${index + 1}:</strong> ${question?.question_text?.substring(0, 100)}...<br>
+                                <strong>Selected Answer:</strong> ${answer.selected_answer || 'Not answered'}<br>
+                                <strong>Correct Answer:</strong> ${question?.correct_answer || 'N/A'}<br>
+                                <strong>Marks:</strong> ${answer.marks || 0}/${question?.marks || 1}<br>
+                                <strong>Status:</strong> <span class="${isCorrect ? 'pass' : 'fail'}">${isCorrect ? 'CORRECT' : 'INCORRECT'}</span>
+                            </div>
+                        `;
+                    });
+                }
+
+                document.getElementById('modalTitle').textContent = `Exam Details: ${student?.full_name || 'Student'}`;
+                document.getElementById('modalContent').innerHTML = detailsHTML;
+                document.getElementById('studentModal').style.display = 'flex';
+                
+            } catch (error) {
+                console.error('Error loading student details:', error);
+                alert('Error loading details. Please try again.');
+            }
+        }
+
+        async function resetStudentExam(studentId, examId) {
+            if (!confirm('Are you sure you want to reset this student\'s exam? All their answers will be deleted and they can retake the exam.')) {
+                return;
+            }
+
+            try {
+                const { error } = await supabase
+                    .from('exam_grades')
+                    .delete()
+                    .eq('student_id', studentId)
+                    .eq('exam_id', examId);
+
+                if (error) throw error;
+
+                alert('Exam reset successfully! The student can now retake the exam.');
+                loadResults(); // Refresh the list
+                
+            } catch (error) {
+                console.error('Error resetting exam:', error);
+                alert('Error resetting exam. Please try again.');
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('studentModal').style.display = 'none';
+        }
+
+        function resetFilters() {
+            document.getElementById('examFilter').value = '';
+            document.getElementById('programFilter').value = '';
+            document.getElementById('statusFilter').value = '';
+            document.getElementById('dateFrom').value = '';
+            document.getElementById('dateTo').value = '';
+            document.getElementById('searchInput').value = '';
+            loadResults();
+        }
+
+        // Export Functions
+        function exportToExcel() {
+            if (currentResults.length === 0) {
+                alert('No data to export.');
+                return;
+            }
+
+            const worksheet = XLSX.utils.json_to_sheet(currentResults.map(r => ({
+                'Student Name': r.student_profiles?.full_name,
+                'Student Email': r.student_profiles?.email,
+                'Exam Name': r.exams?.exam_name,
+                'Exam Type': r.exams?.exam_type,
+                'Program': r.student_profiles?.program,
+                'Block': r.student_profiles?.block,
+                'Score': r.marks,
+                'Percentage': `${r.total_score?.toFixed(2)}%`,
+                'Status': r.result_status,
+                'Date Taken': new Date(r.graded_at).toLocaleDateString(),
+                'Time Taken': new Date(r.graded_at).toLocaleTimeString()
+            })));
+
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, 'Exam Results');
+            XLSX.writeFile(workbook, `exam_results_${new Date().toISOString().split('T')[0]}.xlsx`);
+        }
+
+        function exportToCSV() {
+            if (currentResults.length === 0) {
+                alert('No data to export.');
+                return;
+            }
+
+            const headers = ['Student Name', 'Email', 'Exam', 'Type', 'Program', 'Block', 'Score', 'Percentage', 'Status', 'Date'];
+            const csvRows = [
+                headers.join(','),
+                ...currentResults.map(r => [
+                    `"${r.student_profiles?.full_name || ''}"`,
+                    `"${r.student_profiles?.email || ''}"`,
+                    `"${r.exams?.exam_name || ''}"`,
+                    `"${r.exams?.exam_type || ''}"`,
+                    `"${r.student_profiles?.program || ''}"`,
+                    `"${r.student_profiles?.block || ''}"`,
+                    r.marks || 0,
+                    `${r.total_score?.toFixed(2)}%`,
+                    r.result_status || '',
+                    new Date(r.graded_at).toLocaleDateString()
+                ].join(','))
+            ];
+
+            const csvContent = csvRows.join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `exam_results_${new Date().toISOString().split('T')[0]}.csv`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+        }
+
+        function exportToPDF() {
+            alert('PDF export requires additional libraries. Consider using jsPDF or server-side generation.');
+            // You can integrate jsPDF here for client-side PDF generation
+        }
+
+        function printResults() {
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(`
+                <html>
+                <head>
+                    <title>Exam Results Report</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; padding: 20px; }
+                        h1 { color: #0A3D62; }
+                        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+                        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+                        th { background: #f0f0f0; }
+                        .pass { color: green; }
+                        .fail { color: red; }
+                    </style>
+                </head>
+                <body>
+                    <h1>Exam Results Report</h1>
+                    <p>Generated: ${new Date().toLocaleString()}</p>
+                    ${document.getElementById('resultsTable').outerHTML}
+                </body>
+                </html>
+            `);
+            printWindow.document.close();
+            printWindow.print();
+        }
+
+        // Initialize
+        window.addEventListener('DOMContentLoaded', loadInitialData);
+
+        // Close modal when clicking outside
+        window.addEventListener('click', (event) => {
+            const modal = document.getElementById('studentModal');
+            if (event.target === modal) {
+                closeModal();
+            }
+        });
+    </script>
+</body>
+</html>
