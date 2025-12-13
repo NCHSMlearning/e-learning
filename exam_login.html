@@ -33,6 +33,11 @@ const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// Debug: Show current state on page load
+console.log('=== LOGIN PAGE LOADED ===');
+console.log('Current localStorage - currentUserId:', localStorage.getItem('currentUserId'));
+console.log('Current localStorage - studentEmail:', localStorage.getItem('studentEmail'));
+
 document.getElementById('loginBtn').addEventListener('click', async () => {
     const email = document.getElementById('email').value.trim();
     const password = document.getElementById('password').value;
@@ -54,6 +59,8 @@ document.getElementById('loginBtn').addEventListener('click', async () => {
         document.getElementById('loginBtn').disabled = true;
         document.getElementById('loginBtn').innerText = 'Logging in...';
 
+        console.log('Attempting login for:', email);
+
         // 1. First authenticate with Supabase
         const { data: authData, error: authError } = await sb.auth.signInWithPassword({
             email,
@@ -61,6 +68,7 @@ document.getElementById('loginBtn').addEventListener('click', async () => {
         });
         
         if(authError || !authData.user){ 
+            console.error('Auth failed:', authError);
             errorDiv.innerText = authError?.message || 'Login failed. Check your credentials.';
             errorDiv.style.display = 'block';
             loadingDiv.style.display = 'none';
@@ -69,6 +77,8 @@ document.getElementById('loginBtn').addEventListener('click', async () => {
             return; 
         }
 
+        console.log('Supabase auth successful, user ID:', authData.user.id);
+
         // 2. Check if student exists in consolidated_user_profiles_table
         const { data: studentData, error: studentError } = await sb
             .from('consolidated_user_profiles_table')
@@ -76,8 +86,11 @@ document.getElementById('loginBtn').addEventListener('click', async () => {
             .eq('email', email)
             .single();
 
+        let finalUserId = null;
+        let finalEmail = null;
+
         if(studentError || !studentData) {
-            console.log('Student not found in profiles table:', studentError);
+            console.log('Student not found by email, trying by auth user_id...');
             
             // Try alternative: Check by user_id from auth
             const { data: studentById, error: idError } = await sb
@@ -87,35 +100,57 @@ document.getElementById('loginBtn').addEventListener('click', async () => {
                 .single();
             
             if(idError || !studentById) {
-                // Student not authorized for exams
+                console.error('Student not found in database at all:', idError);
                 errorDiv.innerText = 'Access denied: Student not registered for exams.';
                 errorDiv.style.display = 'block';
                 loadingDiv.style.display = 'none';
                 document.getElementById('loginBtn').disabled = false;
                 document.getElementById('loginBtn').innerText = 'Login';
                 
-                // Sign out from auth
                 await sb.auth.signOut();
                 return;
             }
             
-            // Save student data
-            localStorage.setItem('currentUserId', studentById.user_id);
-            localStorage.setItem('studentEmail', studentById.email || email);
+            finalUserId = studentById.user_id;
+            finalEmail = studentById.email || email;
+            console.log('Found student by auth ID:', finalUserId);
         } else {
-            // Save student data
-            localStorage.setItem('currentUserId', studentData.user_id);
-            localStorage.setItem('studentEmail', studentData.email || email);
+            finalUserId = studentData.user_id;
+            finalEmail = studentData.email || email;
+            console.log('Found student by email:', finalUserId);
         }
 
-        console.log('Login successful, redirecting to dashboard...');
+        // CRITICAL: Save to localStorage with VERIFICATION
+        console.log('Saving to localStorage:', { finalUserId, finalEmail });
         
-        // Redirect to dashboard
-        window.location.href = 'exam_dashboard.html';
+        localStorage.setItem('currentUserId', finalUserId);
+        localStorage.setItem('studentEmail', finalEmail);
+        
+        // VERIFY it was saved
+        const savedUserId = localStorage.getItem('currentUserId');
+        const savedEmail = localStorage.getItem('studentEmail');
+        
+        console.log('Verifying save - Saved userId:', savedUserId);
+        console.log('Verifying save - Saved email:', savedEmail);
+        
+        if (!savedUserId || savedUserId === 'null') {
+            throw new Error('Failed to save user ID to localStorage');
+        }
+
+        // Also store in sessionStorage as backup
+        sessionStorage.setItem('currentUserId', finalUserId);
+        sessionStorage.setItem('studentEmail', finalEmail);
+
+        console.log('Login COMPLETE. Redirecting in 1 second...');
+        
+        // Wait 1 second to ensure everything is saved, then redirect
+        setTimeout(() => {
+            window.location.href = 'exam_dashboard.html';
+        }, 1000);
         
     } catch(err){ 
         console.error('Login error:', err);
-        errorDiv.innerText = 'Unexpected error. Please try again.';
+        errorDiv.innerText = 'Unexpected error. Please try again. Error: ' + err.message;
         errorDiv.style.display = 'block';
         loadingDiv.style.display = 'none';
         document.getElementById('loginBtn').disabled = false;
@@ -130,17 +165,33 @@ document.getElementById('password').addEventListener('keypress', function(e) {
     }
 });
 
-// Clear any existing auth session on page load
+// Check if already logged in
 window.addEventListener('DOMContentLoaded', async () => {
     try {
-        // Check if already logged in
-        const { data } = await sb.auth.getSession();
-        if (data.session) {
-            // Already logged in, redirect to dashboard
-            window.location.href = 'exam_dashboard.html';
+        // Check localStorage first
+        const savedUserId = localStorage.getItem('currentUserId');
+        const savedEmail = localStorage.getItem('studentEmail');
+        
+        console.log('Page loaded - Checking existing session');
+        console.log('localStorage userId:', savedUserId);
+        console.log('localStorage email:', savedEmail);
+        
+        if (savedUserId && savedUserId !== 'null') {
+            console.log('Found saved user, checking Supabase session...');
+            const { data } = await sb.auth.getSession();
+            if (data.session) {
+                console.log('Supabase session exists, redirecting to dashboard...');
+                setTimeout(() => {
+                    window.location.href = 'exam_dashboard.html';
+                }, 500);
+            } else {
+                console.log('No Supabase session, clearing localStorage...');
+                localStorage.removeItem('currentUserId');
+                localStorage.removeItem('studentEmail');
+            }
         }
     } catch (err) {
-        console.log('No existing session');
+        console.log('Session check error:', err);
     }
 });
 </script>
