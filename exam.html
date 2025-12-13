@@ -160,6 +160,78 @@ button#submit-exam-btn:disabled { background: #FCA5A5; cursor: not-allowed; box-
 #error { color: #EF4444; font-weight: 600; text-align: center; margin-bottom: 15px; }
 #final-msg { text-align: center; font-size: 1.3rem; color: #064E3B; margin-top: 30px; }
 
+/* --- Success Screen Styles --- */
+.success-screen {
+    text-align: center;
+    padding: 40px 20px;
+    background: linear-gradient(135deg, #D1FAE5 0%, #F0FDF4 100%);
+    border-radius: 16px;
+    margin: 20px auto;
+    max-width: 600px;
+    border: 3px solid #38A169;
+    box-shadow: 0 10px 40px rgba(5, 150, 105, 0.1);
+}
+
+.success-icon {
+    font-size: 4rem;
+    margin-bottom: 20px;
+    animation: successPulse 2s infinite;
+}
+
+@keyframes successPulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1); }
+}
+
+.success-title {
+    color: #064E3B;
+    font-size: 2rem;
+    font-weight: 700;
+    margin-bottom: 15px;
+}
+
+.success-message {
+    color: #047857;
+    font-size: 1.1rem;
+    margin-bottom: 25px;
+    line-height: 1.6;
+}
+
+.redirect-countdown {
+    background: white;
+    padding: 15px;
+    border-radius: 10px;
+    margin: 20px auto;
+    max-width: 300px;
+    border: 2px solid #38A169;
+    font-weight: 600;
+    color: #065F46;
+}
+
+.redirect-countdown span {
+    color: #DC2626;
+    font-size: 1.3rem;
+    font-weight: 700;
+}
+
+.dashboard-link {
+    display: inline-block;
+    margin-top: 20px;
+    padding: 12px 30px;
+    background: #38A169;
+    color: white;
+    text-decoration: none;
+    border-radius: 8px;
+    font-weight: 600;
+    transition: all 0.3s;
+}
+
+.dashboard-link:hover {
+    background: #2F855A;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(5, 150, 105, 0.3);
+}
 
 /* =============================== */
 /* --- SUBMISSION MODAL STYLES --- */
@@ -215,6 +287,21 @@ button#submit-exam-btn:disabled { background: #FCA5A5; cursor: not-allowed; box-
 #cancel-submit-btn:hover {
     background: #D1D5DB;
 }
+
+/* Warning Modal for Page Leave */
+.warning-modal {
+    background: #FFF7ED;
+    border: 3px solid #F59E0B;
+}
+
+.warning-icon {
+    font-size: 3rem;
+    margin-bottom: 15px;
+}
+
+.warning-title {
+    color: #92400E;
+}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -254,6 +341,7 @@ button#submit-exam-btn:disabled { background: #FCA5A5; cursor: not-allowed; box-
     </div>
 </div>
 
+<!-- Submission Confirmation Modal -->
 <div id="submission-modal" class="modal-overlay">
     <div class="modal-content">
         <h3>Final Submission Confirmation</h3>
@@ -261,6 +349,20 @@ button#submit-exam-btn:disabled { background: #FCA5A5; cursor: not-allowed; box-
         <div class="modal-buttons">
             <button id="cancel-submit-btn">Cancel</button>
             <button id="confirm-submit-btn">Confirm & Submit</button>
+        </div>
+    </div>
+</div>
+
+<!-- Page Leave Warning Modal -->
+<div id="page-leave-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-content warning-modal">
+        <div class="warning-icon">⚠️</div>
+        <h3 class="warning-title">Page Navigation Detected</h3>
+        <p>You are attempting to leave the exam page. For exam security purposes, leaving this page will result in automatic submission of your exam.</p>
+        <p><strong>This action cannot be undone.</strong></p>
+        <div class="modal-buttons">
+            <button id="stay-on-page-btn" style="background: #38A169; color: white;">Stay on Exam Page</button>
+            <button id="leave-anyway-btn" style="background: #DC2626; color: white;">Submit & Leave Anyway</button>
         </div>
     </div>
 </div>
@@ -313,6 +415,9 @@ const cancelSubmitBtn = document.getElementById('cancel-submit-btn');
 const finalSubmitBtn = document.getElementById('submit-exam-btn');
 const modalMessage = document.getElementById('modal-message');
 const examTitle = document.getElementById('exam-title');
+const pageLeaveModal = document.getElementById('page-leave-modal');
+const stayOnPageBtn = document.getElementById('stay-on-page-btn');
+const leaveAnywayBtn = document.getElementById('leave-anyway-btn');
 
 // --- NAVIGATION FUNCTIONS ---
 function nextQuestion() {
@@ -601,7 +706,8 @@ async function executeSubmission() {
     // Disable all buttons to prevent double-clicks
     document.querySelectorAll('button').forEach(btn => btn.disabled = true);
     submissionModal.style.display = 'none';
-    document.getElementById('error').innerText = 'Submitting final answers...';
+    
+    showSuccessScreen('submitting');
 
     // Save all unanswered questions as 0 marks
     const skippedEntries = [];
@@ -629,16 +735,80 @@ async function executeSubmission() {
     // Calculate and save final grade based on exam type
     await calculateAndSaveFinalGrade();
     
-    showFinalScreen();
-
-    document.getElementById('error').innerText = '';
-    document.getElementById('final-msg').innerText = `✅ ${examType} submitted successfully! Redirecting to dashboard...`;
+    // Update success screen
+    showSuccessScreen('completed');
     
-    // FIXED: Redirect to dashboard WITH the exam_completed parameter
-    setTimeout(() => {
-        // CRITICAL FIX: Add the exam_id parameter so dashboard can detect completion
-        window.location.href = `${REDIRECT_URL}?exam_completed=${EXAM_ID}&type=${examType}`; 
-    }, 2500); 
+    // Countdown before redirect
+    let countdown = 5;
+    const countdownElement = document.querySelector('#countdown-number');
+    const countdownInterval = setInterval(() => {
+        countdown--;
+        if (countdownElement) countdownElement.textContent = countdown;
+        if (countdown <= 0) {
+            clearInterval(countdownInterval);
+            redirectToDashboard();
+        }
+    }, 1000);
+}
+
+// Show beautiful success screen
+function showSuccessScreen(status) {
+    clearInterval(timerInterval);
+    window.removeEventListener('beforeunload', beforeUnloadHandler);
+    
+    const container = document.getElementById('exam-container');
+    const navButtons = document.getElementById('nav-buttons');
+    const progress = document.getElementById('progress');
+    const answerSaved = document.getElementById('answer-saved');
+    const timer = document.getElementById('timer');
+    const finalMsg = document.getElementById('final-msg');
+    
+    // Hide exam elements
+    container.style.display = 'none';
+    navButtons.style.display = 'none';
+    progress.style.display = 'none';
+    answerSaved.style.display = 'none';
+    timer.style.display = 'none';
+    finalMsg.style.display = 'none';
+    
+    let title, message, details;
+    
+    if (status === 'submitting') {
+        title = "⏳ Processing Submission";
+        message = "Your exam is being submitted. Please wait while we process your answers and calculate your grade.";
+        details = "Saving responses to database...";
+    } else {
+        title = "🎉 Exam Successfully Submitted!";
+        message = `Congratulations! Your ${examType} has been successfully submitted and graded.`;
+        details = "Your results have been saved and are now available in your dashboard.";
+    }
+    
+    const successHTML = `
+        <div class="success-screen">
+            <div class="success-icon">${status === 'submitting' ? '⏳' : '✅'}</div>
+            <h2 class="success-title">${title}</h2>
+            <p class="success-message">${message}</p>
+            <p style="color: #475569; margin-bottom: 20px;">${details}</p>
+            
+            <div class="redirect-countdown">
+                <p>You will be redirected to your dashboard in <span id="countdown-number">5</span> seconds...</p>
+            </div>
+            
+            <p style="margin-top: 20px; color: #64748B;">
+                <small>Exam ID: ${EXAM_ID.substring(0, 8)}... | Student: ${studentId.substring(0, 8)}...</small>
+            </p>
+            
+            <a href="${REDIRECT_URL}?exam_completed=${EXAM_ID}&type=${examType}" class="dashboard-link">
+                Go to Dashboard Now
+            </a>
+        </div>
+    `;
+    
+    document.querySelector('.question-area').insertAdjacentHTML('beforeend', successHTML);
+}
+
+function redirectToDashboard() {
+    window.location.href = `${REDIRECT_URL}?exam_completed=${EXAM_ID}&type=${examType}`;
 }
 
 // CRITICAL FUNCTION: Calculate and save grade based on exam type
@@ -720,7 +890,6 @@ async function calculateAndSaveFinalGrade() {
         
     } catch (error) {
         console.error('❌ Error calculating final grade:', error);
-        document.getElementById('error').innerText = 'Grade calculation completed, but there was an issue saving to database.';
     }
 }
 
@@ -751,28 +920,10 @@ async function updateStudentGradeDirectly(gradeData) {
 // Update student's consolidated grade record
 async function updateStudentGradeRecord(gradeData) {
     try {
-        // This would update a student's overall grade record if you have such a table
-        // For example: student_course_grades or similar
         console.log('📝 Student grade processed:', gradeData);
-        
-        // You could add additional logic here to update student transcripts
-        // or send notifications about grade availability
-        
     } catch (error) {
         console.error('Error updating student record:', error);
     }
-}
-
-function showFinalScreen() {
-    clearInterval(timerInterval);
-    window.removeEventListener('beforeunload', beforeUnloadHandler); 
-    
-    document.getElementById('exam-container').innerHTML = '';
-    document.getElementById('nav-buttons').style.display = 'none';
-    document.getElementById('progress').style.display = 'none'; 
-    document.getElementById('answer-saved').style.display = 'none';
-    document.getElementById('timer').innerText = "Exam Ended.";
-    document.getElementById('final-msg').innerText = `${examType} submitted! Processing results...`;
 }
 
 // --- TIMER AND LOCKDOWN ---
@@ -784,12 +935,25 @@ function startTimer(seconds) {
         timerEl.innerText = `Time Remaining: ${timeString}`;
         if (seconds-- <= 0) {
             // Timer expiry triggers submission automatically
-            executeSubmission(); 
+            showTimeoutMessage();
+            setTimeout(executeSubmission, 2000);
             return;
         }
     }
     updateTimer();
     timerInterval = setInterval(updateTimer, 1000);
+}
+
+function showTimeoutMessage() {
+    const container = document.getElementById('exam-container');
+    container.innerHTML = `
+        <div style="text-align: center; padding: 40px 20px; background: #FEF3C7; border-radius: 12px; border: 3px solid #F59E0B;">
+            <div style="font-size: 3rem; margin-bottom: 20px;">⏰</div>
+            <h3 style="color: #92400E;">Time's Up!</h3>
+            <p>Your exam time has expired. The system is now automatically submitting your answers.</p>
+            <p><strong>Please wait while we process your submission...</strong></p>
+        </div>
+    `;
 }
 
 function lockDown() {
@@ -798,20 +962,52 @@ function lockDown() {
     document.addEventListener('cut', e => e.preventDefault());
     document.addEventListener('paste', e => e.preventDefault());
     document.addEventListener('selectstart', e => e.preventDefault());
-    window.addEventListener('beforeunload', beforeUnloadHandler);
+    
+    // Improved page leave handling
+    let isSubmitting = false;
+    
+    window.addEventListener('beforeunload', (e) => {
+        if (isSubmitting) return; // Allow redirect if we're submitting
+        
+        e.preventDefault();
+        e.returnValue = 'Are you sure you want to leave? Your exam will be automatically submitted.';
+        
+        // Show custom modal for better UX
+        pageLeaveModal.style.display = 'flex';
+        
+        // Don't prevent default if user confirms
+        stayOnPageBtn.onclick = () => {
+            pageLeaveModal.style.display = 'none';
+        };
+        
+        leaveAnywayBtn.onclick = () => {
+            isSubmitting = true;
+            pageLeaveModal.style.display = 'none';
+            executeSubmission();
+        };
+        
+        // Set timeout to auto-submit after 5 seconds
+        setTimeout(() => {
+            if (pageLeaveModal.style.display === 'flex') {
+                pageLeaveModal.style.display = 'none';
+                executeSubmission();
+            }
+        }, 5000);
+        
+        return e.returnValue;
+    });
     
     document.addEventListener('visibilitychange', () => {
-        if (document.hidden) {
-            // Automatic submission if student leaves the page/tab
-            executeSubmission(); 
-            alert('Warning: The exam was automatically submitted due to unauthorized page context change.'); 
+        if (document.hidden && !isSubmitting) {
+            // Show warning and submit if user switches tabs
+            setTimeout(() => {
+                if (document.hidden) {
+                    alert('⚠️ Exam Security Alert: Tab switching detected. Your exam is being submitted automatically.');
+                    executeSubmission();
+                }
+            }, 1000);
         }
     });
-}
-
-function beforeUnloadHandler(e) {
-    e.preventDefault();
-    e.returnValue = 'Warning: Leaving this page will submit your exam immediately.';
 }
 
 // --- EVENT LISTENERS ---
