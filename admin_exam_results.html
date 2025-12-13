@@ -1068,6 +1068,91 @@ function displayStudentsResults() {
     tbody.innerHTML = html;
     renderPagination('students', studentsResults.length);
 }
+
+        async function viewExamResult(studentId, examId) {
+    try {
+        // Get exam details
+        const { data: exam } = await supabase
+            .from('exams')
+            .select('*')
+            .eq('id', examId)
+            .single();
+
+        // Get overall grade
+        const { data: overallGrade } = await supabase
+            .from('exam_grades')
+            .select('*')
+            .eq('student_id', studentId)
+            .eq('exam_id', examId)
+            .eq('question_id', '00000000-0000-0000-0000-000000000000')
+            .single();
+
+        // Get all question answers
+        const { data: questionAnswers } = await supabase
+            .from('exam_grades')
+            .select(`
+                *,
+                exam_questions!inner(question_text, correct_answer, marks, question_number)
+            `)
+            .eq('student_id', studentId)
+            .eq('exam_id', examId)
+            .neq('question_id', '00000000-0000-0000-0000-000000000000')
+            .order('exam_questions(question_number)');
+
+        let detailsHTML = `
+            <div style="background: #F8FAFC; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                <h3 style="color: #0A3D62; margin-bottom: 15px;">👤 Student Information</h3>
+                <p><strong>Student ID:</strong> ${studentId}</p>
+                <p><strong>Note:</strong> Student profile not found in database</p>
+            </div>
+
+            <div style="background: #F0FDF4; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                <h3 style="color: #38A169; margin-bottom: 15px;">🎯 Exam Summary</h3>
+                <p><strong>Exam:</strong> ${exam?.exam_name || 'N/A'} (${exam?.exam_type || 'N/A'})</p>
+                <p><strong>Date Taken:</strong> ${new Date(overallGrade?.graded_at).toLocaleString()}</p>
+                <p><strong>Total Score:</strong> <span style="font-size: 1.2rem; font-weight: bold;">${overallGrade?.marks || 0}</span> marks</p>
+                <p><strong>Percentage:</strong> <span style="font-size: 1.2rem; font-weight: bold;">${overallGrade?.total_score?.toFixed(2) || 0}%</span></p>
+                <p><strong>Result:</strong> <span class="${overallGrade?.result_status === 'PASS' ? 'status-pass' : 'status-fail'}">${overallGrade?.result_status || 'N/A'}</span></p>
+            </div>
+        `;
+
+        if (questionAnswers && questionAnswers.length > 0) {
+            detailsHTML += `
+                <h3 style="color: #0A3D62; margin: 20px 0 15px 0;">📝 Question-wise Performance</h3>
+                <div style="max-height: 300px; overflow-y: auto;">
+            `;
+
+            questionAnswers.forEach((answer, index) => {
+                const question = answer.exam_questions;
+                const isCorrect = answer.selected_answer === question?.correct_answer;
+                const statusColor = isCorrect ? '#38A169' : '#DC2626';
+                const statusText = isCorrect ? 'CORRECT' : 'INCORRECT';
+                
+                detailsHTML += `
+                    <div style="border: 1px solid #E2E8F0; border-radius: 8px; padding: 15px; margin-bottom: 10px; background: white;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                            <strong style="color: #0A3D62;">Q${question?.question_number || index + 1}:</strong>
+                            <span style="color: ${statusColor}; font-weight: bold;">${statusText}</span>
+                        </div>
+                        <p style="margin: 5px 0;"><strong>Selected:</strong> ${answer.selected_answer || 'Not answered'}</p>
+                        <p style="margin: 5px 0;"><strong>Correct:</strong> ${question?.correct_answer || 'N/A'}</p>
+                        <p style="margin: 5px 0;"><strong>Marks:</strong> ${answer.marks || 0}/${question?.marks || 1}</p>
+                    </div>
+                `;
+            });
+
+            detailsHTML += `</div>`;
+        }
+
+        document.getElementById('modalTitle').textContent = `Exam Result - ${exam?.exam_name || 'Unknown Exam'}`;
+        document.getElementById('modalContent').innerHTML = detailsHTML;
+        document.getElementById('studentModal').style.display = 'flex';
+        
+    } catch (error) {
+        console.error('Error loading exam result:', error);
+        alert('Error loading exam result. Please try again.');
+    }
+} 
         // 2. LOAD ALL REGISTERED STUDENTS
         async function loadAllStudents() {
             const program = document.getElementById('studentProgramFilter')?.value || '';
@@ -1284,106 +1369,108 @@ function displayStudentsResults() {
         }
 
         // Filter Options Loading
-        async function loadFilterOptions() {
-            // Load exams dropdown
-            const { data: exams } = await supabase
-                .from('exams')
-                .select('id, exam_name, exam_type')
-                .order('exam_name');
+       async function loadFilterOptions() {
+    // Load exams dropdown
+    const { data: exams } = await supabase
+        .from('exams')
+        .select('id, exam_name, exam_type')
+        .order('exam_name');
 
-            const examSelect = document.getElementById('examFilter');
-            if (examSelect) {
-                examSelect.innerHTML = '<option value="">All Exams</option>';
-                exams?.forEach(exam => {
-                    const option = document.createElement('option');
-                    option.value = exam.id;
-                    option.textContent = `${exam.exam_name} (${exam.exam_type})`;
-                    examSelect.appendChild(option);
-                });
+    const examSelect = document.getElementById('examFilter');
+    if (examSelect) {
+        examSelect.innerHTML = '<option value="">All Exams</option>';
+        exams?.forEach(exam => {
+            const option = document.createElement('option');
+            option.value = exam.id;
+            option.textContent = `${exam.exam_name} (${exam.exam_type})`;
+            examSelect.appendChild(option);
+        });
+    }
+
+    // Load programs - FIXED: Use consolidated_user_profiles_table
+    const { data: programs } = await supabase
+        .from('consolidated_user_profiles_table')
+        .select('program, department')
+        .not('program', 'is', null)
+        .not('department', 'is', null);
+
+    const programSelect = document.getElementById('programFilter');
+    if (programSelect) {
+        programSelect.innerHTML = '<option value="">All Programs</option>';
+        const uniquePrograms = [...new Set(programs?.map(p => p.program || p.department))];
+        uniquePrograms?.forEach(program => {
+            if (program) {
+                const option = document.createElement('option');
+                option.value = program;
+                option.textContent = program;
+                programSelect.appendChild(option);
             }
-
-            // Load programs
-            const { data: programs } = await supabase
-                .from('student_profiles')
-                .select('program')
-                .not('program', 'is', null);
-
-            const programSelect = document.getElementById('programFilter');
-            if (programSelect) {
-                programSelect.innerHTML = '<option value="">All Programs</option>';
-                const uniquePrograms = [...new Set(programs?.map(p => p.program))];
-                uniquePrograms?.forEach(program => {
-                    if (program) {
-                        const option = document.createElement('option');
-                        option.value = program;
-                        option.textContent = program;
-                        programSelect.appendChild(option);
-                    }
-                });
-            }
-        }
+        });
+    }
+}
 
         async function loadStudentFilterOptions() {
-            // Load programs
-            const { data: programs } = await supabase
-                .from('student_profiles')
-                .select('program')
-                .not('program', 'is', null);
+    // Load programs - FIXED: Use consolidated_user_profiles_table
+    const { data: programs } = await supabase
+        .from('consolidated_user_profiles_table')
+        .select('program, department')
+        .not('program', 'is', null)
+        .not('department', 'is', null);
 
-            const programSelect = document.getElementById('studentProgramFilter');
-            if (programSelect) {
-                programSelect.innerHTML = '<option value="">All Programs</option>';
-                const uniquePrograms = [...new Set(programs?.map(p => p.program))];
-                uniquePrograms?.forEach(program => {
-                    if (program) {
-                        const option = document.createElement('option');
-                        option.value = program;
-                        option.textContent = program;
-                        programSelect.appendChild(option);
-                    }
-                });
+    const programSelect = document.getElementById('studentProgramFilter');
+    if (programSelect) {
+        programSelect.innerHTML = '<option value="">All Programs</option>';
+        const uniquePrograms = [...new Set(programs?.map(p => p.program || p.department))];
+        uniquePrograms?.forEach(program => {
+            if (program) {
+                const option = document.createElement('option');
+                option.value = program;
+                option.textContent = program;
+                programSelect.appendChild(option);
             }
+        });
+    }
 
-            // Load blocks
-            const { data: blocks } = await supabase
-                .from('student_profiles')
-                .select('block')
-                .not('block', 'is', null);
+    // Load blocks - FIXED: Use consolidated_user_profiles_table
+    const { data: blocks } = await supabase
+        .from('consolidated_user_profiles_table')
+        .select('block')
+        .not('block', 'is', null);
 
-            const blockSelect = document.getElementById('studentBlockFilter');
-            if (blockSelect) {
-                blockSelect.innerHTML = '<option value="">All Blocks</option>';
-                const uniqueBlocks = [...new Set(blocks?.map(b => b.block))];
-                uniqueBlocks?.forEach(block => {
-                    if (block) {
-                        const option = document.createElement('option');
-                        option.value = block;
-                        option.textContent = block;
-                        blockSelect.appendChild(option);
-                    }
-                });
+    const blockSelect = document.getElementById('studentBlockFilter');
+    if (blockSelect) {
+        blockSelect.innerHTML = '<option value="">All Blocks</option>';
+        const uniqueBlocks = [...new Set(blocks?.map(b => b.block))];
+        uniqueBlocks?.forEach(block => {
+            if (block) {
+                const option = document.createElement('option');
+                option.value = block;
+                option.textContent = block;
+                blockSelect.appendChild(option);
             }
+        });
+    }
 
-            // Load intakes
-            const { data: intakes } = await supabase
-                .from('student_profiles')
-                .select('intake')
-                .not('intake', 'is', null);
+    // Load intake years - FIXED: Use intake_year instead of intake
+    const { data: intakes } = await supabase
+        .from('consolidated_user_profiles_table')
+        .select('intake_year')
+        .not('intake_year', 'is', null);
 
-            const intakeSelect = document.getElementById('studentIntakeFilter');
-            if (intakeSelect) {
-                intakeSelect.innerHTML = '<option value="">All Intakes</option>';
-                const uniqueIntakes = [...new Set(intakes?.map(i => i.intake))];
-                uniqueIntakes?.forEach(intake => {
-                    if (intake) {
-                        const option = document.createElement('option');
-                        option.value = intake;
-                        option.textContent = intake;
-                        intakeSelect.appendChild(option);
-                    }
-                });
+    const intakeSelect = document.getElementById('studentIntakeFilter');
+    if (intakeSelect) {
+        intakeSelect.innerHTML = '<option value="">All Intake Years</option>';
+        const uniqueIntakes = [...new Set(intakes?.map(i => i.intake_year))];
+        uniqueIntakes?.forEach(intake => {
+            if (intake) {
+                const option = document.createElement('option');
+                option.value = intake;
+                option.textContent = intake;
+                intakeSelect.appendChild(option);
             }
-        }
+        });
+    }
+}
 
         // Update Statistics
         function updateStats() {
@@ -1768,142 +1855,134 @@ function displayStudentsResults() {
         }
 
         // RESET/ALLOW RETAKE - This is the key function!
-        async function resetStudentExam(studentId, examId) {
-            if (!confirm('Are you sure you want to allow this student to retake the exam?\n\n⚠️ This will delete all their current exam data including scores.')) {
-                return;
-            }
+     async function resetStudentExam(studentId, examId) {
+    if (!confirm('Are you sure you want to allow this student to retake the exam?\n\n⚠️ This will delete all their current exam data including scores.')) {
+        return;
+    }
 
-            try {
-                // Get student details for confirmation
-                const { data: student } = await supabase
-                    .from('student_profiles')
-                    .select('full_name, email')
-                    .eq('id', studentId)
-                    .single();
+    try {
+        // Delete ALL exam data for this student and exam
+        const { error: deleteError } = await supabase
+            .from('exam_grades')
+            .delete()
+            .eq('student_id', studentId)
+            .eq('exam_id', examId);
 
-                // Delete ALL exam data for this student and exam
-                const { error: deleteError } = await supabase
-                    .from('exam_grades')
-                    .delete()
-                    .eq('student_id', studentId)
-                    .eq('exam_id', examId);
+        if (deleteError) throw deleteError;
 
-                if (deleteError) throw deleteError;
+        alert(`✅ Success! Student can now retake the exam.\n\nTheir previous scores have been deleted.`);
 
-                alert(`✅ Success! ${student?.full_name || 'Student'} can now retake the exam.\n\nTheir previous scores have been deleted.`);
-
-                // Refresh results
-                if (currentTab === 'students') {
-                    loadStudentsWithResults();
-                }
-                loadAllStudents(); // Refresh all students list too
-                
-            } catch (error) {
-                console.error('Error resetting exam:', error);
-                alert('❌ Error resetting exam. Please try again or contact support.');
-            }
+        // Refresh results
+        if (currentTab === 'students') {
+            loadStudentsWithResults();
         }
+        loadAllStudents(); // Refresh all students list too
+        
+    } catch (error) {
+        console.error('Error resetting exam:', error);
+        alert('❌ Error resetting exam. Please try again or contact support.');
+    }
+}
 
         // Assign Exam to Student
-        async function assignExamToStudent(studentId = null) {
-            // Load students dropdown
-            const { data: students } = await supabase
-                .from('student_profiles')
-                .select('id, full_name, email')
-                .order('full_name');
+       async function assignExamToStudent(studentId = null) {
+    // Load students dropdown - FIXED: Use consolidated_user_profiles_table
+    const { data: students } = await supabase
+        .from('consolidated_user_profiles_table')
+        .select('id, full_name, email')
+        .order('full_name');
 
-            const studentSelect = document.getElementById('assignStudentSelect');
-            studentSelect.innerHTML = '';
-            students?.forEach(student => {
-                const option = document.createElement('option');
-                option.value = student.id;
-                option.textContent = `${student.full_name} (${student.email})`;
-                if (studentId && student.id === studentId) {
-                    option.selected = true;
-                }
-                studentSelect.appendChild(option);
-            });
-
-            // Load exams dropdown
-            const { data: exams } = await supabase
-                .from('exams')
-                .select('id, exam_name, exam_type')
-                .order('exam_name');
-
-            const examSelect = document.getElementById('assignExamSelect');
-            examSelect.innerHTML = '<option value="">Select an exam</option>';
-            exams?.forEach(exam => {
-                const option = document.createElement('option');
-                option.value = exam.id;
-                option.textContent = `${exam.exam_name} (${exam.exam_type})`;
-                examSelect.appendChild(option);
-            });
-
-            document.getElementById('assignExamModal').style.display = 'flex';
+    const studentSelect = document.getElementById('assignStudentSelect');
+    studentSelect.innerHTML = '';
+    students?.forEach(student => {
+        const option = document.createElement('option');
+        option.value = student.id;
+        option.textContent = `${student.full_name} (${student.email})`;
+        if (studentId && student.id === studentId) {
+            option.selected = true;
         }
+        studentSelect.appendChild(option);
+    });
 
-        async function confirmAssignExam() {
-            const studentId = document.getElementById('assignStudentSelect').value;
-            const examId = document.getElementById('assignExamSelect').value;
-            const dueDate = document.getElementById('assignDueDate').value;
+    // Load exams dropdown
+    const { data: exams } = await supabase
+        .from('exams')
+        .select('id, exam_name, exam_type')
+        .order('exam_name');
 
-            if (!studentId || !examId) {
-                alert('Please select both a student and an exam.');
+    const examSelect = document.getElementById('assignExamSelect');
+    examSelect.innerHTML = '<option value="">Select an exam</option>';
+    exams?.forEach(exam => {
+        const option = document.createElement('option');
+        option.value = exam.id;
+        option.textContent = `${exam.exam_name} (${exam.exam_type})`;
+        examSelect.appendChild(option);
+    });
+
+    document.getElementById('assignExamModal').style.display = 'flex';
+}
+
+      async function confirmAssignExam() {
+    const studentId = document.getElementById('assignStudentSelect').value;
+    const examId = document.getElementById('assignExamSelect').value;
+    const dueDate = document.getElementById('assignDueDate').value;
+
+    if (!studentId || !examId) {
+        alert('Please select both a student and an exam.');
+        return;
+    }
+
+    try {
+        // Check if student already has this exam
+        const { data: existing } = await supabase
+            .from('exam_grades')
+            .select('id')
+            .eq('student_id', studentId)
+            .eq('exam_id', examId)
+            .neq('question_id', '00000000-0000-0000-0000-000000000000')
+            .limit(1);
+
+        if (existing && existing.length > 0) {
+            if (!confirm('This student already has this exam. Do you want to reset it first?')) {
                 return;
             }
-
-            try {
-                // Check if student already has this exam
-                const { data: existing } = await supabase
-                    .from('exam_grades')
-                    .select('id')
-                    .eq('student_id', studentId)
-                    .eq('exam_id', examId)
-                    .neq('question_id', '00000000-0000-0000-0000-000000000000')
-                    .limit(1);
-
-                if (existing && existing.length > 0) {
-                    if (!confirm('This student already has this exam. Do you want to reset it first?')) {
-                        return;
-                    }
-                    // Delete existing exam data
-                    await supabase
-                        .from('exam_grades')
-                        .delete()
-                        .eq('student_id', studentId)
-                        .eq('exam_id', examId);
-                }
-
-                // Get student and exam details
-                const { data: student } = await supabase
-                    .from('student_profiles')
-                    .select('full_name')
-                    .eq('id', studentId)
-                    .single();
-
-                const { data: exam } = await supabase
-                    .from('exams')
-                    .select('exam_name')
-                    .eq('id', examId)
-                    .single();
-
-                alert(`✅ Exam assigned successfully!\n\n${student?.full_name} can now take "${exam?.exam_name}"`);
-
-                closeAssignModal();
-                
-                // Refresh data
-                if (currentTab === 'students') {
-                    loadStudentsWithResults();
-                }
-                loadAllStudents();
-                loadAllExams();
-                
-            } catch (error) {
-                console.error('Error assigning exam:', error);
-                alert('❌ Error assigning exam. Please try again.');
-            }
+            // Delete existing exam data
+            await supabase
+                .from('exam_grades')
+                .delete()
+                .eq('student_id', studentId)
+                .eq('exam_id', examId);
         }
 
+        // Get student and exam details - FIXED: Use consolidated_user_profiles_table
+        const { data: student } = await supabase
+            .from('consolidated_user_profiles_table')
+            .select('full_name')
+            .eq('id', studentId)
+            .single();
+
+        const { data: exam } = await supabase
+            .from('exams')
+            .select('exam_name')
+            .eq('id', examId)
+            .single();
+
+        alert(`✅ Exam assigned successfully!\n\n${student?.full_name} can now take "${exam?.exam_name}"`);
+
+        closeAssignModal();
+        
+        // Refresh data
+        if (currentTab === 'students') {
+            loadStudentsWithResults();
+        }
+        loadAllStudents();
+        loadAllExams();
+        
+    } catch (error) {
+        console.error('Error assigning exam:', error);
+        alert('❌ Error assigning exam. Please try again.');
+    }
+}
         function closeAssignModal() {
             document.getElementById('assignExamModal').style.display = 'none';
         }
