@@ -15,6 +15,7 @@ h1 { color:#073450; }
 .exam-card button { padding:10px 20px; border:none; border-radius:8px; background:#38A169; color:#fff; font-weight:600; cursor:pointer; }
 .exam-card button:hover{ background:#2F855A; }
 .exam-card button:disabled { background:#6B7280; cursor:not-allowed; }
+.filter-info { background:#E2E8F0; padding:10px; border-radius:8px; margin-bottom:20px; text-align:center; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -25,7 +26,10 @@ h1 { color:#073450; }
     <p id="userInfo">Loading user info...</p>
 </header>
 
-<div class="exam-list" id="examList">Loading exams...</div>
+<div class="exam-list">
+    <div id="filterInfo" class="filter-info"></div>
+    <div id="examList">Loading exams...</div>
+</div>
 
 <script>
 const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
@@ -51,8 +55,7 @@ async function loadExams() {
             `Logged in as: <strong>${currentUserEmail}</strong> | 
              <button onclick="logout()" style="background:#DC2626; padding:5px 10px; border-radius:4px; color:white; border:none; cursor:pointer;">Logout</button>`;
 
-        // Load available exams for this student
-        // First get student details from consolidated table
+        // Load student details
         const { data: studentProfile, error: profileError } = await sb
             .from('consolidated_user_profiles_table')
             .select('program, block, intake_year')
@@ -65,26 +68,20 @@ async function loadExams() {
             return;
         }
 
+        // Show filter info
+        document.getElementById('filterInfo').innerHTML = 
+            `Showing exams for: <strong>${studentProfile.program}</strong> | 
+             Block: <strong>${studentProfile.block || 'Any'}</strong> | 
+             Intake: <strong>${studentProfile.intake_year}</strong>`;
+
         console.log('Student Profile:', studentProfile);
 
-        // FIXED: Better query for exams
-        let query = sb
+        // FIXED: SIMPLIFIED QUERY - Get ALL upcoming exams first
+        const { data: exams, error: examsError } = await sb
             .from('exams_with_courses')
             .select('*')
-            .eq('intake_year', studentProfile.intake_year)
-            .eq('status', 'Upcoming');
-
-        // Apply filters for program and block
-        // Exams can be: Specific to program OR General
-        // Exams can be: Specific to block OR null OR General
-        query = query.or(`program_type.eq.${studentProfile.program},program_type.eq.General`);
-        
-        // For block: can be student's block OR null OR General
-        if (studentProfile.block) {
-            query = query.or(`block_term.eq.${studentProfile.block},block_term.is.null,block_term.eq.General`);
-        }
-
-        const { data: exams, error: examsError } = await query.order('exam_date', { ascending: true });
+            .eq('status', 'Upcoming')
+            .order('exam_date', { ascending: true });
 
         if (examsError) {
             console.error('Error loading exams:', examsError);
@@ -92,9 +89,35 @@ async function loadExams() {
             return;
         }
 
-        console.log('Available exams:', exams);
+        console.log('All upcoming exams:', exams);
 
-        // Also check which exams the student has already taken
+        // Filter exams on client side for better control
+        const filteredExams = exams.filter(exam => {
+            // 1. Check intake year (exact match required)
+            if (exam.intake_year !== studentProfile.intake_year) {
+                return false;
+            }
+            
+            // 2. Check program type
+            // Allow: exact program match OR 'General' program
+            if (exam.program_type !== studentProfile.program && exam.program_type !== 'General') {
+                return false;
+            }
+            
+            // 3. Check block term (if specified in exam)
+            // Allow: exact block match OR null/undefined OR 'General'
+            if (exam.block_term && 
+                exam.block_term !== studentProfile.block && 
+                exam.block_term !== 'General') {
+                return false;
+            }
+            
+            return true;
+        });
+
+        console.log('Filtered exams for student:', filteredExams);
+
+        // Check which exams the student has already taken
         const { data: takenExams, error: takenError } = await sb
             .from('exam_grades')
             .select('exam_id')
@@ -106,12 +129,22 @@ async function loadExams() {
         const container = document.getElementById('examList');
         container.innerHTML = '';
 
-        if (!exams || exams.length === 0) {
-            container.innerHTML = '<div class="exam-card">No upcoming exams found for your program.</div>';
+        if (!filteredExams || filteredExams.length === 0) {
+            container.innerHTML = `
+                <div class="exam-card">
+                    <strong>No upcoming exams found</strong><br>
+                    <small>Matching criteria: ${studentProfile.program}, ${studentProfile.intake_year}</small>
+                </div>
+                <div class="exam-card">
+                    <strong>Debug Info:</strong><br>
+                    <small>Total upcoming exams in system: ${exams?.length || 0}</small><br>
+                    <small>Your filters: Program=${studentProfile.program}, Block=${studentProfile.block}, Year=${studentProfile.intake_year}</small>
+                </div>
+            `;
             return;
         }
 
-        exams.forEach(exam => {
+        filteredExams.forEach(exam => {
             const div = document.createElement('div');
             div.className = 'exam-card';
             
@@ -121,11 +154,11 @@ async function loadExams() {
             const buttonColor = isTaken ? '#6B7280' : '#38A169';
             
             div.innerHTML = `
-                <div>
+                <div style="flex-grow:1;">
                     <strong>${exam.exam_name}</strong><br>
-                    <small>Course: ${exam.course_name || 'General'}</small><br>
+                    <small>Course: ${exam.course_name || 'General'} | Type: ${exam.exam_type || 'EXAM'}</small><br>
                     <small>Date: ${exam.exam_date} | Duration: ${exam.duration_minutes || 30} min</small><br>
-                    <small>Type: ${exam.exam_type || 'EXAM'} | Program: ${exam.program_type || 'General'}</small>
+                    <small>Program: ${exam.program_type || 'General'} | Block: ${exam.block_term || 'Any'}</small>
                 </div>
                 <button onclick="${isTaken ? 'viewResults' : 'startExam'}('${exam.id}')" 
                         style="background:${buttonColor}"
@@ -136,6 +169,20 @@ async function loadExams() {
             container.appendChild(div);
         });
 
+        // Add debug info
+        const debugDiv = document.createElement('div');
+        debugDiv.className = 'exam-card';
+        debugDiv.style.background = '#F1F5F9';
+        debugDiv.innerHTML = `
+            <small>
+                <strong>Debug Info:</strong><br>
+                Total upcoming exams: ${exams?.length || 0}<br>
+                Filtered for you: ${filteredExams.length}<br>
+                Taken by you: ${takenExamIds.length}
+            </small>
+        `;
+        container.appendChild(debugDiv);
+
     } catch (err) {
         console.error('Unexpected error:', err);
         document.getElementById('examList').innerText = 'Error loading exams.';
@@ -143,13 +190,11 @@ async function loadExams() {
 }
 
 function startExam(examId) {
-    // CRITICAL FIX: Pass user ID in the URL
     const userId = localStorage.getItem('currentUserId');
     window.location.href = `exam.html?exam_id=${examId}&user_id=${userId}`;
 }
 
 function viewResults(examId) {
-    // You can implement a results viewing page here
     alert('Results viewing feature coming soon!');
 }
 
