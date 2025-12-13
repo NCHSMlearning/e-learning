@@ -223,12 +223,11 @@ button#submit-exam-btn:disabled { background: #FCA5A5; cursor: not-allowed; box-
     <div class="sidebar">
         <div id="timer">Loading timer...</div>
         <div class="status-title">Question Status</div>
-        <div id="question-status-table">
-            </div>
+        <div id="question-status-table"></div>
     </div>
     
     <div class="exam-main">
-        <h1>Examination</h1>
+        <h1 id="exam-title">Examination</h1>
         
         <div id="progress">
             Question <span id="current">0</span> of <span id="total">0</span>
@@ -258,9 +257,7 @@ button#submit-exam-btn:disabled { background: #FCA5A5; cursor: not-allowed; box-
 <div id="submission-modal" class="modal-overlay">
     <div class="modal-content">
         <h3>Final Submission Confirmation</h3>
-        <p>
-            You are about to submit your exam. Please confirm.
-        </p>
+        <p id="modal-message">You are about to submit your exam. Please confirm.</p>
         <div class="modal-buttons">
             <button id="cancel-submit-btn">Cancel</button>
             <button id="confirm-submit-btn">Confirm & Submit</button>
@@ -269,70 +266,90 @@ button#submit-exam-btn:disabled { background: #FCA5A5; cursor: not-allowed; box-
 </div>
 
 <script>
-// IMPORTANT: Ensure your Supabase exam_grades table has a composite unique constraint/primary key on (student_id, exam_id, question_id) for upsert to work correctly.
-
 // --- CONFIGURATION ---
-const SUPABASE_URL='https://lwhtjozfsmbyihenfunw.supabase.co';
-const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
+const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
 const REDIRECT_URL = 'https://nakurucollegeofhealthelearning.site/exam_dashboard.html';
 
-const sb=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const params=new URLSearchParams(window.location.search);
-const EXAM_ID=params.get('exam_id');
-let studentId=localStorage.getItem('currentUserId'); 
-let questions=[], currentIndex=0, duration=0, timerInterval;
-let answers={}; 
+const params = new URLSearchParams(window.location.search);
+const EXAM_ID = params.get('exam_id');
+let studentId = localStorage.getItem('currentUserId'); 
+let questions = [], currentIndex = 0, duration = 0, timerInterval;
+let answers = {}; 
 let hasAnsweredAtLeastOne = false; 
+let examType = 'EXAM'; // Store exam type globally
 
 // References to the modal elements
 const submissionModal = document.getElementById('submission-modal');
 const confirmSubmitBtn = document.getElementById('confirm-submit-btn');
 const cancelSubmitBtn = document.getElementById('cancel-submit-btn');
 const finalSubmitBtn = document.getElementById('submit-exam-btn');
+const modalMessage = document.getElementById('modal-message');
+const examTitle = document.getElementById('exam-title');
 
-
-if(!studentId){ 
-    window.location.href='exam_login.html'; 
+if (!studentId) { 
+    window.location.href = 'exam_login.html'; 
 }
 
 // --- NAVIGATION FUNCTIONS ---
-function nextQuestion(){
-    if(currentIndex < questions.length - 1){
+function nextQuestion() {
+    if (currentIndex < questions.length - 1) {
         renderQuestion(currentIndex + 1);
     }
 }
-function prevQuestion(){
-    if(currentIndex > 0){
+
+function prevQuestion() {
+    if (currentIndex > 0) {
         renderQuestion(currentIndex - 1);
     }
 }
 
 // --- CORE FUNCTIONS ---
-async function initExam(){
-    try{
-        const { data: examData } = await sb.from('exams_with_courses').select('*').eq('id',EXAM_ID).maybeSingle();
-        if(!examData){ document.getElementById('error').innerText='Exam not found'; return; }
-        duration=examData.duration_minutes||30;
-
-        const { data: qData, error: qError } = await sb.from('questions').select('*').eq('exam_id',EXAM_ID);
-        if(qError || !qData || qData.length===0){ 
-            document.getElementById('exam-container').innerText='No questions found or failed to load questions.'; 
-            console.error(qError);
+async function initExam() {
+    try {
+        // Get exam details including exam_type
+        const { data: examData, error: examError } = await sb.from('exams')
+            .select('exam_name, exam_type, duration_minutes')
+            .eq('id', EXAM_ID)
+            .single();
+        
+        if (examError || !examData) { 
+            document.getElementById('error').innerText = 'Exam not found'; 
             return; 
         }
-        questions=qData;
+        
+        // Set exam details
+        duration = examData.duration_minutes || 30;
+        examType = examData.exam_type || 'EXAM';
+        examTitle.textContent = examData.exam_name || 'Examination';
+        
+        // Load questions from exam_questions table
+        const { data: qData, error: qError } = await sb.from('exam_questions')
+            .select('*')
+            .eq('exam_id', EXAM_ID)
+            .order('question_number', { ascending: true });
+        
+        if (qError || !qData || qData.length === 0) { 
+            document.getElementById('exam-container').innerText = 'No questions found or failed to load questions.'; 
+            console.error('Question error:', qError);
+            return; 
+        }
+        
+        questions = qData;
 
         await loadExistingAnswers();
         
-        document.getElementById('total').innerText=questions.length;
+        document.getElementById('total').innerText = questions.length;
         renderQuestionStatusTable();
         renderQuestion();
-        startTimer(duration*60);
+        startTimer(duration * 60);
         lockDown();
-    }catch(err){ 
-        console.error(err); 
-        document.getElementById('error').innerText='Error loading exam.'; 
+        
+    } catch (err) { 
+        console.error('Init exam error:', err); 
+        document.getElementById('error').innerText = 'Error loading exam.'; 
     }
 }
 
@@ -362,42 +379,48 @@ async function loadExistingAnswers() {
     }
 }
 
-function renderQuestion(index = currentIndex){
+function renderQuestion(index = currentIndex) {
     currentIndex = index;
-    const q=questions[currentIndex];
-    const container=document.getElementById('exam-container');
+    const q = questions[currentIndex];
+    const container = document.getElementById('exam-container');
     
-    container.innerHTML='';
+    container.innerHTML = '';
 
     const questionText = document.createElement('div');
     questionText.className = 'question';
-    questionText.innerHTML = `<p><strong>Q${currentIndex+1}:</strong> ${q.question}</p>`;
+    questionText.innerHTML = `<p><strong>Q${currentIndex + 1}:</strong> ${q.question_text}</p>`;
     container.appendChild(questionText);
 
-    const ul=document.createElement('ul'); ul.className='options';
-    // Ensure options are parsed if they are stored as JSON string
-    const opts=Array.isArray(q.options)?q.options:JSON.parse(q.options); 
+    const ul = document.createElement('ul'); 
+    ul.className = 'options';
     
-    opts.forEach(opt=>{
-        const li=document.createElement('li');
-        li.innerHTML=`<label><input type="radio" name="q${q.id}" value="${opt}"> <span>${opt}</span></label>`; 
+    // Create options array from individual columns
+    const options = [];
+    if (q.option_a) options.push({ letter: 'A', text: q.option_a });
+    if (q.option_b) options.push({ letter: 'B', text: q.option_b });
+    if (q.option_c) options.push({ letter: 'C', text: q.option_c });
+    if (q.option_d) options.push({ letter: 'D', text: q.option_d });
+    
+    options.forEach(opt => {
+        const li = document.createElement('li');
+        li.innerHTML = `<label><input type="radio" name="q${q.id}" value="${opt.letter}"> <span>${opt.letter}: ${opt.text}</span></label>`; 
         ul.appendChild(li);
     });
     container.appendChild(ul);
 
     // RESTORE STATE
-    if(answers[q.id]){
-        const input=document.querySelector(`input[name="q${q.id}"][value="${answers[q.id]}"]`);
-        if(input) input.checked=true;
+    if (answers[q.id]) {
+        const input = document.querySelector(`input[name="q${q.id}"][value="${answers[q.id]}"]`);
+        if (input) input.checked = true;
     }
 
     updateProgressUI();
     updateStatusTableUI();
 
     // Add event listener for auto-save and Submit button enablement
-    const radios=document.querySelectorAll(`input[name="q${q.id}"]`);
-    radios.forEach(r=>{
-        r.addEventListener('change', ()=>{ 
+    const radios = document.querySelectorAll(`input[name="q${q.id}"]`);
+    radios.forEach(r => {
+        r.addEventListener('change', () => { 
             saveAnswer(r.value);
             if (!hasAnsweredAtLeastOne) {
                 hasAnsweredAtLeastOne = true;
@@ -458,18 +481,19 @@ function updateProgressUI() {
 }
 
 // --- PERSISTENCE AND SUBMISSION ---
-async function saveAnswer(selectedAnswerValue){
-    const q=questions[currentIndex];
+async function saveAnswer(selectedAnswerValue) {
+    const q = questions[currentIndex];
     const answer = selectedAnswerValue;
     
     answers[q.id] = answer; 
 
-    document.getElementById('answer-saved').style.display='block';
-    setTimeout(()=>{ document.getElementById('answer-saved').style.display='none'; },1000);
+    document.getElementById('answer-saved').style.display = 'block';
+    setTimeout(() => { document.getElementById('answer-saved').style.display = 'none'; }, 1000);
 
+    // Calculate marks based on correct answer
     const marks = answer === q.correct_answer ? (q.marks || 1) : 0;
     
-    try{
+    try {
         await sb.from('exam_grades').upsert(
             [{
                 student_id: studentId, 
@@ -479,48 +503,44 @@ async function saveAnswer(selectedAnswerValue){
                 marks, 
                 graded_at: new Date()
             }],
-            {onConflict:['student_id','exam_id','question_id']}
+            { onConflict: ['student_id', 'exam_id', 'question_id'] }
         );
-    }catch(err){ 
+    } catch (err) { 
         console.error('Error saving answer', err);
-        document.getElementById('error').innerText='Warning: Could not save answer to server!';
+        document.getElementById('error').innerText = 'Warning: Could not save answer to server!';
     }
 }
 
-// MODIFIED: This function now calculates skipped count and updates/shows the modal
-function submitExam(){
+function submitExam() {
     let skippedCount = 0;
     
     // Count skipped questions
     questions.forEach(q => {
-        // If question ID is missing from answers OR the value is null (was skipped/unanswered)
         if (!answers.hasOwnProperty(q.id) || answers[q.id] === null) {
             skippedCount++;
         }
     });
 
-    const modalMessageEl = submissionModal.querySelector('.modal-content p');
-    let message = `You are about to submit your exam. Please confirm.`;
+    let message = `You are about to submit your ${examType} exam. Please confirm.`;
 
     if (skippedCount > 0) {
-        // Display a strong warning about the skipped questions
-        message += ` **Warning:** You have **${skippedCount}** unanswered question(s). These will be marked as incorrect (0 marks).`;
+        message += ` <br><br><strong style="color:#DC2626;">⚠️ Warning:</strong> You have <strong>${skippedCount}</strong> unanswered question(s). These will be marked as incorrect (0 marks).`;
     } else {
-        message += ` All questions have been answered.`;
+        message += ` <br><br>✅ All ${questions.length} questions have been answered.`;
     }
     
-    modalMessageEl.innerHTML = message;
+    modalMessage.innerHTML = message;
     submissionModal.style.display = 'flex';
 }
 
-// NEW FUNCTION: Handles the actual submission after confirmation
-async function executeSubmission(){
+// MAIN SUBMISSION FUNCTION
+async function executeSubmission() {
     // Disable all buttons to prevent double-clicks
     document.querySelectorAll('button').forEach(btn => btn.disabled = true);
     submissionModal.style.display = 'none';
     document.getElementById('error').innerText = 'Submitting final answers...';
 
-    // Logic to record all skipped/unanswered questions with 0 marks (CRITICAL)
+    // Save all unanswered questions as 0 marks
     const skippedEntries = [];
     questions.forEach(q => {
         const questionId = q.id;
@@ -537,28 +557,149 @@ async function executeSubmission(){
     });
 
     if (skippedEntries.length > 0) {
-        // Upsert the zero-mark entries for skipped questions
-        const { error } = await sb.from('exam_grades').upsert(skippedEntries, {onConflict:['student_id','exam_id','question_id']});
+        const { error } = await sb.from('exam_grades').upsert(skippedEntries, { onConflict: ['student_id', 'exam_id', 'question_id'] });
         if (error) {
             console.error('Error saving skipped answers:', error);
-            document.getElementById('error').innerText = 'CRITICAL ERROR: Submission failed to finalize skipped questions in the database. (Check Supabase constraint!)';
-            return;
         }
     }
+    
+    // Calculate and save final grade based on exam type
+    await calculateAndSaveFinalGrade();
     
     showFinalScreen();
 
     document.getElementById('error').innerText = '';
-    document.getElementById('final-msg').innerText = '✅ Exam submitted successfully! Redirecting to dashboard...';
+    document.getElementById('final-msg').innerText = `✅ ${examType} submitted successfully! Redirecting to dashboard...`;
     
-    // --- REDIRECT TO DASHBOARD ---
+    // Redirect to dashboard
     setTimeout(() => {
         window.location.href = REDIRECT_URL; 
-    }, 1500); 
+    }, 2500); 
 }
 
+// CRITICAL FUNCTION: Calculate and save grade based on exam type
+async function calculateAndSaveFinalGrade() {
+    try {
+        // Get all answers for this exam
+        const { data: allAnswers } = await sb.from('exam_grades')
+            .select('marks')
+            .eq('student_id', studentId)
+            .eq('exam_id', EXAM_ID);
+        
+        if (!allAnswers || allAnswers.length === 0) {
+            console.log('No answers found to calculate grade');
+            return;
+        }
 
-function showFinalScreen(){
+        // Calculate total marks (sum of all question marks)
+        const totalMarks = allAnswers.reduce((sum, answer) => sum + (answer.marks || 0), 0);
+        
+        console.log(`📊 Calculating grade for ${examType}: ${totalMarks} total marks`);
+        
+        // Calculate percentage and prepare grade data based on exam type
+        let percentage = 0;
+        let gradeData = {
+            student_id: studentId,
+            exam_id: EXAM_ID,
+            question_id: '00000000-0000-0000-0000-000000000000', // Special ID for total
+            total_score: 0,
+            result_status: 'Final',
+            graded_at: new Date().toISOString(),
+            graded_by: 'system_auto_grade' // Indicates auto-graded by system
+        };
+
+        if (examType === 'CAT_1' || examType === 'CAT') {
+            // CAT 1 or generic CAT: out of 30 marks
+            percentage = ((totalMarks / 30) * 100);
+            gradeData.cat_1_score = totalMarks;
+            gradeData.total_score = parseFloat(percentage.toFixed(2));
+            console.log(`✅ CAT 1 Grade: ${totalMarks}/30 = ${gradeData.total_score}%`);
+            
+        } else if (examType === 'CAT_2') {
+            // CAT 2: out of 30 marks
+            percentage = ((totalMarks / 30) * 100);
+            gradeData.cat_2_score = totalMarks;
+            gradeData.total_score = parseFloat(percentage.toFixed(2));
+            console.log(`✅ CAT 2 Grade: ${totalMarks}/30 = ${gradeData.total_score}%`);
+            
+        } else if (examType === 'EXAM') {
+            // Final Exam: out of 100 marks (for just the exam portion)
+            percentage = ((totalMarks / 100) * 100);
+            gradeData.exam_score = totalMarks;
+            gradeData.total_score = parseFloat(percentage.toFixed(2));
+            console.log(`✅ Final Exam Grade: ${totalMarks}/100 = ${gradeData.total_score}%`);
+            
+        } else if (examType === 'ASSIGNMENT') {
+            // Assignment: store in appropriate field
+            percentage = ((totalMarks / 100) * 100);
+            gradeData.total_score = parseFloat(percentage.toFixed(2));
+            console.log(`✅ Assignment Grade: ${totalMarks}/100 = ${gradeData.total_score}%`);
+        }
+
+        // Save the final grade to exam_grades table
+        const { error: gradeError } = await sb.from('exam_grades').upsert(
+            [gradeData],
+            { onConflict: ['student_id', 'exam_id', 'question_id'] }
+        );
+
+        if (gradeError) {
+            console.error('❌ Error saving final grade:', gradeError);
+            
+            // Try alternative: Direct update to student's grade record
+            await updateStudentGradeDirectly(gradeData);
+        } else {
+            console.log('✅ Final grade saved successfully to database');
+            
+            // Also update the student's overall record if needed
+            await updateStudentGradeRecord(gradeData);
+        }
+        
+    } catch (error) {
+        console.error('❌ Error calculating final grade:', error);
+        document.getElementById('error').innerText = 'Grade calculation completed, but there was an issue saving to database.';
+    }
+}
+
+// Backup function if main save fails
+async function updateStudentGradeDirectly(gradeData) {
+    try {
+        // Try to update existing grade record
+        const { error } = await sb.from('exam_grades')
+            .update(gradeData)
+            .eq('student_id', studentId)
+            .eq('exam_id', EXAM_ID)
+            .eq('question_id', '00000000-0000-0000-0000-000000000000');
+            
+        if (error) {
+            // Try insert instead
+            const { error: insertError } = await sb.from('exam_grades')
+                .insert([gradeData]);
+                
+            if (insertError) {
+                console.error('Both update and insert failed:', insertError);
+            }
+        }
+    } catch (err) {
+        console.error('Direct update failed:', err);
+    }
+}
+
+// Update student's consolidated grade record
+async function updateStudentGradeRecord(gradeData) {
+    try {
+        // This would update a student's overall grade record if you have such a table
+        // For example: student_course_grades or similar
+        console.log('📝 Student grade processed:', gradeData);
+        
+        // You could add additional logic here to update student transcripts
+        // or send notifications about grade availability
+        
+    } catch (error) {
+        console.error('Error updating student record:', error);
+    }
+}
+
+function showFinalScreen() {
     clearInterval(timerInterval);
     window.removeEventListener('beforeunload', beforeUnloadHandler); 
     
@@ -567,28 +708,27 @@ function showFinalScreen(){
     document.getElementById('progress').style.display = 'none'; 
     document.getElementById('answer-saved').style.display = 'none';
     document.getElementById('timer').innerText = "Exam Ended.";
-    document.getElementById('final-msg').innerText='Exam submitted! Processing results...';
+    document.getElementById('final-msg').innerText = `${examType} submitted! Processing results...`;
 }
 
-
 // --- TIMER AND LOCKDOWN ---
-function startTimer(seconds){
-    const timerEl=document.getElementById('timer');
-    function updateTimer(){
-        const m=Math.floor(seconds/60), s=seconds%60;
+function startTimer(seconds) {
+    const timerEl = document.getElementById('timer');
+    function updateTimer() {
+        const m = Math.floor(seconds / 60), s = seconds % 60;
         const timeString = `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
-        timerEl.innerText=`Time Remaining: ${timeString}`;
-        if(seconds-- <=0) {
+        timerEl.innerText = `Time Remaining: ${timeString}`;
+        if (seconds-- <= 0) {
             // Timer expiry triggers submission automatically
             executeSubmission(); 
             return;
         }
     }
     updateTimer();
-    timerInterval=setInterval(updateTimer,1000);
+    timerInterval = setInterval(updateTimer, 1000);
 }
 
-function lockDown(){
+function lockDown() {
     document.addEventListener('contextmenu', e => e.preventDefault());
     document.addEventListener('copy', e => e.preventDefault());
     document.addEventListener('cut', e => e.preventDefault());
@@ -600,22 +740,22 @@ function lockDown(){
         if (document.hidden) {
             // Automatic submission if student leaves the page/tab
             executeSubmission(); 
-            alert('Warning: The exam was automatically submitted due to unauthorized page context change (leaving the tab/window).'); 
+            alert('Warning: The exam was automatically submitted due to unauthorized page context change.'); 
         }
     });
 }
 
-function beforeUnloadHandler(e){
+function beforeUnloadHandler(e) {
     e.preventDefault();
-    e.returnValue='Warning: Leaving this page will submit your exam immediately.';
+    e.returnValue = 'Warning: Leaving this page will submit your exam immediately.';
 }
 
 // --- EVENT LISTENERS ---
 document.getElementById('prev-btn').addEventListener('click', prevQuestion);
 document.getElementById('next-btn').addEventListener('click', nextQuestion);
-finalSubmitBtn.addEventListener('click', submitExam); // Shows the modal with the warning
-confirmSubmitBtn.addEventListener('click', executeSubmission); // Executes submission after confirmation
-cancelSubmitBtn.addEventListener('click', () => { // Hides the modal
+finalSubmitBtn.addEventListener('click', submitExam);
+confirmSubmitBtn.addEventListener('click', executeSubmission);
+cancelSubmitBtn.addEventListener('click', () => {
     submissionModal.style.display = 'none';
 });
 
