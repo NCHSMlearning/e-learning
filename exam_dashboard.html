@@ -25,6 +25,8 @@ button { padding:10px 20px; border:none; border-radius:8px; font-weight:600; cur
 .btn-details { background:#3B82F6; color:white; }
 .btn-details:hover { background:#2563EB; }
 .btn-disabled { background:#9CA3AF; color:white; cursor:not-allowed; }
+.refresh-btn { background:#8B5CF6; color:white; padding:8px 16px; border-radius:6px; border:none; cursor:pointer; margin-left:10px; }
+.refresh-btn:hover { background:#7C3AED; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -36,7 +38,9 @@ button { padding:10px 20px; border:none; border-radius:8px; font-weight:600; cur
 </header>
 
 <div class="exam-list">
-    <div id="filterInfo" class="filter-info"></div>
+    <div id="filterInfo" class="filter-info">
+        <button class="refresh-btn" onclick="refreshExams()" title="Refresh exams">🔄 Refresh</button>
+    </div>
     <div id="examList">Loading exams...</div>
 </div>
 
@@ -55,9 +59,17 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let currentUserId = null;
 let currentUserEmail = null;
+let isLoading = false;
 
-async function loadExams() {
+async function loadExams(showLoading = true) {
+    if (isLoading) return;
+    
     try {
+        isLoading = true;
+        if (showLoading) {
+            document.getElementById('examList').innerHTML = '<div class="exam-card">Loading exams...</div>';
+        }
+
         // Get current user
         currentUserId = localStorage.getItem('currentUserId');
         currentUserEmail = localStorage.getItem('studentEmail');
@@ -82,10 +94,12 @@ async function loadExams() {
         if (profileError) throw profileError;
 
         // Show filter info
-        document.getElementById('filterInfo').innerHTML = 
+        const filterInfo = document.getElementById('filterInfo');
+        filterInfo.innerHTML = 
             `Showing exams for: <strong>${studentProfile.program}</strong> | 
              Block: <strong>${studentProfile.block || 'Any'}</strong> | 
-             Intake: <strong>${studentProfile.intake_year}</strong>`;
+             Intake: <strong>${studentProfile.intake_year}</strong>
+             <button class="refresh-btn" onclick="refreshExams()" title="Refresh exams">🔄 Refresh</button>`;
 
         // Get ALL upcoming exams
         const { data: exams, error: examsError } = await sb
@@ -96,7 +110,7 @@ async function loadExams() {
 
         if (examsError) throw examsError;
 
-        // Get final grades for this student
+        // Get final grades for this student - force fresh fetch
         const { data: finalGrades, error: gradesError } = await sb
             .from('exam_grades')
             .select(`
@@ -111,7 +125,7 @@ async function loadExams() {
             .eq('student_id', currentUserId)
             .eq('question_id', '00000000-0000-0000-0000-000000000000');
 
-        console.log('Final grades:', finalGrades);
+        console.log('Final grades loaded:', finalGrades);
 
         // Filter exams for this student
         const filteredExams = exams.filter(exam => {
@@ -145,6 +159,9 @@ async function loadExams() {
             // Check if student has taken this exam
             const finalGrade = finalGrades?.find(g => g.exam_id === exam.id);
             const isTaken = !!finalGrade;
+            
+            // Debug log
+            console.log(`Exam: ${exam.exam_name}, Taken: ${isTaken}, Grade:`, finalGrade);
             
             // Build exam card content
             let examContent = `
@@ -213,14 +230,35 @@ async function loadExams() {
             container.appendChild(div);
         });
 
+        // Check for URL parameters that indicate exam completion
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has('exam_completed')) {
+            const examId = urlParams.get('exam_completed');
+            setTimeout(() => {
+                alert('Exam submitted successfully! Your results have been updated.');
+                // Remove the parameter from URL
+                window.history.replaceState({}, document.title, window.location.pathname);
+                // Refresh to show updated status
+                refreshExams();
+            }, 500);
+        }
+
     } catch (err) {
         console.error('Error:', err);
         document.getElementById('examList').innerHTML = 
             `<div class="exam-card">
                 <strong>Error loading exams.</strong><br>
                 <small>${err.message}</small>
+                <button class="refresh-btn" onclick="refreshExams()">Try Again</button>
             </div>`;
+    } finally {
+        isLoading = false;
     }
+}
+
+function refreshExams() {
+    console.log('Refreshing exams...');
+    loadExams(false);
 }
 
 function startExam(examId) {
@@ -346,7 +384,29 @@ function logout() {
     window.location.href = 'exam_login.html';
 }
 
-window.addEventListener('DOMContentLoaded', loadExams);
+// Auto-refresh when page becomes visible (if user returns from exam page)
+document.addEventListener('visibilitychange', function() {
+    if (!document.hidden) {
+        // Page is now visible again, refresh data
+        refreshExams();
+    }
+});
+
+// Also refresh when page is focused
+window.addEventListener('focus', refreshExams);
+
+// Initial load
+window.addEventListener('DOMContentLoaded', () => {
+    loadExams();
+    
+    // Check if we're returning from an exam
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('from_exam')) {
+        setTimeout(refreshExams, 1000); // Refresh after 1 second
+        // Clean URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+    }
+});
 </script>
 </body>
 </html>
