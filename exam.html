@@ -369,28 +369,20 @@ button#submit-exam-btn:disabled { background: #FCA5A5; cursor: not-allowed; box-
 
 <script>
 // --- IMPROVED AUTHENTICATION SYSTEM ---
-// FIXED: Better authentication for exam page
 function getStudentId() {
-    // Try URL parameters first (from dashboard link)
     const params = new URLSearchParams(window.location.search);
     const urlUserId = params.get('user_id');
-    
-    // Try localStorage next (if coming directly)
     const localUserId = localStorage.getItem('currentUserId');
-    
-    // Return the first found
     return urlUserId || localUserId;
 }
 
 let studentId = getStudentId();
 
 if (!studentId) {
-    // Redirect to login with return URL
     const returnUrl = encodeURIComponent(window.location.href);
     window.location.href = `exam_login.html?return=${returnUrl}`;
 } else {
     console.log('✅ Student authenticated:', studentId.substring(0, 8) + '...');
-    // Also store in localStorage for future use
     localStorage.setItem('currentUserId', studentId);
 }
 
@@ -406,7 +398,7 @@ const EXAM_ID = params.get('exam_id');
 let questions = [], currentIndex = 0, duration = 0, timerInterval;
 let answers = {}; 
 let hasAnsweredAtLeastOne = false; 
-let examType = 'EXAM'; // Store exam type globally
+let examType = 'EXAM';
 
 // References to the modal elements
 const submissionModal = document.getElementById('submission-modal');
@@ -435,7 +427,6 @@ function prevQuestion() {
 // --- CORE FUNCTIONS ---
 async function initExam() {
     try {
-        // Get exam details including exam_type
         const { data: examData, error: examError } = await sb.from('exams')
             .select('exam_name, exam_type, duration_minutes')
             .eq('id', EXAM_ID)
@@ -446,12 +437,10 @@ async function initExam() {
             return; 
         }
         
-        // Set exam details
         duration = examData.duration_minutes || 30;
         examType = examData.exam_type || 'EXAM';
         examTitle.textContent = examData.exam_name || 'Examination';
         
-        // Load questions from exam_questions table
         const { data: qData, error: qError } = await sb.from('exam_questions')
             .select('*')
             .eq('exam_id', EXAM_ID)
@@ -490,7 +479,6 @@ async function loadExistingAnswers() {
         
         if (data && data.length > 0) {
             data.forEach(item => {
-                // Only load if an answer was actually selected (not null/skipped)
                 if (item.selected_answer !== null) { 
                     answers[item.question_id] = item.selected_answer;
                     hasAnsweredAtLeastOne = true;
@@ -504,32 +492,28 @@ async function loadExistingAnswers() {
         console.error('Error loading existing answers:', err);
     }
 }
+
 function renderQuestion(index = currentIndex) {
     currentIndex = index;
     const q = questions[currentIndex];
     const container = document.getElementById('exam-container');
     
-    // Clear container
     container.innerHTML = '';
 
-    // Create question text
     const questionText = document.createElement('div');
     questionText.className = 'question';
     questionText.innerHTML = `<p><strong>Q${currentIndex + 1}:</strong> ${q.question_text}</p>`;
     container.appendChild(questionText);
 
-    // Create options list
     const ul = document.createElement('ul'); 
     ul.className = 'options';
     
-    // Create options array
     const options = [];
     if (q.option_a) options.push({ letter: 'A', text: q.option_a });
     if (q.option_b) options.push({ letter: 'B', text: q.option_b });
     if (q.option_c) options.push({ letter: 'C', text: q.option_c });
     if (q.option_d) options.push({ letter: 'D', text: q.option_d });
     
-    // Create radio buttons
     options.forEach(opt => {
         const li = document.createElement('li');
         const radioId = `q${q.id}_${opt.letter}`;
@@ -544,7 +528,6 @@ function renderQuestion(index = currentIndex) {
     });
     container.appendChild(ul);
 
-    // RESTORE PREVIOUS ANSWER
     if (answers[q.id]) {
         const input = document.querySelector(`input[name="question_${q.id}"][value="${answers[q.id]}"]`);
         if (input) {
@@ -553,21 +536,17 @@ function renderQuestion(index = currentIndex) {
         }
     }
 
-    // Update UI
     updateProgressUI();
     updateStatusTableUI();
 
-    // FIXED: Add event listeners PROPERLY
     setTimeout(() => {
         const radios = document.querySelectorAll(`input[name="question_${q.id}"]`);
         console.log(`Found ${radios.length} radio buttons for Q${currentIndex + 1}`);
         
         radios.forEach(r => {
-            // Remove any existing listeners first
             const newRadio = r.cloneNode(true);
             r.parentNode.replaceChild(newRadio, r);
             
-            // Add new event listener
             newRadio.addEventListener('change', (event) => { 
                 console.log(`Radio changed for Q${currentIndex + 1}:`, event.target.value);
                 saveAnswer(event.target.value);
@@ -578,7 +557,7 @@ function renderQuestion(index = currentIndex) {
                 updateStatusTableUI(); 
             });
         });
-    }, 100); // Small delay to ensure DOM is ready
+    }, 100);
 }
 
 // --- STATUS TABLE FUNCTIONS ---
@@ -643,13 +622,11 @@ async function saveAnswer(selectedAnswerValue) {
     
     answers[q.id] = answer; 
 
-    // Show save confirmation
     document.getElementById('answer-saved').style.display = 'block';
     setTimeout(() => { 
         document.getElementById('answer-saved').style.display = 'none'; 
     }, 1000);
 
-    // Calculate marks based on correct answer
     const marks = answer === q.correct_answer ? (q.marks || 1) : 0;
     console.log('Marks calculated:', marks);
     
@@ -682,7 +659,6 @@ async function saveAnswer(selectedAnswerValue) {
 function submitExam() {
     let skippedCount = 0;
     
-    // Count skipped questions
     questions.forEach(q => {
         if (!answers.hasOwnProperty(q.id) || answers[q.id] === null) {
             skippedCount++;
@@ -701,6 +677,166 @@ function submitExam() {
     submissionModal.style.display = 'flex';
 }
 
+// CRITICAL FUNCTION: Calculate and save grade based on exam type
+async function calculateAndSaveFinalGrade() {
+    try {
+        console.log('=== CALCULATING FINAL GRADE FOR EXAM:', EXAM_ID, 'TYPE:', examType);
+        
+        // First, ensure all answers are saved (including unanswered ones as 0 marks)
+        const skippedEntries = [];
+        questions.forEach(q => {
+            const questionId = q.id;
+            if (!answers.hasOwnProperty(questionId) || answers[questionId] === null) {
+                skippedEntries.push({
+                    student_id: studentId, 
+                    exam_id: EXAM_ID, 
+                    question_id: questionId, 
+                    selected_answer: null, 
+                    marks: 0, 
+                    graded_at: new Date().toISOString()
+                });
+            }
+        });
+
+        if (skippedEntries.length > 0) {
+            const { error } = await sb.from('exam_grades').upsert(skippedEntries, { 
+                onConflict: ['student_id', 'exam_id', 'question_id'] 
+            });
+            if (error) {
+                console.error('Error saving skipped answers:', error);
+            } else {
+                console.log(`Saved ${skippedEntries.length} unanswered questions as 0 marks`);
+            }
+        }
+
+        // Wait a moment to ensure all records are saved
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Get ALL answers for this exam (excluding any potential total records)
+        const { data: allAnswers, error: answersError } = await sb.from('exam_grades')
+            .select('marks, selected_answer')
+            .eq('student_id', studentId)
+            .eq('exam_id', EXAM_ID)
+            .neq('question_id', '00000000-0000-0000-0000-000000000000');
+        
+        if (answersError) {
+            console.error('❌ Error fetching answers:', answersError);
+            return;
+        }
+        
+        if (!allAnswers || allAnswers.length === 0) {
+            console.log('No answers found to calculate grade');
+            return;
+        }
+
+        // Calculate total marks (sum of all question marks)
+        const totalMarks = allAnswers.reduce((sum, answer) => sum + (answer.marks || 0), 0);
+        const totalQuestions = allAnswers.length;
+        const answeredQuestions = allAnswers.filter(a => a.selected_answer !== null).length;
+        
+        console.log(`📊 Grade Calculation Summary:`);
+        console.log(`- Total Questions: ${totalQuestions}`);
+        console.log(`- Answered Questions: ${answeredQuestions}`);
+        console.log(`- Total Marks: ${totalMarks}`);
+        
+        // Calculate percentage and prepare grade data based on exam type
+        let percentage = 0;
+        let gradeData = {
+            student_id: studentId,
+            exam_id: EXAM_ID,
+            question_id: '00000000-0000-0000-0000-000000000000',
+            total_score: 0,
+            result_status: 'COMPLETED',
+            graded_at: new Date().toISOString(),
+            graded_by: 'system_auto_grade',
+            cat_1_score: null,
+            cat_2_score: null,
+            exam_score: null
+        };
+
+        // Determine total possible marks based on exam type and questions
+        if (examType === 'CAT_1' || examType === 'CAT') {
+            // CAT 1: Each question is typically 1 mark, total out of 30
+            const totalPossible = Math.min(30, totalQuestions);
+            percentage = totalPossible > 0 ? ((totalMarks / totalPossible) * 100) : 0;
+            gradeData.cat_1_score = totalMarks;
+            gradeData.total_score = parseFloat(percentage.toFixed(2));
+            console.log(`✅ CAT 1 Grade: ${totalMarks}/${totalPossible} = ${gradeData.total_score}%`);
+            
+        } else if (examType === 'CAT_2') {
+            // CAT 2: Each question is typically 1 mark, total out of 30
+            const totalPossible = Math.min(30, totalQuestions);
+            percentage = totalPossible > 0 ? ((totalMarks / totalPossible) * 100) : 0;
+            gradeData.cat_2_score = totalMarks;
+            gradeData.total_score = parseFloat(percentage.toFixed(2));
+            console.log(`✅ CAT 2 Grade: ${totalMarks}/${totalPossible} = ${gradeData.total_score}%`);
+            
+        } else if (examType === 'EXAM') {
+            // Final Exam: Calculate based on question marks
+            const { data: questionMarks } = await sb.from('exam_questions')
+                .select('marks')
+                .eq('exam_id', EXAM_ID);
+            
+            const totalPossible = questionMarks?.reduce((sum, q) => sum + (q.marks || 1), 0) || totalQuestions;
+            percentage = totalPossible > 0 ? ((totalMarks / totalPossible) * 100) : 0;
+            gradeData.exam_score = totalMarks;
+            gradeData.total_score = parseFloat(percentage.toFixed(2));
+            console.log(`✅ Final Exam Grade: ${totalMarks}/${totalPossible} = ${gradeData.total_score}%`);
+            
+        } else {
+            // Default: calculate percentage based on total questions
+            const totalPossible = totalQuestions;
+            percentage = totalPossible > 0 ? ((totalMarks / totalPossible) * 100) : 0;
+            gradeData.total_score = parseFloat(percentage.toFixed(2));
+            console.log(`✅ Default Grade: ${totalMarks}/${totalPossible} = ${gradeData.total_score}%`);
+        }
+
+        // Determine pass/fail status (60% passing)
+        gradeData.result_status = gradeData.total_score >= 60 ? 'PASS' : 'FAIL';
+        console.log(`📊 Result Status: ${gradeData.result_status}`);
+
+        // Save the final grade to exam_grades table
+        console.log('📝 Saving final grade to database:', gradeData);
+        
+        const { data: savedGrade, error: gradeError } = await sb.from('exam_grades').upsert(
+            [gradeData],
+            { 
+                onConflict: 'student_id,exam_id,question_id'
+            }
+        );
+
+        if (gradeError) {
+            console.error('❌ Error saving final grade:', gradeError);
+            
+            // Try alternative: Delete existing and insert fresh
+            try {
+                await sb.from('exam_grades')
+                    .delete()
+                    .eq('student_id', studentId)
+                    .eq('exam_id', EXAM_ID)
+                    .eq('question_id', '00000000-0000-0000-0000-000000000000');
+                
+                const { error: insertError } = await sb.from('exam_grades')
+                    .insert([gradeData]);
+                    
+                if (insertError) {
+                    console.error('❌ Insert after delete also failed:', insertError);
+                } else {
+                    console.log('✅ Final grade saved via delete+insert');
+                }
+            } catch (deleteError) {
+                console.error('❌ Delete failed:', deleteError);
+            }
+        } else {
+            console.log('✅ Final grade saved successfully to database');
+        }
+        
+    } catch (error) {
+        console.error('❌ Error calculating final grade:', error);
+        console.error('Error details:', error.message);
+    }
+}
+
 // MAIN SUBMISSION FUNCTION
 async function executeSubmission() {
     // Disable all buttons to prevent double-clicks
@@ -709,28 +845,8 @@ async function executeSubmission() {
     
     showSuccessScreen('submitting');
 
-    // Save all unanswered questions as 0 marks
-    const skippedEntries = [];
-    questions.forEach(q => {
-        const questionId = q.id;
-        if (!answers.hasOwnProperty(questionId) || answers[questionId] === null) {
-            skippedEntries.push({
-                student_id: studentId, 
-                exam_id: EXAM_ID, 
-                question_id: questionId, 
-                selected_answer: null, 
-                marks: 0, 
-                graded_at: new Date()
-            });
-        }
-    });
-
-    if (skippedEntries.length > 0) {
-        const { error } = await sb.from('exam_grades').upsert(skippedEntries, { onConflict: ['student_id', 'exam_id', 'question_id'] });
-        if (error) {
-            console.error('Error saving skipped answers:', error);
-        }
-    }
+    // DEBUG: Check current state
+    await debugExamState();
     
     // Calculate and save final grade based on exam type
     await calculateAndSaveFinalGrade();
@@ -751,10 +867,39 @@ async function executeSubmission() {
     }, 1000);
 }
 
-// Show beautiful success screen
+// Debug function
+async function debugExamState() {
+    console.log('=== DEBUG EXAM STATE ===');
+    console.log('Exam ID:', EXAM_ID);
+    console.log('Student ID:', studentId);
+    console.log('Exam Type:', examType);
+    console.log('Total Questions:', questions.length);
+    console.log('Answers saved locally:', Object.keys(answers).length);
+    
+    const { data: dbAnswers } = await sb.from('exam_grades')
+        .select('*')
+        .eq('student_id', studentId)
+        .eq('exam_id', EXAM_ID);
+    
+    console.log('Answers in database:', dbAnswers?.length || 0);
+    console.log('Database answers:', dbAnswers);
+    
+    const totalRecord = dbAnswers?.find(a => a.question_id === '00000000-0000-0000-0000-000000000000');
+    console.log('Total record exists:', !!totalRecord);
+    if (totalRecord) {
+        console.log('Total record details:', totalRecord);
+    }
+}
+
 function showSuccessScreen(status) {
     clearInterval(timerInterval);
-    window.removeEventListener('beforeunload', beforeUnloadHandler);
+    
+    // Remove the beforeunload event listener safely
+    try {
+        window.removeEventListener('beforeunload', beforeUnloadHandler);
+    } catch (e) {
+        console.log('Could not remove beforeunload handler:', e);
+    }
     
     const container = document.getElementById('exam-container');
     const navButtons = document.getElementById('nav-buttons');
@@ -763,7 +908,6 @@ function showSuccessScreen(status) {
     const timer = document.getElementById('timer');
     const finalMsg = document.getElementById('final-msg');
     
-    // Hide exam elements
     container.style.display = 'none';
     navButtons.style.display = 'none';
     progress.style.display = 'none';
@@ -811,121 +955,6 @@ function redirectToDashboard() {
     window.location.href = `${REDIRECT_URL}?exam_completed=${EXAM_ID}&type=${examType}`;
 }
 
-// CRITICAL FUNCTION: Calculate and save grade based on exam type
-async function calculateAndSaveFinalGrade() {
-    try {
-        // Get all answers for this exam
-        const { data: allAnswers } = await sb.from('exam_grades')
-            .select('marks')
-            .eq('student_id', studentId)
-            .eq('exam_id', EXAM_ID);
-        
-        if (!allAnswers || allAnswers.length === 0) {
-            console.log('No answers found to calculate grade');
-            return;
-        }
-
-        // Calculate total marks (sum of all question marks)
-        const totalMarks = allAnswers.reduce((sum, answer) => sum + (answer.marks || 0), 0);
-        
-        console.log(`📊 Calculating grade for ${examType}: ${totalMarks} total marks`);
-        
-        // Calculate percentage and prepare grade data based on exam type
-        let percentage = 0;
-        let gradeData = {
-            student_id: studentId,
-            exam_id: EXAM_ID,
-            question_id: '00000000-0000-0000-0000-000000000000', // Special ID for total
-            total_score: 0,
-            result_status: 'Final',
-            graded_at: new Date().toISOString(),
-            graded_by: 'system_auto_grade' // Indicates auto-graded by system
-        };
-
-        if (examType === 'CAT_1' || examType === 'CAT') {
-            // CAT 1 or generic CAT: out of 30 marks
-            percentage = ((totalMarks / 30) * 100);
-            gradeData.cat_1_score = totalMarks;
-            gradeData.total_score = parseFloat(percentage.toFixed(2));
-            console.log(`✅ CAT 1 Grade: ${totalMarks}/30 = ${gradeData.total_score}%`);
-            
-        } else if (examType === 'CAT_2') {
-            // CAT 2: out of 30 marks
-            percentage = ((totalMarks / 30) * 100);
-            gradeData.cat_2_score = totalMarks;
-            gradeData.total_score = parseFloat(percentage.toFixed(2));
-            console.log(`✅ CAT 2 Grade: ${totalMarks}/30 = ${gradeData.total_score}%`);
-            
-        } else if (examType === 'EXAM') {
-            // Final Exam: out of 100 marks (for just the exam portion)
-            percentage = ((totalMarks / 100) * 100);
-            gradeData.exam_score = totalMarks;
-            gradeData.total_score = parseFloat(percentage.toFixed(2));
-            console.log(`✅ Final Exam Grade: ${totalMarks}/100 = ${gradeData.total_score}%`);
-            
-        } else if (examType === 'ASSIGNMENT') {
-            // Assignment: store in appropriate field
-            percentage = ((totalMarks / 100) * 100);
-            gradeData.total_score = parseFloat(percentage.toFixed(2));
-            console.log(`✅ Assignment Grade: ${totalMarks}/100 = ${gradeData.total_score}%`);
-        }
-
-        // Save the final grade to exam_grades table
-        const { error: gradeError } = await sb.from('exam_grades').upsert(
-            [gradeData],
-            { onConflict: ['student_id', 'exam_id', 'question_id'] }
-        );
-
-        if (gradeError) {
-            console.error('❌ Error saving final grade:', gradeError);
-            
-            // Try alternative: Direct update to student's grade record
-            await updateStudentGradeDirectly(gradeData);
-        } else {
-            console.log('✅ Final grade saved successfully to database');
-            
-            // Also update the student's overall record if needed
-            await updateStudentGradeRecord(gradeData);
-        }
-        
-    } catch (error) {
-        console.error('❌ Error calculating final grade:', error);
-    }
-}
-
-// Backup function if main save fails
-async function updateStudentGradeDirectly(gradeData) {
-    try {
-        // Try to update existing grade record
-        const { error } = await sb.from('exam_grades')
-            .update(gradeData)
-            .eq('student_id', studentId)
-            .eq('exam_id', EXAM_ID)
-            .eq('question_id', '00000000-0000-0000-0000-000000000000');
-            
-        if (error) {
-            // Try insert instead
-            const { error: insertError } = await sb.from('exam_grades')
-                .insert([gradeData]);
-                
-            if (insertError) {
-                console.error('Both update and insert failed:', insertError);
-            }
-        }
-    } catch (err) {
-        console.error('Direct update failed:', err);
-    }
-}
-
-// Update student's consolidated grade record
-async function updateStudentGradeRecord(gradeData) {
-    try {
-        console.log('📝 Student grade processed:', gradeData);
-    } catch (error) {
-        console.error('Error updating student record:', error);
-    }
-}
-
 // --- TIMER AND LOCKDOWN ---
 function startTimer(seconds) {
     const timerEl = document.getElementById('timer');
@@ -934,7 +963,6 @@ function startTimer(seconds) {
         const timeString = `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
         timerEl.innerText = `Time Remaining: ${timeString}`;
         if (seconds-- <= 0) {
-            // Timer expiry triggers submission automatically
             showTimeoutMessage();
             setTimeout(executeSubmission, 2000);
             return;
@@ -956,6 +984,13 @@ function showTimeoutMessage() {
     `;
 }
 
+// BEFOREUNLOAD HANDLER FUNCTION - ADD THIS
+function beforeUnloadHandler(e) {
+    e.preventDefault();
+    e.returnValue = 'Warning: Leaving this page will submit your exam immediately.';
+    return e.returnValue;
+}
+
 function lockDown() {
     document.addEventListener('contextmenu', e => e.preventDefault());
     document.addEventListener('copy', e => e.preventDefault());
@@ -963,46 +998,17 @@ function lockDown() {
     document.addEventListener('paste', e => e.preventDefault());
     document.addEventListener('selectstart', e => e.preventDefault());
     
-    // Improved page leave handling
-    let isSubmitting = false;
+    // Add the beforeunload handler
+    window.addEventListener('beforeunload', beforeUnloadHandler);
     
-    window.addEventListener('beforeunload', (e) => {
-        if (isSubmitting) return; // Allow redirect if we're submitting
-        
-        e.preventDefault();
-        e.returnValue = 'Are you sure you want to leave? Your exam will be automatically submitted.';
-        
-        // Show custom modal for better UX
-        pageLeaveModal.style.display = 'flex';
-        
-        // Don't prevent default if user confirms
-        stayOnPageBtn.onclick = () => {
-            pageLeaveModal.style.display = 'none';
-        };
-        
-        leaveAnywayBtn.onclick = () => {
-            isSubmitting = true;
-            pageLeaveModal.style.display = 'none';
-            executeSubmission();
-        };
-        
-        // Set timeout to auto-submit after 5 seconds
-        setTimeout(() => {
-            if (pageLeaveModal.style.display === 'flex') {
-                pageLeaveModal.style.display = 'none';
-                executeSubmission();
-            }
-        }, 5000);
-        
-        return e.returnValue;
-    });
+    let isSubmitting = false;
     
     document.addEventListener('visibilitychange', () => {
         if (document.hidden && !isSubmitting) {
-            // Show warning and submit if user switches tabs
             setTimeout(() => {
                 if (document.hidden) {
                     alert('⚠️ Exam Security Alert: Tab switching detected. Your exam is being submitted automatically.');
+                    isSubmitting = true;
                     executeSubmission();
                 }
             }, 1000);
@@ -1018,6 +1024,20 @@ confirmSubmitBtn.addEventListener('click', executeSubmission);
 cancelSubmitBtn.addEventListener('click', () => {
     submissionModal.style.display = 'none';
 });
+
+// Page leave modal buttons
+if (stayOnPageBtn) {
+    stayOnPageBtn.addEventListener('click', () => {
+        pageLeaveModal.style.display = 'none';
+    });
+}
+
+if (leaveAnywayBtn) {
+    leaveAnywayBtn.addEventListener('click', () => {
+        pageLeaveModal.style.display = 'none';
+        executeSubmission();
+    });
+}
 
 window.addEventListener('DOMContentLoaded', initExam);
 </script>
