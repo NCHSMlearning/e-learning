@@ -16,6 +16,7 @@ h1 { color:#073450; }
 .exam-card button:hover{ background:#2F855A; }
 .exam-card button:disabled { background:#6B7280; cursor:not-allowed; }
 .filter-info { background:#E2E8F0; padding:10px; border-radius:8px; margin-bottom:20px; text-align:center; }
+.debug-info { background:#FEF3C7; padding:10px; border-radius:8px; margin-bottom:20px; font-size:12px; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -27,6 +28,7 @@ h1 { color:#073450; }
 </header>
 
 <div class="exam-list">
+    <div id="debugInfo" class="debug-info"></div>
     <div id="filterInfo" class="filter-info"></div>
     <div id="examList">Loading exams...</div>
 </div>
@@ -39,15 +41,63 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let currentUserId = null;
 let currentUserEmail = null;
 
+// Debug function to show all localStorage
+function showLocalStorageDebug() {
+    let debugHTML = '<strong>DEBUG INFO:</strong><br>';
+    
+    debugHTML += `currentUserId: <code>${localStorage.getItem('currentUserId') || 'NULL'}</code><br>`;
+    debugHTML += `studentEmail: <code>${localStorage.getItem('studentEmail') || 'NULL'}</code><br>`;
+    
+    debugHTML += 'All localStorage items:<br>';
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        debugHTML += `<code>${key}</code>: ${localStorage.getItem(key)}<br>`;
+    }
+    
+    return debugHTML;
+}
+
 async function loadExams() {
     try {
+        // Show debug info immediately
+        document.getElementById('debugInfo').innerHTML = showLocalStorageDebug();
+        
         // Get current user from localStorage
         currentUserId = localStorage.getItem('currentUserId');
         currentUserEmail = localStorage.getItem('studentEmail');
         
-        if (!currentUserId || !currentUserEmail) {
-            window.location.href = 'exam_login.html';
-            return;
+        console.log('=== DASHBOARD LOADED ===');
+        console.log('localStorage currentUserId:', currentUserId);
+        console.log('localStorage studentEmail:', currentUserEmail);
+        console.log('sessionStorage currentUserId:', sessionStorage.getItem('currentUserId'));
+        
+        if (!currentUserId || currentUserId === 'null') {
+            console.error('ERROR: currentUserId is null or empty!');
+            
+            // Try to get from sessionStorage as backup
+            const sessionUserId = sessionStorage.getItem('currentUserId');
+            if (sessionUserId && sessionUserId !== 'null') {
+                console.log('Found user ID in sessionStorage, restoring...');
+                localStorage.setItem('currentUserId', sessionUserId);
+                localStorage.setItem('studentEmail', sessionStorage.getItem('studentEmail') || '');
+                currentUserId = sessionUserId;
+                currentUserEmail = sessionStorage.getItem('studentEmail');
+            } else {
+                console.log('No user ID found, redirecting to login...');
+                window.location.href = 'exam_login.html';
+                return;
+            }
+        }
+
+        if (!currentUserEmail || currentUserEmail === 'null') {
+            console.error('ERROR: studentEmail is null or empty!');
+            
+            // Try to get from sessionStorage
+            const sessionEmail = sessionStorage.getItem('studentEmail');
+            if (sessionEmail) {
+                localStorage.setItem('studentEmail', sessionEmail);
+                currentUserEmail = sessionEmail;
+            }
         }
 
         // Display user info
@@ -64,7 +114,12 @@ async function loadExams() {
 
         if (profileError) {
             console.error('Error loading student profile:', profileError);
-            document.getElementById('examList').innerText = 'Error loading your student profile.';
+            document.getElementById('examList').innerHTML = 
+                `<div class="exam-card">
+                    <strong>Error loading your student profile.</strong><br>
+                    <small>User ID: ${currentUserId}</small><br>
+                    <small>Error: ${profileError.message}</small>
+                </div>`;
             return;
         }
 
@@ -76,7 +131,7 @@ async function loadExams() {
 
         console.log('Student Profile:', studentProfile);
 
-        // FIXED: SIMPLIFIED QUERY - Get ALL upcoming exams first
+        // Get ALL upcoming exams
         const { data: exams, error: examsError } = await sb
             .from('exams_with_courses')
             .select('*')
@@ -85,27 +140,29 @@ async function loadExams() {
 
         if (examsError) {
             console.error('Error loading exams:', examsError);
-            document.getElementById('examList').innerText = 'Failed to load exams.';
+            document.getElementById('examList').innerHTML = 
+                `<div class="exam-card">
+                    <strong>Failed to load exams.</strong><br>
+                    <small>Error: ${examsError.message}</small>
+                </div>`;
             return;
         }
 
         console.log('All upcoming exams:', exams);
 
-        // Filter exams on client side for better control
+        // Filter exams on client side
         const filteredExams = exams.filter(exam => {
-            // 1. Check intake year (exact match required)
+            // 1. Check intake year
             if (exam.intake_year !== studentProfile.intake_year) {
                 return false;
             }
             
             // 2. Check program type
-            // Allow: exact program match OR 'General' program
             if (exam.program_type !== studentProfile.program && exam.program_type !== 'General') {
                 return false;
             }
             
             // 3. Check block term (if specified in exam)
-            // Allow: exact block match OR null/undefined OR 'General'
             if (exam.block_term && 
                 exam.block_term !== studentProfile.block && 
                 exam.block_term !== 'General') {
@@ -134,11 +191,6 @@ async function loadExams() {
                 <div class="exam-card">
                     <strong>No upcoming exams found</strong><br>
                     <small>Matching criteria: ${studentProfile.program}, ${studentProfile.intake_year}</small>
-                </div>
-                <div class="exam-card">
-                    <strong>Debug Info:</strong><br>
-                    <small>Total upcoming exams in system: ${exams?.length || 0}</small><br>
-                    <small>Your filters: Program=${studentProfile.program}, Block=${studentProfile.block}, Year=${studentProfile.intake_year}</small>
                 </div>
             `;
             return;
@@ -169,29 +221,53 @@ async function loadExams() {
             container.appendChild(div);
         });
 
-        // Add debug info
-        const debugDiv = document.createElement('div');
-        debugDiv.className = 'exam-card';
-        debugDiv.style.background = '#F1F5F9';
-        debugDiv.innerHTML = `
-            <small>
-                <strong>Debug Info:</strong><br>
-                Total upcoming exams: ${exams?.length || 0}<br>
-                Filtered for you: ${filteredExams.length}<br>
-                Taken by you: ${takenExamIds.length}
-            </small>
-        `;
-        container.appendChild(debugDiv);
+        // Update debug info after loading
+        document.getElementById('debugInfo').innerHTML = showLocalStorageDebug() + 
+            `<br>Total exams: ${exams?.length || 0} | Filtered: ${filteredExams.length} | Taken: ${takenExamIds.length}`;
 
     } catch (err) {
         console.error('Unexpected error:', err);
-        document.getElementById('examList').innerText = 'Error loading exams.';
+        document.getElementById('examList').innerHTML = 
+            `<div class="exam-card">
+                <strong>Error loading exams.</strong><br>
+                <small>${err.message}</small>
+            </div>`;
     }
 }
 
 function startExam(examId) {
+    // CRITICAL FIX: Get user ID with validation
     const userId = localStorage.getItem('currentUserId');
-    window.location.href = `exam.html?exam_id=${examId}&user_id=${userId}`;
+    const email = localStorage.getItem('studentEmail');
+    
+    console.log('=== STARTING EXAM ===');
+    console.log('Exam ID:', examId);
+    console.log('User ID from localStorage:', userId);
+    console.log('Email from localStorage:', email);
+    
+    if (!userId || userId === 'null') {
+        console.error('ERROR: User ID is null! Cannot start exam.');
+        
+        // Try sessionStorage as backup
+        const sessionUserId = sessionStorage.getItem('currentUserId');
+        if (sessionUserId && sessionUserId !== 'null') {
+            console.log('Using sessionStorage user ID:', sessionUserId);
+            const examUrl = `exam.html?exam_id=${examId}&user_id=${sessionUserId}`;
+            console.log('Redirecting to:', examUrl);
+            window.location.href = examUrl;
+            return;
+        }
+        
+        alert('ERROR: Your login session has expired. Please login again.');
+        logout();
+        return;
+    }
+    
+    // Build the URL
+    const examUrl = `exam.html?exam_id=${examId}&user_id=${userId}`;
+    console.log('Redirecting to exam page:', examUrl);
+    
+    window.location.href = examUrl;
 }
 
 function viewResults(examId) {
@@ -199,10 +275,27 @@ function viewResults(examId) {
 }
 
 function logout() {
+    console.log('Logging out...');
+    
+    // Clear all storage
     localStorage.removeItem('currentUserId');
     localStorage.removeItem('studentEmail');
+    sessionStorage.removeItem('currentUserId');
+    sessionStorage.removeItem('studentEmail');
+    
+    // Sign out from Supabase
+    sb.auth.signOut();
+    
+    // Redirect to login
     window.location.href = 'exam_login.html';
 }
+
+// Add click handler for logout button (if user clicks the button in userInfo)
+document.addEventListener('click', function(e) {
+    if (e.target && e.target.textContent === 'Logout') {
+        logout();
+    }
+});
 
 window.addEventListener('DOMContentLoaded', loadExams);
 </script>
