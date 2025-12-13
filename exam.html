@@ -287,21 +287,6 @@ button#submit-exam-btn:disabled { background: #FCA5A5; cursor: not-allowed; box-
 #cancel-submit-btn:hover {
     background: #D1D5DB;
 }
-
-/* Warning Modal for Page Leave */
-.warning-modal {
-    background: #FFF7ED;
-    border: 3px solid #F59E0B;
-}
-
-.warning-icon {
-    font-size: 3rem;
-    margin-bottom: 15px;
-}
-
-.warning-title {
-    color: #92400E;
-}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -353,20 +338,6 @@ button#submit-exam-btn:disabled { background: #FCA5A5; cursor: not-allowed; box-
     </div>
 </div>
 
-<!-- Page Leave Warning Modal -->
-<div id="page-leave-modal" class="modal-overlay" style="display: none;">
-    <div class="modal-content warning-modal">
-        <div class="warning-icon">⚠️</div>
-        <h3 class="warning-title">Page Navigation Detected</h3>
-        <p>You are attempting to leave the exam page. For exam security purposes, leaving this page will result in automatic submission of your exam.</p>
-        <p><strong>This action cannot be undone.</strong></p>
-        <div class="modal-buttons">
-            <button id="stay-on-page-btn" style="background: #38A169; color: white;">Stay on Exam Page</button>
-            <button id="leave-anyway-btn" style="background: #DC2626; color: white;">Submit & Leave Anyway</button>
-        </div>
-    </div>
-</div>
-
 <script>
 // --- IMPROVED AUTHENTICATION SYSTEM ---
 function getStudentId() {
@@ -407,9 +378,13 @@ const cancelSubmitBtn = document.getElementById('cancel-submit-btn');
 const finalSubmitBtn = document.getElementById('submit-exam-btn');
 const modalMessage = document.getElementById('modal-message');
 const examTitle = document.getElementById('exam-title');
-const pageLeaveModal = document.getElementById('page-leave-modal');
-const stayOnPageBtn = document.getElementById('stay-on-page-btn');
-const leaveAnywayBtn = document.getElementById('leave-anyway-btn');
+
+// --- BEFOREUNLOAD HANDLER FUNCTION ---
+function beforeUnloadHandler(e) {
+    e.preventDefault();
+    e.returnValue = 'Warning: Leaving this page will submit your exam immediately.';
+    return e.returnValue;
+}
 
 // --- NAVIGATION FUNCTIONS ---
 function nextQuestion() {
@@ -677,51 +652,94 @@ function submitExam() {
     submissionModal.style.display = 'flex';
 }
 
-// CRITICAL FUNCTION: Calculate and save grade based on exam type
+// MAIN SUBMISSION FUNCTION
+async function executeSubmission() {
+    // Disable all buttons to prevent double-clicks
+    document.querySelectorAll('button').forEach(btn => btn.disabled = true);
+    submissionModal.style.display = 'none';
+    
+    showSuccessScreen('submitting');
+
+    console.log('=== STARTING EXAM SUBMISSION ===');
+    console.log('Exam ID:', EXAM_ID);
+    console.log('Student ID:', studentId);
+    console.log('Exam Type:', examType);
+    console.log('Total Questions:', questions.length);
+    console.log('Answers saved locally:', Object.keys(answers).length);
+    
+    // Save all unanswered questions as 0 marks FIRST
+    await saveUnansweredQuestions();
+    
+    // Wait to ensure all answers are saved
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Calculate and save final grade
+    await calculateAndSaveFinalGrade();
+    
+    // Update success screen
+    showSuccessScreen('completed');
+    
+    // Countdown before redirect
+    let countdown = 5;
+    const countdownInterval = setInterval(() => {
+        countdown--;
+        const countdownElement = document.querySelector('#countdown-number');
+        if (countdownElement) countdownElement.textContent = countdown;
+        if (countdown <= 0) {
+            clearInterval(countdownInterval);
+            redirectToDashboard();
+        }
+    }, 1000);
+}
+
+// Save unanswered questions as 0 marks
+async function saveUnansweredQuestions() {
+    const skippedEntries = [];
+    questions.forEach(q => {
+        const questionId = q.id;
+        if (!answers.hasOwnProperty(questionId) || answers[questionId] === null) {
+            skippedEntries.push({
+                student_id: studentId, 
+                exam_id: EXAM_ID, 
+                question_id: questionId, 
+                selected_answer: null, 
+                marks: 0, 
+                graded_at: new Date().toISOString()
+            });
+        }
+    });
+
+    if (skippedEntries.length > 0) {
+        console.log(`Saving ${skippedEntries.length} unanswered questions as 0 marks`);
+        const { error } = await sb.from('exam_grades').upsert(skippedEntries, { 
+            onConflict: ['student_id', 'exam_id', 'question_id'] 
+        });
+        if (error) {
+            console.error('Error saving skipped answers:', error);
+        } else {
+            console.log('✅ Unanswered questions saved as 0 marks');
+        }
+    }
+}
+
+// FIXED: Calculate and save final grade
 async function calculateAndSaveFinalGrade() {
     try {
-        console.log('=== CALCULATING FINAL GRADE FOR EXAM:', EXAM_ID, 'TYPE:', examType);
+        console.log('=== CALCULATING FINAL GRADE ===');
         
-        // First, ensure all answers are saved (including unanswered ones as 0 marks)
-        const skippedEntries = [];
-        questions.forEach(q => {
-            const questionId = q.id;
-            if (!answers.hasOwnProperty(questionId) || answers[questionId] === null) {
-                skippedEntries.push({
-                    student_id: studentId, 
-                    exam_id: EXAM_ID, 
-                    question_id: questionId, 
-                    selected_answer: null, 
-                    marks: 0, 
-                    graded_at: new Date().toISOString()
-                });
-            }
-        });
-
-        if (skippedEntries.length > 0) {
-            const { error } = await sb.from('exam_grades').upsert(skippedEntries, { 
-                onConflict: ['student_id', 'exam_id', 'question_id'] 
-            });
-            if (error) {
-                console.error('Error saving skipped answers:', error);
-            } else {
-                console.log(`Saved ${skippedEntries.length} unanswered questions as 0 marks`);
-            }
-        }
-
-        // Wait a moment to ensure all records are saved
+        // Wait a bit to ensure all answers are saved
         await new Promise(resolve => setTimeout(resolve, 500));
         
-        // Get ALL answers for this exam (excluding any potential total records)
+        // Get ALL answers for this exam
         const { data: allAnswers, error: answersError } = await sb.from('exam_grades')
-            .select('marks, selected_answer')
+            .select('marks')
             .eq('student_id', studentId)
             .eq('exam_id', EXAM_ID)
             .neq('question_id', '00000000-0000-0000-0000-000000000000');
         
         if (answersError) {
             console.error('❌ Error fetching answers:', answersError);
-            return;
+            throw answersError;
         }
         
         if (!allAnswers || allAnswers.length === 0) {
@@ -729,24 +747,31 @@ async function calculateAndSaveFinalGrade() {
             return;
         }
 
-        // Calculate total marks (sum of all question marks)
+        // Calculate total marks
         const totalMarks = allAnswers.reduce((sum, answer) => sum + (answer.marks || 0), 0);
         const totalQuestions = allAnswers.length;
-        const answeredQuestions = allAnswers.filter(a => a.selected_answer !== null).length;
         
-        console.log(`📊 Grade Calculation Summary:`);
-        console.log(`- Total Questions: ${totalQuestions}`);
-        console.log(`- Answered Questions: ${answeredQuestions}`);
-        console.log(`- Total Marks: ${totalMarks}`);
+        console.log(`📊 Grade Summary: ${totalMarks} marks from ${totalQuestions} questions`);
         
-        // Calculate percentage and prepare grade data based on exam type
+        // Calculate percentage
         let percentage = 0;
+        let totalPossible = 30; // Default for CAT exams
+        
+        if (examType === 'CAT_1' || examType === 'CAT_2' || examType === 'CAT') {
+            totalPossible = 30; // CAT exams are out of 30
+        } else if (examType === 'EXAM') {
+            totalPossible = 100; // Final exams are out of 100
+        }
+        
+        percentage = totalPossible > 0 ? ((totalMarks / totalPossible) * 100) : 0;
+        
+        // Prepare grade data
         let gradeData = {
             student_id: studentId,
             exam_id: EXAM_ID,
             question_id: '00000000-0000-0000-0000-000000000000',
-            total_score: 0,
-            result_status: 'COMPLETED',
+            total_score: parseFloat(percentage.toFixed(2)),
+            result_status: percentage >= 60 ? 'PASS' : 'FAIL',
             graded_at: new Date().toISOString(),
             graded_by: 'system_auto_grade',
             cat_1_score: null,
@@ -754,45 +779,20 @@ async function calculateAndSaveFinalGrade() {
             exam_score: null
         };
 
-        // Determine total possible marks based on exam type and questions
+        // Set appropriate score based on exam type
         if (examType === 'CAT_1' || examType === 'CAT') {
-            // CAT 1: Each question is typically 1 mark, total out of 30
-            const totalPossible = Math.min(30, totalQuestions);
-            percentage = totalPossible > 0 ? ((totalMarks / totalPossible) * 100) : 0;
             gradeData.cat_1_score = totalMarks;
-            gradeData.total_score = parseFloat(percentage.toFixed(2));
             console.log(`✅ CAT 1 Grade: ${totalMarks}/${totalPossible} = ${gradeData.total_score}%`);
-            
         } else if (examType === 'CAT_2') {
-            // CAT 2: Each question is typically 1 mark, total out of 30
-            const totalPossible = Math.min(30, totalQuestions);
-            percentage = totalPossible > 0 ? ((totalMarks / totalPossible) * 100) : 0;
             gradeData.cat_2_score = totalMarks;
-            gradeData.total_score = parseFloat(percentage.toFixed(2));
             console.log(`✅ CAT 2 Grade: ${totalMarks}/${totalPossible} = ${gradeData.total_score}%`);
-            
         } else if (examType === 'EXAM') {
-            // Final Exam: Calculate based on question marks
-            const { data: questionMarks } = await sb.from('exam_questions')
-                .select('marks')
-                .eq('exam_id', EXAM_ID);
-            
-            const totalPossible = questionMarks?.reduce((sum, q) => sum + (q.marks || 1), 0) || totalQuestions;
-            percentage = totalPossible > 0 ? ((totalMarks / totalPossible) * 100) : 0;
             gradeData.exam_score = totalMarks;
-            gradeData.total_score = parseFloat(percentage.toFixed(2));
             console.log(`✅ Final Exam Grade: ${totalMarks}/${totalPossible} = ${gradeData.total_score}%`);
-            
         } else {
-            // Default: calculate percentage based on total questions
-            const totalPossible = totalQuestions;
-            percentage = totalPossible > 0 ? ((totalMarks / totalPossible) * 100) : 0;
-            gradeData.total_score = parseFloat(percentage.toFixed(2));
-            console.log(`✅ Default Grade: ${totalMarks}/${totalPossible} = ${gradeData.total_score}%`);
+            console.log(`✅ Default Grade: ${totalMarks}/${totalQuestions} = ${gradeData.total_score}%`);
         }
 
-        // Determine pass/fail status (60% passing)
-        gradeData.result_status = gradeData.total_score >= 60 ? 'PASS' : 'FAIL';
         console.log(`📊 Result Status: ${gradeData.result_status}`);
 
         // Save the final grade to exam_grades table
@@ -834,60 +834,6 @@ async function calculateAndSaveFinalGrade() {
     } catch (error) {
         console.error('❌ Error calculating final grade:', error);
         console.error('Error details:', error.message);
-    }
-}
-
-// MAIN SUBMISSION FUNCTION
-async function executeSubmission() {
-    // Disable all buttons to prevent double-clicks
-    document.querySelectorAll('button').forEach(btn => btn.disabled = true);
-    submissionModal.style.display = 'none';
-    
-    showSuccessScreen('submitting');
-
-    // DEBUG: Check current state
-    await debugExamState();
-    
-    // Calculate and save final grade based on exam type
-    await calculateAndSaveFinalGrade();
-    
-    // Update success screen
-    showSuccessScreen('completed');
-    
-    // Countdown before redirect
-    let countdown = 5;
-    const countdownElement = document.querySelector('#countdown-number');
-    const countdownInterval = setInterval(() => {
-        countdown--;
-        if (countdownElement) countdownElement.textContent = countdown;
-        if (countdown <= 0) {
-            clearInterval(countdownInterval);
-            redirectToDashboard();
-        }
-    }, 1000);
-}
-
-// Debug function
-async function debugExamState() {
-    console.log('=== DEBUG EXAM STATE ===');
-    console.log('Exam ID:', EXAM_ID);
-    console.log('Student ID:', studentId);
-    console.log('Exam Type:', examType);
-    console.log('Total Questions:', questions.length);
-    console.log('Answers saved locally:', Object.keys(answers).length);
-    
-    const { data: dbAnswers } = await sb.from('exam_grades')
-        .select('*')
-        .eq('student_id', studentId)
-        .eq('exam_id', EXAM_ID);
-    
-    console.log('Answers in database:', dbAnswers?.length || 0);
-    console.log('Database answers:', dbAnswers);
-    
-    const totalRecord = dbAnswers?.find(a => a.question_id === '00000000-0000-0000-0000-000000000000');
-    console.log('Total record exists:', !!totalRecord);
-    if (totalRecord) {
-        console.log('Total record details:', totalRecord);
     }
 }
 
@@ -939,7 +885,7 @@ function showSuccessScreen(status) {
             </div>
             
             <p style="margin-top: 20px; color: #64748B;">
-                <small>Exam ID: ${EXAM_ID.substring(0, 8)}... | Student: ${studentId.substring(0, 8)}...</small>
+                <small>Exam ID: ${EXAM_ID} | Student: ${studentId.substring(0, 8)}...</small>
             </p>
             
             <a href="${REDIRECT_URL}?exam_completed=${EXAM_ID}&type=${examType}" class="dashboard-link">
@@ -984,13 +930,6 @@ function showTimeoutMessage() {
     `;
 }
 
-// BEFOREUNLOAD HANDLER FUNCTION - ADD THIS
-function beforeUnloadHandler(e) {
-    e.preventDefault();
-    e.returnValue = 'Warning: Leaving this page will submit your exam immediately.';
-    return e.returnValue;
-}
-
 function lockDown() {
     document.addEventListener('contextmenu', e => e.preventDefault());
     document.addEventListener('copy', e => e.preventDefault());
@@ -1024,20 +963,6 @@ confirmSubmitBtn.addEventListener('click', executeSubmission);
 cancelSubmitBtn.addEventListener('click', () => {
     submissionModal.style.display = 'none';
 });
-
-// Page leave modal buttons
-if (stayOnPageBtn) {
-    stayOnPageBtn.addEventListener('click', () => {
-        pageLeaveModal.style.display = 'none';
-    });
-}
-
-if (leaveAnywayBtn) {
-    leaveAnywayBtn.addEventListener('click', () => {
-        pageLeaveModal.style.display = 'none';
-        executeSubmission();
-    });
-}
 
 window.addEventListener('DOMContentLoaded', initExam);
 </script>
