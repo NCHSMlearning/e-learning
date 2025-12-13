@@ -14,6 +14,7 @@ h1 { color:#073450; }
 .exam-card { background:#fff; padding:20px; border-radius:12px; margin-bottom:15px; box-shadow:0 5px 20px rgba(0,0,0,0.05); display:flex; justify-content:space-between; align-items:center; }
 .exam-card button { padding:10px 20px; border:none; border-radius:8px; background:#38A169; color:#fff; font-weight:600; cursor:pointer; }
 .exam-card button:hover{ background:#2F855A; }
+.exam-card button:disabled { background:#6B7280; cursor:not-allowed; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -64,15 +65,26 @@ async function loadExams() {
             return;
         }
 
-        // Load exams that match student's program, block, and intake year
-        const { data: exams, error: examsError } = await sb
+        console.log('Student Profile:', studentProfile);
+
+        // FIXED: Better query for exams
+        let query = sb
             .from('exams_with_courses')
             .select('*')
-            .or(`program_type.eq.${studentProfile.program}, program_type.eq.General`)
-            .or(`block_term.eq.${studentProfile.block}, block_term.is.null, block_term.eq.General`)
             .eq('intake_year', studentProfile.intake_year)
-            .eq('status', 'Upcoming') // Only show upcoming exams
-            .order('exam_date', { ascending: true });
+            .eq('status', 'Upcoming');
+
+        // Apply filters for program and block
+        // Exams can be: Specific to program OR General
+        // Exams can be: Specific to block OR null OR General
+        query = query.or(`program_type.eq.${studentProfile.program},program_type.eq.General`);
+        
+        // For block: can be student's block OR null OR General
+        if (studentProfile.block) {
+            query = query.or(`block_term.eq.${studentProfile.block},block_term.is.null,block_term.eq.General`);
+        }
+
+        const { data: exams, error: examsError } = await query.order('exam_date', { ascending: true });
 
         if (examsError) {
             console.error('Error loading exams:', examsError);
@@ -80,10 +92,12 @@ async function loadExams() {
             return;
         }
 
+        console.log('Available exams:', exams);
+
         // Also check which exams the student has already taken
         const { data: takenExams, error: takenError } = await sb
             .from('exam_grades')
-            .select('exam_id, result_status')
+            .select('exam_id')
             .eq('student_id', currentUserId)
             .eq('result_status', 'Final');
 
@@ -105,17 +119,17 @@ async function loadExams() {
             const isTaken = takenExamIds.includes(exam.id);
             const buttonText = isTaken ? 'View Results' : 'Start Exam';
             const buttonColor = isTaken ? '#6B7280' : '#38A169';
-            const buttonDisabled = isTaken ? 'disabled' : '';
             
             div.innerHTML = `
                 <div>
                     <strong>${exam.exam_name}</strong><br>
                     <small>Course: ${exam.course_name || 'General'}</small><br>
-                    <small>Date: ${exam.exam_date} | Duration: ${exam.duration_minutes || 30} min</small>
+                    <small>Date: ${exam.exam_date} | Duration: ${exam.duration_minutes || 30} min</small><br>
+                    <small>Type: ${exam.exam_type || 'EXAM'} | Program: ${exam.program_type || 'General'}</small>
                 </div>
-                <button onclick="startExam('${exam.id}')" 
-                        style="background:${buttonColor}" 
-                        ${buttonDisabled}>
+                <button onclick="${isTaken ? 'viewResults' : 'startExam'}('${exam.id}')" 
+                        style="background:${buttonColor}"
+                        ${isTaken ? 'disabled' : ''}>
                     ${buttonText}
                 </button>
             `;
@@ -132,6 +146,11 @@ function startExam(examId) {
     // CRITICAL FIX: Pass user ID in the URL
     const userId = localStorage.getItem('currentUserId');
     window.location.href = `exam.html?exam_id=${examId}&user_id=${userId}`;
+}
+
+function viewResults(examId) {
+    // You can implement a results viewing page here
+    alert('Results viewing feature coming soon!');
 }
 
 function logout() {
