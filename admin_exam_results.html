@@ -971,114 +971,103 @@
             updateStats();
         }
 
-        // 1. LOAD STUDENTS WITH EXAM RESULTS
-        async function loadStudentsWithResults() {
-            const examId = document.getElementById('examFilter')?.value || '';
-            const program = document.getElementById('programFilter')?.value || '';
-            const status = document.getElementById('statusFilter')?.value || '';
-            const dateFrom = document.getElementById('dateFrom')?.value || '';
-            const dateTo = document.getElementById('dateTo')?.value || '';
-            const search = document.getElementById('searchInput')?.value || '';
+      async function loadStudentsWithResults() {
+    const examId = document.getElementById('examFilter')?.value || '';
+    const status = document.getElementById('statusFilter')?.value || '';
+    const dateFrom = document.getElementById('dateFrom')?.value || '';
+    const dateTo = document.getElementById('dateTo')?.value || '';
+    const search = document.getElementById('searchInput')?.value || '';
 
-            document.getElementById('studentsLoading').style.display = 'block';
-            document.getElementById('studentsTable').style.display = 'none';
+    document.getElementById('studentsLoading').style.display = 'block';
+    document.getElementById('studentsTable').style.display = 'none';
 
-            try {
-                // Get overall exam grades (question_id = 00000000...)
-                let query = supabase
-                    .from('exam_grades')
-                    .select(`
-                        *,
-                        exams!inner(exam_name, exam_type, course, program),
-                        student_profiles!inner(full_name, email, program, block, intake)
-                    `)
-                    .eq('question_id', '00000000-0000-0000-0000-000000000000')
-                    .order('graded_at', { ascending: false });
+    try {
+        // Get exam results without student join
+        let query = supabase
+            .from('exam_grades')
+            .select(`
+                *,
+                exams!inner(exam_name, exam_type, course, program)
+            `)
+            .eq('question_id', '00000000-0000-0000-0000-000000000000')
+            .order('graded_at', { ascending: false });
 
-                // Apply filters
-                if (examId) query = query.eq('exam_id', examId);
-                if (program) query = query.eq('student_profiles.program', program);
-                if (status) query = query.eq('result_status', status);
-                if (dateFrom) query = query.gte('graded_at', dateFrom);
-                if (dateTo) query = query.lte('graded_at', dateTo + ' 23:59:59');
-                if (search) {
-                    query = query.or(`
-                        student_profiles.full_name.ilike.%${search}%,
-                        student_profiles.email.ilike.%${search}%,
-                        student_profiles.program.ilike.%${search}%
-                    `);
-                }
-
-                const { data: results, error } = await query;
-                
-                if (error) throw error;
-
-                studentsResults = results || [];
-                displayStudentsResults();
-                
-                document.getElementById('studentsLoading').style.display = 'none';
-                document.getElementById('studentsTable').style.display = 'table';
-                
-            } catch (error) {
-                console.error('Error loading student results:', error);
-                document.getElementById('studentsLoading').innerHTML = 
-                    `<div style="color: #DC2626;">❌ Error loading results: ${error.message}</div>`;
-            }
+        if (examId) query = query.eq('exam_id', examId);
+        if (status) query = query.eq('result_status', status);
+        if (dateFrom) query = query.gte('graded_at', dateFrom);
+        if (dateTo) query = query.lte('graded_at', dateTo + ' 23:59:59');
+        if (search) {
+            query = query.or(`exams.exam_name.ilike.%${search}%`);
         }
 
-        function displayStudentsResults() {
-            const startIndex = (currentPage.students - 1) * itemsPerPage;
-            const endIndex = startIndex + itemsPerPage;
-            const pageResults = studentsResults.slice(startIndex, endIndex);
-            const tbody = document.getElementById('studentsBody');
+        const { data: results, error } = await query;
+        
+        if (error) throw error;
 
-            if (pageResults.length === 0) {
-                tbody.innerHTML = `
-                    <tr>
-                        <td colspan="11" style="text-align: center; padding: 40px; color: #64748B;">
-                            No student results found. Try changing your filters.
-                        </td>
-                    </tr>
-                `;
-                document.getElementById('studentsPagination').innerHTML = '';
-                return;
-            }
+        studentsResults = results || [];
+        displayStudentsResults();
+        
+        document.getElementById('studentsLoading').style.display = 'none';
+        document.getElementById('studentsTable').style.display = 'table';
+        
+    } catch (error) {
+        console.error('Error loading student results:', error);
+        document.getElementById('studentsLoading').innerHTML = 
+            `<div style="color: #DC2626;">❌ Error loading results: ${error.message}</div>`;
+    }
+}
 
-            let html = '';
-            pageResults.forEach(result => {
-                const student = result.student_profiles;
-                const exam = result.exams;
-                const percentage = result.total_score || 0;
-                const statusClass = result.result_status === 'PASS' ? 'status-pass' : 'status-fail';
-                
-                html += `
-                    <tr>
-                        <td><strong>${student?.full_name || 'N/A'}</strong></td>
-                        <td>${student?.email || 'N/A'}</td>
-                        <td>${student?.program || 'N/A'}</td>
-                        <td>${student?.block || 'N/A'}</td>
-                        <td>${exam?.exam_name || 'N/A'}</td>
-                        <td>${exam?.exam_type || 'N/A'}</td>
-                        <td><strong>${result.marks || 0}</strong></td>
-                        <td><strong>${percentage.toFixed(2)}%</strong></td>
-                        <td><span class="${statusClass}">${result.result_status || 'N/A'}</span></td>
-                        <td>${new Date(result.graded_at).toLocaleDateString()}</td>
-                        <td class="action-buttons-cell">
-                            <button class="action-btn btn-view" onclick="viewStudentDetails('${result.student_id}', ${result.exam_id})">
-                                👁️ View
-                            </button>
-                            <button class="action-btn btn-reset" onclick="resetStudentExam('${result.student_id}', ${result.exam_id})">
-                                🔄 Retake
-                            </button>
-                        </td>
-                    </tr>
-                `;
-            });
+function displayStudentsResults() {
+    const startIndex = (currentPage.students - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    const pageResults = studentsResults.slice(startIndex, endIndex);
+    const tbody = document.getElementById('studentsBody');
 
-            tbody.innerHTML = html;
-            renderPagination('students', studentsResults.length);
-        }
+    if (pageResults.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="11" style="text-align: center; padding: 40px; color: #64748B;">
+                    No student results found. Try changing your filters.
+                </td>
+            </tr>
+        `;
+        document.getElementById('studentsPagination').innerHTML = '';
+        return;
+    }
 
+    let html = '';
+    pageResults.forEach(result => {
+        const exam = result.exams;
+        const percentage = result.total_score || 0;
+        const statusClass = result.result_status === 'PASS' ? 'status-pass' : 'status-fail';
+        
+        html += `
+            <tr>
+                <td><strong>Student ID: ${result.student_id.substring(0, 8)}...</strong></td>
+                <td>${result.student_id.substring(0, 8)}...</td>
+                <td>Unknown</td>
+                <td>Unknown</td>
+                <td>${exam?.exam_name || 'N/A'}</td>
+                <td>${exam?.exam_type || 'N/A'}</td>
+                <td><strong>${result.marks || 0}</strong></td>
+                <td><strong>${percentage.toFixed(2)}%</strong></td>
+                <td><span class="${statusClass}">${result.result_status || 'N/A'}</span></td>
+                <td>${new Date(result.graded_at).toLocaleDateString()}</td>
+                <td class="action-buttons-cell">
+                    <button class="action-btn btn-view" onclick="viewExamResult('${result.student_id}', ${result.exam_id})">
+                        👁️ View
+                    </button>
+                    <button class="action-btn btn-reset" onclick="resetStudentExam('${result.student_id}', ${result.exam_id})">
+                        🔄 Retake
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+
+    tbody.innerHTML = html;
+    renderPagination('students', studentsResults.length);
+}
         // 2. LOAD ALL REGISTERED STUDENTS
         async function loadAllStudents() {
             const program = document.getElementById('studentProgramFilter')?.value || '';
@@ -1091,7 +1080,7 @@
 
             try {
                 let query = supabase
-                    .from('student_profiles')
+                    .from('consolidated_user_profiles_table')
                     .select('*')
                     .order('full_name', { ascending: true });
 
@@ -1481,7 +1470,7 @@
             try {
                 // Get student details
                 const { data: student } = await supabase
-                    .from('student_profiles')
+                    .from('consolidated_user_profiles_table')
                     .select('*')
                     .eq('id', studentId)
                     .single();
@@ -1575,7 +1564,7 @@
             try {
                 // Get student details
                 const { data: student } = await supabase
-                    .from('student_profiles')
+                    .from('consolidated_user_profiles_table')
                     .select('*')
                     .eq('id', studentId)
                     .single();
