@@ -2677,7 +2677,7 @@
                     .replace(/'/g, "&#039;");
             }
                         
-// Load exams - FIXED: Pass mark is ALWAYS 60%
+// Load exams - FIXED: Pass mark is ALWAYS 60% with consistent PASS/FAIL
 async function loadExams() {
     const tableBody = document.getElementById('exams-table');
     if (!tableBody) return;
@@ -2718,7 +2718,7 @@ async function loadExams() {
 
         if (examsError) throw examsError;
 
-        // Fetch overall grades (not individual question answers)
+        // Fetch overall grades
         const { data: grades, error: gradesError } = await sb
             .from('exam_grades')
             .select(`
@@ -2729,7 +2729,9 @@ async function loadExams() {
                 exam_score,
                 total_score,
                 result_status,
-                marks
+                marks,
+                graded_by,
+                graded_at
             `)
             .eq('student_id', studentId)
             .eq('question_id', '00000000-0000-0000-0000-000000000000')
@@ -2737,24 +2739,63 @@ async function loadExams() {
 
         if (gradesError) throw gradesError;
 
-        // Combine exams with their grades
+        // Combine exams with their grades - FIXED: Consistent PASS/FAIL logic
         cachedExams = exams.map(exam => {
             const grade = grades?.find(g => String(g.exam_id) === String(exam.id));
             const examType = exam.exam_type || '';
             
-            // ✅ FIXED: Pass mark is ALWAYS 60% regardless of exam type
+            // ✅ FIXED: Consistent PASS/FAIL calculation for both table and transcript
             let resultStatus = 'Scheduled';
             let displayStatus = 'Scheduled';
+            let calculatedPercentage = null;
             
             if (grade) {
-                if (grade.result_status === 'Final') {
-                    // Convert "Final" to PASS/FAIL based on 60% pass mark
-                    const percentage = grade.total_score || 0;
-                    displayStatus = percentage >= 60 ? 'PASS' : 'FAIL';
+                // Calculate percentage consistently
+                if (grade.total_score !== null && grade.total_score !== undefined) {
+                    // Use total_score from database (already a percentage)
+                    calculatedPercentage = Number(grade.total_score);
+                } else {
+                    // Calculate from CAT scores if total_score not available
+                    if (examType.includes('CAT_1') || examType === 'CAT' || examType === 'CAT_1') {
+                        if (grade.cat_1_score !== null) {
+                            calculatedPercentage = (grade.cat_1_score / 30) * 100;
+                        }
+                    } else if (examType.includes('CAT_2') || examType === 'CAT_2') {
+                        if (grade.cat_2_score !== null) {
+                            calculatedPercentage = (grade.cat_2_score / 30) * 100;
+                        }
+                    } else if (examType === 'EXAM' || examType.includes('EXAM') || examType.includes('Final')) {
+                        // For final exams, calculate from all scores if available
+                        if (grade.cat_1_score !== null && grade.cat_2_score !== null && grade.exam_score !== null) {
+                            const totalMarks = grade.cat_1_score + grade.cat_2_score + grade.exam_score;
+                            calculatedPercentage = (totalMarks / 100) * 100;
+                        } else if (grade.marks) {
+                            // Try to get percentage from marks JSON
+                            try {
+                                const marksData = typeof grade.marks === 'string' ? JSON.parse(grade.marks) : grade.marks;
+                                if (marksData.percentage !== undefined) {
+                                    calculatedPercentage = marksData.percentage;
+                                }
+                            } catch (e) {
+                                // Ignore parsing errors
+                            }
+                        }
+                    }
+                }
+                
+                // Determine PASS/FAIL based on 60% threshold
+                if (calculatedPercentage !== null) {
+                    displayStatus = calculatedPercentage >= 60 ? 'PASS' : 'FAIL';
                     resultStatus = 'Final';
                 } else {
-                    displayStatus = grade.result_status || 'Graded';
-                    resultStatus = grade.result_status || 'Graded';
+                    // If we can't calculate percentage, use result_status from database
+                    if (grade.result_status === 'Final') {
+                        displayStatus = 'Graded'; // Default to Graded if Final but no percentage
+                        resultStatus = 'Final';
+                    } else {
+                        displayStatus = grade.result_status || 'Graded';
+                        resultStatus = grade.result_status || 'Graded';
+                    }
                 }
             }
             
@@ -2762,7 +2803,8 @@ async function loadExams() {
                 ...exam, 
                 grade: grade || null,
                 display_status: displayStatus,
-                result_status: resultStatus
+                result_status: resultStatus,
+                calculated_percentage: calculatedPercentage
             };
         });
 
@@ -2867,13 +2909,12 @@ function displayExamsTable(exams) {
                 cat2Score = '<span style="color:#9CA3AF; font-style:italic;">N/A</span>';
                 finalExamScore = '<span style="color:#9CA3AF; font-style:italic;">N/A</span>';
                 
-                // ✅ FIXED: Use total_score percentage from database
-                // If total_score exists, use it directly (it's already a percentage)
-                if (gradeEntry.total_score !== null) {
+                // ✅ Use calculated_percentage (consistent with transcript)
+                if (exam.calculated_percentage !== null) {
+                    totalScore = `${exam.calculated_percentage.toFixed(1)}%`;
+                } else if (gradeEntry.total_score !== null) {
                     totalScore = `${gradeEntry.total_score.toFixed(1)}%`;
-                } 
-                // Otherwise calculate percentage from cat_1_score out of 30
-                else if (gradeEntry.cat_1_score !== null) {
+                } else if (gradeEntry.cat_1_score !== null) {
                     totalScore = `${((gradeEntry.cat_1_score / 30) * 100).toFixed(1)}%`;
                 } else {
                     totalScore = '-';
@@ -2885,12 +2926,12 @@ function displayExamsTable(exams) {
                 cat2Score = gradeEntry.cat_2_score !== null ? gradeEntry.cat_2_score : '-';
                 finalExamScore = '<span style="color:#9CA3AF; font-style:italic;">N/A</span>';
                 
-                // ✅ FIXED: Use total_score percentage from database
-                if (gradeEntry.total_score !== null) {
+                // ✅ Use calculated_percentage (consistent with transcript)
+                if (exam.calculated_percentage !== null) {
+                    totalScore = `${exam.calculated_percentage.toFixed(1)}%`;
+                } else if (gradeEntry.total_score !== null) {
                     totalScore = `${gradeEntry.total_score.toFixed(1)}%`;
-                }
-                // Otherwise calculate percentage from cat_2_score out of 30
-                else if (gradeEntry.cat_2_score !== null) {
+                } else if (gradeEntry.cat_2_score !== null) {
                     totalScore = `${((gradeEntry.cat_2_score / 30) * 100).toFixed(1)}%`;
                 } else {
                     totalScore = '-';
@@ -2902,9 +2943,17 @@ function displayExamsTable(exams) {
                 cat2Score = gradeEntry.cat_2_score !== null ? gradeEntry.cat_2_score : '-';
                 finalExamScore = gradeEntry.exam_score !== null ? gradeEntry.exam_score : '-';
                 
-                // ✅ FIXED: Use total_score percentage from database
-                totalScore = gradeEntry.total_score !== null ? 
-                    `${gradeEntry.total_score.toFixed(1)}%` : '-';
+                // ✅ Use calculated_percentage (consistent with transcript)
+                if (exam.calculated_percentage !== null) {
+                    totalScore = `${exam.calculated_percentage.toFixed(1)}%`;
+                } else if (gradeEntry.total_score !== null) {
+                    totalScore = `${gradeEntry.total_score.toFixed(1)}%`;
+                } else if (gradeEntry.cat_1_score !== null && gradeEntry.cat_2_score !== null && gradeEntry.exam_score !== null) {
+                    const totalMarks = gradeEntry.cat_1_score + gradeEntry.cat_2_score + gradeEntry.exam_score;
+                    totalScore = `${totalMarks.toFixed(1)}%`;
+                } else {
+                    totalScore = '-';
+                }
             }
         } else {
             // No grade yet
@@ -2914,7 +2963,7 @@ function displayExamsTable(exams) {
             totalScore = '-';
         }
 
-        // Use display_status which should now show correct PASS/FAIL based on 60%
+        // Use display_status which is now consistently calculated
         const resultStatus = exam.display_status || 'Scheduled';
         
         // Determine status color and text
@@ -2987,7 +3036,7 @@ function displayExamsTable(exams) {
     });
 }
 
-// View provisional transcript - FIXED: 60% pass mark
+// View provisional transcript - FIXED: Consistent PASS/FAIL with Graded By
 async function viewProvisionalTranscript(examId) {
     try {
         const exam = cachedExams.find(e => String(e.id) === String(examId));
@@ -3005,11 +3054,13 @@ async function viewProvisionalTranscript(examId) {
         let finalScore = grade.exam_score !== null ? grade.exam_score : '-';
         let totalScore = '-';
         
-        // ✅ FIXED: Always use total_score from database (it's already a percentage)
-        if (grade.total_score !== null) {
+        // ✅ FIXED: Use calculated_percentage from exam object (same as table)
+        if (exam.calculated_percentage !== null) {
+            totalScore = `${exam.calculated_percentage.toFixed(1)}%`;
+        } else if (grade.total_score !== null) {
             totalScore = `${grade.total_score.toFixed(1)}%`;
         } else {
-            // Calculate from available scores
+            // Calculate from available scores (fallback)
             if (examType.includes('CAT_1') || examType === 'CAT' || examType === 'CAT_1') {
                 if (grade.cat_1_score !== null) {
                     totalScore = `${((grade.cat_1_score / 30) * 100).toFixed(1)}%`;
@@ -3022,21 +3073,55 @@ async function viewProvisionalTranscript(examId) {
                 }
                 cat1Score = 'N/A';
                 finalScore = 'N/A';
+            } else if (examType === 'EXAM' || examType.includes('EXAM') || examType.includes('Final')) {
+                if (grade.cat_1_score !== null && grade.cat_2_score !== null && grade.exam_score !== null) {
+                    const totalMarks = grade.cat_1_score + grade.cat_2_score + grade.exam_score;
+                    totalScore = `${totalMarks.toFixed(1)}%`;
+                }
             }
         }
 
-        // ✅ FIXED: PASS/FAIL based on 60% pass mark
-        const passMark = 60; // Always 60%
-        let resultStatus = exam.display_status || 'Provisional';
+        // ✅ FIXED: Use the SAME display_status as the table (already calculated)
+        const resultStatus = exam.display_status || 'Provisional';
         
-        // If we have totalScore, calculate PASS/FAIL
-        if (totalScore !== '-' && totalScore !== '-%') {
-            const numericScore = parseFloat(totalScore);
-            resultStatus = numericScore >= passMark ? 'PASS' : 'FAIL';
+        // Format graded date
+        let gradedDateStr = 'N/A';
+        let gradedByStr = 'System';
+        
+        if (grade.graded_at) {
+            gradedDateStr = new Date(grade.graded_at).toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+        
+        if (grade.graded_by) {
+            // Try to get lecturer name if graded_by is a user ID
+            try {
+                const { data: lecturer, error } = await sb
+                    .from('users')
+                    .select('full_name, email')
+                    .eq('id', grade.graded_by)
+                    .single();
+                    
+                if (!error && lecturer) {
+                    gradedByStr = lecturer.full_name || lecturer.email || grade.graded_by;
+                } else {
+                    gradedByStr = grade.graded_by;
+                }
+            } catch (e) {
+                gradedByStr = grade.graded_by;
+            }
         }
 
         // Update modal display
         document.getElementById('transcript-exam-name').textContent = exam.exam_name || 'N/A';
+        document.getElementById('transcript-course-name').textContent = exam.course_name || 'N/A';
+        document.getElementById('transcript-exam-type').textContent = exam.exam_type || 'N/A';
+        document.getElementById('transcript-block').textContent = exam.block_term || 'N/A';
         
         // CAT 1
         document.getElementById('transcript-cat1').textContent = cat1Score;
@@ -3080,6 +3165,13 @@ async function viewProvisionalTranscript(examId) {
         } else {
             document.getElementById('transcript-status').style.color = 'gray';
         }
+        
+        // Graded By information
+        document.getElementById('transcript-graded-by').textContent = gradedByStr;
+        document.getElementById('transcript-graded-date').textContent = gradedDateStr;
+        
+        // Show Pass Mark
+        document.getElementById('transcript-pass-mark').textContent = '60%';
 
         document.getElementById('transcript-modal').style.display = 'flex';
 
@@ -3087,6 +3179,135 @@ async function viewProvisionalTranscript(examId) {
         console.error('Error viewing transcript:', error);
         AppUtils.showToast('Failed to load transcript details', 'error');
     }
+}
+
+// Print transcript function
+function printTranscript() {
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+        <html>
+        <head>
+            <title>Provisional Transcript</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 20px; }
+                .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 15px; }
+                .section { margin-bottom: 25px; }
+                .section h3 { color: #2c3e50; border-bottom: 1px solid #ddd; padding-bottom: 8px; }
+                table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+                th { background-color: #f8f9fa; padding: 10px; text-align: left; }
+                td { padding: 10px; border-bottom: 1px solid #eee; }
+                .scores-table th { background-color: #2c3e50; color: white; text-align: center; }
+                .scores-table td { text-align: center; font-weight: bold; font-size: 16px; }
+                .pass { color: green; }
+                .fail { color: red; }
+                .footer { margin-top: 40px; font-size: 12px; color: #666; text-align: center; }
+                @media print {
+                    body { margin: 0; padding: 10px; }
+                    .no-print { display: none; }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>Provisional Transcript</h1>
+                <p>Student: ${currentUserProfile?.full_name || 'Student'}</p>
+                <p>Date: ${new Date().toLocaleDateString('en-US', { 
+                    weekday: 'long', 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                })}</p>
+            </div>
+            
+            <div class="section">
+                <h3>Exam Details</h3>
+                <table>
+                    <tr>
+                        <td><strong>Exam Name:</strong></td>
+                        <td>${document.getElementById('transcript-exam-name').textContent}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Course:</strong></td>
+                        <td>${document.getElementById('transcript-course-name').textContent}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Exam Type:</strong></td>
+                        <td>${document.getElementById('transcript-exam-type').textContent}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Block/Term:</strong></td>
+                        <td>${document.getElementById('transcript-block').textContent}</td>
+                    </tr>
+                </table>
+            </div>
+            
+            <div class="section">
+                <h3>Scores</h3>
+                <table class="scores-table">
+                    <thead>
+                        <tr>
+                            <th>CAT 1 (30)</th>
+                            <th>CAT 2 (30)</th>
+                            <th>Final Exam (40)</th>
+                            <th>Total Score (100%)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>${document.getElementById('transcript-cat1').textContent}</td>
+                            <td>${document.getElementById('transcript-cat2').textContent}</td>
+                            <td>${document.getElementById('transcript-final').textContent}</td>
+                            <td class="${document.getElementById('transcript-status').textContent === 'PASS' ? 'pass' : 'fail'}">
+                                ${document.getElementById('transcript-total').textContent}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="section">
+                <h3>Grading Information</h3>
+                <table>
+                    <tr>
+                        <td><strong>Status:</strong></td>
+                        <td class="${document.getElementById('transcript-status').textContent === 'PASS' ? 'pass' : 'fail'}">
+                            ${document.getElementById('transcript-status').textContent}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><strong>Pass Mark:</strong></td>
+                        <td>${document.getElementById('transcript-pass-mark').textContent}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Graded By:</strong></td>
+                        <td>${document.getElementById('transcript-graded-by').textContent}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Graded On:</strong></td>
+                        <td>${document.getElementById('transcript-graded-date').textContent}</td>
+                    </tr>
+                </table>
+            </div>
+            
+            <div class="footer">
+                <p>This is a provisional transcript. Final results may be subject to moderation by the examination board.</p>
+                <p>Printed on: ${new Date().toLocaleString()}</p>
+            </div>
+            
+            <div class="no-print" style="margin-top: 20px; text-align: center;">
+                <button onclick="window.print()" style="padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                    Print Transcript
+                </button>
+                <button onclick="window.close()" style="padding: 10px 20px; background: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer; margin-left: 10px;">
+                    Close Window
+                </button>
+            </div>
+        </body>
+        </html>
+    `);
+    
+    printWindow.document.close();
+    printWindow.focus();
 }
 
 // Reset exam filter
@@ -3105,12 +3326,25 @@ function closeTranscriptModal() {
         modal.style.display = 'none';
     }
 }
-window.closeTranscriptModal = closeTranscriptModal;
 
 // Update the filter event listener
 window.filterExams = function() {
     loadExams();
 };
+
+// Utility function to escape HTML
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Make functions globally accessible
+window.closeTranscriptModal = closeTranscriptModal;
+window.printTranscript = printTranscript;
+window.resetExamFilter = resetExamFilter;
+window.viewProvisionalTranscript = viewProvisionalTranscript;
+window.displayExamsTable = displayExamsTable;
             // *************************************************************************
             // *** ENHANCED RESOURCES SYSTEM - VIEW ONLY ***
             // *************************************************************************
