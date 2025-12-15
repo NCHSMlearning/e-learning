@@ -3031,10 +3031,10 @@ function displayExamsTable(exams) {
     });
 }
 
-// View provisional transcript - FIXED: Compact size + proper lecturer names
+// View provisional transcript - ENHANCED with better formatting
 async function viewProvisionalTranscript(examId) {
     try {
-        const exam = cachedExams.find(e => String(e.id) === String(examId));
+        const exam = window.cachedExams?.find(e => String(e.id) === String(examId));
         if (!exam) {
             alert("Exam not found.");
             return;
@@ -3043,10 +3043,10 @@ async function viewProvisionalTranscript(examId) {
         const grade = exam.grade || {};
         const examType = exam.exam_type || '';
         
-        // Get scores from the grade object
-        let cat1Score = grade.cat_1_score !== null ? grade.cat_1_score : '-';
-        let cat2Score = grade.cat_2_score !== null ? grade.cat_2_score : '-';
-        let finalScore = grade.exam_score !== null ? grade.exam_score : '-';
+        // Get scores with better formatting
+        let cat1Score = grade.cat_1_score !== null ? grade.cat_1_score : 'N/A';
+        let cat2Score = grade.cat_2_score !== null ? grade.cat_2_score : 'N/A';
+        let finalScore = grade.exam_score !== null ? grade.exam_score : 'N/A';
         let totalScore = '-';
         
         // Use calculated_percentage from exam object (same as table)
@@ -3135,14 +3135,25 @@ async function viewProvisionalTranscript(examId) {
             examNameElement.textContent = exam.exam_name || 'N/A';
         }
         
+        // Update scores - with enhanced formatting
         const cat1Element = document.getElementById('transcript-cat1');
         if (cat1Element) {
-            cat1Element.textContent = cat1Score;
+            if (grade.cat_1_score !== null && (examType.includes('CAT_1') || examType === 'CAT' || examType === 'CAT_1')) {
+                const percentage = ((grade.cat_1_score / 30) * 100).toFixed(1);
+                cat1Element.textContent = `${grade.cat_1_score} (${percentage}%)`;
+            } else {
+                cat1Element.textContent = cat1Score;
+            }
         }
         
         const cat2Element = document.getElementById('transcript-cat2');
         if (cat2Element) {
-            cat2Element.textContent = cat2Score;
+            if (grade.cat_2_score !== null && examType.includes('CAT_2')) {
+                const percentage = ((grade.cat_2_score / 30) * 100).toFixed(1);
+                cat2Element.textContent = `${grade.cat_2_score} (${percentage}%)`;
+            } else {
+                cat2Element.textContent = cat2Score;
+            }
         }
         
         const finalElement = document.getElementById('transcript-final');
@@ -3155,17 +3166,20 @@ async function viewProvisionalTranscript(examId) {
             totalElement.textContent = totalScore;
             
             // Color code total score
-            if (totalScore !== '-' && totalScore !== '-%') {
+            if (totalScore !== '-' && totalScore !== '-%' && totalScore !== 'N/A') {
                 const numericScore = parseFloat(totalScore);
-                totalElement.style.color = numericScore >= 60 ? 'green' : 'red';
-                totalElement.style.fontWeight = 'bold';
+                if (!isNaN(numericScore)) {
+                    totalElement.style.color = numericScore >= 60 ? '#10B981' : '#EF4444';
+                    totalElement.style.fontWeight = 'bold';
+                }
             }
         }
         
         const statusElement = document.getElementById('transcript-status');
         if (statusElement) {
             statusElement.textContent = resultStatus;
-            statusElement.style.color = resultStatus === 'PASS' ? 'green' : resultStatus === 'FAIL' ? 'red' : 'gray';
+            statusElement.style.color = resultStatus === 'PASS' ? '#10B981' : 
+                                     resultStatus === 'FAIL' ? '#EF4444' : '#6B7280';
             statusElement.style.fontWeight = 'bold';
         }
         
@@ -3188,7 +3202,7 @@ async function viewProvisionalTranscript(examId) {
                 row.className = 'dynamic-row';
                 row.innerHTML = `
                     <td style="font-weight:600; padding:4px 0; color:#4B5563; font-size:0.9em;">${rowData.label}</td>
-                    <td style="padding:4px 0; font-size:0.9em;">${rowData.value}</td>
+                    <td style="padding:4px 0; font-size:0.9em; text-align:right;">${rowData.value}</td>
                 `;
             });
         }
@@ -3219,6 +3233,10 @@ function closeTranscriptModal() {
         }
     }
 }
+
+// Make sure functions are globally accessible
+window.viewProvisionalTranscript = viewProvisionalTranscript;
+window.closeTranscriptModal = closeTranscriptModal;
             // *************************************************************************
             // *** ENHANCED RESOURCES SYSTEM - VIEW ONLY ***
             // *************************************************************************
