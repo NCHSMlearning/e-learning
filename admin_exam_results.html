@@ -762,571 +762,1182 @@
             </div>
         </div>
     </div>
+<script>
+   // Initialize Supabase FIRST
+const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
 
-    <script>
-        // Initialize Supabase FIRST
-        const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// Global variables
+let currentTab = 'students';
+let studentsResults = [];
+let allStudents = [];
+let allExams = [];
+let currentPage = {
+    students: 1,
+    allStudents: 1,
+    exams: 1
+};
+const itemsPerPage = 15;
+
+// Helper functions for CAT percentage calculations
+const PASS_MARK = 60; // Always 60% pass mark
+
+// ✅ FIXED: Calculate percentage properly for CAT exams
+function calculateCATPercentage(score, examType) {
+    if (score === null || score === undefined || score === '-') return null;
+    
+    const numericScore = parseFloat(score);
+    if (isNaN(numericScore)) return null;
+    
+    // For CAT exams (out of 30), calculate percentage
+    if (examType && (examType.includes('CAT_1') || examType.includes('CAT_2') || examType === 'CAT')) {
+        return (numericScore / 30) * 100;
+    }
+    
+    // For final exams, assume it's already a percentage or out of 100
+    return numericScore;
+}
+
+// ✅ FIXED: Determine PASS/FAIL status
+function calculatePassFailStatus(percentage, currentStatus, examType) {
+    if (percentage !== null && !isNaN(percentage)) {
+        return percentage >= PASS_MARK ? 'PASS' : 'FAIL';
+    }
+    
+    // If we have current status and it's already PASS/FAIL
+    if (currentStatus === 'PASS' || currentStatus === 'FAIL') {
+        return currentStatus;
+    }
+    
+    // Default to N/A if we can't determine
+    return 'N/A';
+}
+
+// ✅ FIXED: Get exam type from exam data or exam name
+function getExamType(examData, examName) {
+    if (examData?.exam_type) return examData.exam_type;
+    
+    // Try to determine from exam name
+    const name = examName || examData?.exam_name || '';
+    if (name.includes('CAT 1') || name.includes('CAT_1')) return 'CAT_1';
+    if (name.includes('CAT 2') || name.includes('CAT_2')) return 'CAT_2';
+    if (name.includes('Final') || name.includes('EXAM')) return 'EXAM';
+    
+    return examData?.exam_type || 'EXAM';
+}
+
+// Admin Authentication
+function checkAdminAuth() {
+    const adminSession = localStorage.getItem('adminSession');
+    if (!adminSession) {
+        window.location.href = 'admin_login.html';
+        return false;
+    }
+    
+    try {
+        const session = JSON.parse(adminSession);
+        if (session.email !== 'admin2@exam.gmail.com') {
+            window.location.href = 'admin_login.html';
+            return false;
+        }
         
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        // Display admin name
+        document.getElementById('adminName').textContent = 
+            `👤 ${session.name || 'Admin'} | ${session.email}`;
         
-        // Global variables
-        let currentTab = 'students';
-        let studentsResults = [];
-        let allStudents = [];
-        let allExams = [];
-        let currentPage = {
-            students: 1,
-            allStudents: 1,
-            exams: 1
-        };
-        const itemsPerPage = 15;
+        return session;
+    } catch (e) {
+        window.location.href = 'admin_login.html';
+        return false;
+    }
+}
 
-        // Helper functions for CAT percentage calculations
-        const PASS_MARK = 60; // Always 60% pass mark
+function logout() {
+    if (confirm('Are you sure you want to logout?')) {
+        localStorage.removeItem('adminSession');
+        window.location.href = 'admin_login.html';
+    }
+}
 
-        // ✅ FIXED: Calculate percentage properly for CAT exams
-        function calculateCATPercentage(score, examType) {
-            if (score === null || score === undefined || score === '-') return null;
+// Tab Switching
+function switchTab(tabName) {
+    currentTab = tabName;
+    
+    // Update active tab button
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    event.target.classList.add('active');
+    
+    // Show/hide tables
+    document.getElementById('studentsTableContainer').style.display = 'none';
+    document.getElementById('allStudentsTableContainer').style.display = 'none';
+    document.getElementById('examsTableContainer').style.display = 'none';
+    
+    // Load appropriate data
+    if (tabName === 'students') {
+        document.getElementById('studentsTableContainer').style.display = 'block';
+        loadStudentsWithResults();
+    } else if (tabName === 'allStudents') {
+        document.getElementById('allStudentsTableContainer').style.display = 'block';
+        loadAllStudents();
+    } else if (tabName === 'exams') {
+        document.getElementById('examsTableContainer').style.display = 'block';
+        loadAllExams();
+    }
+    
+    updateFilters();
+    updateStats();
+}
+
+// Update Filters based on Tab
+function updateFilters() {
+    const filtersContainer = document.getElementById('filtersContainer');
+    
+    if (currentTab === 'students') {
+        filtersContainer.innerHTML = `
+            <h2>Filter Student Results</h2>
+            <div class="filters-grid">
+                <div class="filter-group">
+                    <label>Select Exam:</label>
+                    <select id="examFilter">
+                        <option value="">All Exams</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Program:</label>
+                    <select id="programFilter">
+                        <option value="">All Programs</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Result Status:</label>
+                    <select id="statusFilter">
+                        <option value="">All Results</option>
+                        <option value="PASS">PASS</option>
+                        <option value="FAIL">FAIL</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Date From:</label>
+                    <input type="date" id="dateFrom">
+                </div>
+                <div class="filter-group">
+                    <label>Date To:</label>
+                    <input type="date" id="dateTo">
+                </div>
+            </div>
             
-            const numericScore = parseFloat(score);
-            if (isNaN(numericScore)) return null;
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="Search by student name, email, or ID...">
+                <button class="btn btn-primary" onclick="loadStudentsWithResults()">🔍 Search</button>
+                <button class="btn btn-danger" onclick="resetFilters()">🔄 Reset</button>
+            </div>
+        `;
+        loadFilterOptions();
+    } else if (currentTab === 'allStudents') {
+        filtersContainer.innerHTML = `
+            <h2>Filter All Students</h2>
+            <div class="filters-grid">
+                <div class="filter-group">
+                    <label>Program:</label>
+                    <select id="studentProgramFilter">
+                        <option value="">All Programs</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Block:</label>
+                    <select id="studentBlockFilter">
+                        <option value="">All Blocks</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Intake:</label>
+                    <select id="studentIntakeFilter">
+                        <option value="">All Intakes</option>
+                    </select>
+                </div>
+            </div>
             
-            // For CAT exams (out of 30), calculate percentage
-            if (examType && (examType.includes('CAT_1') || examType.includes('CAT_2') || examType === 'CAT')) {
-                return (numericScore / 30) * 100;
-            }
+            <div class="search-box">
+                <input type="text" id="studentSearchInput" placeholder="Search by student name or email...">
+                <button class="btn btn-primary" onclick="loadAllStudents()">🔍 Search</button>
+                <button class="btn btn-danger" onclick="resetStudentFilters()">🔄 Reset</button>
+            </div>
+        `;
+        loadStudentFilterOptions();
+    } else if (currentTab === 'exams') {
+        filtersContainer.innerHTML = `
+            <h2>Filter Exams</h2>
+            <div class="filters-grid">
+                <div class="filter-group">
+                    <label>Exam Type:</label>
+                    <select id="examTypeFilter">
+                        <option value="">All Types</option>
+                        <option value="CAT_1">CAT 1</option>
+                        <option value="CAT_2">CAT 2</option>
+                        <option value="EXAM">Final Exam</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Program:</label>
+                    <select id="examProgramFilter">
+                        <option value="">All Programs</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Course:</label>
+                    <input type="text" id="examCourseFilter" placeholder="Filter by course...">
+                </div>
+            </div>
             
-            // For final exams, assume it's already a percentage or out of 100
-            return numericScore;
+            <div class="search-box">
+                <input type="text" id="examSearchInput" placeholder="Search by exam name...">
+                <button class="btn btn-primary" onclick="loadAllExams()">🔍 Search</button>
+                <button class="btn btn-danger" onclick="resetExamFilters()">🔄 Reset</button>
+            </div>
+        `;
+    }
+}
+
+// Load Initial Data
+async function loadInitialData() {
+    if (!checkAdminAuth()) return;
+    
+    // Load all data initially
+    await Promise.all([
+        loadStudentsWithResults(),
+        loadAllStudents(),
+        loadAllExams()
+    ]);
+    
+    // Update stats
+    updateStats();
+}
+
+// ✅ FIXED: LOAD STUDENTS WITH RESULTS - With proper CAT percentage calculations
+async function loadStudentsWithResults() {
+    const examId = document.getElementById('examFilter')?.value || '';
+    const status = document.getElementById('statusFilter')?.value || '';
+    const dateFrom = document.getElementById('dateFrom')?.value || '';
+    const dateTo = document.getElementById('dateTo')?.value || '';
+    const search = document.getElementById('searchInput')?.value || '';
+
+    document.getElementById('studentsLoading').style.display = 'block';
+    document.getElementById('studentsTable').style.display = 'none';
+
+    try {
+        // Get completed exam results
+        let query = supabase
+            .from('exam_grades')
+            .select('*')
+            .eq('question_id', '00000000-0000-0000-0000-000000000000')
+            .not('result_status', 'is', null)
+            .order('graded_at', { ascending: false });
+
+        if (examId) query = query.eq('exam_id', examId);
+        if (status) {
+            if (status === 'PASS') query = query.eq('result_status', 'PASS');
+            else if (status === 'FAIL') query = query.eq('result_status', 'FAIL');
+        }
+        if (dateFrom) query = query.gte('graded_at', dateFrom);
+        if (dateTo) query = query.lte('graded_at', dateTo + ' 23:59:59');
+        if (search) {
+            query = query.or(`
+                student_id.ilike.%${search}%,
+                remarks.ilike.%${search}%
+            `);
         }
 
-        // ✅ FIXED: Determine PASS/FAIL status
-        function calculatePassFailStatus(percentage, currentStatus, examType) {
-            if (percentage !== null && !isNaN(percentage)) {
-                return percentage >= PASS_MARK ? 'PASS' : 'FAIL';
-            }
-            
-            // If we have current status and it's already PASS/FAIL
-            if (currentStatus === 'PASS' || currentStatus === 'FAIL') {
-                return currentStatus;
-            }
-            
-            // Default to N/A if we can't determine
-            return 'N/A';
+        const { data: results, error } = await query;
+        if (error) throw error;
+
+        const completedResults = results || [];
+        
+        if (completedResults.length === 0) {
+            studentsResults = [];
+            displayStudentsResults();
+            document.getElementById('studentsLoading').style.display = 'none';
+            document.getElementById('studentsTable').style.display = 'table';
+            return;
         }
 
-        // ✅ FIXED: Get exam type from exam data or exam name
-        function getExamType(examData, examName) {
-            if (examData?.exam_type) return examData.exam_type;
-            
-            // Try to determine from exam name
-            const name = examName || examData?.exam_name || '';
-            if (name.includes('CAT 1') || name.includes('CAT_1')) return 'CAT_1';
-            if (name.includes('CAT 2') || name.includes('CAT_2')) return 'CAT_2';
-            if (name.includes('Final') || name.includes('EXAM')) return 'EXAM';
-            
-            return examData?.exam_type || 'EXAM';
+        // Get exam details
+        const examIds = [...new Set(completedResults.map(r => r.exam_id).filter(id => id))];
+        const { data: exams } = await supabase
+            .from('exams')
+            .select('*')
+            .in('id', examIds);
+        
+        const examsMap = {};
+        if (exams) {
+            exams.forEach(exam => examsMap[exam.id] = exam);
         }
 
-        // Admin Authentication
-        function checkAdminAuth() {
-            const adminSession = localStorage.getItem('adminSession');
-            if (!adminSession) {
-                window.location.href = 'admin_login.html';
-                return false;
-            }
-            
-            try {
-                const session = JSON.parse(adminSession);
-                if (session.email !== 'admin2@exam.gmail.com') {
-                    window.location.href = 'admin_login.html';
-                    return false;
-                }
-                
-                // Display admin name
-                document.getElementById('adminName').textContent = 
-                    `👤 ${session.name || 'Admin'} | ${session.email}`;
-                
-                return session;
-            } catch (e) {
-                window.location.href = 'admin_login.html';
-                return false;
-            }
-        }
+        // Get student data from consolidated_user_profiles_table
+        const studentIds = [...new Set(completedResults.map(r => r.student_id).filter(id => id))];
+        let studentsMap = {};
 
-        function logout() {
-            if (confirm('Are you sure you want to logout?')) {
-                localStorage.removeItem('adminSession');
-                window.location.href = 'admin_login.html';
-            }
-        }
+        // Method 1: Try matching by user_id
+        const { data: studentsByUserId } = await supabase
+            .from('consolidated_user_profiles_table')
+            .select('*')
+            .in('user_id', studentIds);
 
-        // Tab Switching
-        function switchTab(tabName) {
-            currentTab = tabName;
-            
-            // Update active tab button
-            document.querySelectorAll('.tab-btn').forEach(btn => {
-                btn.classList.remove('active');
+        if (studentsByUserId) {
+            studentsByUserId.forEach(student => {
+                studentsMap[student.user_id] = {
+                    ...student,
+                    source: 'user_id_match'
+                };
             });
-            event.target.classList.add('active');
-            
-            // Show/hide tables
-            document.getElementById('studentsTableContainer').style.display = 'none';
-            document.getElementById('allStudentsTableContainer').style.display = 'none';
-            document.getElementById('examsTableContainer').style.display = 'none';
-            
-            // Load appropriate data
-            if (tabName === 'students') {
-                document.getElementById('studentsTableContainer').style.display = 'block';
-                loadStudentsWithResults();
-            } else if (tabName === 'allStudents') {
-                document.getElementById('allStudentsTableContainer').style.display = 'block';
-                loadAllStudents();
-            } else if (tabName === 'exams') {
-                document.getElementById('examsTableContainer').style.display = 'block';
-                loadAllExams();
-            }
-            
-            updateFilters();
-            updateStats();
         }
 
-        // Update Filters based on Tab
-        function updateFilters() {
-            const filtersContainer = document.getElementById('filtersContainer');
-            
-            if (currentTab === 'students') {
-                filtersContainer.innerHTML = `
-                    <h2>Filter Student Results</h2>
-                    <div class="filters-grid">
-                        <div class="filter-group">
-                            <label>Select Exam:</label>
-                            <select id="examFilter">
-                                <option value="">All Exams</option>
-                            </select>
-                        </div>
-                        <div class="filter-group">
-                            <label>Program:</label>
-                            <select id="programFilter">
-                                <option value="">All Programs</option>
-                            </select>
-                        </div>
-                        <div class="filter-group">
-                            <label>Result Status:</label>
-                            <select id="statusFilter">
-                                <option value="">All Results</option>
-                                <option value="PASS">PASS</option>
-                                <option value="FAIL">FAIL</option>
-                            </select>
-                        </div>
-                        <div class="filter-group">
-                            <label>Date From:</label>
-                            <input type="date" id="dateFrom">
-                        </div>
-                        <div class="filter-group">
-                            <label>Date To:</label>
-                            <input type="date" id="dateTo">
-                        </div>
-                    </div>
-                    
-                    <div class="search-box">
-                        <input type="text" id="searchInput" placeholder="Search by student name, email, or ID...">
-                        <button class="btn btn-primary" onclick="loadStudentsWithResults()">🔍 Search</button>
-                        <button class="btn btn-danger" onclick="resetFilters()">🔄 Reset</button>
-                    </div>
-                `;
-                loadFilterOptions();
-            } else if (currentTab === 'allStudents') {
-                filtersContainer.innerHTML = `
-                    <h2>Filter All Students</h2>
-                    <div class="filters-grid">
-                        <div class="filter-group">
-                            <label>Program:</label>
-                            <select id="studentProgramFilter">
-                                <option value="">All Programs</option>
-                            </select>
-                        </div>
-                        <div class="filter-group">
-                            <label>Block:</label>
-                            <select id="studentBlockFilter">
-                                <option value="">All Blocks</option>
-                            </select>
-                        </div>
-                        <div class="filter-group">
-                            <label>Intake:</label>
-                            <select id="studentIntakeFilter">
-                                <option value="">All Intakes</option>
-                            </select>
-                        </div>
-                    </div>
-                    
-                    <div class="search-box">
-                        <input type="text" id="studentSearchInput" placeholder="Search by student name or email...">
-                        <button class="btn btn-primary" onclick="loadAllStudents()">🔍 Search</button>
-                        <button class="btn btn-danger" onclick="resetStudentFilters()">🔄 Reset</button>
-                    </div>
-                `;
-                loadStudentFilterOptions();
-            } else if (currentTab === 'exams') {
-                filtersContainer.innerHTML = `
-                    <h2>Filter Exams</h2>
-                    <div class="filters-grid">
-                        <div class="filter-group">
-                            <label>Exam Type:</label>
-                            <select id="examTypeFilter">
-                                <option value="">All Types</option>
-                                <option value="CAT_1">CAT 1</option>
-                                <option value="CAT_2">CAT 2</option>
-                                <option value="EXAM">Final Exam</option>
-                            </select>
-                        </div>
-                        <div class="filter-group">
-                            <label>Program:</label>
-                                <select id="examProgramFilter">
-                                <option value="">All Programs</option>
-                            </select>
-                        </div>
-                        <div class="filter-group">
-                            <label>Course:</label>
-                            <input type="text" id="examCourseFilter" placeholder="Filter by course...">
-                        </div>
-                    </div>
-                    
-                    <div class="search-box">
-                        <input type="text" id="examSearchInput" placeholder="Search by exam name...">
-                        <button class="btn btn-primary" onclick="loadAllExams()">🔍 Search</button>
-                        <button class="btn btn-danger" onclick="resetExamFilters()">🔄 Reset</button>
-                    </div>
-                `;
-            }
-        }
+        // Method 2: Try matching by student_uuid
+        if (Object.keys(studentsMap).length < studentIds.length) {
+            const { data: studentsByUuid } = await supabase
+                .from('consolidated_user_profiles_table')
+                .select('*')
+                .in('student_uuid', studentIds);
 
-        // Load Initial Data
-        async function loadInitialData() {
-            if (!checkAdminAuth()) return;
-            
-            // Load all data initially
-            await Promise.all([
-                loadStudentsWithResults(),
-                loadAllStudents(),
-                loadAllExams()
-            ]);
-            
-            // Update stats
-            updateStats();
-        }
-
-        // ✅ FIXED: LOAD STUDENTS WITH RESULTS - With proper CAT percentage calculations
-        async function loadStudentsWithResults() {
-            const examId = document.getElementById('examFilter')?.value || '';
-            const status = document.getElementById('statusFilter')?.value || '';
-            const dateFrom = document.getElementById('dateFrom')?.value || '';
-            const dateTo = document.getElementById('dateTo')?.value || '';
-            const search = document.getElementById('searchInput')?.value || '';
-
-            document.getElementById('studentsLoading').style.display = 'block';
-            document.getElementById('studentsTable').style.display = 'none';
-
-            try {
-                // Get completed exam results
-                let query = supabase
-                    .from('exam_grades')
-                    .select('*')
-                    .eq('question_id', '00000000-0000-0000-0000-000000000000')
-                    .not('result_status', 'is', null)
-                    .order('graded_at', { ascending: false });
-
-                if (examId) query = query.eq('exam_id', examId);
-                if (status) {
-                    if (status === 'PASS') query = query.eq('result_status', 'PASS');
-                    else if (status === 'FAIL') query = query.eq('result_status', 'FAIL');
-                }
-                if (dateFrom) query = query.gte('graded_at', dateFrom);
-                if (dateTo) query = query.lte('graded_at', dateTo + ' 23:59:59');
-                if (search) {
-                    query = query.or(`
-                        student_id.ilike.%${search}%,
-                        remarks.ilike.%${search}%
-                    `);
-                }
-
-                const { data: results, error } = await query;
-                if (error) throw error;
-
-                const completedResults = results || [];
-                
-                if (completedResults.length === 0) {
-                    studentsResults = [];
-                    displayStudentsResults();
-                    document.getElementById('studentsLoading').style.display = 'none';
-                    document.getElementById('studentsTable').style.display = 'table';
-                    return;
-                }
-
-                // Get exam details
-                const examIds = [...new Set(completedResults.map(r => r.exam_id).filter(id => id))];
-                const { data: exams } = await supabase
-                    .from('exams')
-                    .select('*')
-                    .in('id', examIds);
-                
-                const examsMap = {};
-                if (exams) {
-                    exams.forEach(exam => examsMap[exam.id] = exam);
-                }
-
-                // Get student data from consolidated_user_profiles_table
-                const studentIds = [...new Set(completedResults.map(r => r.student_id).filter(id => id))];
-                let studentsMap = {};
-
-                // Method 1: Try matching by user_id
-                const { data: studentsByUserId } = await supabase
-                    .from('consolidated_user_profiles_table')
-                    .select('*')
-                    .in('user_id', studentIds);
-
-                if (studentsByUserId) {
-                    studentsByUserId.forEach(student => {
-                        studentsMap[student.user_id] = {
+            if (studentsByUuid) {
+                studentsByUuid.forEach(student => {
+                    if (!studentsMap[student.user_id] && !studentsMap[student.student_uuid]) {
+                        studentsMap[student.student_uuid] = {
                             ...student,
-                            source: 'user_id_match'
+                            source: 'student_uuid_match'
                         };
+                    }
+                });
+            }
+        }
+
+        // ✅ FIXED: Combine data with proper percentage calculations
+        studentsResults = completedResults.map(result => {
+            const exam = examsMap[result.exam_id];
+            let studentProfile = null;
+            
+            // Find student profile
+            if (studentsMap[result.student_id]) {
+                studentProfile = studentsMap[result.student_id];
+            } else {
+                for (const [key, student] of Object.entries(studentsMap)) {
+                    if (key === result.student_id || 
+                        student.user_id === result.student_id ||
+                        student.student_uuid === result.student_id) {
+                        studentProfile = student;
+                        break;
+                    }
+                }
+            }
+
+            // Get exam type
+            const examType = getExamType(exam, result.exam_name);
+            
+            // ✅ FIXED: Calculate percentage properly
+            let percentage = null;
+            if (result.total_score !== null && !isNaN(parseFloat(result.total_score))) {
+                // If total_score exists and is valid, use it
+                percentage = parseFloat(result.total_score);
+            } else if (result.marks !== null) {
+                // Calculate from marks based on exam type
+                const marks = parseFloat(result.marks) || 0;
+                if (examType.includes('CAT_1') || examType.includes('CAT_2') || examType === 'CAT') {
+                    // CAT exams are out of 30
+                    percentage = (marks / 30) * 100;
+                } else {
+                    // Final exams are out of 100
+                    percentage = marks;
+                }
+            }
+            
+            // ✅ FIXED: Determine PASS/FAIL status
+            const displayStatus = calculatePassFailStatus(percentage, result.result_status, examType);
+            
+            return {
+                ...result,
+                exam: exam || null,
+                student_profile: studentProfile || null,
+                display_status: displayStatus,
+                calculated_percentage: percentage || 0,
+                exam_type: examType,
+                cat_1_score: result.cat_1_score,
+                cat_2_score: result.cat_2_score,
+                exam_score: result.exam_score
+            };
+        });
+
+        displayStudentsResults();
+        
+        document.getElementById('studentsLoading').style.display = 'none';
+        document.getElementById('studentsTable').style.display = 'table';
+        
+    } catch (error) {
+        console.error('Error loading student results:', error);
+        document.getElementById('studentsLoading').innerHTML = 
+            `<div style="color: #DC2626;">❌ Error: ${error.message}</div>`;
+    }
+}
+
+function displayStudentsResults() {
+    const startIndex = (currentPage.students - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    const pageResults = studentsResults.slice(startIndex, endIndex);
+    const tbody = document.getElementById('studentsBody');
+
+    if (pageResults.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="11" style="text-align: center; padding: 40px; color: #64748B;">
+                    No student results found. Try changing your filters.
+                </td>
+            </tr>
+        `;
+        document.getElementById('studentsPagination').innerHTML = '';
+        return;
+    }
+
+    let html = '';
+    pageResults.forEach(result => {
+        const student = result.student_profile;
+        const exam = result.exam;
+        const percentage = result.calculated_percentage || 0;
+        
+        // Format exam type for display
+        const examType = result.exam_type || exam?.exam_type || 'N/A';
+        const displayType = examType === 'CAT_1' ? 'CAT 1' : 
+                          examType === 'CAT_2' ? 'CAT 2' : 
+                          examType === 'EXAM' ? 'Final Exam' : examType;
+        
+        // Determine status class
+        let statusClass = 'status-pending';
+        if (result.display_status === 'PASS') {
+            statusClass = 'status-pass';
+        } else if (result.display_status === 'FAIL') {
+            statusClass = 'status-fail';
+        }
+        
+        // Get raw score for display
+        let rawScore = '-';
+        if (examType.includes('CAT_1') && result.cat_1_score !== null) {
+            rawScore = result.cat_1_score;
+        } else if (examType.includes('CAT_2') && result.cat_2_score !== null) {
+            rawScore = result.cat_2_score;
+        } else if (result.marks !== null) {
+            rawScore = result.marks;
+        }
+        
+        // Format student ID
+        const studentId = result.student_id || '';
+        const shortId = studentId.substring(0, 8) + (studentId.length > 8 ? '...' : '');
+        
+        html += `
+            <tr>
+                <td><strong>${student?.full_name || shortId}</strong></td>
+                <td>${student?.email || studentId || 'N/A'}</td>
+                <td>${student?.program || student?.department || exam?.program || 'N/A'}</td>
+                <td>${student?.block || exam?.block || 'N/A'}</td>
+                <td>${exam?.exam_name || 'N/A'}</td>
+                <td>${displayType}</td>
+                <td style="font-weight:600;">${rawScore}</td>
+                <td style="font-weight:600;">${percentage.toFixed(1)}%</td>
+                <td><span class="${statusClass}">${result.display_status || 'N/A'}</span></td>
+                <td>${result.graded_at ? new Date(result.graded_at).toLocaleDateString() : 'N/A'}</td>
+                <td class="action-buttons-cell">
+                    <button class="action-btn btn-view" onclick="viewExamResult('${studentId}', ${result.exam_id})">
+                        👁️ View
+                    </button>
+                    <button class="action-btn btn-reset" onclick="resetStudentExam('${studentId}', ${result.exam_id})">
+                        🔄 Retake
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+
+    tbody.innerHTML = html;
+    renderPagination('students', studentsResults.length);
+}
+
+// LOAD ALL REGISTERED STUDENTS
+async function loadAllStudents() {
+    const program = document.getElementById('studentProgramFilter')?.value || '';
+    const block = document.getElementById('studentBlockFilter')?.value || '';
+    const intake = document.getElementById('studentIntakeFilter')?.value || '';
+    const search = document.getElementById('studentSearchInput')?.value || '';
+
+    document.getElementById('allStudentsLoading').style.display = 'block';
+    document.getElementById('allStudentsTable').style.display = 'none';
+
+    try {
+        let query = supabase
+            .from('consolidated_user_profiles_table')
+            .select('*')
+            .order('full_name', { ascending: true });
+
+        if (program) query = query.eq('program', program);
+        if (block) query = query.eq('block', block);
+        if (intake) query = query.eq('intake_year', intake);
+        if (search) {
+            query = query.or(`
+                full_name.ilike.%${search}%,
+                email.ilike.%${search}%,
+                program.ilike.%${search}%
+            `);
+        }
+
+        const { data: students, error } = await query;
+        
+        if (error) throw error;
+
+        allStudents = students || [];
+        
+        // For each student, get their exam count
+        for (let student of allStudents) {
+            const { count } = await supabase
+                .from('exam_grades')
+                .select('*', { count: 'exact', head: true })
+                .eq('student_id', student.user_id)
+                .neq('question_id', '00000000-0000-0000-0000-000000000000');
+            
+            student.examsTaken = count || 0;
+        }
+
+        displayAllStudents();
+        
+        document.getElementById('allStudentsLoading').style.display = 'none';
+        document.getElementById('allStudentsTable').style.display = 'table';
+        
+    } catch (error) {
+        console.error('Error loading all students:', error);
+        document.getElementById('allStudentsLoading').innerHTML = 
+            `<div style="color: #DC2626;">❌ Error loading students: ${error.message}</div>`;
+    }
+}
+
+function displayAllStudents() {
+    const startIndex = (currentPage.allStudents - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    const pageResults = allStudents.slice(startIndex, endIndex);
+    const tbody = document.getElementById('allStudentsBody');
+
+    if (pageResults.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="9" style="text-align: center; padding: 40px; color: #64748B;">
+                    No students found.
+                </td>
+            </tr>
+        `;
+        document.getElementById('allStudentsPagination').innerHTML = '';
+        return;
+    }
+
+    let html = '';
+    pageResults.forEach(student => {
+        const status = student.examsTaken > 0 ? 'status-completed' : 'status-not-started';
+        const statusText = student.examsTaken > 0 ? `Taken: ${student.examsTaken}` : 'Not Started';
+        
+        html += `
+            <tr>
+                <td><small>${student.user_id ? student.user_id.substring(0, 8) + '...' : 'N/A'}</small></td>
+                <td><strong>${student.full_name || 'N/A'}</strong></td>
+                <td>${student.email || 'N/A'}</td>
+                <td>${student.program || 'N/A'}</td>
+                <td>${student.block || 'N/A'}</td>
+                <td>${student.intake_year || 'N/A'}</td>
+                <td><strong>${student.examsTaken || 0}</strong> exams</td>
+                <td><span class="${status}">${statusText}</span></td>
+                <td class="action-buttons-cell">
+                    <button class="action-btn btn-view" onclick="viewStudentProfile('${student.id}')">
+                        👁️ Profile
+                    </button>
+                    <button class="action-btn btn-assign" onclick="assignExamToStudent('${student.id}')">
+                        📝 Assign Exam
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+
+    tbody.innerHTML = html;
+    renderPagination('allStudents', allStudents.length);
+}
+
+// LOAD ALL EXAMS
+async function loadAllExams() {
+    const examType = document.getElementById('examTypeFilter')?.value || '';
+    const program = document.getElementById('examProgramFilter')?.value || '';
+    const course = document.getElementById('examCourseFilter')?.value || '';
+    const search = document.getElementById('examSearchInput')?.value || '';
+
+    document.getElementById('examsLoading').style.display = 'block';
+    document.getElementById('examsTable').style.display = 'none';
+
+    try {
+        let query = supabase
+            .from('exams')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (examType) query = query.eq('exam_type', examType);
+        if (program) query = query.eq('program', program);
+        if (course) query = query.ilike('course', `%${course}%`);
+        if (search) query = query.ilike('exam_name', `%${search}%`);
+
+        const { data: exams, error } = await query;
+        
+        if (error) throw error;
+
+        allExams = exams || [];
+        
+        // For each exam, get student count
+        for (let exam of allExams) {
+            const { count } = await supabase
+                .from('exam_grades')
+                .select('*', { count: 'exact', head: true })
+                .eq('exam_id', exam.id)
+                .neq('question_id', '00000000-0000-0000-0000-000000000000');
+            
+            exam.studentsAssigned = count || 0;
+            
+            // Get question count
+            const { count: questionCount } = await supabase
+                .from('exam_questions')
+                .select('*', { count: 'exact', head: true })
+                .eq('exam_id', exam.id);
+            
+            exam.questionsCount = questionCount || 0;
+        }
+
+        displayAllExams();
+        
+        document.getElementById('examsLoading').style.display = 'none';
+        document.getElementById('examsTable').style.display = 'table';
+        
+    } catch (error) {
+        console.error('Error loading all exams:', error);
+        document.getElementById('examsLoading').innerHTML = 
+            `<div style="color: #DC2626;">❌ Error loading exams: ${error.message}</div>`;
+    }
+}
+
+function displayAllExams() {
+    const startIndex = (currentPage.exams - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    const pageResults = allExams.slice(startIndex, endIndex);
+    const tbody = document.getElementById('examsBody');
+
+    if (pageResults.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="10" style="text-align: center; padding: 40px; color: #64748B;">
+                    No exams found.
+                </td>
+            </tr>
+        `;
+        document.getElementById('examsPagination').innerHTML = '';
+        return;
+    }
+
+    let html = '';
+    pageResults.forEach(exam => {
+        const status = exam.studentsAssigned > 0 ? 'status-completed' : 'status-pending';
+        const statusText = exam.studentsAssigned > 0 ? 'Active' : 'Draft';
+        const examType = exam.exam_type || 'EXAM';
+        const displayType = examType === 'CAT_1' ? 'CAT 1' : 
+                          examType === 'CAT_2' ? 'CAT 2' : 
+                          examType === 'EXAM' ? 'Final Exam' : examType;
+        
+        html += `
+            <tr>
+                <td><small>${exam.id}</small></td>
+                <td><strong>${exam.exam_name || 'N/A'}</strong></td>
+                <td>${displayType}</td>
+                <td>${exam.course || 'N/A'}</td>
+                <td>${exam.program || 'N/A'}</td>
+                <td>${exam.duration_minutes || 0} min</td>
+                <td><strong>${exam.questionsCount || 0}</strong> questions</td>
+                <td><strong>${exam.studentsAssigned || 0}</strong> students</td>
+                <td><span class="${status}">${statusText}</span></td>
+                <td class="action-buttons-cell">
+                    <button class="action-btn btn-view" onclick="viewExamDetails(${exam.id})">
+                        👁️ View
+                    </button>
+                    <button class="action-btn btn-assign" onclick="assignStudentsToExam(${exam.id})">
+                        👥 Assign Students
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+
+    tbody.innerHTML = html;
+    renderPagination('exams', allExams.length);
+}
+
+// PAGINATION FUNCTION - THIS WAS MISSING
+function renderPagination(type, totalItems) {
+    const totalPages = Math.ceil(totalItems / itemsPerPage);
+    const pagination = document.getElementById(type + 'Pagination');
+    
+    if (totalPages <= 1) {
+        pagination.innerHTML = '';
+        return;
+    }
+
+    let html = '';
+    
+    // Previous button
+    html += `<button class="page-btn" ${currentPage[type] === 1 ? 'disabled' : ''} onclick="changePage('${type}', ${currentPage[type] - 1})">‹ Previous</button>`;
+    
+    // Page numbers
+    for (let i = 1; i <= totalPages; i++) {
+        if (i === 1 || i === totalPages || (i >= currentPage[type] - 2 && i <= currentPage[type] + 2)) {
+            html += `<button class="page-btn ${i === currentPage[type] ? 'active' : ''}" onclick="changePage('${type}', ${i})">${i}</button>`;
+        } else if (i === currentPage[type] - 3 || i === currentPage[type] + 3) {
+            html += `<span style="padding: 8px 15px;">...</span>`;
+        }
+    }
+    
+    // Next button
+    html += `<button class="page-btn" ${currentPage[type] === totalPages ? 'disabled' : ''} onclick="changePage('${type}', ${currentPage[type] + 1})">Next ›</button>`;
+    
+    pagination.innerHTML = html;
+}
+
+function changePage(type, page) {
+    currentPage[type] = page;
+    
+    if (type === 'students') {
+        displayStudentsResults();
+    } else if (type === 'allStudents') {
+        displayAllStudents();
+    } else if (type === 'exams') {
+        displayAllExams();
+    }
+    
+    window.scrollTo({ top: document.querySelector('.table-container').offsetTop - 100, behavior: 'smooth' });
+}
+
+// ✅ FIXED: Update Statistics with proper percentage calculations
+function updateStats() {
+    // Calculate passed/failed based on 60% threshold
+    const passedExams = studentsResults.filter(r => {
+        const percentage = r.calculated_percentage || 0;
+        return percentage >= PASS_MARK;
+    }).length;
+    
+    const failedExams = studentsResults.filter(r => {
+        const percentage = r.calculated_percentage || 0;
+        return percentage > 0 && percentage < PASS_MARK;
+    }).length;
+    
+    const totalStudents = allStudents.length;
+    const totalExams = allExams.length;
+    const pendingStudents = allStudents.filter(s => s.examsTaken === 0).length;
+    
+    // Calculate average score only from valid percentages
+    const validPercentages = studentsResults
+        .filter(r => r.calculated_percentage && r.calculated_percentage > 0)
+        .map(r => r.calculated_percentage);
+    
+    const avgScore = validPercentages.length > 0 
+        ? (validPercentages.reduce((sum, p) => sum + p, 0) / validPercentages.length).toFixed(1)
+        : 0;
+
+    document.getElementById('statsContainer').innerHTML = `
+        <div class="stat-card total">
+            <div class="stat-value">${totalStudents}</div>
+            <div class="stat-label">Total Students</div>
+        </div>
+        <div class="stat-card passed">
+            <div class="stat-value">${passedExams}</div>
+            <div class="stat-label">Passed Exams</div>
+        </div>
+        <div class="stat-card failed">
+            <div class="stat-value">${failedExams}</div>
+            <div class="stat-label">Failed Exams</div>
+        </div>
+        <div class="stat-card avg">
+            <div class="stat-value">${avgScore}%</div>
+            <div class="stat-label">Avg Score</div>
+        </div>
+        <div class="stat-card pending">
+            <div class="stat-value">${pendingStudents}</div>
+            <div class="stat-label">Pending Students</div>
+        </div>
+    `;
+}
+
+// Load filter options
+async function loadFilterOptions() {
+    try {
+        // Load exams dropdown
+        const { data: exams } = await supabase
+            .from('exams')
+            .select('id, exam_name, exam_type, program, course')
+            .order('exam_name');
+
+        const examSelect = document.getElementById('examFilter');
+        if (examSelect) {
+            examSelect.innerHTML = '<option value="">All Exams</option>';
+            exams?.forEach(exam => {
+                const option = document.createElement('option');
+                option.value = exam.id;
+                const examType = exam.exam_type === 'CAT_1' ? 'CAT 1' : 
+                               exam.exam_type === 'CAT_2' ? 'CAT 2' : 
+                               exam.exam_type === 'EXAM' ? 'Final Exam' : exam.exam_type;
+                option.textContent = `${exam.exam_name} (${examType})`;
+                examSelect.appendChild(option);
+            });
+        }
+
+        // Load programs
+        const { data: programs } = await supabase
+            .from('consolidated_user_profiles_table')
+            .select('program, department')
+            .not('program', 'is', null);
+
+        const programSelect = document.getElementById('programFilter');
+        if (programSelect) {
+            programSelect.innerHTML = '<option value="">All Programs</option>';
+            const uniquePrograms = new Set();
+            
+            programs?.forEach(p => {
+                if (p.program) uniquePrograms.add(p.program);
+                if (p.department) uniquePrograms.add(p.department);
+            });
+            
+            exams?.forEach(e => {
+                if (e.program) uniquePrograms.add(e.program);
+            });
+            
+            Array.from(uniquePrograms).sort().forEach(program => {
+                const option = document.createElement('option');
+                option.value = program;
+                option.textContent = program;
+                programSelect.appendChild(option);
+            });
+        }
+        
+    } catch (error) {
+        console.error('Error loading filter options:', error);
+    }
+}
+
+async function loadStudentFilterOptions() {
+    // Load programs
+    const { data: programs } = await supabase
+        .from('consolidated_user_profiles_table')
+        .select('program, department')
+        .not('program', 'is', null)
+        .not('department', 'is', null);
+
+    const programSelect = document.getElementById('studentProgramFilter');
+    if (programSelect) {
+        programSelect.innerHTML = '<option value="">All Programs</option>';
+        const uniquePrograms = [...new Set(programs?.map(p => p.program || p.department))];
+        uniquePrograms?.forEach(program => {
+            if (program) {
+                const option = document.createElement('option');
+                option.value = program;
+                option.textContent = program;
+                programSelect.appendChild(option);
+            }
+        });
+    }
+
+    // Load blocks
+    const { data: blocks } = await supabase
+        .from('consolidated_user_profiles_table')
+        .select('block')
+        .not('block', 'is', null);
+
+    const blockSelect = document.getElementById('studentBlockFilter');
+    if (blockSelect) {
+        blockSelect.innerHTML = '<option value="">All Blocks</option>';
+        const uniqueBlocks = [...new Set(blocks?.map(b => b.block))];
+        uniqueBlocks?.forEach(block => {
+            if (block) {
+                const option = document.createElement('option');
+                option.value = block;
+                option.textContent = block;
+                blockSelect.appendChild(option);
+            }
+        });
+    }
+
+    // Load intake years
+    const { data: intakes } = await supabase
+        .from('consolidated_user_profiles_table')
+        .select('intake_year')
+        .not('intake_year', 'is', null);
+
+    const intakeSelect = document.getElementById('studentIntakeFilter');
+    if (intakeSelect) {
+        intakeSelect.innerHTML = '<option value="">All Intake Years</option>';
+        const uniqueIntakes = [...new Set(intakes?.map(i => i.intake_year))];
+        uniqueIntakes?.forEach(intake => {
+            if (intake) {
+                const option = document.createElement('option');
+                option.value = intake;
+                option.textContent = intake;
+                intakeSelect.appendChild(option);
+            }
+        });
+    }
+}
+
+// MODAL AND VIEW FUNCTIONS
+async function viewExamResult(studentId, examId) {
+    try {
+        let studentData = null;
+        let dataSource = 'Unknown';
+        
+        // Check consolidated_user_profiles_table by user_id
+        const { data: profileByUserId } = await supabase
+            .from('consolidated_user_profiles_table')
+            .select('*')
+            .eq('user_id', studentId)
+            .single();
+        
+        if (profileByUserId && !profileByUserId.code) {
+            studentData = profileByUserId;
+            dataSource = 'Student Profile (user_id match)';
+        } else {
+            // Try student_uuid
+            const { data: profileByUuid } = await supabase
+                .from('consolidated_user_profiles_table')
+                .select('*')
+                .eq('student_uuid', studentId)
+                .single();
+            
+            if (profileByUuid && !profileByUuid.code) {
+                studentData = profileByUuid;
+                dataSource = 'Student Profile (uuid match)';
+            }
+        }
+
+        // Get exam details
+        const { data: exam } = await supabase
+            .from('exams')
+            .select('*')
+            .eq('id', examId)
+            .single();
+
+        // Get overall grade
+        const { data: overallGrade } = await supabase
+            .from('exam_grades')
+            .select('*')
+            .eq('student_id', studentId)
+            .eq('exam_id', examId)
+            .eq('question_id', '00000000-0000-0000-0000-000000000000')
+            .single();
+
+        // ✅ FIXED: Calculate percentage properly
+        const examType = getExamType(exam, exam?.exam_name);
+        let percentage = null;
+        let passFailStatus = 'N/A';
+        
+        if (overallGrade?.total_score !== null && !isNaN(parseFloat(overallGrade?.total_score))) {
+            percentage = parseFloat(overallGrade.total_score);
+        } else if (overallGrade?.marks !== null) {
+            const marks = parseFloat(overallGrade.marks) || 0;
+            if (examType.includes('CAT_1') || examType.includes('CAT_2') || examType === 'CAT') {
+                percentage = (marks / 30) * 100;
+            } else {
+                percentage = marks;
+            }
+        }
+        
+        if (percentage !== null) {
+            passFailStatus = percentage >= PASS_MARK ? 'PASS' : 'FAIL';
+        }
+
+        // Build student info
+        let studentInfoHTML = '';
+        if (studentData) {
+            studentInfoHTML = `
+                <div style="background: #F0FDF4; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 2px solid #38A169;">
+                    <h3 style="color: #065F46; margin-bottom: 15px;">👤 Student Information (${dataSource})</h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div>
+                            <p><strong>Full Name:</strong> ${studentData.full_name || 'Student'}</p>
+                            <p><strong>Email:</strong> ${studentData.email || studentId}</p>
+                            <p><strong>Program:</strong> ${studentData.program || 'N/A'}</p>
+                        </div>
+                        <div>
+                            <p><strong>Student ID:</strong> ${studentData.student_id || studentId.substring(0, 8) + '...'}</p>
+                            <p><strong>Block:</strong> ${studentData.block || 'N/A'}</p>
+                            <p><strong>Intake:</strong> ${studentData.intake_year || 'N/A'}</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else {
+            studentInfoHTML = `
+                <div style="background: #FEF3C7; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 2px solid #F59E0B;">
+                    <h3 style="color: #92400E; margin-bottom: 15px;">👤 Exam Taker Information</h3>
+                    <p><strong>Exam Taker ID:</strong> ${studentId}</p>
+                    <p><strong>Status:</strong> <span style="color: #DC2626;">Student profile not found</span></p>
+                </div>
+            `;
+        }
+
+        // Exam summary section with proper calculations
+        let detailsHTML = studentInfoHTML + `
+            <div style="background: #EFF6FF; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 2px solid #3B82F6;">
+                <h3 style="color: #1E40AF; margin-bottom: 15px;">📊 Exam Summary</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div>
+                        <p><strong>Exam:</strong> ${exam?.exam_name || 'N/A'}</p>
+                        <p><strong>Type:</strong> ${examType}</p>
+                        <p><strong>Course:</strong> ${exam?.course || 'N/A'}</p>
+                        <p><strong>Program:</strong> ${exam?.program || 'N/A'}</p>
+                    </div>
+                    <div>
+                        <p><strong>Date Taken:</strong> ${overallGrade?.graded_at ? new Date(overallGrade.graded_at).toLocaleString() : 'N/A'}</p>
+                        <p><strong>Raw Score:</strong> <span style="font-size: 1.2rem; font-weight: bold;">${overallGrade?.marks || 0}</span> marks</p>
+                        <p><strong>Percentage:</strong> <span style="font-size: 1.2rem; font-weight: bold;">${percentage?.toFixed(1) || '0.0'}%</span></p>
+                        <p><strong>Result:</strong> <span class="${passFailStatus === 'PASS' ? 'status-pass' : 'status-fail'}">${passFailStatus}</span></p>
+                        <p><strong>Pass Mark:</strong> 60%</p>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Get all question answers
+        const { data: questionAnswers } = await supabase
+            .from('exam_grades')
+            .select(`
+                *,
+                exam_questions!inner(question_text, correct_answer, marks, question_number)
+            `)
+            .eq('student_id', studentId)
+            .eq('exam_id', examId)
+            .neq('question_id', '00000000-0000-0000-0000-000000000000')
+            .order('exam_questions(question_number)');
+
+        if (questionAnswers && questionAnswers.length > 0) {
+            detailsHTML += `
+                <h3 style="color: #0A3D62; margin: 20px 0 15px 0; padding-bottom: 10px; border-bottom: 2px solid #E2E8F0;">
+                    📝 Question Details (${questionAnswers.length} questions)
+                </h3>
+                <div style="max-height: 400px; overflow-y: auto; padding-right: 10px;">
+            `;
+
+            questionAnswers.forEach((answer, index) => {
+                const question = answer.exam_questions;
+                const isCorrect = answer.selected_answer === question?.correct_answer;
+                const statusColor = isCorrect ? '#38A169' : '#DC2626';
+                const statusIcon = isCorrect ? '✅' : '❌';
+                
+                detailsHTML += `
+                    <div style="border: 1px solid ${isCorrect ? '#38A169' : '#FCA5A5'}; border-radius: 8px; padding: 15px; margin-bottom: 10px; background: ${isCorrect ? '#F0FDF4' : '#FEF2F2'};">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <strong style="color: #0A3D62;">Question ${question?.question_number || index + 1}</strong>
+                            <span style="color: ${statusColor}; font-weight: bold;">${statusIcon} ${isCorrect ? 'CORRECT' : 'INCORRECT'}</span>
+                        </div>
+                        <p style="margin: 5px 0; color: #475569;"><strong>Question:</strong> ${question?.question_text?.substring(0, 100)}...</p>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
+                            <div>
+                                <p style="margin: 3px 0;"><strong>Selected:</strong> ${answer.selected_answer || 'Not answered'}</p>
+                                <p style="margin: 3px 0;"><strong>Correct:</strong> ${question?.correct_answer || 'N/A'}</p>
+                            </div>
+                            <div>
+                                <p style="margin: 3px 0;"><strong>Marks:</strong> ${answer.marks || 0}/${question?.marks || 1}</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            detailsHTML += `</div>`;
+        } else {
+            detailsHTML += `
+                <div style="text-align: center; padding: 20px; color: #64748B; background: #F8FAFC; border-radius: 8px; margin-top: 20px;">
+                    <p>No detailed question answers found in the database.</p>
+                </div>
+            `;
+        }
+
+        document.getElementById('modalTitle').textContent = `Exam Result - ${exam?.exam_name || 'Unknown Exam'}`;
+        document.getElementById('modalContent').innerHTML = detailsHTML;
+        document.getElementById('studentModal').style.display = 'flex';
+        
+    } catch (error) {
+        console.error('Error loading exam result:', error);
+        alert('Error loading exam result. Please try again.');
+    }
+}
+
+async function viewStudentProfile(studentId) {
+    try {
+        // Get student details
+        const { data: student } = await supabase
+            .from('consolidated_user_profiles_table')
+            .select('*')
+            .eq('id', studentId)
+            .single();
+
+        // Get all exams taken by this student (using user_id)
+        const { data: studentExams } = await supabase
+            .from('exam_grades')
+            .select(`
+                *,
+                exams!inner(exam_name, exam_type, course)
+            `)
+            .eq('student_id', student.user_id)
+            .order('graded_at', { ascending: false });
+
+        let detailsHTML = `
+            <div style="background: #F8FAFC; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                <h3 style="color: #0A3D62; margin-bottom: 15px;">👤 Student Profile</h3>
+                <p><strong>Name:</strong> ${student?.full_name || 'N/A'}</p>
+                <p><strong>Email:</strong> ${student?.email || 'N/A'}</p>
+                <p><strong>Program:</strong> ${student?.program || 'N/A'}</p>
+                <p><strong>Block:</strong> ${student?.block || 'N/A'}</p>
+                <p><strong>Intake:</strong> ${student?.intake_year || 'N/A'}</p>
+                <p><strong>Registration Date:</strong> ${new Date(student?.created_at).toLocaleDateString()}</p>
+                <p><strong>User ID:</strong> <small>${student?.user_id || 'N/A'}</small></p>
+            </div>
+        `;
+
+        // Group exams by exam_id
+        const examMap = new Map();
+        studentExams?.forEach(record => {
+            if (record.exam_id && record.exams) {
+                if (!examMap.has(record.exam_id)) {
+                    examMap.set(record.exam_id, {
+                        exam: record.exams,
+                        records: []
                     });
                 }
-
-                // Method 2: Try matching by student_uuid
-                if (Object.keys(studentsMap).length < studentIds.length) {
-                    const { data: studentsByUuid } = await supabase
-                        .from('consolidated_user_profiles_table')
-                        .select('*')
-                        .in('student_uuid', studentIds);
-
-                    if (studentsByUuid) {
-                        studentsByUuid.forEach(student => {
-                            if (!studentsMap[student.user_id] && !studentsMap[student.student_uuid]) {
-                                studentsMap[student.student_uuid] = {
-                                    ...student,
-                                    source: 'student_uuid_match'
-                                };
-                            }
-                        });
-                    }
-                }
-
-                // ✅ FIXED: Combine data with proper percentage calculations
-                studentsResults = completedResults.map(result => {
-                    const exam = examsMap[result.exam_id];
-                    let studentProfile = null;
-                    
-                    // Find student profile
-                    if (studentsMap[result.student_id]) {
-                        studentProfile = studentsMap[result.student_id];
-                    } else {
-                        for (const [key, student] of Object.entries(studentsMap)) {
-                            if (key === result.student_id || 
-                                student.user_id === result.student_id ||
-                                student.student_uuid === result.student_id) {
-                                studentProfile = student;
-                                break;
-                            }
-                        }
-                    }
-
-                    // Get exam type
-                    const examType = getExamType(exam, result.exam_name);
-                    
-                    // ✅ FIXED: Calculate percentage properly
-                    let percentage = null;
-                    if (result.total_score !== null && !isNaN(parseFloat(result.total_score))) {
-                        // If total_score exists and is valid, use it
-                        percentage = parseFloat(result.total_score);
-                    } else if (result.marks !== null) {
-                        // Calculate from marks based on exam type
-                        const marks = parseFloat(result.marks) || 0;
-                        if (examType.includes('CAT_1') || examType.includes('CAT_2') || examType === 'CAT') {
-                            // CAT exams are out of 30
-                            percentage = (marks / 30) * 100;
-                        } else {
-                            // Final exams are out of 100
-                            percentage = marks;
-                        }
-                    }
-                    
-                    // ✅ FIXED: Determine PASS/FAIL status
-                    const displayStatus = calculatePassFailStatus(percentage, result.result_status, examType);
-                    
-                    return {
-                        ...result,
-                        exam: exam || null,
-                        student_profile: studentProfile || null,
-                        display_status: displayStatus,
-                        calculated_percentage: percentage || 0,
-                        exam_type: examType,
-                        cat_1_score: result.cat_1_score,
-                        cat_2_score: result.cat_2_score,
-                        exam_score: result.exam_score
-                    };
-                });
-
-                displayStudentsResults();
-                
-                document.getElementById('studentsLoading').style.display = 'none';
-                document.getElementById('studentsTable').style.display = 'table';
-                
-            } catch (error) {
-                console.error('Error loading student results:', error);
-                document.getElementById('studentsLoading').innerHTML = 
-                    `<div style="color: #DC2626;">❌ Error: ${error.message}</div>`;
+                examMap.get(record.exam_id).records.push(record);
             }
-        }
+        });
 
-        function displayStudentsResults() {
-            const startIndex = (currentPage.students - 1) * itemsPerPage;
-            const endIndex = startIndex + itemsPerPage;
-            const pageResults = studentsResults.slice(startIndex, endIndex);
-            const tbody = document.getElementById('studentsBody');
+        if (examMap.size > 0) {
+            detailsHTML += `
+                <h3 style="color: #0A3D62; margin: 20px 0 15px 0;">📊 Exams Taken</h3>
+            `;
 
-            if (pageResults.length === 0) {
-                tbody.innerHTML = `
-                    <tr>
-                        <td colspan="11" style="text-align: center; padding: 40px; color: #64748B;">
-                            No student results found. Try changing your filters.
-                        </td>
-                    </tr>
-                `;
-                document.getElementById('studentsPagination').innerHTML = '';
-                return;
-            }
-
-            let html = '';
-            pageResults.forEach(result => {
-                const student = result.student_profile;
-                const exam = result.exam;
-                const percentage = result.calculated_percentage || 0;
+            for (let [examId, data] of examMap) {
+                const exam = data.exam;
+                const records = data.records;
                 
-                // Format exam type for display
-                const examType = result.exam_type || exam?.exam_type || 'N/A';
-                const displayType = examType === 'CAT_1' ? 'CAT 1' : 
-                                  examType === 'CAT_2' ? 'CAT 2' : 
-                                  examType === 'EXAM' ? 'Final Exam' : examType;
+                // Find overall grade
+                const overallGrade = records.find(r => r.question_id === '00000000-0000-0000-0000-000000000000');
                 
-                // Determine status class
-                let statusClass = 'status-pending';
-                if (result.display_status === 'PASS') {
-                    statusClass = 'status-pass';
-                } else if (result.display_status === 'FAIL') {
-                    statusClass = 'status-fail';
-                }
-                
-                // Get raw score for display
-                let rawScore = '-';
-                if (examType.includes('CAT_1') && result.cat_1_score !== null) {
-                    rawScore = result.cat_1_score;
-                } else if (examType.includes('CAT_2') && result.cat_2_score !== null) {
-                    rawScore = result.cat_2_score;
-                } else if (result.marks !== null) {
-                    rawScore = result.marks;
-                }
-                
-                // Format student ID
-                const studentId = result.student_id || '';
-                const shortId = studentId.substring(0, 8) + (studentId.length > 8 ? '...' : '');
-                
-                html += `
-                    <tr>
-                        <td><strong>${student?.full_name || shortId}</strong></td>
-                        <td>${student?.email || studentId || 'N/A'}</td>
-                        <td>${student?.program || student?.department || exam?.program || 'N/A'}</td>
-                        <td>${student?.block || exam?.block || 'N/A'}</td>
-                        <td>${exam?.exam_name || 'N/A'}</td>
-                        <td>${displayType}</td>
-                        <td style="font-weight:600;">${rawScore}</td>
-                        <td style="font-weight:600;">${percentage.toFixed(1)}%</td>
-                        <td><span class="${statusClass}">${result.display_status || 'N/A'}</span></td>
-                        <td>${result.graded_at ? new Date(result.graded_at).toLocaleDateString() : 'N/A'}</td>
-                        <td class="action-buttons-cell">
-                            <button class="action-btn btn-view" onclick="viewExamResult('${studentId}', ${result.exam_id})">
-                                👁️ View
-                            </button>
-                            <button class="action-btn btn-reset" onclick="resetStudentExam('${studentId}', ${result.exam_id})">
-                                🔄 Retake
-                            </button>
-                        </td>
-                    </tr>
-                `;
-            });
-
-            tbody.innerHTML = html;
-            renderPagination('students', studentsResults.length);
-        }
-
-        async function viewExamResult(studentId, examId) {
-            try {
-                let studentData = null;
-                let dataSource = 'Unknown';
-                
-                // Check consolidated_user_profiles_table by user_id
-                const { data: profileByUserId } = await supabase
-                    .from('consolidated_user_profiles_table')
-                    .select('*')
-                    .eq('user_id', studentId)
-                    .single();
-                
-                if (profileByUserId && !profileByUserId.code) {
-                    studentData = profileByUserId;
-                    dataSource = 'Student Profile (user_id match)';
-                } else {
-                    // Try student_uuid
-                    const { data: profileByUuid } = await supabase
-                        .from('consolidated_user_profiles_table')
-                        .select('*')
-                        .eq('student_uuid', studentId)
-                        .single();
-                    
-                    if (profileByUuid && !profileByUuid.code) {
-                        studentData = profileByUuid;
-                        dataSource = 'Student Profile (uuid match)';
-                    }
-                }
-
-                // Get exam details
-                const { data: exam } = await supabase
-                    .from('exams')
-                    .select('*')
-                    .eq('id', examId)
-                    .single();
-
-                // Get overall grade
-                const { data: overallGrade } = await supabase
-                    .from('exam_grades')
-                    .select('*')
-                    .eq('student_id', studentId)
-                    .eq('exam_id', examId)
-                    .eq('question_id', '00000000-0000-0000-0000-000000000000')
-                    .single();
-
-                // Get all question answers
-                const { data: questionAnswers } = await supabase
-                    .from('exam_grades')
-                    .select(`
-                        *,
-                        exam_questions!inner(question_text, correct_answer, marks, question_number)
-                    `)
-                    .eq('student_id', studentId)
-                    .eq('exam_id', examId)
-                    .neq('question_id', '00000000-0000-0000-0000-000000000000')
-                    .order('exam_questions(question_number)');
-
-                // ✅ FIXED: Calculate percentage properly
-                const examType = getExamType(exam, exam?.exam_name);
+                // Calculate percentage
                 let percentage = null;
-                let passFailStatus = 'N/A';
-                
-                if (overallGrade?.total_score !== null && !isNaN(parseFloat(overallGrade?.total_score))) {
-                    percentage = parseFloat(overallGrade.total_score);
+                if (overallGrade?.total_score !== null) {
+                    percentage = parseFloat(overallGrade?.total_score);
                 } else if (overallGrade?.marks !== null) {
+                    const examType = getExamType(exam, exam.exam_name);
                     const marks = parseFloat(overallGrade.marks) || 0;
                     if (examType.includes('CAT_1') || examType.includes('CAT_2') || examType === 'CAT') {
                         percentage = (marks / 30) * 100;
@@ -1335,445 +1946,612 @@
                     }
                 }
                 
-                if (percentage !== null) {
-                    passFailStatus = percentage >= PASS_MARK ? 'PASS' : 'FAIL';
-                }
-
-                // Build student info
-                let studentInfoHTML = '';
-                if (studentData) {
-                    studentInfoHTML = `
-                        <div style="background: #F0FDF4; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 2px solid #38A169;">
-                            <h3 style="color: #065F46; margin-bottom: 15px;">👤 Student Information (${dataSource})</h3>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                                <div>
-                                    <p><strong>Full Name:</strong> ${studentData.full_name || 'Student'}</p>
-                                    <p><strong>Email:</strong> ${studentData.email || studentId}</p>
-                                    <p><strong>Program:</strong> ${studentData.program || 'N/A'}</p>
-                                </div>
-                                <div>
-                                    <p><strong>Student ID:</strong> ${studentData.student_id || studentId.substring(0, 8) + '...'}</p>
-                                    <p><strong>Block:</strong> ${studentData.block || 'N/A'}</p>
-                                    <p><strong>Intake:</strong> ${studentData.intake_year || 'N/A'}</p>
-                                </div>
-                            </div>
+                const passFailStatus = percentage !== null ? (percentage >= PASS_MARK ? 'PASS' : 'FAIL') : 'N/A';
+                
+                detailsHTML += `
+                    <div style="border: 1px solid #E2E8F0; border-radius: 8px; padding: 15px; margin-bottom: 15px; background: white;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                            <strong style="color: #0A3D62;">${exam.exam_name} (${exam.exam_type})</strong>
+                            ${overallGrade ? `
+                                <span class="${passFailStatus === 'PASS' ? 'status-pass' : 'status-fail'}">
+                                    ${passFailStatus} - ${percentage?.toFixed(1) || '0.0'}%
+                                </span>
+                            ` : ''}
                         </div>
-                    `;
-                } else {
-                    studentInfoHTML = `
-                        <div style="background: #FEF3C7; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 2px solid #F59E0B;">
-                            <h3 style="color: #92400E; margin-bottom: 15px;">👤 Exam Taker Information</h3>
-                            <p><strong>Exam Taker ID:</strong> ${studentId}</p>
-                            <p><strong>Status:</strong> <span style="color: #DC2626;">Student profile not found</span></p>
-                        </div>
-                    `;
-                }
-
-                // Exam summary section with proper calculations
-                let detailsHTML = studentInfoHTML + `
-                    <div style="background: #EFF6FF; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 2px solid #3B82F6;">
-                        <h3 style="color: #1E40AF; margin-bottom: 15px;">📊 Exam Summary</h3>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                            <div>
-                                <p><strong>Exam:</strong> ${exam?.exam_name || 'N/A'}</p>
-                                <p><strong>Type:</strong> ${examType}</p>
-                                <p><strong>Course:</strong> ${exam?.course || 'N/A'}</p>
-                                <p><strong>Program:</strong> ${exam?.program || 'N/A'}</p>
-                            </div>
-                            <div>
-                                <p><strong>Date Taken:</strong> ${overallGrade?.graded_at ? new Date(overallGrade.graded_at).toLocaleString() : 'N/A'}</p>
-                                <p><strong>Raw Score:</strong> <span style="font-size: 1.2rem; font-weight: bold;">${overallGrade?.marks || 0}</span> marks</p>
-                                <p><strong>Percentage:</strong> <span style="font-size: 1.2rem; font-weight: bold;">${percentage?.toFixed(1) || '0.0'}%</span></p>
-                                <p><strong>Result:</strong> <span class="${passFailStatus === 'PASS' ? 'status-pass' : 'status-fail'}">${passFailStatus}</span></p>
-                                <p><strong>Pass Mark:</strong> 60%</p>
-                            </div>
+                        <p><strong>Course:</strong> ${exam.course || 'N/A'}</p>
+                        <p><strong>Questions Attempted:</strong> ${records.filter(r => r.question_id !== '00000000-0000-0000-0000-000000000000').length}</p>
+                        ${overallGrade ? `<p><strong>Date Taken:</strong> ${new Date(overallGrade.graded_at).toLocaleDateString()}</p>` : ''}
+                        <div style="margin-top: 10px;">
+                            <button class="action-btn btn-view" onclick="viewStudentDetails('${student.user_id}', ${examId})">
+                                View Exam Details
+                            </button>
+                            <button class="action-btn btn-reset" onclick="resetStudentExam('${student.user_id}', ${examId})">
+                                Allow Retake
+                            </button>
                         </div>
                     </div>
                 `;
-
-                // Question answers section
-                if (questionAnswers && questionAnswers.length > 0) {
-                    detailsHTML += `
-                        <h3 style="color: #0A3D62; margin: 20px 0 15px 0; padding-bottom: 10px; border-bottom: 2px solid #E2E8F0;">
-                            📝 Question Details (${questionAnswers.length} questions)
-                        </h3>
-                        <div style="max-height: 400px; overflow-y: auto; padding-right: 10px;">
-                    `;
-
-                    questionAnswers.forEach((answer, index) => {
-                        const question = answer.exam_questions;
-                        const isCorrect = answer.selected_answer === question?.correct_answer;
-                        const statusColor = isCorrect ? '#38A169' : '#DC2626';
-                        const statusIcon = isCorrect ? '✅' : '❌';
-                        
-                        detailsHTML += `
-                            <div style="border: 1px solid ${isCorrect ? '#38A169' : '#FCA5A5'}; border-radius: 8px; padding: 15px; margin-bottom: 10px; background: ${isCorrect ? '#F0FDF4' : '#FEF2F2'};">
-                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                                    <strong style="color: #0A3D62;">Question ${question?.question_number || index + 1}</strong>
-                                    <span style="color: ${statusColor}; font-weight: bold;">${statusIcon} ${isCorrect ? 'CORRECT' : 'INCORRECT'}</span>
-                                </div>
-                                <p style="margin: 5px 0; color: #475569;"><strong>Question:</strong> ${question?.question_text?.substring(0, 100)}...</p>
-                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
-                                    <div>
-                                        <p style="margin: 3px 0;"><strong>Selected:</strong> ${answer.selected_answer || 'Not answered'}</p>
-                                        <p style="margin: 3px 0;"><strong>Correct:</strong> ${question?.correct_answer || 'N/A'}</p>
-                                    </div>
-                                    <div>
-                                        <p style="margin: 3px 0;"><strong>Marks:</strong> ${answer.marks || 0}/${question?.marks || 1}</p>
-                                    </div>
-                                </div>
-                            </div>
-                        `;
-                    });
-
-                    detailsHTML += `</div>`;
-                } else {
-                    detailsHTML += `
-                        <div style="text-align: center; padding: 20px; color: #64748B; background: #F8FAFC; border-radius: 8px; margin-top: 20px;">
-                            <p>No detailed question answers found in the database.</p>
-                        </div>
-                    `;
-                }
-
-                document.getElementById('modalTitle').textContent = `Exam Result - ${exam?.exam_name || 'Unknown Exam'}`;
-                document.getElementById('modalContent').innerHTML = detailsHTML;
-                document.getElementById('studentModal').style.display = 'flex';
-                
-            } catch (error) {
-                console.error('Error loading exam result:', error);
-                alert('Error loading exam result. Please try again.');
             }
-        }
-
-        // 2. LOAD ALL REGISTERED STUDENTS (Unchanged)
-        async function loadAllStudents() {
-            const program = document.getElementById('studentProgramFilter')?.value || '';
-            const block = document.getElementById('studentBlockFilter')?.value || '';
-            const intake = document.getElementById('studentIntakeFilter')?.value || '';
-            const search = document.getElementById('studentSearchInput')?.value || '';
-
-            document.getElementById('allStudentsLoading').style.display = 'block';
-            document.getElementById('allStudentsTable').style.display = 'none';
-
-            try {
-                let query = supabase
-                    .from('consolidated_user_profiles_table')
-                    .select('*')
-                    .order('full_name', { ascending: true });
-
-                if (program) query = query.eq('program', program);
-                if (block) query = query.eq('block', block);
-                if (intake) query = query.eq('intake_year', intake);
-                if (search) {
-                    query = query.or(`
-                        full_name.ilike.%${search}%,
-                        email.ilike.%${search}%,
-                        program.ilike.%${search}%
-                    `);
-                }
-
-                const { data: students, error } = await query;
-                
-                if (error) throw error;
-
-                allStudents = students || [];
-                
-                // For each student, get their exam count
-                for (let student of allStudents) {
-                    const { count } = await supabase
-                        .from('exam_grades')
-                        .select('*', { count: 'exact', head: true })
-                        .eq('student_id', student.user_id)
-                        .neq('question_id', '00000000-0000-0000-0000-000000000000');
-                    
-                    student.examsTaken = count || 0;
-                }
-
-                displayAllStudents();
-                
-                document.getElementById('allStudentsLoading').style.display = 'none';
-                document.getElementById('allStudentsTable').style.display = 'table';
-                
-            } catch (error) {
-                console.error('Error loading all students:', error);
-                document.getElementById('allStudentsLoading').innerHTML = 
-                    `<div style="color: #DC2626;">❌ Error loading students: ${error.message}</div>`;
-            }
-        }
-
-        function displayAllStudents() {
-            const startIndex = (currentPage.allStudents - 1) * itemsPerPage;
-            const endIndex = startIndex + itemsPerPage;
-            const pageResults = allStudents.slice(startIndex, endIndex);
-            const tbody = document.getElementById('allStudentsBody');
-
-            if (pageResults.length === 0) {
-                tbody.innerHTML = `
-                    <tr>
-                        <td colspan="9" style="text-align: center; padding: 40px; color: #64748B;">
-                            No students found.
-                        </td>
-                    </tr>
-                `;
-                document.getElementById('allStudentsPagination').innerHTML = '';
-                return;
-            }
-
-            let html = '';
-            pageResults.forEach(student => {
-                const status = student.examsTaken > 0 ? 'status-completed' : 'status-not-started';
-                const statusText = student.examsTaken > 0 ? `Taken: ${student.examsTaken}` : 'Not Started';
-                
-                html += `
-                    <tr>
-                        <td><small>${student.user_id ? student.user_id.substring(0, 8) + '...' : 'N/A'}</small></td>
-                        <td><strong>${student.full_name || 'N/A'}</strong></td>
-                        <td>${student.email || 'N/A'}</td>
-                        <td>${student.program || 'N/A'}</td>
-                        <td>${student.block || 'N/A'}</td>
-                        <td>${student.intake_year || 'N/A'}</td>
-                        <td><strong>${student.examsTaken || 0}</strong> exams</td>
-                        <td><span class="${status}">${statusText}</span></td>
-                        <td class="action-buttons-cell">
-                            <button class="action-btn btn-view" onclick="viewStudentProfile('${student.id}')">
-                                👁️ Profile
-                            </button>
-                            <button class="action-btn btn-assign" onclick="assignExamToStudent('${student.id}')">
-                                📝 Assign Exam
-                            </button>
-                        </td>
-                    </tr>
-                `;
-            });
-
-            tbody.innerHTML = html;
-            renderPagination('allStudents', allStudents.length);
-        }
-
-        // 3. LOAD ALL EXAMS (Unchanged)
-        async function loadAllExams() {
-            const examType = document.getElementById('examTypeFilter')?.value || '';
-            const program = document.getElementById('examProgramFilter')?.value || '';
-            const course = document.getElementById('examCourseFilter')?.value || '';
-            const search = document.getElementById('examSearchInput')?.value || '';
-
-            document.getElementById('examsLoading').style.display = 'block';
-            document.getElementById('examsTable').style.display = 'none';
-
-            try {
-                let query = supabase
-                    .from('exams')
-                    .select('*')
-                    .order('created_at', { ascending: false });
-
-                if (examType) query = query.eq('exam_type', examType);
-                if (program) query = query.eq('program', program);
-                if (course) query = query.ilike('course', `%${course}%`);
-                if (search) query = query.ilike('exam_name', `%${search}%`);
-
-                const { data: exams, error } = await query;
-                
-                if (error) throw error;
-
-                allExams = exams || [];
-                
-                // For each exam, get student count
-                for (let exam of allExams) {
-                    const { count } = await supabase
-                        .from('exam_grades')
-                        .select('*', { count: 'exact', head: true })
-                        .eq('exam_id', exam.id)
-                        .neq('question_id', '00000000-0000-0000-0000-000000000000');
-                    
-                    exam.studentsAssigned = count || 0;
-                    
-                    // Get question count
-                    const { count: questionCount } = await supabase
-                        .from('exam_questions')
-                        .select('*', { count: 'exact', head: true })
-                        .eq('exam_id', exam.id);
-                    
-                    exam.questionsCount = questionCount || 0;
-                }
-
-                displayAllExams();
-                
-                document.getElementById('examsLoading').style.display = 'none';
-                document.getElementById('examsTable').style.display = 'table';
-                
-            } catch (error) {
-                console.error('Error loading all exams:', error);
-                document.getElementById('examsLoading').innerHTML = 
-                    `<div style="color: #DC2626;">❌ Error loading exams: ${error.message}</div>`;
-            }
-        }
-
-        function displayAllExams() {
-            const startIndex = (currentPage.exams - 1) * itemsPerPage;
-            const endIndex = startIndex + itemsPerPage;
-            const pageResults = allExams.slice(startIndex, endIndex);
-            const tbody = document.getElementById('examsBody');
-
-            if (pageResults.length === 0) {
-                tbody.innerHTML = `
-                    <tr>
-                        <td colspan="10" style="text-align: center; padding: 40px; color: #64748B;">
-                            No exams found.
-                        </td>
-                    </tr>
-                `;
-                document.getElementById('examsPagination').innerHTML = '';
-                return;
-            }
-
-            let html = '';
-            pageResults.forEach(exam => {
-                const status = exam.studentsAssigned > 0 ? 'status-completed' : 'status-pending';
-                const statusText = exam.studentsAssigned > 0 ? 'Active' : 'Draft';
-                const examType = exam.exam_type || 'EXAM';
-                const displayType = examType === 'CAT_1' ? 'CAT 1' : 
-                                  examType === 'CAT_2' ? 'CAT 2' : 
-                                  examType === 'EXAM' ? 'Final Exam' : examType;
-                
-                html += `
-                    <tr>
-                        <td><small>${exam.id}</small></td>
-                        <td><strong>${exam.exam_name || 'N/A'}</strong></td>
-                        <td>${displayType}</td>
-                        <td>${exam.course || 'N/A'}</td>
-                        <td>${exam.program || 'N/A'}</td>
-                        <td>${exam.duration_minutes || 0} min</td>
-                        <td><strong>${exam.questionsCount || 0}</strong> questions</td>
-                        <td><strong>${exam.studentsAssigned || 0}</strong> students</td>
-                        <td><span class="${status}">${statusText}</span></td>
-                        <td class="action-buttons-cell">
-                            <button class="action-btn btn-view" onclick="viewExamDetails(${exam.id})">
-                                👁️ View
-                            </button>
-                            <button class="action-btn btn-assign" onclick="assignStudentsToExam(${exam.id})">
-                                👥 Assign Students
-                            </button>
-                        </td>
-                    </tr>
-                `;
-            });
-
-            tbody.innerHTML = html;
-            renderPagination('exams', allExams.length);
-        }
-
-        // ✅ FIXED: Update Statistics with proper percentage calculations
-        function updateStats() {
-            // Calculate passed/failed based on 60% threshold
-            const passedExams = studentsResults.filter(r => {
-                const percentage = r.calculated_percentage || 0;
-                return percentage >= PASS_MARK;
-            }).length;
-            
-            const failedExams = studentsResults.filter(r => {
-                const percentage = r.calculated_percentage || 0;
-                return percentage > 0 && percentage < PASS_MARK;
-            }).length;
-            
-            const totalStudents = allStudents.length;
-            const totalExams = allExams.length;
-            const pendingStudents = allStudents.filter(s => s.examsTaken === 0).length;
-            
-            // Calculate average score only from valid percentages
-            const validPercentages = studentsResults
-                .filter(r => r.calculated_percentage && r.calculated_percentage > 0)
-                .map(r => r.calculated_percentage);
-            
-            const avgScore = validPercentages.length > 0 
-                ? (validPercentages.reduce((sum, p) => sum + p, 0) / validPercentages.length).toFixed(1)
-                : 0;
-
-            document.getElementById('statsContainer').innerHTML = `
-                <div class="stat-card total">
-                    <div class="stat-value">${totalStudents}</div>
-                    <div class="stat-label">Total Students</div>
-                </div>
-                <div class="stat-card passed">
-                    <div class="stat-value">${passedExams}</div>
-                    <div class="stat-label">Passed Exams</div>
-                </div>
-                <div class="stat-card failed">
-                    <div class="stat-value">${failedExams}</div>
-                    <div class="stat-label">Failed Exams</div>
-                </div>
-                <div class="stat-card avg">
-                    <div class="stat-value">${avgScore}%</div>
-                    <div class="stat-label">Avg Score</div>
-                </div>
-                <div class="stat-card pending">
-                    <div class="stat-value">${pendingStudents}</div>
-                    <div class="stat-label">Pending Students</div>
+        } else {
+            detailsHTML += `
+                <div style="text-align: center; padding: 20px; color: #64748B;">
+                    <p>No exams taken yet.</p>
+                    <button class="btn btn-assign" onclick="assignExamToStudent('${studentId}')">
+                        Assign First Exam
+                    </button>
                 </div>
             `;
         }
 
-        // Load filter options (rest of functions remain mostly unchanged...)
-        async function loadFilterOptions() {
-            try {
-                // Load exams dropdown
-                const { data: exams } = await supabase
-                    .from('exams')
-                    .select('id, exam_name, exam_type, program, course')
-                    .order('exam_name');
+        document.getElementById('modalTitle').textContent = `Profile: ${student?.full_name || 'Student'}`;
+        document.getElementById('modalContent').innerHTML = detailsHTML;
+        document.getElementById('studentModal').style.display = 'flex';
+        
+    } catch (error) {
+        console.error('Error loading student profile:', error);
+        alert('Error loading student profile. Please try again.');
+    }
+}
 
-                const examSelect = document.getElementById('examFilter');
-                if (examSelect) {
-                    examSelect.innerHTML = '<option value="">All Exams</option>';
-                    exams?.forEach(exam => {
-                        const option = document.createElement('option');
-                        option.value = exam.id;
-                        const examType = exam.exam_type === 'CAT_1' ? 'CAT 1' : 
-                                       exam.exam_type === 'CAT_2' ? 'CAT 2' : 
-                                       exam.exam_type === 'EXAM' ? 'Final Exam' : exam.exam_type;
-                        option.textContent = `${exam.exam_name} (${examType})`;
-                        examSelect.appendChild(option);
-                    });
-                }
+async function viewStudentDetails(studentId, examId) {
+    try {
+        // Get student details by user_id
+        const { data: student } = await supabase
+            .from('consolidated_user_profiles_table')
+            .select('*')
+            .eq('user_id', studentId)
+            .single();
 
-                // Load programs
-                const { data: programs } = await supabase
-                    .from('consolidated_user_profiles_table')
-                    .select('program, department')
-                    .not('program', 'is', null);
+        // Get exam details
+        const { data: exam } = await supabase
+            .from('exams')
+            .select('*')
+            .eq('id', examId)
+            .single();
 
-                const programSelect = document.getElementById('programFilter');
-                if (programSelect) {
-                    programSelect.innerHTML = '<option value="">All Programs</option>';
-                    const uniquePrograms = new Set();
-                    
-                    programs?.forEach(p => {
-                        if (p.program) uniquePrograms.add(p.program);
-                        if (p.department) uniquePrograms.add(p.department);
-                    });
-                    
-                    exams?.forEach(e => {
-                        if (e.program) uniquePrograms.add(e.program);
-                    });
-                    
-                    Array.from(uniquePrograms).sort().forEach(program => {
-                        const option = document.createElement('option');
-                        option.value = program;
-                        option.textContent = program;
-                        programSelect.appendChild(option);
-                    });
-                }
-                
-            } catch (error) {
-                console.error('Error loading filter options:', error);
+        // Get overall grade
+        const { data: overallGrade } = await supabase
+            .from('exam_grades')
+            .select('*')
+            .eq('student_id', studentId)
+            .eq('exam_id', examId)
+            .eq('question_id', '00000000-0000-0000-0000-000000000000')
+            .single();
+
+        // ✅ FIXED: Calculate percentage properly
+        const examType = getExamType(exam, exam?.exam_name);
+        let percentage = null;
+        let passFailStatus = 'N/A';
+        
+        if (overallGrade?.total_score !== null && !isNaN(parseFloat(overallGrade?.total_score))) {
+            percentage = parseFloat(overallGrade.total_score);
+        } else if (overallGrade?.marks !== null) {
+            const marks = parseFloat(overallGrade.marks) || 0;
+            if (examType.includes('CAT_1') || examType.includes('CAT_2') || examType === 'CAT') {
+                percentage = (marks / 30) * 100;
+            } else {
+                percentage = marks;
             }
         }
-
-        // Pagination, modals, and other functions remain the same...
-        // [Rest of the functions from your original code remain unchanged]
         
-        // Initialize
-        window.addEventListener('DOMContentLoaded', loadInitialData);
+        if (percentage !== null) {
+            passFailStatus = percentage >= PASS_MARK ? 'PASS' : 'FAIL';
+        }
 
-    </script>
+        let detailsHTML = `
+            <div style="background: #F8FAFC; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                <h3 style="color: #0A3D62; margin-bottom: 15px;">📋 Student Information</h3>
+                <p><strong>Name:</strong> ${student?.full_name || 'N/A'}</p>
+                <p><strong>Email:</strong> ${student?.email || 'N/A'}</p>
+                <p><strong>Program:</strong> ${student?.program || 'N/A'} | Block: ${student?.block || 'N/A'}</p>
+                <p><strong>Intake:</strong> ${student?.intake_year || 'N/A'}</p>
+            </div>
+
+            <div style="background: #F0FDF4; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                <h3 style="color: #38A169; margin-bottom: 15px;">🎯 Exam Summary</h3>
+                <p><strong>Exam:</strong> ${exam?.exam_name || 'N/A'} (${examType})</p>
+                <p><strong>Date Taken:</strong> ${new Date(overallGrade?.graded_at).toLocaleString()}</p>
+                <p><strong>Raw Score:</strong> <span style="font-size: 1.2rem; font-weight: bold;">${overallGrade?.marks || 0}</span> marks</p>
+                <p><strong>Percentage:</strong> <span style="font-size: 1.2rem; font-weight: bold;">${percentage?.toFixed(1) || 0}%</span></p>
+                <p><strong>Result:</strong> <span class="${passFailStatus === 'PASS' ? 'status-pass' : 'status-fail'}">${passFailStatus}</span></p>
+            </div>
+        `;
+
+        // Get all question answers
+        const { data: questionAnswers } = await supabase
+            .from('exam_grades')
+            .select(`
+                *,
+                exam_questions!inner(question_text, correct_answer, marks, question_number)
+            `)
+            .eq('student_id', studentId)
+            .eq('exam_id', examId)
+            .neq('question_id', '00000000-0000-0000-0000-000000000000')
+            .order('exam_questions(question_number)');
+
+        if (questionAnswers && questionAnswers.length > 0) {
+            detailsHTML += `
+                <h3 style="color: #0A3D62; margin: 20px 0 15px 0;">📝 Question-wise Performance</h3>
+                <div style="max-height: 300px; overflow-y: auto;">
+            `;
+
+            questionAnswers.forEach((answer, index) => {
+                const question = answer.exam_questions;
+                const isCorrect = answer.selected_answer === question?.correct_answer;
+                const statusColor = isCorrect ? '#38A169' : '#DC2626';
+                const statusText = isCorrect ? 'CORRECT' : 'INCORRECT';
+                
+                detailsHTML += `
+                    <div style="border: 1px solid #E2E8F0; border-radius: 8px; padding: 15px; margin-bottom: 10px; background: white;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                            <strong style="color: #0A3D62;">Q${question?.question_number || index + 1}:</strong>
+                            <span style="color: ${statusColor}; font-weight: bold;">${statusText}</span>
+                        </div>
+                        <p style="margin: 5px 0;"><strong>Selected:</strong> ${answer.selected_answer || 'Not answered'}</p>
+                        <p style="margin: 5px 0;"><strong>Correct:</strong> ${question?.correct_answer || 'N/A'}</p>
+                        <p style="margin: 5px 0;"><strong>Marks:</strong> ${answer.marks || 0}/${question?.marks || 1}</p>
+                    </div>
+                `;
+            });
+
+            detailsHTML += `</div>`;
+        }
+
+        document.getElementById('modalTitle').textContent = `Student: ${student?.full_name || 'N/A'}`;
+        document.getElementById('modalContent').innerHTML = detailsHTML;
+        document.getElementById('studentModal').style.display = 'flex';
+        
+    } catch (error) {
+        console.error('Error loading student details:', error);
+        alert('Error loading student details. Please try again.');
+    }
+}
+
+async function viewExamDetails(examId) {
+    try {
+        // Get exam details
+        const { data: exam } = await supabase
+            .from('exams')
+            .select('*')
+            .eq('id', examId)
+            .single();
+
+        // Get questions for this exam
+        const { data: questions } = await supabase
+            .from('exam_questions')
+            .select('*')
+            .eq('exam_id', examId)
+            .order('question_number');
+
+        // Get students who took this exam
+        const { data: studentResults } = await supabase
+            .from('exam_grades')
+            .select('*')
+            .eq('exam_id', examId)
+            .eq('question_id', '00000000-0000-0000-0000-000000000000');
+
+        let detailsHTML = `
+            <div style="background: #F8FAFC; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                <h3 style="color: #0A3D62; margin-bottom: 15px;">📝 Exam Details</h3>
+                <p><strong>Exam Name:</strong> ${exam?.exam_name || 'N/A'}</p>
+                <p><strong>Type:</strong> ${exam?.exam_type || 'N/A'}</p>
+                <p><strong>Course:</strong> ${exam?.course || 'N/A'}</p>
+                <p><strong>Program:</strong> ${exam?.program || 'N/A'}</p>
+                <p><strong>Duration:</strong> ${exam?.duration_minutes || 0} minutes</p>
+                <p><strong>Pass Mark:</strong> ${exam?.pass_mark || 60}%</p>
+                <p><strong>Created:</strong> ${new Date(exam?.created_at).toLocaleDateString()}</p>
+            </div>
+        `;
+
+        if (questions && questions.length > 0) {
+            detailsHTML += `
+                <h3 style="color: #0A3D62; margin: 20px 0 15px 0;">❓ Questions (${questions.length})</h3>
+                <div style="max-height: 200px; overflow-y: auto; margin-bottom: 20px;">
+            `;
+
+            questions.forEach((q, index) => {
+                detailsHTML += `
+                    <div style="border: 1px solid #E2E8F0; border-radius: 6px; padding: 10px; margin-bottom: 8px; background: white;">
+                        <strong>Q${index + 1}:</strong> ${q.question_text?.substring(0, 80)}...
+                    </div>
+                `;
+            });
+
+            detailsHTML += `</div>`;
+        }
+
+        if (studentResults && studentResults.length > 0) {
+            detailsHTML += `
+                <h3 style="color: #0A3D62; margin: 20px 0 15px 0;">👥 Students who took this exam (${studentResults.length})</h3>
+                <div style="max-height: 200px; overflow-y: auto;">
+            `;
+
+            // Get student names for each result
+            const studentIds = studentResults.map(r => r.student_id);
+            const { data: students } = await supabase
+                .from('consolidated_user_profiles_table')
+                .select('user_id, full_name, email')
+                .in('user_id', studentIds);
+
+            const studentsMap = {};
+            if (students) {
+                students.forEach(s => {
+                    studentsMap[s.user_id] = s;
+                });
+            }
+
+            studentResults.forEach(result => {
+                const student = studentsMap[result.student_id];
+                // Calculate PASS/FAIL status
+                const examType = getExamType(exam, exam?.exam_name);
+                let percentage = null;
+                if (result.total_score !== null) {
+                    percentage = parseFloat(result.total_score);
+                } else if (result.marks !== null) {
+                    const marks = parseFloat(result.marks) || 0;
+                    if (examType.includes('CAT_1') || examType.includes('CAT_2') || examType === 'CAT') {
+                        percentage = (marks / 30) * 100;
+                    } else {
+                        percentage = marks;
+                    }
+                }
+                const statusClass = percentage !== null && percentage >= PASS_MARK ? 'status-pass' : 'status-fail';
+                
+                detailsHTML += `
+                    <div style="border: 1px solid #E2E8F0; border-radius: 6px; padding: 10px; margin-bottom: 8px; background: white; display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <strong>${student?.full_name || result.student_id.substring(0, 8) + '...'}</strong><br>
+                            <small>${student?.email || 'N/A'}</small>
+                        </div>
+                        <div style="text-align: right;">
+                            <span class="${statusClass}">${percentage !== null ? (percentage >= PASS_MARK ? 'PASS' : 'FAIL') : 'N/A'}</span><br>
+                            <small>${percentage?.toFixed(1) || '0.0'}%</small>
+                        </div>
+                    </div>
+                `;
+            });
+
+            detailsHTML += `</div>`;
+        }
+
+        detailsHTML += `
+            <div style="margin-top: 20px; display: flex; gap: 10px; justify-content: center;">
+                <button class="btn btn-assign" onclick="assignStudentsToExam(${examId})">
+                    👥 Assign More Students
+                </button>
+                <button class="btn btn-warning" onclick="editExam(${examId})">
+                    ✏️ Edit Exam
+                </button>
+            </div>
+        `;
+
+        document.getElementById('modalTitle').textContent = `Exam: ${exam?.exam_name || 'N/A'}`;
+        document.getElementById('modalContent').innerHTML = detailsHTML;
+        document.getElementById('studentModal').style.display = 'flex';
+        
+    } catch (error) {
+        console.error('Error loading exam details:', error);
+        alert('Error loading exam details. Please try again.');
+    }
+}
+
+// RESET/ALLOW RETAKE
+async function resetStudentExam(studentId, examId) {
+    if (!confirm('Are you sure you want to allow this student to retake the exam?\n\n⚠️ This will delete all their current exam data including scores.')) {
+        return;
+    }
+
+    try {
+        // Delete ALL exam data for this student and exam
+        const { error: deleteError } = await supabase
+            .from('exam_grades')
+            .delete()
+            .eq('student_id', studentId)
+            .eq('exam_id', examId);
+
+        if (deleteError) throw deleteError;
+
+        alert(`✅ Success! Student can now retake the exam.\n\nTheir previous scores have been deleted.`);
+
+        // Refresh results
+        if (currentTab === 'students') {
+            loadStudentsWithResults();
+        }
+        loadAllStudents(); // Refresh all students list too
+        
+    } catch (error) {
+        console.error('Error resetting exam:', error);
+        alert('❌ Error resetting exam. Please try again or contact support.');
+    }
+}
+
+// Assign Exam to Student
+async function assignExamToStudent(studentId = null) {
+    // Load students dropdown
+    const { data: students } = await supabase
+        .from('consolidated_user_profiles_table')
+        .select('id, full_name, email')
+        .order('full_name');
+
+    const studentSelect = document.getElementById('assignStudentSelect');
+    studentSelect.innerHTML = '';
+    students?.forEach(student => {
+        const option = document.createElement('option');
+        option.value = student.id;
+        option.textContent = `${student.full_name} (${student.email})`;
+        if (studentId && student.id === studentId) {
+            option.selected = true;
+        }
+        studentSelect.appendChild(option);
+    });
+
+    // Load exams dropdown
+    const { data: exams } = await supabase
+        .from('exams')
+        .select('id, exam_name, exam_type')
+        .order('exam_name');
+
+    const examSelect = document.getElementById('assignExamSelect');
+    examSelect.innerHTML = '<option value="">Select an exam</option>';
+    exams?.forEach(exam => {
+        const option = document.createElement('option');
+        option.value = exam.id;
+        const examType = exam.exam_type === 'CAT_1' ? 'CAT 1' : 
+                       exam.exam_type === 'CAT_2' ? 'CAT 2' : 
+                       exam.exam_type === 'EXAM' ? 'Final Exam' : exam.exam_type;
+        option.textContent = `${exam.exam_name} (${examType})`;
+        examSelect.appendChild(option);
+    });
+
+    document.getElementById('assignExamModal').style.display = 'flex';
+}
+
+async function confirmAssignExam() {
+    const studentId = document.getElementById('assignStudentSelect').value;
+    const examId = document.getElementById('assignExamSelect').value;
+    const dueDate = document.getElementById('assignDueDate').value;
+
+    if (!studentId || !examId) {
+        alert('Please select both a student and an exam.');
+        return;
+    }
+
+    try {
+        // Get student user_id
+        const { data: student } = await supabase
+            .from('consolidated_user_profiles_table')
+            .select('user_id, full_name')
+            .eq('id', studentId)
+            .single();
+
+        if (!student?.user_id) {
+            alert('Error: Student user_id not found.');
+            return;
+        }
+
+        // Check if student already has this exam
+        const { data: existing } = await supabase
+            .from('exam_grades')
+            .select('id')
+            .eq('student_id', student.user_id)
+            .eq('exam_id', examId)
+            .neq('question_id', '00000000-0000-0000-0000-000000000000')
+            .limit(1);
+
+        if (existing && existing.length > 0) {
+            if (!confirm('This student already has this exam. Do you want to reset it first?')) {
+                return;
+            }
+            // Delete existing exam data
+            await supabase
+                .from('exam_grades')
+                .delete()
+                .eq('student_id', student.user_id)
+                .eq('exam_id', examId);
+        }
+
+        const { data: exam } = await supabase
+            .from('exams')
+            .select('exam_name')
+            .eq('id', examId)
+            .single();
+
+        alert(`✅ Exam assigned successfully!\n\n${student?.full_name} can now take "${exam?.exam_name}"`);
+
+        closeAssignModal();
+        
+        // Refresh data
+        if (currentTab === 'students') {
+            loadStudentsWithResults();
+        }
+        loadAllStudents();
+        loadAllExams();
+        
+    } catch (error) {
+        console.error('Error assigning exam:', error);
+        alert('❌ Error assigning exam. Please try again.');
+    }
+}
+
+function closeAssignModal() {
+    document.getElementById('assignExamModal').style.display = 'none';
+}
+
+function assignStudentsToExam(examId) {
+    alert('Feature: Assign multiple students to exam.\n\nThis would open a modal to select multiple students from the list and assign them to this exam.');
+}
+
+function createNewExam() {
+    window.location.href = 'create_exam.html';
+}
+
+function editExam(examId) {
+    window.location.href = `edit_exam.html?id=${examId}`;
+}
+
+// Close Modal
+function closeModal() {
+    document.getElementById('studentModal').style.display = 'none';
+}
+
+// Filter Resets
+function resetFilters() {
+    document.getElementById('examFilter').value = '';
+    document.getElementById('programFilter').value = '';
+    document.getElementById('statusFilter').value = '';
+    document.getElementById('dateFrom').value = '';
+    document.getElementById('dateTo').value = '';
+    document.getElementById('searchInput').value = '';
+    currentPage.students = 1;
+    loadStudentsWithResults();
+}
+
+function resetStudentFilters() {
+    document.getElementById('studentProgramFilter').value = '';
+    document.getElementById('studentBlockFilter').value = '';
+    document.getElementById('studentIntakeFilter').value = '';
+    document.getElementById('studentSearchInput').value = '';
+    currentPage.allStudents = 1;
+    loadAllStudents();
+}
+
+function resetExamFilters() {
+    document.getElementById('examTypeFilter').value = '';
+    document.getElementById('examProgramFilter').value = '';
+    document.getElementById('examCourseFilter').value = '';
+    document.getElementById('examSearchInput').value = '';
+    currentPage.exams = 1;
+    loadAllExams();
+}
+
+// Export Functions
+function exportToExcel(type) {
+    let data = [];
+    let filename = '';
+    
+    if (type === 'students') {
+        data = studentsResults.map(r => ({
+            'Student Name': r.student_profile?.full_name,
+            'Student Email': r.student_profile?.email,
+            'Program': r.student_profile?.program,
+            'Block': r.student_profile?.block,
+            'Exam Name': r.exam?.exam_name,
+            'Exam Type': r.exam_type === 'CAT_1' ? 'CAT 1' : r.exam_type === 'CAT_2' ? 'CAT 2' : 'Final Exam',
+            'Score': r.marks,
+            'Percentage': `${r.calculated_percentage?.toFixed(1)}%`,
+            'Status': r.display_status,
+            'Date Taken': new Date(r.graded_at).toLocaleDateString(),
+            'Time Taken': new Date(r.graded_at).toLocaleTimeString()
+        }));
+        filename = `students_with_results_${new Date().toISOString().split('T')[0]}.xlsx`;
+    } else if (type === 'allStudents') {
+        data = allStudents.map(s => ({
+            'Student ID': s.user_id ? s.user_id.substring(0, 8) + '...' : 'N/A',
+            'Full Name': s.full_name,
+            'Email': s.email,
+            'Program': s.program,
+            'Block': s.block,
+            'Intake': s.intake_year,
+            'Exams Taken': s.examsTaken || 0,
+            'Registration Date': new Date(s.created_at).toLocaleDateString()
+        }));
+        filename = `all_students_${new Date().toISOString().split('T')[0]}.xlsx`;
+    } else if (type === 'exams') {
+        data = allExams.map(e => ({
+            'Exam ID': e.id,
+            'Exam Name': e.exam_name,
+            'Type': e.exam_type === 'CAT_1' ? 'CAT 1' : e.exam_type === 'CAT_2' ? 'CAT 2' : 'Final Exam',
+            'Course': e.course,
+            'Program': e.program,
+            'Duration (min)': e.duration_minutes,
+            'Questions': e.questionsCount || 0,
+            'Students Assigned': e.studentsAssigned || 0,
+            'Pass Mark': e.pass_mark || 60,
+            'Created Date': new Date(e.created_at).toLocaleDateString()
+        }));
+        filename = `all_exams_${new Date().toISOString().split('T')[0]}.xlsx`;
+    }
+
+    if (data.length === 0) {
+        alert('No data to export.');
+        return;
+    }
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Data');
+    XLSX.writeFile(workbook, filename);
+}
+
+function printTable(type) {
+    const tableId = type === 'students' ? 'studentsTable' : 
+                   type === 'allStudents' ? 'allStudentsTable' : 'examsTable';
+    const table = document.getElementById(tableId);
+    
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+        <html>
+        <head>
+            <title>${type === 'students' ? 'Students with Results' : 
+                      type === 'allStudents' ? 'All Registered Students' : 
+                      'All Exams'} - NCHSM</title>
+            <style>
+                body { font-family: Arial, sans-serif; padding: 20px; }
+                h1 { color: #0A3D62; border-bottom: 2px solid #0A3D62; padding-bottom: 10px; }
+                table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+                th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 12px; }
+                th { background: #f0f0f0; }
+                @media print {
+                    button { display: none; }
+                }
+            </style>
+        </head>
+        <body>
+            <h1>${type === 'students' ? 'Students with Exam Results' : 
+                   type === 'allStudents' ? 'All Registered Students' : 
+                   'All Available Exams'} - NCHSM</h1>
+            <p><strong>Generated:</strong> ${new Date().toLocaleString()}</p>
+            <p><strong>Total Records:</strong> ${type === 'students' ? studentsResults.length : 
+                                                type === 'allStudents' ? allStudents.length : 
+                                                allExams.length}</p>
+            ${table.outerHTML}
+        </body>
+        </html>
+    `);
+    printWindow.document.close();
+    printWindow.print();
+}
+
+// Initialize
+window.addEventListener('DOMContentLoaded', loadInitialData);
+
+// Close modals when clicking outside
+window.addEventListener('click', (event) => {
+    const modals = ['studentModal', 'assignExamModal'];
+    modals.forEach(modalId => {
+        const modal = document.getElementById(modalId);
+        if (event.target === modal) {
+            if (modalId === 'studentModal') closeModal();
+            if (modalId === 'assignExamModal') closeAssignModal();
+        }
+    });
+});
+
+// Allow Enter key in search inputs
+document.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter' && e.target.matches('input[type="text"]')) {
+        if (currentTab === 'students') loadStudentsWithResults();
+        if (currentTab === 'allStudents') loadAllStudents();
+        if (currentTab === 'exams') loadAllExams();
+    }
+});
+
+// Auto-load today's date in dateTo
+window.addEventListener('load', () => {
+    const today = new Date().toISOString().split('T')[0];
+    const dateTo = document.getElementById('dateTo');
+    if (dateTo) dateTo.value = today;
+});
+<script>
 </body>
 </html>
