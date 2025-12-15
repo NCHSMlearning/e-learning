@@ -2677,7 +2677,7 @@
                     .replace(/'/g, "&#039;");
             }
                         
-// Load exams - FIXED VERSION
+// Load exams - FIXED: Pass mark is ALWAYS 60%
 async function loadExams() {
     const tableBody = document.getElementById('exams-table');
     if (!tableBody) return;
@@ -2740,15 +2740,20 @@ async function loadExams() {
         // Combine exams with their grades
         cachedExams = exams.map(exam => {
             const grade = grades?.find(g => String(g.exam_id) === String(exam.id));
+            const examType = exam.exam_type || '';
             
-            // ✅ FIX: Determine PASS/FAIL status based on total_score
+            // ✅ FIXED: Pass mark is ALWAYS 60% regardless of exam type
             let resultStatus = 'Scheduled';
+            let displayStatus = 'Scheduled';
+            
             if (grade) {
                 if (grade.result_status === 'Final') {
-                    // Convert "Final" to PASS/FAIL based on score
-                    const passMark = 60; // Default pass mark
-                    resultStatus = grade.total_score >= passMark ? 'PASS' : 'FAIL';
+                    // Convert "Final" to PASS/FAIL based on 60% pass mark
+                    const percentage = grade.total_score || 0;
+                    displayStatus = percentage >= 60 ? 'PASS' : 'FAIL';
+                    resultStatus = 'Final';
                 } else {
+                    displayStatus = grade.result_status || 'Graded';
                     resultStatus = grade.result_status || 'Graded';
                 }
             }
@@ -2756,14 +2761,15 @@ async function loadExams() {
             return { 
                 ...exam, 
                 grade: grade || null,
-                display_status: resultStatus // Store the display status
+                display_status: displayStatus,
+                result_status: resultStatus
             };
         });
 
         // Make exams data globally accessible
         window.cachedExams = cachedExams;
 
-        // ✅ FIXED: Filter by dropdown with proper filtering
+        // Filter by dropdown
         const filter = document.getElementById('exam-type-filter')?.value || 'all';
         let filteredExams = cachedExams;
         
@@ -2809,7 +2815,7 @@ async function loadExams() {
     }
 }
 
-// Display exams in table - FIXED VERSION
+// Display exams in table - FIXED: 60% pass mark
 function displayExamsTable(exams) {
     const tableBody = document.getElementById('exams-table');
     if (!tableBody) return;
@@ -2860,22 +2866,43 @@ function displayExamsTable(exams) {
                 cat1Score = gradeEntry.cat_1_score !== null ? gradeEntry.cat_1_score : '-';
                 cat2Score = '<span style="color:#9CA3AF; font-style:italic;">N/A</span>';
                 finalExamScore = '<span style="color:#9CA3AF; font-style:italic;">N/A</span>';
-                totalScore = gradeEntry.cat_1_score !== null ? 
-                    `${((gradeEntry.cat_1_score / 30) * 100).toFixed(1)}%` : '-';
+                
+                // ✅ FIXED: Use total_score percentage from database
+                // If total_score exists, use it directly (it's already a percentage)
+                if (gradeEntry.total_score !== null) {
+                    totalScore = `${gradeEntry.total_score.toFixed(1)}%`;
+                } 
+                // Otherwise calculate percentage from cat_1_score out of 30
+                else if (gradeEntry.cat_1_score !== null) {
+                    totalScore = `${((gradeEntry.cat_1_score / 30) * 100).toFixed(1)}%`;
+                } else {
+                    totalScore = '-';
+                }
                     
             } else if (examType.includes('CAT_2') || examType === 'CAT_2') {
                 // CAT 2 only
                 cat1Score = '<span style="color:#9CA3AF; font-style:italic;">N/A</span>';
                 cat2Score = gradeEntry.cat_2_score !== null ? gradeEntry.cat_2_score : '-';
                 finalExamScore = '<span style="color:#9CA3AF; font-style:italic;">N/A</span>';
-                totalScore = gradeEntry.cat_2_score !== null ? 
-                    `${((gradeEntry.cat_2_score / 30) * 100).toFixed(1)}%` : '-';
+                
+                // ✅ FIXED: Use total_score percentage from database
+                if (gradeEntry.total_score !== null) {
+                    totalScore = `${gradeEntry.total_score.toFixed(1)}%`;
+                }
+                // Otherwise calculate percentage from cat_2_score out of 30
+                else if (gradeEntry.cat_2_score !== null) {
+                    totalScore = `${((gradeEntry.cat_2_score / 30) * 100).toFixed(1)}%`;
+                } else {
+                    totalScore = '-';
+                }
                     
             } else if (examType === 'EXAM' || examType.includes('EXAM') || examType.includes('Final')) {
-                // Final Exam - show all
+                // Final Exam - show all scores
                 cat1Score = gradeEntry.cat_1_score !== null ? gradeEntry.cat_1_score : '-';
                 cat2Score = gradeEntry.cat_2_score !== null ? gradeEntry.cat_2_score : '-';
                 finalExamScore = gradeEntry.exam_score !== null ? gradeEntry.exam_score : '-';
+                
+                // ✅ FIXED: Use total_score percentage from database
                 totalScore = gradeEntry.total_score !== null ? 
                     `${gradeEntry.total_score.toFixed(1)}%` : '-';
             }
@@ -2887,7 +2914,7 @@ function displayExamsTable(exams) {
             totalScore = '-';
         }
 
-        // ✅ FIX: Use display_status which shows PASS/FAIL instead of "Final"
+        // Use display_status which should now show correct PASS/FAIL based on 60%
         const resultStatus = exam.display_status || 'Scheduled';
         
         // Determine status color and text
@@ -2895,25 +2922,33 @@ function displayExamsTable(exams) {
         let statusColor = '';
         
         if (resultStatus === 'PASS') {
-            statusColor = 'var(--color-success)';
-            statusDisplay = `<span style="color:${statusColor}; font-weight:700;">PASS</span>`;
+            statusColor = '#10B981'; // Green
+            statusDisplay = `<span style="color:${statusColor}; font-weight:700;">
+                <i class="fas fa-check-circle"></i> PASS
+            </span>`;
         } else if (resultStatus === 'FAIL') {
-            statusColor = 'var(--color-alert)';
-            statusDisplay = `<span style="color:${statusColor}; font-weight:700;">FAIL</span>`;
+            statusColor = '#EF4444'; // Red
+            statusDisplay = `<span style="color:${statusColor}; font-weight:700;">
+                <i class="fas fa-times-circle"></i> FAIL
+            </span>`;
         } else if (resultStatus === 'Graded') {
-            statusColor = 'var(--color-primary)';
-            statusDisplay = `<span style="color:${statusColor}; font-weight:700;">Graded</span>`;
+            statusColor = '#3B82F6'; // Blue
+            statusDisplay = `<span style="color:${statusColor}; font-weight:700;">
+                <i class="fas fa-clipboard-check"></i> Graded
+            </span>`;
         } else {
-            statusColor = 'var(--color-warning)';
-            statusDisplay = `<span style="color:${statusColor}; font-weight:700;">${resultStatus}</span>`;
+            statusColor = '#F59E0B'; // Orange
+            statusDisplay = `<span style="color:${statusColor}; font-weight:700;">
+                <i class="fas fa-calendar"></i> ${resultStatus}
+            </span>`;
         }
 
         // Add exam type badge
-        const typeBadge = examType === 'CAT_1' || examType.includes('CAT_1') ? 
+        const typeBadge = examType.includes('CAT_1') ? 
             '<span style="background:#3B82F6; color:white; padding:2px 8px; border-radius:12px; font-size:11px; margin-left:5px;">CAT 1</span>' :
-            examType === 'CAT_2' || examType.includes('CAT_2') ?
+            examType.includes('CAT_2') ?
             '<span style="background:#8B5CF6; color:white; padding:2px 8px; border-radius:12px; font-size:11px; margin-left:5px;">CAT 2</span>' :
-            examType === 'EXAM' || examType.includes('EXAM') || examType.includes('Final') ?
+            examType.includes('EXAM') || examType.includes('Final') ?
             '<span style="background:#EF4444; color:white; padding:2px 8px; border-radius:12px; font-size:11px; margin-left:5px;">Final</span>' :
             '<span style="background:#6B7280; color:white; padding:2px 8px; border-radius:12px; font-size:11px; margin-left:5px;">Exam</span>';
 
@@ -2944,7 +2979,7 @@ function displayExamsTable(exams) {
                 <td style="text-align:center; ${cat1Score !== '-' ? 'font-weight:600;' : ''}">${cat1Score}</td>
                 <td style="text-align:center; ${cat2Score !== '-' && !cat2Score.includes('N/A') ? 'font-weight:600;' : ''}">${cat2Score}</td>
                 <td style="text-align:center; ${finalExamScore !== '-' ? 'font-weight:600;' : ''}">${finalExamScore}</td>
-                <td style="text-align:center; ${totalScore !== '-' && totalScore !== '-%' ? 'font-weight:700; color: var(--color-primary);' : ''}">
+                <td style="text-align:center; ${totalScore !== '-' && totalScore !== '-%' ? 'font-weight:700;' : ''}">
                     ${totalScore}
                 </td>
                 <td>${actionBtn}</td>
@@ -2952,7 +2987,7 @@ function displayExamsTable(exams) {
     });
 }
 
-// View provisional transcript - FIXED VERSION
+// View provisional transcript - FIXED: 60% pass mark
 async function viewProvisionalTranscript(examId) {
     try {
         const exam = cachedExams.find(e => String(e.id) === String(examId));
@@ -2962,35 +2997,42 @@ async function viewProvisionalTranscript(examId) {
         }
 
         const grade = exam.grade || {};
-        const examType = exam.exam_type || 'EXAM';
+        const examType = exam.exam_type || '';
         
         // Get scores from the grade object
         let cat1Score = grade.cat_1_score !== null ? grade.cat_1_score : '-';
         let cat2Score = grade.cat_2_score !== null ? grade.cat_2_score : '-';
         let finalScore = grade.exam_score !== null ? grade.exam_score : '-';
-        let totalScore = grade.total_score !== null ? 
-            `${grade.total_score.toFixed(1)}%` : '-';
+        let totalScore = '-';
         
-        // For CAT exams, calculate percentage
-        if (examType.includes('CAT_1') || examType === 'CAT' || examType === 'CAT_1') {
-            totalScore = grade.cat_1_score !== null ? 
-                `${((grade.cat_1_score / 30) * 100).toFixed(1)}%` : '-';
-            cat2Score = 'N/A';
-            finalScore = 'N/A';
-        } else if (examType.includes('CAT_2') || examType === 'CAT_2') {
-            totalScore = grade.cat_2_score !== null ? 
-                `${((grade.cat_2_score / 30) * 100).toFixed(1)}%` : '-';
-            cat1Score = 'N/A';
-            finalScore = 'N/A';
+        // ✅ FIXED: Always use total_score from database (it's already a percentage)
+        if (grade.total_score !== null) {
+            totalScore = `${grade.total_score.toFixed(1)}%`;
+        } else {
+            // Calculate from available scores
+            if (examType.includes('CAT_1') || examType === 'CAT' || examType === 'CAT_1') {
+                if (grade.cat_1_score !== null) {
+                    totalScore = `${((grade.cat_1_score / 30) * 100).toFixed(1)}%`;
+                }
+                cat2Score = 'N/A';
+                finalScore = 'N/A';
+            } else if (examType.includes('CAT_2') || examType === 'CAT_2') {
+                if (grade.cat_2_score !== null) {
+                    totalScore = `${((grade.cat_2_score / 30) * 100).toFixed(1)}%`;
+                }
+                cat1Score = 'N/A';
+                finalScore = 'N/A';
+            }
         }
 
-        // ✅ FIX: Determine PASS/FAIL status
-        const passMark = 60; // Default pass mark
+        // ✅ FIXED: PASS/FAIL based on 60% pass mark
+        const passMark = 60; // Always 60%
         let resultStatus = exam.display_status || 'Provisional';
         
-        // If status is "Final", convert to PASS/FAIL
-        if (resultStatus === 'Final' || grade.result_status === 'Final') {
-            resultStatus = grade.total_score >= passMark ? 'PASS' : 'FAIL';
+        // If we have totalScore, calculate PASS/FAIL
+        if (totalScore !== '-' && totalScore !== '-%') {
+            const numericScore = parseFloat(totalScore);
+            resultStatus = numericScore >= passMark ? 'PASS' : 'FAIL';
         }
 
         // Update modal display
@@ -2998,31 +3040,28 @@ async function viewProvisionalTranscript(examId) {
         
         // CAT 1
         document.getElementById('transcript-cat1').textContent = cat1Score;
-        document.getElementById('transcript-cat1').style.color = 
-            (cat1Score !== '-' && cat1Score !== 'N/A' && parseFloat(cat1Score) < 15) ? 'red' : 'black';
+        document.getElementById('transcript-cat1').style.color = 'black';
         
         // CAT 2
         document.getElementById('transcript-cat2').textContent = cat2Score;
-        document.getElementById('transcript-cat2').style.color = 
-            (cat2Score !== '-' && cat2Score !== 'N/A' && parseFloat(cat2Score) < 15) ? 'red' : 'black';
+        document.getElementById('transcript-cat2').style.color = 'black';
         
         // Final
         document.getElementById('transcript-final').textContent = finalScore;
-        document.getElementById('transcript-final').style.color = 
-            (finalScore !== '-' && finalScore !== 'N/A' && parseFloat(finalScore) < 50) ? 'red' : 'black';
+        document.getElementById('transcript-final').style.color = 'black';
         
         // Total
         document.getElementById('transcript-total').textContent = totalScore;
         
-        // Color code total score based on PASS/FAIL
+        // Color code total score based on PASS/FAIL (60% threshold)
         if (totalScore !== '-' && totalScore !== '-%') {
             const numericScore = parseFloat(totalScore);
-            if (resultStatus === 'PASS') {
+            if (numericScore >= 60) {
                 document.getElementById('transcript-total').style.color = 'green';
-            } else if (resultStatus === 'FAIL') {
-                document.getElementById('transcript-total').style.color = 'red';
+                document.getElementById('transcript-total').style.fontWeight = 'bold';
             } else {
-                document.getElementById('transcript-total').style.color = 'black';
+                document.getElementById('transcript-total').style.color = 'red';
+                document.getElementById('transcript-total').style.fontWeight = 'bold';
             }
         } else {
             document.getElementById('transcript-total').style.color = 'black';
@@ -3068,7 +3107,7 @@ function closeTranscriptModal() {
 }
 window.closeTranscriptModal = closeTranscriptModal;
 
-// Also update the filter event listener to use the new function
+// Update the filter event listener
 window.filterExams = function() {
     loadExams();
 };
