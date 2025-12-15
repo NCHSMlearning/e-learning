@@ -2677,7 +2677,7 @@
                     .replace(/'/g, "&#039;");
             }
                         
-         // Load exams
+  // Load exams - FIXED VERSION
 async function loadExams() {
     const tableBody = document.getElementById('exams-table');
     if (!tableBody) return;
@@ -2697,6 +2697,7 @@ async function loadExams() {
     }
 
     try {
+        // Fetch exams for this student's program
         const { data: exams, error: examsError } = await sb
             .from('exams_with_courses')
             .select(`
@@ -2717,6 +2718,7 @@ async function loadExams() {
 
         if (examsError) throw examsError;
 
+        // ✅ CRITICAL FIX: Fetch ONLY overall grades (not individual question answers)
         const { data: grades, error: gradesError } = await sb
             .from('exam_grades')
             .select(`
@@ -2726,19 +2728,39 @@ async function loadExams() {
                 cat_2_score,
                 exam_score,
                 total_score,
-                result_status
+                result_status,
+                marks,
+                graded_at
             `)
-            .eq('student_id', studentId);
+            .eq('student_id', studentId)
+            .eq('question_id', '00000000-0000-0000-0000-000000000000') // ⬅️ THIS IS THE FIX!
+            .order('graded_at', { ascending: false });
 
         if (gradesError) throw gradesError;
 
+        console.log(`📊 Found ${exams?.length || 0} exams and ${grades?.length || 0} grades`);
+
+        // Combine exams with their grades
         cachedExams = exams.map(exam => {
-            const grade = grades.find(g => g.exam_id === exam.id);
-            return { ...exam, grade };
+            const grade = grades?.find(g => String(g.exam_id) === String(exam.id));
+            return { 
+                ...exam, 
+                grade: grade || null,
+                // Add grade details directly to exam object for easier access
+                cat_1_score: grade?.cat_1_score,
+                cat_2_score: grade?.cat_2_score,
+                exam_score: grade?.exam_score,
+                total_score: grade?.total_score,
+                result_status: grade?.result_status,
+                marks: grade?.marks,
+                graded_at: grade?.graded_at
+            };
         });
- // ADD THIS LINE - Makes exams data globally accessible
+
+        // Make exams data globally accessible
         window.cachedExams = cachedExams;
-        // Filter by dropdown - IMPROVED WITH exam_type
+
+        // Filter by dropdown
         const filter = document.getElementById('exam-type-filter')?.value || 'all';
         let filteredExams = cachedExams;
         
@@ -2756,174 +2778,334 @@ async function loadExams() {
             );
         }
 
-        tableBody.innerHTML = '';
-        if (!filteredExams.length) {
-            tableBody.innerHTML = `<tr><td colspan="9">No exams found.</td></tr>`;
-            return;
-        }
-
-        filteredExams.forEach(exam => {
-            const dateStr = exam.exam_date
-                ? new Date(exam.exam_date).toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })
-                : 'N/A';
-
-            const gradeEntry = exam.grade;
-            const examType = exam.exam_type || 'EXAM';
-            
-            // Determine what scores to show based on exam type
-            let cat1Score = '-';
-            let cat2Score = '-';
-            let finalExamScore = '-';
-            let totalScore = '-';
-            
-            if (gradeEntry) {
-                if (examType.includes('CAT_1') || examType === 'CAT') {
-                    // CAT 1 or generic CAT - show only CAT 1
-                    cat1Score = gradeEntry.cat_1_score ?? '-';
-                    cat2Score = '<span style="color:#9CA3AF; font-style:italic;">N/A</span>';
-                    finalExamScore = '<span style="color:#9CA3AF; font-style:italic;">N/A</span>';
-                    totalScore = gradeEntry.cat_1_score !== null ? 
-                        `${((gradeEntry.cat_1_score / 30) * 100).toFixed(1)}%` : '-';
-                        
-                } else if (examType.includes('CAT_2')) {
-                    // CAT 2 - show only CAT 2
-                    cat1Score = '<span style="color:#9CA3AF; font-style:italic;">N/A</span>';
-                    cat2Score = gradeEntry.cat_2_score ?? '-';
-                    finalExamScore = '<span style="color:#9CA3AF; font-style:italic;">N/A</span>';
-                    totalScore = gradeEntry.cat_2_score !== null ? 
-                        `${((gradeEntry.cat_2_score / 30) * 100).toFixed(1)}%` : '-';
-                        
-                } else if (examType === 'EXAM') {
-                    // Final Exam - show all
-                    cat1Score = gradeEntry.cat_1_score ?? '-';
-                    cat2Score = gradeEntry.cat_2_score ?? '-';
-                    finalExamScore = gradeEntry.exam_score ?? '-';
-                    totalScore = gradeEntry.total_score !== null ? 
-                        `${gradeEntry.total_score.toFixed(1)}%` : '-';
-                }
-            }
-
-            const resultStatus = gradeEntry?.result_status ?? 'Scheduled';
-
-            const statusDisplay = resultStatus === 'Final'
-                ? `<span style="color:var(--color-success); font-weight:700;">Final</span>`
-                : `<span style="color:var(--color-warning); font-weight:700;">${resultStatus}</span>`;
-
-            // Add exam type badge
-            const typeBadge = examType === 'CAT_1' ? 
-                '<span style="background:#3B82F6; color:white; padding:2px 8px; border-radius:12px; font-size:11px; margin-left:5px;">CAT 1</span>' :
-                examType === 'CAT_2' ?
-                '<span style="background:#8B5CF6; color:white; padding:2px 8px; border-radius:12px; font-size:11px; margin-left:5px;">CAT 2</span>' :
-                examType === 'EXAM' ?
-                '<span style="background:#EF4444; color:white; padding:2px 8px; border-radius:12px; font-size:11px; margin-left:5px;">Final</span>' :
-                '<span style="background:#6B7280; color:white; padding:2px 8px; border-radius:12px; font-size:11px; margin-left:5px;">CAT</span>';
-
-            // Dual Action buttons
-            let actionBtn = '';
-            if (exam.exam_link) {
-                actionBtn += `<a href="${exam.exam_link}" target="_blank" class="profile-button" style="background-color: var(--color-success); padding:6px 10px; font-size:0.85em; margin-right:5px;">Start Exam</a>`;
-            }
-            actionBtn += `<button onclick="viewProvisionalTranscript('${exam.id}')" class="profile-button" style="background-color: var(--color-primary); padding:6px 10px; font-size:0.85em;">View Transcript</button>`;
-
-            tableBody.innerHTML += `
-                <tr>
-                    <td>${escapeHtml(exam.exam_name || 'N/A')} ${typeBadge}</td>
-                    <td>${escapeHtml(exam.block_term || 'N/A')}</td>
-                    <td>${dateStr}</td>
-                    <td>${statusDisplay}</td>
-                    <td style="text-align:center;">${cat1Score}</td>
-                    <td style="text-align:center;">${cat2Score}</td>
-                    <td style="text-align:center;">${finalExamScore}</td>
-                    <td style="text-align:center; ${totalScore !== '-' && totalScore !== '-%' ? 'font-weight:600;' : ''}">
-                        ${totalScore}
-                    </td>
-                    <td>${actionBtn}</td>
-                </tr>`;
-        });
+        // Display exams table
+        displayExamsTable(filteredExams);
 
     } catch (error) {
         console.error('❌ Failed to load exams:', error);
         AppUtils.showError(tableBody, `Error loading exams: ${error.message}`);
         cachedExams = [];
+        
+        // Show error in table
+        tableBody.innerHTML = `
+            <tr>
+                <td colspan="9" style="color: #DC2626; padding: 20px; text-align: center;">
+                    Error loading exams: ${error.message}<br>
+                    <small>Please refresh the page or contact support.</small>
+                </td>
+            </tr>
+        `;
     }
 
-    if (typeof loadDashboardMetrics === 'function') loadDashboardMetrics(currentUserId);
+    if (typeof loadDashboardMetrics === 'function') {
+        loadDashboardMetrics(currentUserId);
+    }
 }
-            // View provisional transcript - UPDATED
-function viewProvisionalTranscript(examId) {
-    const exam = cachedExams.find(e => String(e.id) === String(examId));
-    if (!exam) return alert("Exam not found.");
 
-    const grade = exam.grade || {};
-    const examType = exam.exam_type || 'EXAM';
+// Display exams in table
+function displayExamsTable(exams) {
+    const tableBody = document.getElementById('exams-table');
+    if (!tableBody) return;
+
+    tableBody.innerHTML = '';
     
-    // Set scores based on exam type
-    let cat1Score = '-';
-    let cat2Score = '-';
-    let finalScore = '-';
-    let totalScore = '-';
-    
-    if (examType.includes('CAT_1') || examType === 'CAT') {
-        cat1Score = grade.cat_1_score ?? '-';
-        cat2Score = 'N/A';
-        finalScore = 'N/A';
-        totalScore = grade.cat_1_score !== null ? 
-            `${((grade.cat_1_score / 30) * 100).toFixed(1)}%` : '-';
-            
-    } else if (examType.includes('CAT_2')) {
-        cat1Score = 'N/A';
-        cat2Score = grade.cat_2_score ?? '-';
-        finalScore = 'N/A';
-        totalScore = grade.cat_2_score !== null ? 
-            `${((grade.cat_2_score / 30) * 100).toFixed(1)}%` : '-';
-            
-    } else if (examType === 'EXAM') {
-        cat1Score = grade.cat_1_score ?? '-';
-        cat2Score = grade.cat_2_score ?? '-';
-        finalScore = grade.exam_score ?? '-';
-        totalScore = grade.total_score !== null ? 
-            `${grade.total_score.toFixed(1)}%` : '-';
+    if (!exams || exams.length === 0) {
+        tableBody.innerHTML = `
+            <tr>
+                <td colspan="9" style="padding: 40px; text-align: center; color: #6B7280;">
+                    <i class="fas fa-clipboard-list" style="font-size: 2rem; margin-bottom: 10px; display: block;"></i>
+                    <h3>No Exams Found</h3>
+                    <p>No exams have been assigned to your program and block yet.</p>
+                </td>
+            </tr>
+        `;
+        return;
     }
 
-    // Update modal display
-    document.getElementById('transcript-exam-name').textContent = exam.exam_name || 'N/A';
-    
-    // CAT 1
-    document.getElementById('transcript-cat1').textContent = cat1Score;
-    document.getElementById('transcript-cat1').style.color = 
-        (cat1Score !== '-' && cat1Score !== 'N/A' && parseFloat(cat1Score) < 15) ? 'red' : 'black';
-    
-    // CAT 2
-    document.getElementById('transcript-cat2').textContent = cat2Score;
-    document.getElementById('transcript-cat2').style.color = 
-        (cat2Score !== '-' && cat2Score !== 'N/A' && parseFloat(cat2Score) < 15) ? 'red' : 'black';
-    
-    // Final
-    document.getElementById('transcript-final').textContent = finalScore;
-    document.getElementById('transcript-final').style.color = 
-        (finalScore !== '-' && finalScore !== 'N/A' && parseFloat(finalScore) < 50) ? 'red' : 'black';
-    
-    // Total
-    document.getElementById('transcript-total').textContent = totalScore;
-    document.getElementById('transcript-total').style.color = 
-        (totalScore !== '-' && totalScore !== '-%') ? 
-            (grade.result_status === 'Final' ? 'green' : 'black') : 'black';
-    
-    // Status
-    document.getElementById('transcript-status').textContent = grade.result_status || 'Provisional';
-    document.getElementById('transcript-status').style.color = 
-        grade.result_status === 'Final' ? 'green' : 'gray';
+    exams.forEach(exam => {
+        const dateStr = exam.exam_date
+            ? new Date(exam.exam_date).toLocaleDateString('en-US', { 
+                weekday: 'short', 
+                year: 'numeric', 
+                month: 'short', 
+                day: 'numeric' 
+            })
+            : 'N/A';
 
-    document.getElementById('transcript-modal').style.display = 'flex';
-}
-                        // Close transcript modal
-            function closeTranscriptModal() {
-                const modal = document.getElementById('transcript-modal');
-                if (modal) {
-                    modal.style.display = 'none';
-                }
+        const gradeEntry = exam.grade;
+        const examType = exam.exam_type || 'EXAM';
+        
+        // Determine what scores to show
+        let cat1Score = '-';
+        let cat2Score = '-';
+        let finalExamScore = '-';
+        let totalScore = '-';
+        let hasResults = false;
+        
+        if (gradeEntry) {
+            hasResults = true;
+            
+            if (examType.includes('CAT_1') || examType === 'CAT') {
+                // CAT 1 only
+                cat1Score = gradeEntry.cat_1_score !== null ? gradeEntry.cat_1_score : '-';
+                cat2Score = '<span style="color:#9CA3AF; font-style:italic;">N/A</span>';
+                finalExamScore = '<span style="color:#9CA3AF; font-style:italic;">N/A</span>';
+                totalScore = gradeEntry.cat_1_score !== null ? 
+                    `${((gradeEntry.cat_1_score / 30) * 100).toFixed(1)}%` : '-';
+                    
+            } else if (examType.includes('CAT_2')) {
+                // CAT 2 only
+                cat1Score = '<span style="color:#9CA3AF; font-style:italic;">N/A</span>';
+                cat2Score = gradeEntry.cat_2_score !== null ? gradeEntry.cat_2_score : '-';
+                finalExamScore = '<span style="color:#9CA3AF; font-style:italic;">N/A</span>';
+                totalScore = gradeEntry.cat_2_score !== null ? 
+                    `${((gradeEntry.cat_2_score / 30) * 100).toFixed(1)}%` : '-';
+                    
+            } else if (examType === 'EXAM') {
+                // Final Exam - show all
+                cat1Score = gradeEntry.cat_1_score !== null ? gradeEntry.cat_1_score : '-';
+                cat2Score = gradeEntry.cat_2_score !== null ? gradeEntry.cat_2_score : '-';
+                finalExamScore = gradeEntry.exam_score !== null ? gradeEntry.exam_score : '-';
+                totalScore = gradeEntry.total_score !== null ? 
+                    `${gradeEntry.total_score.toFixed(1)}%` : '-';
             }
-            window.closeTranscriptModal = closeTranscriptModal; // Make it globally accessible
+        } else {
+            // No grade yet
+            cat1Score = '-';
+            cat2Score = '-';
+            finalExamScore = '-';
+            totalScore = '-';
+        }
+
+        const resultStatus = gradeEntry?.result_status || 'Scheduled';
+        const statusDisplay = resultStatus === 'Final'
+            ? `<span style="color:var(--color-success); font-weight:700;">Final</span>`
+            : `<span style="color:var(--color-warning); font-weight:700;">${resultStatus}</span>`;
+
+        // Add exam type badge
+        const typeBadge = examType === 'CAT_1' ? 
+            '<span style="background:#3B82F6; color:white; padding:2px 8px; border-radius:12px; font-size:11px; margin-left:5px;">CAT 1</span>' :
+            examType === 'CAT_2' ?
+            '<span style="background:#8B5CF6; color:white; padding:2px 8px; border-radius:12px; font-size:11px; margin-left:5px;">CAT 2</span>' :
+            examType === 'EXAM' ?
+            '<span style="background:#EF4444; color:white; padding:2px 8px; border-radius:12px; font-size:11px; margin-left:5px;">Final</span>' :
+            '<span style="background:#6B7280; color:white; padding:2px 8px; border-radius:12px; font-size:11px; margin-left:5px;">CAT</span>';
+
+        // Action buttons
+        let actionBtn = '';
+        if (exam.exam_link) {
+            actionBtn += `<a href="${exam.exam_link}" target="_blank" class="profile-button" style="background-color: var(--color-success); padding:6px 10px; font-size:0.85em; margin-right:5px;">
+                <i class="fas fa-play-circle"></i> Start Exam
+            </a>`;
+        }
+        
+        if (hasResults) {
+            actionBtn += `<button onclick="viewProvisionalTranscript('${exam.id}')" class="profile-button" style="background-color: var(--color-primary); padding:6px 10px; font-size:0.85em;">
+                <i class="fas fa-eye"></i> View Transcript
+            </button>`;
+        } else {
+            actionBtn += `<button disabled class="profile-button" style="background-color: var(--color-secondary); padding:6px 10px; font-size:0.85em; opacity:0.6; cursor: not-allowed;">
+                <i class="fas fa-clock"></i> No Results Yet
+            </button>`;
+        }
+
+        tableBody.innerHTML += `
+            <tr>
+                <td>${escapeHtml(exam.exam_name || 'N/A')} ${typeBadge}</td>
+                <td>${escapeHtml(exam.block_term || 'N/A')}</td>
+                <td>${dateStr}</td>
+                <td>${statusDisplay}</td>
+                <td style="text-align:center; ${cat1Score !== '-' ? 'font-weight:600;' : ''}">${cat1Score}</td>
+                <td style="text-align:center; ${cat2Score !== '-' && !cat2Score.includes('N/A') ? 'font-weight:600;' : ''}">${cat2Score}</td>
+                <td style="text-align:center; ${finalExamScore !== '-' ? 'font-weight:600;' : ''}">${finalExamScore}</td>
+                <td style="text-align:center; ${totalScore !== '-' && totalScore !== '-%' ? 'font-weight:700; color: var(--color-primary);' : ''}">
+                    ${totalScore}
+                </td>
+                <td>${actionBtn}</td>
+            </tr>`;
+    });
+}
+
+// View provisional transcript - UPDATED
+async function viewProvisionalTranscript(examId) {
+    try {
+        const exam = cachedExams.find(e => String(e.id) === String(examId));
+        if (!exam) {
+            alert("Exam not found.");
+            return;
+        }
+
+        const grade = exam.grade || {};
+        const examType = exam.exam_type || 'EXAM';
+        
+        // Get scores from the grade object
+        let cat1Score = grade.cat_1_score !== null ? grade.cat_1_score : '-';
+        let cat2Score = grade.cat_2_score !== null ? grade.cat_2_score : '-';
+        let finalScore = grade.exam_score !== null ? grade.exam_score : '-';
+        let totalScore = grade.total_score !== null ? 
+            `${grade.total_score.toFixed(1)}%` : '-';
+        
+        // For CAT exams, calculate percentage
+        if (examType.includes('CAT_1') || examType === 'CAT') {
+            totalScore = grade.cat_1_score !== null ? 
+                `${((grade.cat_1_score / 30) * 100).toFixed(1)}%` : '-';
+            cat2Score = 'N/A';
+            finalScore = 'N/A';
+        } else if (examType.includes('CAT_2')) {
+            totalScore = grade.cat_2_score !== null ? 
+                `${((grade.cat_2_score / 30) * 100).toFixed(1)}%` : '-';
+            cat1Score = 'N/A';
+            finalScore = 'N/A';
+        }
+
+        // Update modal display
+        document.getElementById('transcript-exam-name').textContent = exam.exam_name || 'N/A';
+        
+        // CAT 1
+        document.getElementById('transcript-cat1').textContent = cat1Score;
+        document.getElementById('transcript-cat1').style.color = 
+            (cat1Score !== '-' && cat1Score !== 'N/A' && parseFloat(cat1Score) < 15) ? 'red' : 'black';
+        
+        // CAT 2
+        document.getElementById('transcript-cat2').textContent = cat2Score;
+        document.getElementById('transcript-cat2').style.color = 
+            (cat2Score !== '-' && cat2Score !== 'N/A' && parseFloat(cat2Score) < 15) ? 'red' : 'black';
+        
+        // Final
+        document.getElementById('transcript-final').textContent = finalScore;
+        document.getElementById('transcript-final').style.color = 
+            (finalScore !== '-' && finalScore !== 'N/A' && parseFloat(finalScore) < 50) ? 'red' : 'black';
+        
+        // Total
+        document.getElementById('transcript-total').textContent = totalScore;
+        document.getElementById('transcript-total').style.color = 
+            (totalScore !== '-' && totalScore !== '-%') ? 
+                (grade.result_status === 'Final' ? 'green' : 'black') : 'black';
+        
+        // Status
+        document.getElementById('transcript-status').textContent = grade.result_status || 'Provisional';
+        document.getElementById('transcript-status').style.color = 
+            grade.result_status === 'Final' ? 'green' : 'gray';
+
+        // Show graded date if available
+        if (grade.graded_at) {
+            const gradedDate = new Date(grade.graded_at).toLocaleDateString();
+            if (!document.getElementById('transcript-date')) {
+                const statusCell = document.getElementById('transcript-status');
+                statusCell.innerHTML += `<br><small>Graded: ${gradedDate}</small>`;
+            }
+        }
+
+        document.getElementById('transcript-modal').style.display = 'flex';
+
+    } catch (error) {
+        console.error('Error viewing transcript:', error);
+        AppUtils.showToast('Failed to load transcript details', 'error');
+    }
+}
+
+// Close transcript modal
+function closeTranscriptModal() {
+    const modal = document.getElementById('transcript-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+// Make functions globally accessible
+window.closeTranscriptModal = closeTranscriptModal;
+
+// DEBUG FUNCTION - Add this to test if marks are being fetched
+async function debugMarksFetch() {
+    console.log('🔍 DEBUG: Testing marks fetch...');
+    console.log('Current User ID:', currentUserId);
+    
+    try {
+        // Test 1: Check exam_grades table
+        const { data: allGrades, error: gradesError } = await sb
+            .from('exam_grades')
+            .select('*')
+            .eq('student_id', currentUserId)
+            .limit(10);
+        
+        if (gradesError) {
+            console.error('❌ Error fetching grades:', gradesError);
+            return;
+        }
+        
+        console.log('📊 All grades for student:', allGrades);
+        console.log('Total records:', allGrades?.length || 0);
+        
+        // Test 2: Check overall grades only
+        const { data: overallGrades } = await sb
+            .from('exam_grades')
+            .select('*')
+            .eq('student_id', currentUserId)
+            .eq('question_id', '00000000-0000-0000-0000-000000000000');
+        
+        console.log('🎯 Overall grades (question_id = all zeros):', overallGrades);
+        console.log('Overall grades count:', overallGrades?.length || 0);
+        
+        // Test 3: Check exams_with_courses
+        const program = currentUserProfile?.program || currentUserProfile?.department;
+        const intakeYear = currentUserProfile?.intake_year;
+        
+        if (program && intakeYear) {
+            const { data: exams } = await sb
+                .from('exams_with_courses')
+                .select('id, exam_name, exam_type')
+                .or(`program_type.eq.${program},program_type.eq.General`)
+                .eq('intake_year', intakeYear)
+                .limit(5);
+            
+            console.log('📝 Available exams:', exams);
+        }
+        
+        // Show results in alert
+        const message = `
+DEBUG RESULTS:
+• Total grades in exam_grades: ${allGrades?.length || 0}
+• Overall grades (question_id=000...): ${overallGrades?.length || 0}
+• Student ID used: ${currentUserId}
+• Program: ${currentUserProfile?.program || 'N/A'}
+• Intake: ${currentUserProfile?.intake_year || 'N/A'}
+        `;
+        
+        alert(message);
+        
+    } catch (error) {
+        console.error('❌ Debug error:', error);
+        alert('Debug failed: ' + error.message);
+    }
+}
+
+// Add debug button to HTML temporarily
+function addDebugButton() {
+    if (!document.getElementById('debugMarksBtn')) {
+        const debugBtn = document.createElement('button');
+        debugBtn.id = 'debugMarksBtn';
+        debugBtn.innerHTML = '🔍 Debug Marks';
+        debugBtn.style.cssText = `
+            position: fixed;
+            bottom: 100px;
+            right: 20px;
+            z-index: 9999;
+            background: #F59E0B;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        `;
+        debugBtn.onclick = debugMarksFetch;
+        document.body.appendChild(debugBtn);
+    }
+}
+
+// Call this when page loads
+setTimeout(addDebugButton, 3000);
             // *************************************************************************
             // *** ENHANCED RESOURCES SYSTEM - VIEW ONLY ***
             // *************************************************************************
