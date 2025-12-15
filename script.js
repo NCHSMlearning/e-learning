@@ -2669,6 +2669,924 @@ function escapeHtml(text) {
     return div.innerHTML;
                     }
 /*******************************************************
+ * 5. EXCEL EXPORT FOR CATS GRADES - ENHANCED VERSION
+ *******************************************************/
+
+// ENHANCED: Main Excel export function with comprehensive features
+async function exportCATSGradesToExcelEnhanced() {
+    try {
+        showFeedback('📊 Preparing COMPREHENSIVE CATS grades export...', 'info');
+        
+        // Fetch all CATS exams with enhanced details
+        const catsExams = await fetchCATSExamsWithGradesEnhanced();
+        
+        if (catsExams.length === 0) {
+            showFeedback('No CATS exams found to export.', 'warning');
+            return;
+        }
+        
+        // Show enhanced selection modal
+        showCATSSelectionModalEnhanced(catsExams);
+        
+    } catch (error) {
+        console.error('Enhanced export error:', error);
+        showFeedback('Enhanced export failed: ' + error.message, 'error');
+    }
+}
+
+// ENHANCED: Fetch CATS exams with more details
+async function fetchCATSExamsWithGradesEnhanced() {
+    try {
+        const { data: exams, error: examsError } = await sb
+            .from('exams_with_courses')
+            .select(`
+                id,
+                exam_name,
+                exam_type,
+                exam_date,
+                exam_start_time,
+                program_type,
+                block_term,
+                course_name,
+                unit_code,
+                duration_minutes,
+                status,
+                intake_year,
+                online_link,
+                created_at
+            `)
+            .or('exam_type.ilike.%CAT%,exam_type.eq.CAT_1,exam_type.eq.CAT_2,exam_type.eq.CAT')
+            .order('exam_date', { ascending: false });
+        
+        if (examsError) throw examsError;
+        
+        // Get enhanced grade statistics for each exam
+        const examsWithEnhancedStats = await Promise.all(
+            exams.map(async (exam) => {
+                // Get all grades for this exam
+                const { data: grades, error: gradesError } = await sb
+                    .from('exam_grades')
+                    .select(`
+                        *,
+                        student_profiles:student_id(
+                            full_name,
+                            student_id,
+                            email,
+                            phone,
+                            program,
+                            block,
+                            intake_year,
+                            status
+                        )
+                    `)
+                    .eq('exam_id', exam.id);
+                
+                if (gradesError) {
+                    console.error(`Error fetching grades for exam ${exam.id}:`, gradesError);
+                    return {
+                        ...exam,
+                        grade_count: 0,
+                        has_grades: false,
+                        grades: [],
+                        statistics: null
+                    };
+                }
+                
+                // Calculate comprehensive statistics
+                const statistics = calculateExamStatistics(grades, exam.exam_type);
+                
+                return {
+                    ...exam,
+                    grade_count: grades.length,
+                    has_grades: grades.length > 0,
+                    grades: grades || [],
+                    statistics: statistics
+                };
+            })
+        );
+        
+        return examsWithEnhancedStats;
+    } catch (error) {
+        console.error('Error fetching enhanced CATS exams:', error);
+        return [];
+    }
+}
+
+// ENHANCED: Calculate comprehensive exam statistics
+function calculateExamStatistics(grades, examType) {
+    if (!grades || grades.length === 0) {
+        return {
+            total: 0,
+            graded: 0,
+            pending: 0,
+            passCount: 0,
+            failCount: 0,
+            averageScore: 0,
+            highestScore: 0,
+            lowestScore: 0,
+            passRate: 0
+        };
+    }
+    
+    const isCAT1 = examType.includes('CAT_1') || examType === 'CAT_1';
+    const isCAT2 = examType.includes('CAT_2') || examType === 'CAT_2';
+    
+    let gradedCount = 0;
+    let totalScore = 0;
+    let highestScore = -1;
+    let lowestScore = 31; // CATs are out of 30
+    let passCount = 0;
+    
+    grades.forEach(grade => {
+        let score = null;
+        
+        if (isCAT1) {
+            score = grade.cat_1_score;
+        } else if (isCAT2) {
+            score = grade.cat_2_score;
+        } else {
+            score = grade.cat_1_score || grade.cat_2_score;
+        }
+        
+        if (score !== null) {
+            gradedCount++;
+            totalScore += score;
+            
+            if (score > highestScore) highestScore = score;
+            if (score < lowestScore) lowestScore = score;
+            
+            const percentage = (score / 30) * 100;
+            if (percentage >= 60) passCount++;
+        }
+    });
+    
+    const averageScore = gradedCount > 0 ? (totalScore / gradedCount).toFixed(2) : 0;
+    const passRate = gradedCount > 0 ? ((passCount / gradedCount) * 100).toFixed(2) : 0;
+    
+    return {
+        total: grades.length,
+        graded: gradedCount,
+        pending: grades.length - gradedCount,
+        passCount: passCount,
+        failCount: gradedCount - passCount,
+        averageScore: averageScore,
+        highestScore: highestScore === -1 ? 0 : highestScore,
+        lowestScore: lowestScore === 31 ? 0 : lowestScore,
+        passRate: passRate
+    };
+}
+
+// ENHANCED: Show comprehensive selection modal
+function showCATSSelectionModalEnhanced(exams) {
+    // Count total statistics
+    const totalStats = {
+        exams: exams.length,
+        examsWithGrades: exams.filter(e => e.has_grades).length,
+        totalStudents: exams.reduce((sum, e) => sum + e.grade_count, 0),
+        totalGraded: exams.reduce((sum, e) => sum + (e.statistics?.graded || 0), 0)
+    };
+    
+    const modalHTML = `
+        <div id="catsEnhancedModal" class="modal" style="display: block;">
+            <div class="modal-content" style="max-width: 1000px;">
+                <div class="modal-header">
+                    <h3><i class="fas fa-file-excel"></i> COMPREHENSIVE CATS Grades Export</h3>
+                    <span class="close" onclick="closeEnhancedModal()">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <div class="stats-summary">
+                        <div class="stat-card">
+                            <div class="stat-number">${totalStats.exams}</div>
+                            <div class="stat-label">Total Exams</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number">${totalStats.examsWithGrades}</div>
+                            <div class="stat-label">With Grades</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number">${totalStats.totalStudents}</div>
+                            <div class="stat-label">Total Students</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number">${totalStats.totalGraded}</div>
+                            <div class="stat-label">Graded Entries</div>
+                        </div>
+                    </div>
+                    
+                    <div class="export-options" style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                        <h4 style="margin-top: 0;">Export Options</h4>
+                        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                            <button onclick="selectAllEnhanced()" class="btn-action">
+                                <i class="fas fa-check-square"></i> Select All
+                            </button>
+                            <button onclick="selectExamsWithGradesEnhanced()" class="btn-action" style="background-color: #10B981;">
+                                <i class="fas fa-check-circle"></i> Select With Grades
+                            </button>
+                            <button onclick="selectByTypeEnhanced('CAT_1')" class="btn-action" style="background-color: #3B82F6;">
+                                <i class="fas fa-filter"></i> CAT 1 Only
+                            </button>
+                            <button onclick="selectByTypeEnhanced('CAT_2')" class="btn-action" style="background-color: #8B5CF6;">
+                                <i class="fas fa-filter"></i> CAT 2 Only
+                            </button>
+                            <button onclick="clearSelectionEnhanced()" class="btn-warning">
+                                <i class="fas fa-times"></i> Clear
+                            </button>
+                        </div>
+                        
+                        <div style="margin-top: 15px; display: flex; gap: 20px; flex-wrap: wrap;">
+                            <label style="display: flex; align-items: center; gap: 5px;">
+                                <input type="checkbox" id="includeStudentDetailsEnhanced" checked>
+                                Include Student Details
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 5px;">
+                                <input type="checkbox" id="includeStatisticsEnhanced" checked>
+                                Include Statistics Sheets
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 5px;">
+                                <input type="checkbox" id="includeRawDataEnhanced">
+                                Include Raw Data Sheet
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 5px;">
+                                <input type="checkbox" id="groupByProgramEnhanced">
+                                Group by Program
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div style="max-height: 400px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 6px;">
+                        <table class="enhanced-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 50px;">Select</th>
+                                    <th>Exam Details</th>
+                                    <th style="width: 120px;">Statistics</th>
+                                    <th style="width: 100px;">Date/Time</th>
+                                    <th style="width: 80px;">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="enhancedExamsTable">
+                                ${exams.map((exam, index) => `
+                                    <tr class="${exam.has_grades ? 'has-grades' : 'no-grades'}">
+                                        <td>
+                                            <input type="checkbox" 
+                                                   class="enhanced-exam-checkbox" 
+                                                   value="${exam.id}"
+                                                   data-exam='${JSON.stringify(exam).replace(/"/g, '&quot;')}'
+                                                   ${exam.has_grades ? 'checked' : ''}
+                                                   id="enhanced_exam_${exam.id}">
+                                        </td>
+                                        <td>
+                                            <div class="exam-title">${escapeHtml(exam.exam_name || 'Unnamed Exam')}</div>
+                                            <div class="exam-details">
+                                                <span class="exam-type ${exam.exam_type}">${getExamTypeLabel(exam.exam_type)}</span> • 
+                                                ${escapeHtml(exam.course_name || 'General')}
+                                                ${exam.unit_code ? `(${exam.unit_code})` : ''}
+                                            </div>
+                                            <div class="exam-meta">
+                                                ${exam.program_type || 'All'} • Block: ${exam.block_term || 'N/A'} • 
+                                                Intake: ${exam.intake_year || 'N/A'}
+                                            </div>
+                                        </td>
+                                        <td>
+                                            ${exam.has_grades ? `
+                                                <div class="stats-info">
+                                                    <div>Graded: <strong>${exam.statistics.graded}/${exam.statistics.total}</strong></div>
+                                                    <div>Avg: <strong>${exam.statistics.averageScore}</strong></div>
+                                                    <div>Pass: <strong>${exam.statistics.passRate}%</strong></div>
+                                                </div>
+                                            ` : `
+                                                <div class="no-stats">No grades yet</div>
+                                            `}
+                                        </td>
+                                        <td>
+                                            <div>${exam.exam_date ? new Date(exam.exam_date).toLocaleDateString() : 'N/A'}</div>
+                                            <div class="time-small">${exam.exam_start_time || ''}</div>
+                                        </td>
+                                        <td>
+                                            <span class="status-badge status-${exam.status?.toLowerCase() || 'unknown'}">
+                                                ${exam.status || 'Unknown'}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="export-footer">
+                        <div class="selection-info">
+                            <strong>Selected:</strong> 
+                            <span id="selectedEnhancedCount">0</span> exams • 
+                            <span id="selectedEnhancedGrades">0</span> students with grades
+                        </div>
+                        <div class="export-actions">
+                            <button onclick="generateEnhancedReport()" class="btn-action" style="background-color: #217346;">
+                                <i class="fas fa-file-excel"></i> Generate Comprehensive Report
+                            </button>
+                            <button onclick="closeEnhancedModal()" class="btn-warning">
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Remove existing modal if any
+    const existingModal = document.getElementById('catsEnhancedModal');
+    if (existingModal) existingModal.remove();
+    
+    // Create and append modal
+    const modalDiv = document.createElement('div');
+    modalDiv.innerHTML = modalHTML;
+    document.body.appendChild(modalDiv);
+    
+    // Add CSS for enhanced modal
+    addEnhancedModalStyles();
+    
+    // Update counts
+    updateEnhancedSelectionCounts();
+    
+    // Add event listeners
+    document.querySelectorAll('.enhanced-exam-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', updateEnhancedSelectionCounts);
+    });
+}
+
+// Helper function to add CSS
+function addEnhancedModalStyles() {
+    if (document.getElementById('enhanced-modal-styles')) return;
+    
+    const style = document.createElement('style');
+    style.id = 'enhanced-modal-styles';
+    style.textContent = `
+        .stats-summary {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .stat-card {
+            flex: 1;
+            min-width: 120px;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #e5e7eb;
+            text-align: center;
+        }
+        .stat-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #3B82F6;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: #6b7280;
+            margin-top: 5px;
+        }
+        .enhanced-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .enhanced-table th {
+            background: #f9fafb;
+            padding: 12px;
+            text-align: left;
+            border-bottom: 2px solid #e5e7eb;
+        }
+        .enhanced-table td {
+            padding: 12px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .has-grades {
+            background-color: #f0f9ff;
+        }
+        .no-grades {
+            opacity: 0.7;
+        }
+        .exam-title {
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        .exam-details {
+            font-size: 0.9em;
+            color: #6b7280;
+            margin-bottom: 2px;
+        }
+        .exam-meta {
+            font-size: 0.85em;
+            color: #9ca3af;
+        }
+        .exam-type {
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            font-weight: 600;
+        }
+        .exam-type.CAT_1 { background: #DBEAFE; color: #1E40AF; }
+        .exam-type.CAT_2 { background: #E0E7FF; color: #3730A3; }
+        .exam-type.CAT { background: #DCFCE7; color: #166534; }
+        .stats-info {
+            font-size: 0.85em;
+        }
+        .stats-info div {
+            margin: 2px 0;
+        }
+        .no-stats {
+            color: #9ca3af;
+            font-style: italic;
+        }
+        .time-small {
+            font-size: 0.85em;
+            color: #6b7280;
+        }
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: 600;
+        }
+        .status-upcoming { background: #FEF3C7; color: #92400E; }
+        .status-active { background: #D1FAE5; color: #065F46; }
+        .status-completed { background: #DBEAFE; color: #1E40AF; }
+        .status-archived { background: #F3F4F6; color: #374151; }
+        .export-footer {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f9fafb;
+            border-radius: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .selection-info {
+            font-size: 14px;
+        }
+        .export-actions {
+            display: flex;
+            gap: 10px;
+        }
+    `;
+    
+    document.head.appendChild(style);
+}
+
+// Helper functions for enhanced modal
+function updateEnhancedSelectionCounts() {
+    const selectedCheckboxes = document.querySelectorAll('.enhanced-exam-checkbox:checked');
+    const selectedCount = selectedCheckboxes.length;
+    
+    let totalStudents = 0;
+    selectedCheckboxes.forEach(cb => {
+        try {
+            const examData = JSON.parse(cb.getAttribute('data-exam').replace(/&quot;/g, '"'));
+            totalStudents += examData.statistics?.graded || 0;
+        } catch (e) {
+            console.error('Error parsing exam data:', e);
+        }
+    });
+    
+    document.getElementById('selectedEnhancedCount').textContent = selectedCount;
+    document.getElementById('selectedEnhancedGrades').textContent = totalStudents;
+}
+
+function selectAllEnhanced() {
+    document.querySelectorAll('.enhanced-exam-checkbox').forEach(cb => cb.checked = true);
+    updateEnhancedSelectionCounts();
+}
+
+function selectExamsWithGradesEnhanced() {
+    document.querySelectorAll('.enhanced-exam-checkbox').forEach(cb => {
+        const row = cb.closest('tr');
+        cb.checked = row && row.classList.contains('has-grades');
+    });
+    updateEnhancedSelectionCounts();
+}
+
+function selectByTypeEnhanced(type) {
+    document.querySelectorAll('.enhanced-exam-checkbox').forEach(cb => {
+        try {
+            const examData = JSON.parse(cb.getAttribute('data-exam').replace(/&quot;/g, '"'));
+            cb.checked = examData.exam_type === type;
+        } catch (e) {
+            cb.checked = false;
+        }
+    });
+    updateEnhancedSelectionCounts();
+}
+
+function clearSelectionEnhanced() {
+    document.querySelectorAll('.enhanced-exam-checkbox').forEach(cb => cb.checked = false);
+    updateEnhancedSelectionCounts();
+}
+
+function closeEnhancedModal() {
+    const modal = document.getElementById('catsEnhancedModal');
+    if (modal) modal.remove();
+}
+
+// ENHANCED: Generate comprehensive report
+async function generateEnhancedReport() {
+    const selectedCheckboxes = document.querySelectorAll('.enhanced-exam-checkbox:checked');
+    
+    if (selectedCheckboxes.length === 0) {
+        showFeedback('Please select at least one exam to export.', 'warning');
+        return;
+    }
+    
+    showFeedback('🚀 Generating comprehensive Excel report...', 'info');
+    
+    try {
+        const examIds = Array.from(selectedCheckboxes).map(cb => cb.value);
+        const options = {
+            includeStudentDetails: document.getElementById('includeStudentDetailsEnhanced').checked,
+            includeStatistics: document.getElementById('includeStatisticsEnhanced').checked,
+            includeRawData: document.getElementById('includeRawDataEnhanced').checked,
+            groupByProgram: document.getElementById('groupByProgramEnhanced').checked
+        };
+        
+        // Generate enhanced Excel file
+        await generateEnhancedExcelReport(examIds, options);
+        
+        showFeedback(`✅ Comprehensive report generated for ${examIds.length} exam(s)!`, 'success');
+        closeEnhancedModal();
+        
+    } catch (error) {
+        console.error('Enhanced Excel generation error:', error);
+        showFeedback('❌ Export failed: ' + error.message, 'error');
+    }
+}
+
+// ENHANCED: Generate Excel report with all features
+async function generateEnhancedExcelReport(examIds, options) {
+    try {
+        // Load XLSX library
+        await loadXLSXLibrary();
+        
+        // Create workbook
+        const wb = XLSX.utils.book_new();
+        
+        // Process each exam
+        for (let i = 0; i < examIds.length; i++) {
+            const examId = examIds[i];
+            
+            // Get enhanced exam details
+            const { data: exam, error: examError } = await sb
+                .from('exams_with_courses')
+                .select('*')
+                .eq('id', examId)
+                .single();
+            
+            if (examError || !exam) continue;
+            
+            // Get grades with student details
+            const { data: grades, error: gradesError } = await sb
+                .from('exam_grades')
+                .select(`
+                    *,
+                    student_profiles:student_id(
+                        full_name,
+                        student_id,
+                        email,
+                        phone,
+                        program,
+                        block,
+                        intake_year,
+                        status
+                    )
+                `)
+                .eq('exam_id', examId);
+            
+            if (gradesError) continue;
+            
+            // Create main grades sheet
+            const gradesSheetData = createEnhancedGradesSheet(exam, grades || [], options);
+            const gradesWs = XLSX.utils.aoa_to_sheet(gradesSheetData);
+            
+            // Set column widths
+            const colWidths = options.includeStudentDetails ? 
+                [
+                    { wch: 12 }, // Student ID
+                    { wch: 25 }, // Full Name
+                    { wch: 30 }, // Email
+                    { wch: 15 }, // Phone
+                    { wch: 15 }, // Program
+                    { wch: 10 }, // Block
+                    { wch: 10 }, // Intake
+                    { wch: 15 }, // Score
+                    { wch: 15 }, // Percentage
+                    { wch: 12 }, // Grade
+                    { wch: 12 }, // Status
+                    { wch: 20 }, // Graded By
+                    { wch: 20 }, // Graded Date
+                    { wch: 30 }  // Comments
+                ] : [
+                    { wch: 12 }, // Student ID
+                    { wch: 25 }, // Full Name
+                    { wch: 15 }, // Score
+                    { wch: 15 }, // Percentage
+                    { wch: 12 }, // Grade
+                    { wch: 12 }, // Status
+                    { wch: 20 }  // Graded Date
+                ];
+            
+            gradesWs['!cols'] = colWidths;
+            
+            // Add sheet to workbook
+            const sheetName = cleanSheetName(`${getExamTypeLabel(exam.exam_type)}_${exam.exam_name}`.substring(0, 31));
+            XLSX.utils.book_append_sheet(wb, gradesWs, sheetName);
+            
+            // Create statistics sheet if requested
+            if (options.includeStatistics) {
+                createEnhancedStatisticsSheet(wb, exam, grades || []);
+            }
+        }
+        
+        // Create master summary if multiple exams
+        if (examIds.length > 1) {
+            await createEnhancedMasterSummary(wb, examIds, options);
+        }
+        
+        // Add raw data sheet if requested
+        if (options.includeRawData) {
+            await createRawDataSheet(wb, examIds);
+        }
+        
+        // Generate and download Excel file
+        const filename = `CATS_Comprehensive_Report_${new Date().toISOString().split('T')[0]}.xlsx`;
+        XLSX.writeFile(wb, filename);
+        
+    } catch (error) {
+        console.error('Error generating enhanced Excel report:', error);
+        throw error;
+    }
+}
+
+// Helper functions for enhanced export
+function createEnhancedGradesSheet(exam, grades, options) {
+    const isCAT1 = exam.exam_type.includes('CAT_1');
+    const isCAT2 = exam.exam_type.includes('CAT_2');
+    
+    // Header
+    const header = [
+        [`${getExamTypeLabel(exam.exam_type)} - ${exam.exam_name}`],
+        [`Course: ${exam.course_name || 'General'} | Unit Code: ${exam.unit_code || 'N/A'}`],
+        [`Program: ${exam.program_type} | Block: ${exam.block_term} | Intake: ${exam.intake_year}`],
+        [`Date: ${exam.exam_date ? new Date(exam.exam_date).toLocaleDateString() : 'N/A'} | Time: ${exam.exam_start_time || 'N/A'}`],
+        [''],
+        ['GRADES REPORT']
+    ];
+    
+    // Column headers
+    let columnHeaders = ['Student ID', 'Full Name'];
+    if (options.includeStudentDetails) {
+        columnHeaders.push('Email', 'Phone', 'Program', 'Block', 'Intake Year');
+    }
+    columnHeaders.push(
+        isCAT1 ? 'CAT 1 Score (max 30)' : isCAT2 ? 'CAT 2 Score (max 30)' : 'CAT Score (max 30)',
+        'Percentage (%)',
+        'Grade',
+        'Status',
+        options.includeStudentDetails ? 'Graded By' : '',
+        options.includeStudentDetails ? 'Graded Date' : 'Date',
+        options.includeStudentDetails ? 'Comments' : ''
+    );
+    
+    // Data rows
+    const dataRows = grades.map(grade => {
+        const student = grade.student_profiles || {};
+        const row = [
+            student.student_id || 'N/A',
+            student.full_name || 'N/A'
+        ];
+        
+        if (options.includeStudentDetails) {
+            row.push(
+                student.email || 'N/A',
+                student.phone || 'N/A',
+                student.program || 'N/A',
+                student.block || 'N/A',
+                student.intake_year || 'N/A'
+            );
+        }
+        
+        // Calculate scores
+        let score = null;
+        if (isCAT1) score = grade.cat_1_score;
+        else if (isCAT2) score = grade.cat_2_score;
+        else score = grade.cat_1_score || grade.cat_2_score;
+        
+        const percentage = score !== null ? ((score / 30) * 100).toFixed(2) : 'N/A';
+        const gradeLetter = calculateGradeLetter(percentage);
+        const status = grade.result_status || (score !== null ? (percentage >= 60 ? 'PASS' : 'FAIL') : 'PENDING');
+        
+        row.push(
+            score !== null ? score : 'N/G',
+            percentage,
+            gradeLetter,
+            status
+        );
+        
+        if (options.includeStudentDetails) {
+            row.push(
+                grade.graded_by || 'System',
+                grade.graded_at ? new Date(grade.graded_at).toLocaleDateString() : 'N/A',
+                grade.comments || ''
+            );
+        } else {
+            row.push(
+                grade.graded_at ? new Date(grade.graded_at).toLocaleDateString() : 'N/A'
+            );
+        }
+        
+        return row;
+    });
+    
+    // Summary statistics
+    const statistics = calculateExamStatistics(grades, exam.exam_type);
+    const summary = [
+        [''],
+        ['SUMMARY STATISTICS'],
+        ['Total Students', statistics.total],
+        ['Graded Students', statistics.graded],
+        ['Pending Grading', statistics.pending],
+        ['Pass Count', statistics.passCount],
+        ['Fail Count', statistics.failCount],
+        ['Average Score', statistics.averageScore],
+        ['Highest Score', statistics.highestScore],
+        ['Lowest Score', statistics.lowestScore],
+        ['Pass Rate', statistics.passRate + '%']
+    ];
+    
+    return [...header, columnHeaders, ...dataRows, ...summary];
+}
+
+function calculateGradeLetter(percentage) {
+    if (percentage === 'N/A') return 'N/A';
+    const num = parseFloat(percentage);
+    if (num >= 80) return 'A';
+    if (num >= 70) return 'B';
+    if (num >= 60) return 'C';
+    if (num >= 50) return 'D';
+    return 'F';
+}
+
+function createEnhancedStatisticsSheet(wb, exam, grades) {
+    const statistics = calculateExamStatistics(grades, exam.exam_type);
+    
+    const data = [
+        [`${getExamTypeLabel(exam.exam_type)} STATISTICS - ${exam.exam_name}`],
+        [''],
+        ['Exam Details', 'Value'],
+        ['Exam Name', exam.exam_name],
+        ['Exam Type', getExamTypeLabel(exam.exam_type)],
+        ['Course', exam.course_name || 'General'],
+        ['Unit Code', exam.unit_code || 'N/A'],
+        ['Program', exam.program_type],
+        ['Block/Term', exam.block_term],
+        ['Intake Year', exam.intake_year],
+        ['Exam Date', exam.exam_date ? new Date(exam.exam_date).toLocaleDateString() : 'N/A'],
+        ['Exam Time', exam.exam_start_time || 'N/A'],
+        ['Duration', exam.duration_minutes + ' minutes'],
+        ['Status', exam.status || 'Unknown'],
+        [''],
+        ['GRADING STATISTICS'],
+        ['Total Students Enrolled', statistics.total],
+        ['Students Graded', statistics.graded],
+        ['Pending Grading', statistics.pending],
+        ['Pass Count', statistics.passCount],
+        ['Fail Count', statistics.failCount],
+        ['Average Score', statistics.averageScore],
+        ['Highest Score', statistics.highestScore],
+        ['Lowest Score', statistics.lowestScore],
+        ['Pass Rate', statistics.passRate + '%'],
+        ['Grading Completion', ((statistics.graded / statistics.total) * 100).toFixed(2) + '%']
+    ];
+    
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    const sheetName = cleanSheetName(`Stats_${exam.exam_name}`.substring(0, 31));
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+}
+
+async function createEnhancedMasterSummary(wb, examIds, options) {
+    const summaryData = [
+        ['MASTER SUMMARY - ALL CATS EXAMS'],
+        ['Generated: ' + new Date().toLocaleString()],
+        [''],
+        ['Exam Name', 'Type', 'Course', 'Program', 'Block', 'Intake', 'Total', 'Graded', 'Avg Score', 'Pass Rate', 'Status']
+    ];
+    
+    for (const examId of examIds) {
+        const { data: exam, error: examError } = await sb
+            .from('exams_with_courses')
+            .select('*')
+            .eq('id', examId)
+            .single();
+        
+        if (examError || !exam) continue;
+        
+        const { data: grades } = await sb
+            .from('exam_grades')
+            .select('*')
+            .eq('exam_id', examId);
+        
+        const statistics = calculateExamStatistics(grades || [], exam.exam_type);
+        const passRate = statistics.graded > 0 ? ((statistics.passCount / statistics.graded) * 100).toFixed(2) + '%' : '0%';
+        
+        summaryData.push([
+            exam.exam_name,
+            getExamTypeLabel(exam.exam_type),
+            exam.course_name || 'General',
+            exam.program_type,
+            exam.block_term,
+            exam.intake_year,
+            statistics.total,
+            statistics.graded,
+            statistics.averageScore,
+            passRate,
+            exam.status || 'Unknown'
+        ]);
+    }
+    
+    const ws = XLSX.utils.aoa_to_sheet(summaryData);
+    XLSX.utils.book_append_sheet(wb, ws, 'Master Summary');
+}
+
+async function createRawDataSheet(wb, examIds) {
+    const rawData = [
+        ['RAW DATA EXPORT - ALL SELECTED EXAMS'],
+        ['Generated: ' + new Date().toLocaleString()],
+        [''],
+        ['Exam ID', 'Exam Name', 'Exam Type', 'Course', 'Student ID', 'Student Name', 'CAT 1 Score', 'CAT 2 Score', 
+         'Percentage', 'Grade', 'Status', 'Graded By', 'Graded Date', 'Comments']
+    ];
+    
+    for (const examId of examIds) {
+        const { data: exam, error: examError } = await sb
+            .from('exams_with_courses')
+            .select('*')
+            .eq('id', examId)
+            .single();
+        
+        if (examError || !exam) continue;
+        
+        const { data: grades, error: gradesError } = await sb
+            .from('exam_grades')
+            .select(`
+                *,
+                student_profiles:student_id(
+                    full_name,
+                    student_id
+                )
+            `)
+            .eq('exam_id', examId);
+        
+        if (gradesError) continue;
+        
+        (grades || []).forEach(grade => {
+            const student = grade.student_profiles || {};
+            const percentage = grade.cat_1_score !== null ? 
+                ((grade.cat_1_score / 30) * 100).toFixed(2) : 
+                grade.cat_2_score !== null ? 
+                ((grade.cat_2_score / 30) * 100).toFixed(2) : 'N/A';
+            
+            rawData.push([
+                exam.id.substring(0, 8) + '...',
+                exam.exam_name,
+                getExamTypeLabel(exam.exam_type),
+                exam.course_name || 'General',
+                student.student_id || 'N/A',
+                student.full_name || 'N/A',
+                grade.cat_1_score !== null ? grade.cat_1_score : '',
+                grade.cat_2_score !== null ? grade.cat_2_score : '',
+                percentage,
+                calculateGradeLetter(percentage),
+                grade.result_status || 'PENDING',
+                grade.graded_by || 'System',
+                grade.graded_at ? new Date(grade.graded_at).toISOString() : '',
+                grade.comments || ''
+            ]);
+        });
+    }
+    
+    const ws = XLSX.utils.aoa_to_sheet(rawData);
+    XLSX.utils.book_append_sheet(wb, ws, 'Raw Data');
+}
+
+// Utility function to get exam type label
+function getExamTypeLabel(examType) {
+    const labels = {
+        'CAT_1': 'CAT 1',
+        'CAT_2': 'CAT 2',
+        'CAT': 'CAT',
+        'EXAM': 'Final Exam',
+        'ASSIGNMENT': 'Assignment'
+    };
+    return labels[examType] || examType;
+         }
+/*******************************************************
  * 12. MESSAGES & ANNOUNCEMENTS
  *******************************************************/
 async function handleSendMessage(e) {
