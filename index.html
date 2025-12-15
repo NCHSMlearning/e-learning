@@ -3064,7 +3064,7 @@ function displayExamsTable(exams) {
     });
 }
 
-// View provisional transcript - UPDATED for student view only (no print)
+// View provisional transcript - FIXED: Compact size + proper lecturer names
 async function viewProvisionalTranscript(examId) {
     try {
         const exam = cachedExams.find(e => String(e.id) === String(examId));
@@ -3118,135 +3118,112 @@ async function viewProvisionalTranscript(examId) {
         
         if (grade.graded_at) {
             gradedDateStr = new Date(grade.graded_at).toLocaleDateString('en-US', {
-                year: 'numeric',
                 month: 'short',
                 day: 'numeric',
+                year: 'numeric',
                 hour: '2-digit',
                 minute: '2-digit'
             });
         }
         
+        // Try to get lecturer name from cache or fetch it
         if (grade.graded_by) {
-            // Try to get lecturer name if graded_by is a user ID
-            try {
-                const { data: lecturer, error } = await sb
-                    .from('users')
-                    .select('full_name, email')
-                    .eq('id', grade.graded_by)
-                    .single();
+            // First check if we already fetched this lecturer name
+            if (window.lecturerCache && window.lecturerCache[grade.graded_by]) {
+                gradedByStr = window.lecturerCache[grade.graded_by];
+            } else {
+                // Try to get lecturer name from database
+                try {
+                    const { data: lecturer, error } = await sb
+                        .from('users')
+                        .select('full_name, email, username')
+                        .eq('id', grade.graded_by)
+                        .single();
                     
-                if (!error && lecturer) {
-                    gradedByStr = lecturer.full_name || lecturer.email || grade.graded_by;
-                } else {
-                    gradedByStr = grade.graded_by;
+                    if (!error && lecturer) {
+                        // Use full_name, email, or username
+                        gradedByStr = lecturer.full_name || lecturer.email || lecturer.username || 'Lecturer';
+                        
+                        // Cache it for future use
+                        if (!window.lecturerCache) window.lecturerCache = {};
+                        window.lecturerCache[grade.graded_by] = gradedByStr;
+                    } else {
+                        // Check if it's already a name (not a UUID)
+                        if (!grade.graded_by.includes('-') || grade.graded_by.length !== 36) {
+                            gradedByStr = grade.graded_by;
+                        } else {
+                            gradedByStr = 'Auto-graded';
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Could not fetch lecturer name:', e);
+                    gradedByStr = 'Auto-graded';
                 }
-            } catch (e) {
-                gradedByStr = grade.graded_by;
             }
         }
 
-        // ✅ FIXED: Only update elements that exist in your HTML
-        // Update exam name
+        // Update only elements that exist in your HTML
         const examNameElement = document.getElementById('transcript-exam-name');
         if (examNameElement) {
             examNameElement.textContent = exam.exam_name || 'N/A';
         }
         
-        // Update CAT 1 score
         const cat1Element = document.getElementById('transcript-cat1');
         if (cat1Element) {
             cat1Element.textContent = cat1Score;
-            cat1Element.style.color = 'black';
         }
         
-        // Update CAT 2 score
         const cat2Element = document.getElementById('transcript-cat2');
         if (cat2Element) {
             cat2Element.textContent = cat2Score;
-            cat2Element.style.color = 'black';
         }
         
-        // Update Final Exam score
         const finalElement = document.getElementById('transcript-final');
         if (finalElement) {
             finalElement.textContent = finalScore;
-            finalElement.style.color = 'black';
         }
         
-        // Update Total Score
         const totalElement = document.getElementById('transcript-total');
         if (totalElement) {
             totalElement.textContent = totalScore;
             
-            // Color code total score based on PASS/FAIL (60% threshold)
+            // Color code total score
             if (totalScore !== '-' && totalScore !== '-%') {
                 const numericScore = parseFloat(totalScore);
-                if (numericScore >= 60) {
-                    totalElement.style.color = 'green';
-                    totalElement.style.fontWeight = 'bold';
-                } else {
-                    totalElement.style.color = 'red';
-                    totalElement.style.fontWeight = 'bold';
-                }
-            } else {
-                totalElement.style.color = 'black';
-                totalElement.style.fontWeight = 'normal';
+                totalElement.style.color = numericScore >= 60 ? 'green' : 'red';
+                totalElement.style.fontWeight = 'bold';
             }
         }
         
-        // Update Status
         const statusElement = document.getElementById('transcript-status');
         if (statusElement) {
             statusElement.textContent = resultStatus;
-            
-            // Color code status
-            if (resultStatus === 'PASS') {
-                statusElement.style.color = 'green';
-                statusElement.style.fontWeight = 'bold';
-            } else if (resultStatus === 'FAIL') {
-                statusElement.style.color = 'red';
-                statusElement.style.fontWeight = 'bold';
-            } else {
-                statusElement.style.color = 'gray';
-                statusElement.style.fontWeight = 'normal';
-            }
+            statusElement.style.color = resultStatus === 'PASS' ? 'green' : resultStatus === 'FAIL' ? 'red' : 'gray';
+            statusElement.style.fontWeight = 'bold';
         }
         
-        // ✅ Add Graded By, Graded Date, and Pass Mark rows to the table dynamically
+        // Add or update extra info rows
         const table = document.querySelector('#transcript-modal table');
         if (table) {
-            // Remove any existing additional rows we might have added before
-            const existingGradedRows = table.querySelectorAll('.graded-info-row');
-            existingGradedRows.forEach(row => row.remove());
+            // Remove any existing dynamic rows
+            const existingRows = table.querySelectorAll('.dynamic-row');
+            existingRows.forEach(row => row.remove());
             
-            // Add separator
-            const separatorRow = table.insertRow();
-            separatorRow.className = 'graded-info-row';
-            separatorRow.innerHTML = `<td colspan="2" style="padding: 8px 0; border-top: 1px solid #e5e7eb;"></td>`;
+            // Add Graded By, Date, and Pass Mark
+            const rowsToAdd = [
+                { label: 'Graded By:', value: gradedByStr },
+                { label: 'Graded On:', value: gradedDateStr },
+                { label: 'Pass Mark:', value: '60%' }
+            ];
             
-            // Add Graded By row
-            const gradedByRow = table.insertRow();
-            gradedByRow.className = 'graded-info-row';
-            gradedByRow.innerHTML = `
-                <td style="font-weight:600; padding:6px 0;">Graded By:</td>
-                <td>${gradedByStr}</td>
-            `;
-            
-            // Add Graded Date row
-            const gradedDateRow = table.insertRow();
-            gradedDateRow.className = 'graded-info-row';
-            gradedDateRow.innerHTML = `
-                <td style="font-weight:600; padding:6px 0;">Graded On:</td>
-                <td>${gradedDateStr}</td>
-            `;
-            
-            // Add Pass Mark row
-            const passMarkRow = table.insertRow();
-            passMarkRow.className = 'graded-info-row';
-            passMarkRow.innerHTML = `
-                <td style="font-weight:600; padding:6px 0;">Pass Mark:</td>
-                <td>60%</td>
-            `;
+            rowsToAdd.forEach(rowData => {
+                const row = table.insertRow();
+                row.className = 'dynamic-row';
+                row.innerHTML = `
+                    <td style="font-weight:600; padding:4px 0; color:#4B5563; font-size:0.9em;">${rowData.label}</td>
+                    <td style="padding:4px 0; font-size:0.9em;">${rowData.value}</td>
+                `;
+            });
         }
 
         // Show the modal
@@ -3261,17 +3238,17 @@ async function viewProvisionalTranscript(examId) {
     }
 }
 
-// Close transcript modal
+// Close transcript modal with cleanup
 function closeTranscriptModal() {
     const modal = document.getElementById('transcript-modal');
     if (modal) {
         modal.style.display = 'none';
         
-        // Clean up any dynamically added rows
+        // Clean up dynamic rows
         const table = modal.querySelector('table');
         if (table) {
-            const gradedInfoRows = table.querySelectorAll('.graded-info-row');
-            gradedInfoRows.forEach(row => row.remove());
+            const dynamicRows = table.querySelectorAll('.dynamic-row');
+            dynamicRows.forEach(row => row.remove());
         }
     }
 }
