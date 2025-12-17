@@ -398,68 +398,92 @@
                 <div id="messages-list"></div>
             </section>
 
-            <!-- ========== NURSEIQ TAB ========== -->
-            <section id="nurseiq" class="tab-content">
-                <h1>NurseIQ Assessment Center</h1>
-                <p class="subtitle">KRCHN Curriculum practice questions for Kenya Registered Community Health Nursing program</p>
-                
-                <!-- Statistics Container -->
-                <div id="nurseiqStats" class="stats-container"></div>
-                
-                <!-- Loading State -->
-                <div id="nurseiqLoading" style="display: none;">
-                    <div class="loading-content">
-                        <div class="spinner-container">
-                            <div class="spinner"></div>
-                            <div class="spinner-ring"></div>
-                        </div>
-                        <div class="loading-text">
-                            <h3>Loading NurseIQ Assessments</h3>
-                            <p>Preparing your practice questions...</p>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Empty State (Initially hidden) -->
-                <div id="nurseiqEmpty" style="display: none;"></div>
-                
-                <!-- Assessments Container -->
-                <div id="nurseiqAssessments" style="display: none;"></div>
-                
-                <!-- Current Assessment (when taking a quiz) -->
-                <div id="currentAssessment" style="display: none;"></div>
-            </section>
-
-            <!-- Coming soon quizlets Tab -->
-            <section id="coming-soon-quizlets" class="tab-content">
-                <!-- ... coming soon content ... -->
-            </section>
-        </main>
-    </div>
-
-    <!-- Status Bar -->
-    <div class="status-bar" id="statusBar">
-        <div class="status-left">
-            <div class="status-item">
-                <span class="status-icon online"><i class="fas fa-circle"></i></span>
-                <span>Connected</span>
-            </div>
-            <div class="status-badge online" id="syncStatus">
-                <i class="fas fa-sync-alt"></i>
-                <span>Synced</span>
-            </div>
+           <!-- NurseIQ Tab -->
+<section id="nurseiq" class="tab-content">
+    <h1>NurseIQ Assessment Center</h1>
+    <p class="subtitle">KRCHN Curriculum practice questions for Kenya Registered Community Health Nursing program</p>
+    
+    <!-- Overall Progress Dashboard -->
+    <div class="nurseiq-dashboard">
+        <!-- Main Stats Cards -->
+        <div class="dashboard-header">
+            <h2><i class="fas fa-chart-line"></i> Performance Overview</h2>
+            <button class="refresh-btn" onclick="loadNurseIQAssessments()">
+                <i class="fas fa-sync-alt"></i> Refresh
+            </button>
         </div>
-        <div class="status-right">
-            <div class="status-item" id="lastSync">
-                <i class="fas fa-clock"></i>
-                <span>Last sync: Just now</span>
+        
+        <div class="stats-grid" id="nurseiqStats">
+            <!-- Stats will be loaded here by JavaScript -->
+            <div class="loading-state">Loading metrics...</div>
+        </div>
+        
+        <!-- Performance Insights -->
+        <div class="insights-container" id="nurseiqInsights" style="display: none;">
+            <h3><i class="fas fa-lightbulb"></i> Performance Insights</h3>
+            <div class="insights-grid" id="insightsContent"></div>
+        </div>
+    </div>
+    
+    <!-- Difficulty Breakdown -->
+    <div class="difficulty-breakdown" id="difficultyBreakdown" style="display: none;">
+        <h3><i class="fas fa-chart-pie"></i> Difficulty Distribution</h3>
+        <div class="difficulty-chart" id="difficultyChart"></div>
+    </div>
+    
+    <!-- Filter Controls -->
+    <div class="filter-section">
+        <h3><i class="fas fa-filter"></i> Filter Assessments</h3>
+        <div class="filter-row">
+            <div class="filter-group">
+                <select id="nurseiqCourseFilter" class="filter-select">
+                    <option value="all">All Courses</option>
+                </select>
+                <select id="nurseiqDifficultyFilter" class="filter-select">
+                    <option value="all">All Difficulties</option>
+                    <option value="easy">Easy</option>
+                    <option value="medium">Medium</option>
+                    <option value="hard">Hard</option>
+                </select>
+                <select id="nurseiqStatusFilter" class="filter-select">
+                    <option value="all">All Status</option>
+                    <option value="completed">Completed</option>
+                    <option value="pending">Pending</option>
+                    <option value="needs-review">Needs Review</option>
+                </select>
             </div>
-            <div class="status-item" id="appVersionStatus">
-                <i class="fas fa-code-branch"></i>
-                <span>v2.1</span>
+            <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input type="text" id="nurseiqSearch" placeholder="Search questions...">
             </div>
         </div>
     </div>
+    
+    <!-- Loading State -->
+    <div id="nurseiqLoading" style="display: none;">
+        <div class="loading-content">
+            <div class="spinner-container">
+                <div class="spinner"></div>
+                <div class="spinner-ring"></div>
+            </div>
+            <div class="loading-text">
+                <h3>Loading NurseIQ Assessments</h3>
+                <p>Analyzing your performance data...</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Empty State -->
+    <div id="nurseiqEmpty" style="display: none;"></div>
+    
+    <!-- Assessments Container -->
+    <div id="nurseiqAssessments" style="display: none;"></div>
+    
+    <!-- Current Assessment (when taking a quiz) -->
+    <div id="currentAssessment" style="display: none;"></div>
+</section>
+
+   
 
     <!-- Install Prompt -->
     <div class="install-prompt" id="installPrompt">
@@ -1945,6 +1969,8 @@ async function loadNurseIQAssessments() {
     const loadingState = document.getElementById('nurseiqLoading');
     const assessmentsContainer = document.getElementById('nurseiqAssessments');
     const statsContainer = document.getElementById('nurseiqStats');
+    const insightsContainer = document.getElementById('nurseiqInsights');
+    const difficultyBreakdown = document.getElementById('difficultyBreakdown');
     
     try {
         // Show loading with animation
@@ -1965,14 +1991,24 @@ async function loadNurseIQAssessments() {
             return;
         }
         
-        // 3. Calculate statistics
-        const stats = calculateStats(assessmentsWithCourses, userProgress);
+        // 3. Calculate enhanced statistics
+        const stats = calculateEnhancedStats(assessmentsWithCourses, userProgress);
         
-        // 4. Update UI with smooth transitions
-        updateUIStats(stats);
+        // 4. Update UI with enhanced metrics
+        updateEnhancedUIStats(stats);
+        updatePerformanceInsights(stats);
+        updateDifficultyBreakdown(stats);
         updateNavigationBadge(stats.totalAssessments);
         displayAssessments(assessmentsWithCourses, userProgress);
         populateCourseFilter(assessmentsWithCourses);
+        
+        // Show insights and breakdown sections
+        if (insightsContainer) {
+            insightsContainer.style.display = 'block';
+        }
+        if (difficultyBreakdown) {
+            difficultyBreakdown.style.display = 'block';
+        }
         
     } catch (error) {
         console.error('Error loading NurseIQ assessments:', error);
@@ -1995,7 +2031,7 @@ async function loadNurseIQAssessments() {
                     </div>
                     <div class="loading-text">
                         <h3>Loading NurseIQ Assessments</h3>
-                        <p>Preparing your practice questions...</p>
+                        <p>Analyzing your performance data...</p>
                     </div>
                 </div>
             `;
@@ -2103,123 +2139,364 @@ async function loadNurseIQAssessments() {
         }
     }
     
-    function calculateStats(assessments, progress) {
+    function calculateEnhancedStats(assessments, progress) {
         const totalAssessments = assessments.length;
         const completedAssessments = progress.length;
         const correctAnswers = progress.filter(p => p.is_correct).length;
         const totalTime = progress.reduce((sum, p) => sum + (p.time_spent || 0), 0);
         const totalAttempts = progress.reduce((sum, p) => sum + (p.attempts || 1), 0);
         const accuracy = completedAssessments > 0 ? Math.round((correctAnswers / completedAssessments) * 100) : 0;
+        const completionRate = Math.round((completedAssessments / totalAssessments) * 100) || 0;
         
-        // Calculate average score per difficulty
+        // Calculate average time per question
+        const avgTimePerQuestion = completedAssessments > 0 ? Math.round(totalTime / completedAssessments / 60) : 0;
+        
+        // Calculate streaks
+        let currentStreak = 0;
+        let longestStreak = 0;
+        if (progress.length > 0) {
+            const sortedProgress = [...progress].sort((a, b) => 
+                new Date(a.completed_at) - new Date(b.completed_at)
+            );
+            currentStreak = calculateCurrentStreak(sortedProgress);
+        }
+        
+        // Calculate difficulty breakdown
         const difficultyStats = {};
         assessments.forEach(assessment => {
             const diff = assessment.difficulty || 'medium';
             if (!difficultyStats[diff]) {
-                difficultyStats[diff] = { total: 0, completed: 0 };
+                difficultyStats[diff] = { total: 0, completed: 0, correct: 0 };
             }
             difficultyStats[diff].total++;
-        });
-        
-        progress.forEach(p => {
-            const assessment = assessments.find(a => a.id === p.assessment_id);
-            if (assessment) {
-                const diff = assessment.difficulty || 'medium';
+            
+            const prog = progress.find(p => p.assessment_id === assessment.id);
+            if (prog) {
                 difficultyStats[diff].completed++;
+                if (prog.is_correct) difficultyStats[diff].correct++;
             }
         });
         
+        // Calculate accuracy by difficulty
+        Object.keys(difficultyStats).forEach(diff => {
+            const stats = difficultyStats[diff];
+            stats.completionRate = stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
+            stats.accuracy = stats.completed > 0 ? Math.round((stats.correct / stats.completed) * 100) : 0;
+        });
+        
+        // Identify strongest/weakest areas
+        let strongestArea = { name: 'None', accuracy: 0 };
+        let weakestArea = { name: 'None', accuracy: 100 };
+        
+        Object.entries(difficultyStats).forEach(([diff, stats]) => {
+            if (stats.completed > 0) {
+                if (stats.accuracy > strongestArea.accuracy) {
+                    strongestArea = { name: diff, accuracy: stats.accuracy };
+                }
+                if (stats.accuracy < weakestArea.accuracy) {
+                    weakestArea = { name: diff, accuracy: stats.accuracy };
+                }
+            }
+        });
+        
+        // Calculate efficiency score
+        const efficiencyScore = calculateEfficiencyScore(accuracy, avgTimePerQuestion);
+        const masteryLevel = calculateMasteryLevel(accuracy, completionRate, totalAssessments);
+        
         return {
+            // Basic metrics
             totalAssessments,
             completedAssessments,
             correctAnswers,
             totalTime,
             totalAttempts,
             accuracy,
+            completionRate,
+            avgTimePerQuestion,
+            currentStreak,
+            longestStreak,
+            
+            // Advanced metrics
             difficultyStats,
-            completionRate: Math.round((completedAssessments / totalAssessments) * 100) || 0
+            strongestArea,
+            weakestArea,
+            efficiencyScore,
+            masteryLevel,
+            needsReview: completedAssessments - correctAnswers,
+            questionsPerDay: completedAssessments > 0 ? Math.round(completedAssessments / 30) : 0,
+            timePerDay: Math.round(totalTime / 3600 / 30)
         };
     }
     
-    function updateUIStats(stats) {
+    function calculateCurrentStreak(progress) {
+        if (progress.length === 0) return 0;
+        
+        let streak = 1;
+        const lastDate = new Date(progress[progress.length - 1].completed_at);
+        const today = new Date();
+        
+        // If last attempt was today or yesterday, continue streak
+        const diffDays = Math.floor((today - lastDate) / (1000 * 60 * 60 * 24));
+        if (diffDays > 1) return 0; // Streak broken
+        
+        return streak + (diffDays === 0 ? 1 : 0);
+    }
+    
+    function calculateEfficiencyScore(accuracy, avgTime) {
+        // Higher score = better (accurate and fast)
+        const timeScore = Math.max(0, 10 - Math.min(avgTime, 10)); // Max 10 points for speed
+        const accuracyScore = accuracy * 0.9; // Max 90 points for accuracy
+        return Math.min(100, Math.round(timeScore + accuracyScore));
+    }
+    
+    function calculateMasteryLevel(accuracy, completionRate, total) {
+        if (total === 0) return 'Beginner';
+        if (completionRate < 30) return 'Beginner';
+        if (completionRate < 60) return 'Intermediate';
+        if (accuracy < 70) return 'Practicing';
+        if (accuracy < 85) return 'Proficient';
+        return 'Master';
+    }
+    
+    function updateEnhancedUIStats(stats) {
         if (statsContainer) {
             statsContainer.style.opacity = '1';
             statsContainer.innerHTML = `
                 <div class="stats-grid">
-                    <div class="stat-card stat-total">
+                    <!-- Total Questions -->
+                    <div class="stat-card total">
                         <div class="stat-icon">
                             <i class="fas fa-clipboard-list"></i>
                         </div>
-                        <div class="stat-content">
-                            <h3>${stats.totalAssessments}</h3>
-                            <p>Total Questions</p>
-                            <div class="stat-progress">
-                                <div class="progress-bar">
-                                    <div class="progress-fill" style="width: ${stats.completionRate}%"></div>
-                                </div>
-                                <span>${stats.completionRate}% Complete</span>
+                        <div class="stat-main">
+                            <div class="stat-value">${stats.totalAssessments}</div>
+                            <div class="stat-label">Total Questions</div>
+                        </div>
+                        <div class="stat-subtext">
+                            <i class="fas fa-chart-line"></i>
+                            ${stats.completionRate}% Completion
+                        </div>
+                        <div class="stat-progress">
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width: ${stats.completionRate}%"></div>
                             </div>
                         </div>
                     </div>
                     
-                    <div class="stat-card stat-completed">
+                    <!-- Completed -->
+                    <div class="stat-card completed">
                         <div class="stat-icon">
                             <i class="fas fa-check-circle"></i>
                         </div>
-                        <div class="stat-content">
-                            <h3>${stats.completedAssessments}</h3>
-                            <p>Completed</p>
-                            <span class="stat-subtext">${stats.correctAnswers} correct answers</span>
+                        <div class="stat-main">
+                            <div class="stat-value">${stats.completedAssessments}</div>
+                            <div class="stat-label">Completed</div>
+                        </div>
+                        <div class="stat-subtext">
+                            <i class="fas fa-check"></i>
+                            ${stats.correctAnswers} correct
                         </div>
                     </div>
                     
-                    <div class="stat-card stat-accuracy">
+                    <!-- Accuracy -->
+                    <div class="stat-card accuracy">
                         <div class="stat-icon">
                             <i class="fas fa-bullseye"></i>
                         </div>
-                        <div class="stat-content">
-                            <h3 class="${stats.accuracy >= 80 ? 'text-success' : stats.accuracy >= 60 ? 'text-warning' : 'text-danger'}">
+                        <div class="stat-main">
+                            <div class="stat-value ${stats.accuracy >= 80 ? 'text-success' : stats.accuracy >= 60 ? 'text-warning' : 'text-danger'}">
                                 ${stats.accuracy}%
-                            </h3>
-                            <p>Accuracy</p>
-                            <span class="stat-subtext">${stats.totalAttempts} attempts</span>
+                            </div>
+                            <div class="stat-label">Accuracy</div>
+                        </div>
+                        <div class="stat-subtext">
+                            <i class="fas fa-retweet"></i>
+                            ${stats.totalAttempts} attempts
                         </div>
                     </div>
                     
-                    <div class="stat-card stat-time">
+                    <!-- Time Spent -->
+                    <div class="stat-card time">
                         <div class="stat-icon">
                             <i class="fas fa-clock"></i>
                         </div>
-                        <div class="stat-content">
-                            <h3>${formatTime(stats.totalTime)}</h3>
-                            <p>Time Spent</p>
-                            <span class="stat-subtext">${stats.completedAssessments > 0 ? 
-                                Math.round(stats.totalTime / stats.completedAssessments / 60) + ' min avg' : 
-                                'No attempts'}</span>
+                        <div class="stat-main">
+                            <div class="stat-value">${formatTime(stats.totalTime)}</div>
+                            <div class="stat-label">Time Spent</div>
+                        </div>
+                        <div class="stat-subtext">
+                            <i class="fas fa-hourglass-half"></i>
+                            ${stats.avgTimePerQuestion || 0} min avg
+                        </div>
+                    </div>
+                    
+                    <!-- Current Streak -->
+                    <div class="stat-card streak">
+                        <div class="stat-icon">
+                            <i class="fas fa-fire"></i>
+                        </div>
+                        <div class="stat-main">
+                            <div class="stat-value">${stats.currentStreak}</div>
+                            <div class="stat-label">Day Streak</div>
+                        </div>
+                        <div class="stat-subtext">
+                            <i class="fas fa-calendar"></i>
+                            Keep going!
+                        </div>
+                    </div>
+                    
+                    <!-- Efficiency Score -->
+                    <div class="stat-card avg-time">
+                        <div class="stat-icon">
+                            <i class="fas fa-bolt"></i>
+                        </div>
+                        <div class="stat-main">
+                            <div class="stat-value">${stats.efficiencyScore}</div>
+                            <div class="stat-label">Efficiency</div>
+                        </div>
+                        <div class="stat-subtext">
+                            <i class="fas fa-tachometer-alt"></i>
+                            ${stats.masteryLevel} Level
                         </div>
                     </div>
                 </div>
-                
-                ${Object.keys(stats.difficultyStats).length > 0 ? `
-                    <div class="difficulty-breakdown">
-                        <h4><i class="fas fa-chart-bar"></i> Difficulty Breakdown</h4>
-                        <div class="difficulty-bars">
-                            ${Object.entries(stats.difficultyStats).map(([difficulty, data]) => `
-                                <div class="difficulty-bar ${difficulty}">
-                                    <div class="difficulty-label">
-                                        <span class="difficulty-name">${difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}</span>
-                                        <span class="difficulty-count">${data.completed}/${data.total}</span>
-                                    </div>
-                                    <div class="progress-bar">
-                                        <div class="progress-fill" style="width: ${data.total > 0 ? (data.completed / data.total) * 100 : 0}%"></div>
-                                    </div>
-                                </div>
-                            `).join('')}
-                        </div>
-                    </div>
-                ` : ''}
             `;
         }
+    }
+    
+    function updatePerformanceInsights(stats) {
+        const insightsContainer = document.getElementById('insightsContent');
+        if (!insightsContainer) return;
+        
+        const insights = [];
+        
+        // Generate insights based on stats
+        if (stats.completionRate < 30) {
+            insights.push({
+                type: 'warning',
+                icon: 'fa-rocket',
+                title: 'Start Practicing',
+                message: `You've completed ${stats.completionRate}% of available questions. Try to complete at least 1-2 questions daily.`
+            });
+        } else if (stats.completionRate < 60) {
+            insights.push({
+                type: 'info',
+                icon: 'fa-chart-line',
+                title: 'Good Progress',
+                message: `You're ${stats.completionRate}% through the questions. Keep up the momentum!`
+            });
+        } else {
+            insights.push({
+                type: 'positive',
+                icon: 'fa-trophy',
+                title: 'Excellent Progress',
+                message: `You've completed ${stats.completionRate}% of all questions - impressive!`
+            });
+        }
+        
+        if (stats.accuracy >= 80) {
+            insights.push({
+                type: 'positive',
+                icon: 'fa-star',
+                title: 'High Accuracy',
+                message: `Your accuracy of ${stats.accuracy}% shows strong understanding of the material.`
+            });
+        } else if (stats.accuracy >= 60) {
+            insights.push({
+                type: 'warning',
+                icon: 'fa-lightbulb',
+                title: 'Good Understanding',
+                message: `${stats.accuracy}% accuracy. Review incorrect answers to reach 80%+.`
+            });
+        } else {
+            insights.push({
+                type: 'needs-work',
+                icon: 'fa-book',
+                title: 'Needs Focus',
+                message: `${stats.accuracy}% accuracy. Focus on understanding concepts before proceeding.`
+            });
+        }
+        
+        if (stats.needsReview > 0) {
+            insights.push({
+                type: 'needs-work',
+                icon: 'fa-redo',
+                title: 'Questions to Review',
+                message: `You have ${stats.needsReview} questions that need review. Revisit them to reinforce learning.`
+            });
+        }
+        
+        if (stats.currentStreak > 0) {
+            insights.push({
+                type: 'positive',
+                icon: 'fa-fire',
+                title: 'Active Streak',
+                message: `You're on a ${stats.currentStreak}-day practice streak! Consistency is key to mastery.`
+            });
+        }
+        
+        // Add difficulty-specific insights
+        if (stats.strongestArea.name !== 'None') {
+            insights.push({
+                type: 'positive',
+                icon: 'fa-thumbs-up',
+                title: 'Strongest Area',
+                message: `You're doing great with ${stats.strongestArea.name} questions (${stats.strongestArea.accuracy}% accuracy).`
+            });
+        }
+        
+        if (stats.weakestArea.name !== 'None' && stats.weakestArea.accuracy < 70) {
+            insights.push({
+                type: 'needs-work',
+                icon: 'fa-exclamation-triangle',
+                title: 'Area for Improvement',
+                message: `Focus on ${stats.weakestArea.name} questions (${stats.weakestArea.accuracy}% accuracy).`
+            });
+        }
+        
+        // Render insights
+        insightsContainer.innerHTML = insights.map(insight => `
+            <div class="insight-card ${insight.type}">
+                <div class="insight-icon">
+                    <i class="fas ${insight.icon}"></i>
+                </div>
+                <div class="insight-content">
+                    <h4>${insight.title}</h4>
+                    <p>${insight.message}</p>
+                </div>
+            </div>
+        `).join('');
+    }
+    
+    function updateDifficultyBreakdown(stats) {
+        const difficultyChart = document.getElementById('difficultyChart');
+        if (!difficultyChart || !stats.difficultyStats) return;
+        
+        const difficulties = Object.entries(stats.difficultyStats);
+        if (difficulties.length === 0) return;
+        
+        difficultyChart.innerHTML = difficulties.map(([difficulty, data]) => `
+            <div class="difficulty-item ${difficulty}">
+                <div class="difficulty-header">
+                    <div class="difficulty-icon">
+                        <i class="fas ${getDifficultyIcon(difficulty)}"></i>
+                    </div>
+                    <div class="difficulty-name">${difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}</div>
+                </div>
+                <div class="difficulty-stats">
+                    <div class="difficulty-count">${data.completed}/${data.total}</div>
+                    <div class="difficulty-label">Questions</div>
+                </div>
+                <div class="difficulty-progress">
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: ${data.completionRate || 0}%"></div>
+                    </div>
+                    <div class="difficulty-subtext">
+                        ${data.completionRate || 0}% complete • ${data.accuracy || 0}% accuracy
+                    </div>
+                </div>
+            </div>
+        `).join('');
     }
     
     function displayAssessments(assessments, progress) {
@@ -2228,7 +2505,7 @@ async function loadNurseIQAssessments() {
         
         if (assessmentsContainer) {
             assessmentsContainer.style.display = 'block';
-            assessmentsContainer.innerHTML = renderAssessmentsList(assessments, progress);
+            assessmentsContainer.innerHTML = renderEnhancedAssessmentsList(assessments, progress);
             
             // Add animation to cards
             setTimeout(() => {
@@ -2406,8 +2683,8 @@ async function loadNurseIQAssessments() {
     }
 }
 
-// Updated render function with enhanced styling
-function renderAssessmentsList(assessments, userProgress) {
+// Enhanced render function
+function renderEnhancedAssessmentsList(assessments, userProgress) {
     if (!assessments.length) return '<p>No assessments available.</p>';
     
     let html = `
@@ -2415,19 +2692,20 @@ function renderAssessmentsList(assessments, userProgress) {
             <h3><i class="fas fa-clipboard-check"></i> Available Questions</h3>
             <div class="assessments-controls">
                 <div class="filter-group">
-                    <select id="nurseiqCourseFilter" class="form-select">
+                    <select id="nurseiqCourseFilter" class="filter-select">
                         <option value="all">All Courses</option>
                     </select>
-                    <select id="nurseiqDifficultyFilter" class="form-select">
+                    <select id="nurseiqDifficultyFilter" class="filter-select">
                         <option value="all">All Difficulties</option>
                         <option value="easy">Easy</option>
                         <option value="medium">Medium</option>
                         <option value="hard">Hard</option>
                     </select>
-                    <select id="nurseiqStatusFilter" class="form-select">
+                    <select id="nurseiqStatusFilter" class="filter-select">
                         <option value="all">All Status</option>
                         <option value="completed">Completed</option>
                         <option value="pending">Pending</option>
+                        <option value="needs-review">Needs Review</option>
                     </select>
                 </div>
                 <div class="search-box">
@@ -2447,12 +2725,13 @@ function renderAssessmentsList(assessments, userProgress) {
         const attempts = progress?.attempts || 0;
         const timeSpent = progress?.time_spent || 0;
         const lastAttempt = progress?.completed_at;
+        const needsReview = isCompleted && !isCorrect;
         
         html += `
             <div class="assessment-card ${isCompleted ? 'completed' : ''} ${assessment.difficulty || 'medium'}"
                  data-course="${assessment.course?.course_name || ''}"
                  data-difficulty="${assessment.difficulty || 'medium'}"
-                 data-status="${isCompleted ? 'completed' : 'pending'}">
+                 data-status="${isCompleted ? (needsReview ? 'needs-review' : 'completed') : 'pending'}">
                 
                 <div class="assessment-header">
                     <div class="course-badge" style="background: ${assessment.course?.color || '#6c757d'}20; color: ${assessment.course?.color || '#6c757d'}; border-left: 3px solid ${assessment.course?.color || '#6c757d'}">
@@ -2572,7 +2851,7 @@ function renderAssessmentsList(assessments, userProgress) {
     return html;
 }
 
-// Helper functions
+// Helper functions (keep existing ones)
 function getRandomColor(seed) {
     const colors = [
         '#4f46e5', '#7c3aed', '#db2777', '#ea580c', '#059669',
@@ -2707,8 +2986,16 @@ function filterAssessments() {
 
 // Call this after DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-    loadNurseIQAssessments();
-    initNurseIQListeners();
+    // Load NurseIQ when tab is shown
+    const nurseiqTab = document.querySelector('[data-tab="nurseiq"]');
+    if (nurseiqTab) {
+        nurseiqTab.addEventListener('click', () => {
+            setTimeout(() => {
+                loadNurseIQAssessments();
+                initNurseIQListeners();
+            }, 100);
+        });
+    }
 });
             // *************************************************************************
             // *** ATTENDANCE SYSTEM ***
