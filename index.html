@@ -787,57 +787,118 @@
             </section>
         </main>
     </div>
-<!-- NurseIQ Tab - ADD THIS NEW TAB -->
+<!-- NurseIQ Tab -->
 <section id="nurseiq" class="tab-content">
-    <div class="nurseiq-header">
-        <h1><i class="fas fa-brain"></i> NurseIQ Assessment Center</h1>
-        <p class="nurseiq-subtitle">Test your nursing knowledge with KRCHN-specific assessments</p>
-        
+    <div class="nurseiq-container">
+        <!-- Header -->
+        <div class="nurseiq-header">
+            <div class="header-content">
+                <h1>
+                    <i class="fas fa-brain"></i>
+                    NurseIQ Assessment Center
+                </h1>
+                <div class="curriculum-badge">
+                    <i class="fas fa-user-nurse"></i>
+                    <span>KRCHN Curriculum</span>
+                </div>
+            </div>
+            <p class="header-subtitle">
+                Practice questions for Kenya Registered Community Health Nursing program
+            </p>
+        </div>
+
+        <!-- Quick Stats -->
         <div class="nurseiq-stats">
             <div class="stat-card">
-                <i class="fas fa-file-alt"></i>
+                <div class="stat-icon">
+                    <i class="fas fa-file-alt"></i>
+                </div>
                 <div class="stat-content">
                     <span class="stat-number" id="nurseiqTotal">0</span>
                     <span class="stat-label">Total Assessments</span>
                 </div>
             </div>
             <div class="stat-card">
-                <i class="fas fa-check-circle"></i>
+                <div class="stat-icon">
+                    <i class="fas fa-check-circle"></i>
+                </div>
                 <div class="stat-content">
                     <span class="stat-number" id="nurseiqCompleted">0</span>
                     <span class="stat-label">Completed</span>
                 </div>
             </div>
             <div class="stat-card">
-                <i class="fas fa-chart-line"></i>
+                <div class="stat-icon">
+                    <i class="fas fa-chart-line"></i>
+                </div>
                 <div class="stat-content">
                     <span class="stat-number" id="nurseiqAccuracy">0%</span>
                     <span class="stat-label">Accuracy</span>
                 </div>
             </div>
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <i class="fas fa-clock"></i>
+                </div>
+                <div class="stat-content">
+                    <span class="stat-number" id="nurseiqTime">0h</span>
+                    <span class="stat-label">Time Spent</span>
+                </div>
+            </div>
         </div>
-    </div>
 
-    <!-- Empty State -->
-    <div class="nurseiq-empty" id="nurseiqEmpty">
-        <div class="empty-icon">
-            <i class="fas fa-book-medical"></i>
+        <!-- Filter by Course -->
+        <div class="nurseiq-filters">
+            <h3><i class="fas fa-filter"></i> Filter by Course</h3>
+            <div class="filters-row">
+                <select id="nurseiqCourseFilter" class="filter-select">
+                    <option value="all">All Courses</option>
+                </select>
+                <select id="nurseiqDifficultyFilter" class="filter-select">
+                    <option value="all">All Difficulty</option>
+                    <option value="easy">Easy</option>
+                    <option value="medium">Medium</option>
+                    <option value="hard">Hard</option>
+                </select>
+                <button class="refresh-btn" onclick="loadNurseIQAssessments()">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+            </div>
         </div>
-        <h3>No Assessments Available Yet</h3>
-        <p>Your instructors haven't published any KRCHN assessments yet.</p>
-        <p class="empty-note">Check back soon for practice questions!</p>
-    </div>
 
-    <!-- Assessments will load here -->
-    <div id="nurseiqAssessments" style="display: none;">
-        <!-- Assessments will be dynamically loaded -->
+        <!-- Empty State -->
+        <div class="nurseiq-empty" id="nurseiqEmpty">
+            <div class="empty-icon">
+                <i class="fas fa-book-medical"></i>
+            </div>
+            <h3>No Assessments Available Yet</h3>
+            <p>Your instructors haven't published any KRCHN assessments yet.</p>
+            <p class="empty-note">Check back soon for practice questions!</p>
+            
+            <div class="loading-placeholder" id="nurseiqLoading" style="display: none;">
+                <div class="loading-shimmer"></div>
+                <div class="loading-shimmer"></div>
+                <div class="loading-shimmer"></div>
+            </div>
+        </div>
+
+        <!-- Assessments Container -->
+        <div class="assessments-container" id="nurseiqAssessments" style="display: none;">
+            <!-- Assessments will load here -->
+        </div>
+
+        <!-- Current Assessment (when taking a quiz) -->
+        <div class="current-assessment" id="currentAssessment" style="display: none;">
+            <!-- Assessment will load here -->
+        </div>
     </div>
 </section>
 
-<!-- Coming soon quizlets tab -->
+<!-- Coming soon quizlets Tab -->
 <section id="coming soon quizlets" class="tab-content">
-    <!-- ... existing content ... -->
+    <!-- ... coming soon content ... -->
 </section>
+    
     <!-- Install Prompt -->
     <div class="install-prompt" id="installPrompt">
         <button class="install-close" onclick="closeInstallPrompt()">×</button>
@@ -2267,7 +2328,233 @@ function showTab(tabId) {
                     if (uploadButton) uploadButton.disabled = false;
                 });
             }
+            // *************************************************************************
+// *** NURSEIQ ASSESSMENT SYSTEM ***
+// *************************************************************************
+
+async function loadNurseIQAssessments() {
+    const emptyState = document.getElementById('nurseiqEmpty');
+    const loadingState = document.getElementById('nurseiqLoading');
+    const assessmentsContainer = document.getElementById('nurseiqAssessments');
+    const totalElement = document.getElementById('nurseiqTotal');
+    const completedElement = document.getElementById('nurseiqCompleted');
+    const accuracyElement = document.getElementById('nurseiqAccuracy');
+    const timeElement = document.getElementById('nurseiqTime');
+    
+    try {
+        // Show loading
+        if (emptyState) emptyState.style.display = 'none';
+        if (loadingState) loadingState.style.display = 'block';
+        if (assessmentsContainer) assessmentsContainer.style.display = 'none';
+        
+        // 1. Fetch assessments from your Supabase table
+        const { data: assessments, error: assessmentsError } = await sb
+            .from('medical_assessments')  // Your assessments table
+            .select(`
+                id,
+                course_id,
+                unit_name,
+                topic,
+                question_text,
+                question_type,
+                option_a,
+                option_b,
+                option_c,
+                option_d,
+                correct_answer,
+                explanation,
+                marks,
+                difficulty,
+                image_url,
+                created_at,
+                courses:course_id (
+                    course_code,
+                    course_name,
+                    duration_hours
+                )
+            `)
+            .eq('is_published', true)
+            .eq('is_active', true)
+            .eq('curriculum', 'KRCHN');
+        
+        if (assessmentsError) throw assessmentsError;
+        
+        // 2. Fetch user progress
+        const { data: userProgress, error: progressError } = await sb
+            .from('user_assessment_progress')
+            .select('assessment_id, is_correct, time_spent')
+            .eq('user_id', currentUserId);
+        
+        if (progressError) throw progressError;
+        
+        // 3. Calculate stats
+        const totalAssessments = assessments?.length || 0;
+        const completedAssessments = userProgress?.length || 0;
+        const correctAnswers = userProgress?.filter(p => p.is_correct).length || 0;
+        const totalTime = userProgress?.reduce((sum, p) => sum + (p.time_spent || 0), 0) || 0;
+        const accuracy = completedAssessments > 0 ? Math.round((correctAnswers / completedAssessments) * 100) : 0;
+        
+        // 4. Update UI
+        if (totalElement) totalElement.textContent = totalAssessments;
+        if (completedElement) completedElement.textContent = completedAssessments;
+        if (accuracyElement) accuracyElement.textContent = `${accuracy}%`;
+        if (timeElement) {
+            const hours = Math.floor(totalTime / 3600);
+            const minutes = Math.floor((totalTime % 3600) / 60);
+            timeElement.textContent = hours > 0 ? `${hours}h` : `${minutes}m`;
+        }
+        
+        // 5. Update navigation badge
+        const badge = document.getElementById('nurseiqBadge');
+        if (badge && totalAssessments > 0) {
+            badge.textContent = totalAssessments;
+            badge.classList.add('has-assessments');
+        }
+        
+        // 6. Display assessments if they exist
+        if (assessments && assessments.length > 0) {
+            if (loadingState) loadingState.style.display = 'none';
+            if (assessmentsContainer) {
+                assessmentsContainer.style.display = 'block';
+                assessmentsContainer.innerHTML = renderAssessmentsList(assessments, userProgress);
+            }
             
+            // Populate course filter
+            populateNurseIQCourseFilter(assessments);
+        } else {
+            if (loadingState) loadingState.style.display = 'none';
+            if (emptyState) emptyState.style.display = 'block';
+        }
+        
+    } catch (error) {
+        console.error('Error loading NurseIQ assessments:', error);
+        if (loadingState) loadingState.style.display = 'none';
+        if (emptyState) {
+            emptyState.style.display = 'block';
+            emptyState.innerHTML = `
+                <div class="empty-icon">
+                    <i class="fas fa-exclamation-triangle"></i>
+                </div>
+                <h3>Error Loading Assessments</h3>
+                <p>Failed to load assessment data. Please try again.</p>
+                <button class="refresh-btn" onclick="loadNurseIQAssessments()">
+                    <i class="fas fa-sync-alt"></i> Retry
+                </button>
+            `;
+        }
+    }
+}
+
+// Helper function to render assessments list
+function renderAssessmentsList(assessments, userProgress) {
+    if (!assessments.length) return '<p>No assessments available.</p>';
+    
+    let html = '<h3><i class="fas fa-list"></i> Available Assessments</h3><div class="assessments-grid">';
+    
+    assessments.forEach(assessment => {
+        const progress = userProgress?.find(p => p.assessment_id === assessment.id);
+        const isCompleted = !!progress;
+        const isCorrect = progress?.is_correct;
+        
+        html += `
+            <div class="assessment-card ${isCompleted ? 'completed' : ''}">
+                <div class="assessment-header">
+                    <div class="course-badge">
+                        <i class="fas fa-book"></i>
+                        ${assessment.courses?.course_code || 'NCHSM'}
+                    </div>
+                    <div class="difficulty-badge ${assessment.difficulty || 'medium'}">
+                        ${(assessment.difficulty || 'medium').toUpperCase()}
+                    </div>
+                </div>
+                
+                <div class="assessment-body">
+                    <h4>${assessment.topic || 'Assessment'}</h4>
+                    <p class="assessment-text">${assessment.question_text?.substring(0, 150)}...</p>
+                    
+                    <div class="assessment-meta">
+                        <span class="meta-item">
+                            <i class="fas fa-clock"></i>
+                            ${assessment.marks || 1} Mark${assessment.marks !== 1 ? 's' : ''}
+                        </span>
+                        <span class="meta-item">
+                            <i class="fas fa-calendar"></i>
+                            ${new Date(assessment.created_at).toLocaleDateString()}
+                        </span>
+                    </div>
+                </div>
+                
+                <div class="assessment-footer">
+                    ${isCompleted ? 
+                        `<span class="status-badge ${isCorrect ? 'correct' : 'incorrect'}">
+                            <i class="fas fa-${isCorrect ? 'check' : 'times'}"></i>
+                            ${isCorrect ? 'Correct' : 'Incorrect'}
+                        </span>` : 
+                        `<button class="start-btn" onclick="startNurseIQAssessment('${assessment.id}')">
+                            <i class="fas fa-play"></i> Start Assessment
+                        </button>`
+                    }
+                </div>
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    return html;
+}
+
+// Function to populate course filter in NurseIQ
+function populateNurseIQCourseFilter(assessments) {
+    const courseFilter = document.getElementById('nurseiqCourseFilter');
+    if (!courseFilter) return;
+    
+    // Get unique courses from assessments
+    const courses = [...new Set(assessments
+        .filter(a => a.courses?.course_name)
+        .map(a => a.courses.course_name))];
+    
+    courseFilter.innerHTML = '<option value="all">All Courses</option>';
+    courses.forEach(course => {
+        const option = document.createElement('option');
+        option.value = course;
+        option.textContent = course;
+        courseFilter.appendChild(option);
+    });
+}
+
+// Function to start a NurseIQ assessment
+function startNurseIQAssessment(assessmentId) {
+    console.log('Starting NurseIQ assessment:', assessmentId);
+    // This would load the assessment interface
+    // You can implement this based on your assessment structure
+    alert(`Starting assessment ${assessmentId}. Assessment interface will be implemented.`);
+}
+
+// Placeholder function for coming soon quizlets
+async function loadComingSoonQuizlets() {
+    const tabContent = document.getElementById('coming soon quizlets');
+    if (tabContent) {
+        tabContent.innerHTML = `
+            <div style="text-align: center; padding: 60px 20px;">
+                <i class="fas fa-tools" style="font-size: 4rem; color: #9CA3AF; margin-bottom: 20px;"></i>
+                <h2 style="color: #4C1D95;">Coming Soon: Quizlets</h2>
+                <p style="color: #6B7280; max-width: 500px; margin: 0 auto 30px;">
+                    We're working on interactive quizlets to help you study better. 
+                    This feature will be available soon!
+                </p>
+                <div class="progress-bar" style="width: 300px; height: 10px; background: #E5E7EB; border-radius: 5px; margin: 30px auto;">
+                    <div class="progress-fill" style="width: 65%; height: 100%; background: linear-gradient(135deg, #4C1D95, #7C3AED); border-radius: 5px;"></div>
+                </div>
+                <p style="color: #9CA3AF; font-size: 0.9rem;">Development in progress - 65% complete</p>
+            </div>
+        `;
+    }
+}
+
+// Make functions globally accessible
+window.loadNurseIQAssessments = loadNurseIQAssessments;
+window.loadComingSoonQuizlets = loadComingSoonQuizlets;
+window.startNurseIQAssessment = startNurseIQAssessment;
             // *************************************************************************
             // *** ATTENDANCE SYSTEM ***
             // *************************************************************************
