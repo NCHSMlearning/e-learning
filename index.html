@@ -2012,7 +2012,8 @@ document.querySelectorAll('[onclick*="showTab"]').forEach(element => {
 // *** NURSEIQ ASSESSMENT SYSTEM ***
 // *************************************************************************
 
-async function loadNurseIQAssessments() {
+// Make function globally accessible
+window.loadNurseIQAssessments = async function() {
     const emptyState = document.getElementById('nurseiqEmpty');
     const loadingState = document.getElementById('nurseiqLoading');
     const assessmentsContainer = document.getElementById('nurseiqAssessments');
@@ -2147,40 +2148,115 @@ async function loadNurseIQAssessments() {
         
         if (courseIds.length === 0) return assessments;
         
-        const { data: courses } = await supabase
-            .from('courses')
-            .select('id, course_name, unit_code, description, color')
-            .in('id', courseIds);
-        
-        if (!courses) return assessments;
-        
-        const courseMap = courses.reduce((map, course) => ({
-            ...map,
-            [course.id]: {
-                course_code: course.unit_code || 'N/A',
-                course_name: course.course_name || 'Unknown Course',
-                description: course.description || '',
-                color: course.color || getRandomColor(course.id)
+        try {
+            // Check if courses table exists
+            const { error: tableError } = await supabase
+                .from('courses')
+                .select('id')
+                .limit(1);
+            
+            if (tableError) {
+                console.warn('Courses table not found, using default course info');
+                return assessments.map(assessment => ({
+                    ...assessment,
+                    course: getDefaultCourseInfo(assessment.course_id)
+                }));
             }
-        }), {});
-        
-        return assessments.map(assessment => ({
-            ...assessment,
-            course: courseMap[assessment.course_id] || {
-                course_code: 'N/A',
-                course_name: 'Unknown Course',
-                description: '',
-                color: '#6c757d'
+            
+            // Fetch courses with better selection
+            const { data: courses, error } = await supabase
+                .from('courses')
+                .select(`
+                    id,
+                    course_name,
+                    course_code,
+                    unit_code,
+                    description,
+                    color,
+                    category,
+                    icon,
+                    is_active
+                `)
+                .in('id', courseIds)
+                .eq('is_active', true)
+                .order('course_name');
+            
+            if (error) {
+                console.warn('Error fetching courses:', error);
+                return assessments.map(assessment => ({
+                    ...assessment,
+                    course: getDefaultCourseInfo(assessment.course_id)
+                }));
             }
-        }));
+            
+            if (!courses || courses.length === 0) {
+                return assessments.map(assessment => ({
+                    ...assessment,
+                    course: getDefaultCourseInfo(assessment.course_id)
+                }));
+            }
+            
+            // Create comprehensive course map
+            const courseMap = courses.reduce((map, course) => ({
+                ...map,
+                [course.id]: {
+                    course_code: course.course_code || course.unit_code || 'N/A',
+                    course_name: course.course_name || 'Unknown Course',
+                    description: course.description || '',
+                    color: course.color || getRandomColor(course.id),
+                    category: course.category || 'General',
+                    icon: course.icon || 'fa-book-medical'
+                }
+            }), {});
+            
+            return assessments.map(assessment => ({
+                ...assessment,
+                course: courseMap[assessment.course_id] || getDefaultCourseInfo(assessment.course_id)
+            }));
+            
+        } catch (error) {
+            console.error('Error enriching course info:', error);
+            return assessments.map(assessment => ({
+                ...assessment,
+                course: getDefaultCourseInfo(assessment.course_id)
+            }));
+        }
+    }
+    
+    function getDefaultCourseInfo(courseId) {
+        const defaultCourses = {
+            'default': {
+                course_code: 'GEN',
+                course_name: 'General Nursing',
+                description: 'General nursing principles and practices',
+                color: '#6c757d',
+                category: 'General',
+                icon: 'fa-book-medical'
+            }
+        };
+        
+        return defaultCourses['default'] || {
+            course_code: 'N/A',
+            course_name: 'Unknown Course',
+            description: '',
+            color: '#6c757d',
+            category: 'General',
+            icon: 'fa-book-medical'
+        };
     }
     
     async function fetchUserProgress() {
         try {
+            // Ensure currentUserId exists
+            if (!window.currentUserId) {
+                console.warn('currentUserId not found');
+                return [];
+            }
+            
             const { data } = await supabase
                 .from('user_assessment_progress')
                 .select('assessment_id, is_correct, time_spent, completed_at, attempts')
-                .eq('user_id', currentUserId);
+                .eq('user_id', window.currentUserId);
             return data || [];
         } catch {
             return [];
@@ -2731,8 +2807,8 @@ async function loadNurseIQAssessments() {
     }
 }
 
-// Enhanced render function
-function renderEnhancedAssessmentsList(assessments, userProgress) {
+// Make helper functions globally accessible
+window.renderEnhancedAssessmentsList = function(assessments, userProgress) {
     if (!assessments.length) return '<p>No assessments available.</p>';
     
     let html = `
@@ -2783,7 +2859,7 @@ function renderEnhancedAssessmentsList(assessments, userProgress) {
                 
                 <div class="assessment-header">
                     <div class="course-badge" style="background: ${assessment.course?.color || '#6c757d'}20; color: ${assessment.course?.color || '#6c757d'}; border-left: 3px solid ${assessment.course?.color || '#6c757d'}">
-                        <i class="fas fa-book-medical"></i>
+                        <i class="fas ${assessment.course?.icon || 'fa-book-medical'}"></i>
                         <span>${assessment.course?.course_code || 'N/A'}</span>
                     </div>
                     <div class="difficulty-badge ${assessment.difficulty || 'medium'}">
@@ -2897,10 +2973,10 @@ function renderEnhancedAssessmentsList(assessments, userProgress) {
     `;
     
     return html;
-}
+};
 
-// Helper functions (keep existing ones)
-function getRandomColor(seed) {
+// Helper functions (make them globally accessible)
+window.getRandomColor = function(seed) {
     const colors = [
         '#4f46e5', '#7c3aed', '#db2777', '#ea580c', '#059669',
         '#0ea5e9', '#8b5cf6', '#ef4444', '#f59e0b', '#10b981'
@@ -2910,24 +2986,24 @@ function getRandomColor(seed) {
         hash = seed.charCodeAt(i) + ((hash << 5) - hash);
     }
     return colors[Math.abs(hash) % colors.length];
-}
+};
 
-function getDifficultyIcon(difficulty) {
+window.getDifficultyIcon = function(difficulty) {
     switch (difficulty) {
         case 'easy': return 'seedling';
         case 'medium': return 'balance-scale';
         case 'hard': return 'fire';
         default: return 'question-circle';
     }
-}
+};
 
-function truncateText(text, maxLength) {
+window.truncateText = function(text, maxLength) {
     if (!text) return '';
     if (text.length <= maxLength) return text;
     return text.substring(0, maxLength).trim() + '...';
-}
+};
 
-function formatDate(dateString) {
+window.formatDate = function(dateString) {
     const date = new Date(dateString);
     const now = new Date();
     const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
@@ -2937,15 +3013,15 @@ function formatDate(dateString) {
     if (diffDays < 7) return `${diffDays} days ago`;
     if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
+};
 
-function formatTime(seconds) {
+window.formatTime = function(seconds) {
     if (seconds < 60) return `${seconds}s`;
     if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
     return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
-}
+};
 
-function formatRelativeTime(dateString) {
+window.formatRelativeTime = function(dateString) {
     const date = new Date(dateString);
     const now = new Date();
     const diffMs = now - date;
@@ -2957,10 +3033,10 @@ function formatRelativeTime(dateString) {
     if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
     if (diffDays < 7) return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
     return date.toLocaleDateString();
-}
+};
 
 // Initialize event listeners
-function initNurseIQListeners() {
+window.initNurseIQListeners = function() {
     // Debounce search
     let searchTimeout;
     document.addEventListener('input', (e) => {
@@ -2988,10 +3064,10 @@ function initNurseIQListeners() {
             document.querySelector('.assessments-grid').classList.toggle('list-view', view === 'list');
         }
     });
-}
+};
 
 // Filter assessments function
-function filterAssessments() {
+window.filterAssessments = function() {
     const searchTerm = document.getElementById('nurseiqSearch')?.value.toLowerCase() || '';
     const courseFilter = document.getElementById('nurseiqCourseFilter')?.value || 'all';
     const difficultyFilter = document.getElementById('nurseiqDifficultyFilter')?.value || 'all';
@@ -3030,7 +3106,7 @@ function filterAssessments() {
     if (resultsCount) {
         resultsCount.innerHTML = `<i class="fas fa-info-circle"></i> Showing ${visibleCount} of ${cards.length} questions`;
     }
-}
+};
 
 // Call this after DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
@@ -3044,7 +3120,52 @@ document.addEventListener('DOMContentLoaded', () => {
             }, 100);
         });
     }
+    
+    // Also load immediately if on NurseIQ tab by default
+    if (window.location.hash === '#nurseiq' || 
+        document.querySelector('[data-tab="nurseiq"].active')) {
+        setTimeout(() => {
+            loadNurseIQAssessments();
+            initNurseIQListeners();
+        }, 500);
+    }
 });
+
+// Add placeholder functions for unimplemented features
+window.startNurseIQAssessment = function(assessmentId) {
+    alert(`Starting assessment ${assessmentId} - This feature is coming soon!`);
+    console.log('Starting assessment:', assessmentId);
+};
+
+window.reviewAssessment = function(assessmentId) {
+    alert(`Reviewing assessment ${assessmentId} - This feature is coming soon!`);
+    console.log('Reviewing assessment:', assessmentId);
+};
+
+window.retryAssessment = function(assessmentId) {
+    alert(`Retrying assessment ${assessmentId} - This feature is coming soon!`);
+    console.log('Retrying assessment:', assessmentId);
+};
+
+window.shareAssessment = function(assessmentId) {
+    alert(`Sharing assessment ${assessmentId} - This feature is coming soon!`);
+    console.log('Sharing assessment:', assessmentId);
+};
+
+window.showUpcomingFeatures = function() {
+    alert('Viewing roadmap - This feature is coming soon!');
+    console.log('Showing upcoming features');
+};
+
+window.subscribeNotifications = function() {
+    alert('Subscribing to notifications - This feature is coming soon!');
+    console.log('Subscribing to notifications');
+};
+
+window.reportIssue = function(errorMessage) {
+    alert(`Reporting issue: ${errorMessage} - This feature is coming soon!`);
+    console.log('Reporting issue:', errorMessage);
+};
             // *************************************************************************
             // *** ATTENDANCE SYSTEM ***
             // *************************************************************************
