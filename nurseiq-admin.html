@@ -12,21 +12,82 @@
     <div id="config-loader">
         <div class="loader-spinner"></div>
         <h2>NurseIQ Admin Panel</h2>
-        <p>Initializing...</p>
+        <p id="loader-message">Initializing...</p>
     </div>
     
+    <!-- Login Overlay -->
+    <div id="login-overlay" class="login-overlay" style="display: none;">
+        <div class="login-container">
+            <div class="login-box">
+                <h2><i class="fas fa-lock"></i> Authentication Required</h2>
+                <p>You need to login to access the admin panel.</p>
+                <button onclick="redirectToLoginPage()" class="btn btn-primary">
+                    <i class="fas fa-sign-in-alt"></i> Go to Login Page
+                </button>
+                <p class="login-note">Requires admin or superadmin privileges</p>
+            </div>
+        </div>
+    </div>
+
     <!-- Main Container -->
-    <div class="admin-container">
+    <div class="admin-container" style="display: none;">
         <!-- Header -->
         <div class="admin-header">
             <div>
                 <h1><i class="fas fa-stethoscope"></i> NurseIQ Admin Panel</h1>
                 <p class="text-muted">Manage assessments, courses, and user progress</p>
             </div>
-            <div class="admin-status">
-                <div class="status-indicator">
-                    <span class="status-dot connecting"></span>
-                    <span>Connecting...</span>
+            
+            <!-- User Profile Section -->
+            <div class="user-profile-section" id="user-profile-section">
+                <div class="user-info">
+                    <div class="user-avatar" id="user-avatar">A</div>
+                    <div class="user-details">
+                        <div class="user-name" id="user-name">Loading...</div>
+                        <div class="user-role" id="user-role">Admin</div>
+                    </div>
+                    <div class="user-actions">
+                        <button class="btn-profile" onclick="admin.showProfileModal()" title="Profile">
+                            <i class="fas fa-user"></i>
+                        </button>
+                        <button class="btn-logout" onclick="admin.logout()" title="Logout">
+                            <i class="fas fa-sign-out-alt"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Profile Modal -->
+        <div id="profile-modal" class="modal">
+            <div class="modal-content modal-sm">
+                <div class="modal-header">
+                    <h3><i class="fas fa-user-circle"></i> User Profile</h3>
+                    <button class="modal-close" onclick="admin.closeModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="profile-info">
+                        <div class="profile-avatar-large" id="profile-avatar">A</div>
+                        <div class="profile-details">
+                            <h4 id="profile-name">Loading...</h4>
+                            <div class="profile-role-badge" id="profile-role-badge">Admin</div>
+                            <div class="profile-info-item">
+                                <i class="fas fa-envelope"></i>
+                                <span id="profile-email">loading...</span>
+                            </div>
+                            <div class="profile-info-item">
+                                <i class="fas fa-graduation-cap"></i>
+                                <span id="profile-program">loading...</span>
+                            </div>
+                            <div class="profile-info-item">
+                                <i class="fas fa-calendar"></i>
+                                <span id="profile-last-login">loading...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline" onclick="admin.closeModal()">Close</button>
                 </div>
             </div>
         </div>
@@ -480,6 +541,7 @@
                     loaded: false
                 };
                 
+                this.currentUser = null;
                 this.currentTab = 'dashboard';
                 this.assessments = [];
                 this.courses = [];
@@ -493,16 +555,27 @@
                     console.log('🔧 Initializing NurseIQ Admin Panel...');
                     
                     // Show loader
-                    this.showLoader('Initializing...');
+                    this.showLoader('Checking authentication...');
                     
                     // Wait for DOM
                     await this.waitForDOM();
+                    
+                    // Check authentication first
+                    const isAuthenticated = await this.checkAuthentication();
+                    
+                    if (!isAuthenticated) {
+                        this.showLoginOverlay();
+                        return;
+                    }
                     
                     // Initialize Supabase
                     await this.initializeSupabase();
                     
                     // Verify connection
                     await this.verifyConnection();
+                    
+                    // Load user data
+                    await this.loadCurrentUserData();
                     
                     // Show admin interface
                     this.showAdminInterface();
@@ -516,6 +589,122 @@
                     console.error('❌ Initialization failed:', error);
                     this.showError('Initialization failed', error.message);
                 }
+            }
+            
+            async checkAuthentication() {
+                try {
+                    console.log('🔐 Checking authentication...');
+                    
+                    // Get session from localStorage
+                    const sessionData = localStorage.getItem('nurseiq_admin_session');
+                    
+                    if (!sessionData) {
+                        console.warn('❌ No session found in localStorage');
+                        return false;
+                    }
+                    
+                    const session = JSON.parse(sessionData);
+                    
+                    // Check if session is expired (24 hours)
+                    const sessionTime = new Date(session.timestamp);
+                    const currentTime = new Date();
+                    const hoursDiff = (currentTime - sessionTime) / (1000 * 60 * 60);
+                    
+                    if (hoursDiff > 24) {
+                        localStorage.removeItem('nurseiq_admin_session');
+                        console.warn('❌ Session expired');
+                        return false;
+                    }
+                    
+                    // Check if user has admin role
+                    if (session.role !== 'superadmin' && session.role !== 'admin') {
+                        console.warn('❌ User does not have admin role');
+                        return false;
+                    }
+                    
+                    this.currentUser = session;
+                    console.log(`✅ Authenticated as: ${session.full_name} (${session.role})`);
+                    return true;
+                    
+                } catch (error) {
+                    console.error('❌ Authentication check failed:', error);
+                    return false;
+                }
+            }
+            
+            async loadCurrentUserData() {
+                try {
+                    if (!this.supabase || !this.currentUser) return;
+                    
+                    // Get fresh user data from database
+                    const { data: user, error } = await this.supabase
+                        .from('consolidated_user_profiles_table')
+                        .select('*')
+                        .eq('id', this.currentUser.id)
+                        .single();
+                    
+                    if (error) {
+                        console.warn('Could not fetch fresh user data:', error);
+                        return;
+                    }
+                    
+                    // Update current user with fresh data
+                    this.currentUser = { ...this.currentUser, ...user };
+                    
+                    // Update session data
+                    localStorage.setItem('nurseiq_admin_session', JSON.stringify(this.currentUser));
+                    
+                    // Update UI
+                    this.updateUserProfileUI();
+                    
+                } catch (error) {
+                    console.error('Error loading user data:', error);
+                }
+            }
+            
+            updateUserProfileUI() {
+                if (!this.currentUser) return;
+                
+                // Update profile section
+                const userAvatar = document.getElementById('user-avatar');
+                const userName = document.getElementById('user-name');
+                const userRole = document.getElementById('user-role');
+                
+                if (userAvatar && this.currentUser.full_name) {
+                    userAvatar.textContent = this.currentUser.full_name.charAt(0).toUpperCase();
+                }
+                
+                if (userName) {
+                    userName.textContent = this.currentUser.full_name || 'Admin User';
+                }
+                
+                if (userRole) {
+                    userRole.textContent = this.currentUser.role || 'Admin';
+                    userRole.className = 'user-role ' + (this.currentUser.role === 'superadmin' ? 'superadmin' : 'admin');
+                }
+            }
+            
+            showLoginOverlay() {
+                const loader = document.getElementById('config-loader');
+                const loginOverlay = document.getElementById('login-overlay');
+                
+                if (loader) loader.style.display = 'none';
+                if (loginOverlay) loginOverlay.style.display = 'flex';
+            }
+            
+            showAdminInterface() {
+                const loader = document.getElementById('config-loader');
+                const loginOverlay = document.getElementById('login-overlay');
+                const container = document.querySelector('.admin-container');
+                
+                if (loader) loader.style.display = 'none';
+                if (loginOverlay) loginOverlay.style.display = 'none';
+                if (container) container.style.display = 'block';
+                
+                // Update user profile in UI
+                this.updateUserProfileUI();
+                
+                this.showNotification('Connected to database successfully!', 'success');
             }
             
             waitForDOM() {
@@ -573,16 +762,6 @@
                     this.updateConnectionStatus('error');
                     throw new Error(`Database connection failed: ${error.message}`);
                 }
-            }
-            
-            showAdminInterface() {
-                const loader = document.getElementById('config-loader');
-                const container = document.querySelector('.admin-container');
-                
-                if (loader) loader.style.display = 'none';
-                if (container) container.style.display = 'block';
-                
-                this.showNotification('Connected to database successfully!', 'success');
             }
             
             async loadInitialData() {
@@ -652,6 +831,59 @@
                 });
             }
             
+            showProfileModal() {
+                if (!this.currentUser) return;
+                
+                // Update modal content
+                const profileAvatar = document.getElementById('profile-avatar');
+                const profileName = document.getElementById('profile-name');
+                const profileRoleBadge = document.getElementById('profile-role-badge');
+                const profileEmail = document.getElementById('profile-email');
+                const profileProgram = document.getElementById('profile-program');
+                const profileLastLogin = document.getElementById('profile-last-login');
+                
+                if (profileAvatar) {
+                    profileAvatar.textContent = this.currentUser.full_name ? 
+                        this.currentUser.full_name.charAt(0).toUpperCase() : 'A';
+                }
+                
+                if (profileName) {
+                    profileName.textContent = this.currentUser.full_name || 'Admin User';
+                }
+                
+                if (profileRoleBadge) {
+                    profileRoleBadge.textContent = this.currentUser.role || 'Admin';
+                    profileRoleBadge.className = 'profile-role-badge ' + 
+                        (this.currentUser.role === 'superadmin' ? 'superadmin' : 'admin');
+                }
+                
+                if (profileEmail) {
+                    profileEmail.textContent = this.currentUser.email || 'No email';
+                }
+                
+                if (profileProgram) {
+                    profileProgram.textContent = this.currentUser.program || 
+                                               this.currentUser.department || 
+                                               'Not specified';
+                }
+                
+                if (profileLastLogin) {
+                    const lastLogin = this.currentUser.timestamp || this.currentUser.last_login;
+                    profileLastLogin.textContent = lastLogin ? 
+                        this.formatTimeAgo(lastLogin) : 'Never';
+                }
+                
+                this.openModal('profile-modal');
+            }
+            
+            logout() {
+                if (confirm('Are you sure you want to logout?')) {
+                    localStorage.removeItem('nurseiq_admin_session');
+                    document.cookie = 'nurseiq_admin=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+                    window.location.href = 'https://nakurucollegeofhealthelearning.site/nurseiq-admin-login.html';
+                }
+            }
+            
             // ==================== DASHBOARD ====================
             async loadDashboardData() {
                 try {
@@ -702,7 +934,6 @@
                     
                 } catch (error) {
                     console.error('Error loading dashboard:', error);
-                    // Set defaults
                     document.getElementById('total-assessments').textContent = '0';
                     document.getElementById('total-courses').textContent = '0';
                     document.getElementById('active-users').textContent = '0';
@@ -1058,7 +1289,6 @@
                 }
                 
                 tableBody.innerHTML = this.courses.map(course => {
-                    // Use default color if missing
                     const courseColor = course.color || '#4f46e5';
                     
                     return `
@@ -1246,27 +1476,16 @@
                 console.log('👥 Loading users...');
                 
                 try {
-                    // Try multiple table names
                     let users = [];
                     
-                    // Try profiles table
-                    const { data: profilesData, error: profilesError } = await this.supabase
-                        .from('profiles')
+                    // Try consolidated table
+                    const { data: consolidatedData } = await this.supabase
+                        .from('consolidated_user_profiles_table')
                         .select('*')
                         .limit(50);
                     
-                    if (!profilesError && profilesData) {
-                        users = profilesData;
-                    } else {
-                        // Try consolidated table
-                        const { data: consolidatedData } = await this.supabase
-                            .from('consolidated_user_profiles_table')
-                            .select('*')
-                            .limit(50);
-                        
-                        if (consolidatedData) {
-                            users = consolidatedData;
-                        }
+                    if (consolidatedData) {
+                        users = consolidatedData;
                     }
                     
                     this.users = users || [];
@@ -1299,7 +1518,6 @@
                     return;
                 }
                 
-                // Get progress data for each user
                 const usersWithProgress = await Promise.all(
                     this.users.map(async (user) => {
                         try {
@@ -1416,13 +1634,11 @@
             switchTab(tabId) {
                 this.currentTab = tabId;
                 
-                // Update active tab button
                 document.querySelectorAll('.admin-tab').forEach(t => {
                     t.classList.remove('active');
                 });
                 document.querySelector(`[data-tab="${tabId}"]`).classList.add('active');
                 
-                // Update active tab content
                 document.querySelectorAll('.admin-tab-content').forEach(content => {
                     content.classList.remove('active');
                 });
@@ -1518,7 +1734,6 @@
                 
                 finalContainer.appendChild(notification);
                 
-                // Auto-remove after 5 seconds
                 setTimeout(() => {
                     if (notification.parentElement) {
                         notification.remove();
@@ -1567,10 +1782,6 @@
                 };
                 
                 localStorage.setItem('nurseiq_last_update', JSON.stringify(updateEvent));
-                window.dispatchEvent(new StorageEvent('storage', {
-                    key: 'nurseiq_last_update',
-                    newValue: JSON.stringify(updateEvent)
-                }));
                 sessionStorage.setItem('force_refresh_nurseiq', 'true');
                 
                 this.showNotification('Student view will be updated', 'success');
@@ -1603,6 +1814,7 @@
                         Name: ${user.full_name || 'Not specified'}
                         Email: ${user.email || 'Not specified'}
                         Program: ${user.program || user.department || 'Not specified'}
+                        Role: ${user.role || 'Not specified'}
                         User ID: ${user.id}
                     `;
                     alert(details);
@@ -1662,6 +1874,9 @@
         window.refreshUsers = () => adminInstance?.loadUsers();
         window.closeModal = () => adminInstance?.closeModal();
         window.admin = adminInstance;
+        window.redirectToLoginPage = () => {
+            window.location.href = 'https://nakurucollegeofhealthelearning.site/nurseiq-admin-login.html';
+        };
     </script>
 </body>
 </html>
