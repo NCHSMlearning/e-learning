@@ -1,4 +1,4 @@
-this was original js update it // NurseIQ Admin Panel - Complete Script
+// NurseIQ Admin Panel - Complete Script
 class NurseIQAdmin {
     constructor() {
         this.supabase = null;
