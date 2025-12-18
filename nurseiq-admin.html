@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NurseIQ Admin Panel</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="admin-styles.css"> <!-- Admin-specific styles -->
+</head>
+<body>
+    <div class="admin-container">
+        <!-- Header -->
+        <div class="admin-header">
+            <div>
+                <h1><i class="fas fa-stethoscope"></i> NurseIQ Admin Panel</h1>
+                <p class="text-muted">Manage assessments, courses, and user progress</p>
+            </div>
+            <div class="admin-status">
+                <div class="status-indicator">
+                    <span class="status-dot connected"></span>
+                    <span>Connected to Database</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabs Navigation -->
+        <div class="admin-tabs">
+            <button class="admin-tab active" data-tab="dashboard">
+                <i class="fas fa-tachometer-alt"></i> Dashboard
+            </button>
+            <button class="admin-tab" data-tab="assessments">
+                <i class="fas fa-clipboard-list"></i> Assessments
+            </button>
+            <button class="admin-tab" data-tab="courses">
+                <i class="fas fa-book-medical"></i> Courses
+            </button>
+            <button class="admin-tab" data-tab="users">
+                <i class="fas fa-users"></i> Users
+            </button>
+            <button class="admin-tab" data-tab="settings">
+                <i class="fas fa-cog"></i> Settings
+            </button>
+        </div>
+
+        <!-- Dashboard Tab -->
+        <div id="dashboard-tab" class="admin-tab-content active">
+            <div class="dashboard-stats">
+                <!-- Stats Cards -->
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <i class="fas fa-clipboard-check"></i>
+                    </div>
+                    <div class="stat-content">
+                        <h3 id="total-assessments">0</h3>
+                        <p>Total Assessments</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <i class="fas fa-book"></i>
+                    </div>
+                    <div class="stat-content">
+                        <h3 id="total-courses">0</h3>
+                        <p>Active Courses</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <i class="fas fa-user-graduate"></i>
+                    </div>
+                    <div class="stat-content">
+                        <h3 id="active-users">0</h3>
+                        <p>Active Users</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <i class="fas fa-chart-line"></i>
+                    </div>
+                    <div class="stat-content">
+                        <h3 id="completion-rate">0%</h3>
+                        <p>Avg. Completion</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="quick-actions">
+                <h2><i class="fas fa-bolt"></i> Quick Actions</h2>
+                <div class="actions-grid">
+                    <button class="action-btn" onclick="openModal('add-assessment')">
+                        <i class="fas fa-plus-circle"></i>
+                        <span>Add New Assessment</span>
+                    </button>
+                    <button class="action-btn" onclick="openModal('add-course')">
+                        <i class="fas fa-book-medical"></i>
+                        <span>Add New Course</span>
+                    </button>
+                    <button class="action-btn" onclick="openModal('import-data')">
+                        <i class="fas fa-file-import"></i>
+                        <span>Import Questions</span>
+                    </button>
+                    <button class="action-btn" onclick="generateReports()">
+                        <i class="fas fa-chart-bar"></i>
+                        <span>Generate Reports</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Assessments Tab -->
+        <div id="assessments-tab" class="admin-tab-content">
+            <div class="table-header">
+                <h2><i class="fas fa-clipboard-list"></i> Manage Assessments</h2>
+                <div>
+                    <button class="btn btn-primary" onclick="openModal('add-assessment')">
+                        <i class="fas fa-plus"></i> Add Assessment
+                    </button>
+                </div>
+            </div>
+            
+            <div class="filters">
+                <input type="text" id="search-assessments" placeholder="Search assessments..." class="search-input">
+                <select id="filter-course" class="filter-select">
+                    <option value="all">All Courses</option>
+                </select>
+                <select id="filter-difficulty" class="filter-select">
+                    <option value="all">All Difficulties</option>
+                    <option value="easy">Easy</option>
+                    <option value="medium">Medium</option>
+                    <option value="hard">Hard</option>
+                </select>
+            </div>
+
+            <div class="table-responsive">
+                <table id="assessments-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Topic</th>
+                            <th>Course</th>
+                            <th>Difficulty</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Will be populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Courses Tab -->
+        <div id="courses-tab" class="admin-tab-content">
+            <div class="table-header">
+                <h2><i class="fas fa-book-medical"></i> Manage Courses</h2>
+                <div>
+                    <button class="btn btn-primary" onclick="openModal('add-course')">
+                        <i class="fas fa-plus"></i> Add Course
+                    </button>
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table id="courses-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Course Name</th>
+                            <th>Unit Code</th>
+                            <th>Program</th>
+                            <th>Intake Year</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Will be populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Users Tab -->
+        <div id="users-tab" class="admin-tab-content">
+            <div class="table-header">
+                <h2><i class="fas fa-users"></i> User Progress</h2>
+            </div>
+
+            <div class="table-responsive">
+                <table id="users-table">
+                    <thead>
+                        <tr>
+                            <th>User ID</th>
+                            <th>Name</th>
+                            <th>Program</th>
+                            <th>Assessments Completed</th>
+                            <th>Accuracy</th>
+                            <th>Last Active</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Will be populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Settings Tab -->
+        <div id="settings-tab" class="admin-tab-content">
+            <div class="settings-grid">
+                <div class="settings-card">
+                    <h3><i class="fas fa-database"></i> Database Settings</h3>
+                    <div class="setting-item">
+                        <label>Supabase URL</label>
+                        <input type="text" id="supabase-url" class="form-control" placeholder="https://your-project.supabase.co">
+                    </div>
+                    <div class="setting-item">
+                        <label>Anon Key</label>
+                        <input type="password" id="supabase-key" class="form-control" placeholder="eyJhbGciOiJIUzI1NiIsIn...">
+                    </div>
+                    <button class="btn btn-success" onclick="testConnection()">
+                        <i class="fas fa-plug"></i> Test Connection
+                    </button>
+                </div>
+
+                <div class="settings-card">
+                    <h3><i class="fas fa-bell"></i> Notifications</h3>
+                    <div class="setting-item">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="notify-new-assessments" checked>
+                            <span>Notify when new assessments added</span>
+                        </label>
+                    </div>
+                    <div class="setting-item">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="notify-errors" checked>
+                            <span>Notify on system errors</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div id="add-assessment-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-plus-circle"></i> Add New Assessment</h3>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="assessment-form">
+                    <div class="form-group">
+                        <label>Question Text *</label>
+                        <textarea id="question-text" class="form-control" rows="3" required></textarea>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Course *</label>
+                            <select id="assessment-course" class="form-control" required>
+                                <option value="">Select Course</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Difficulty *</label>
+                            <select id="assessment-difficulty" class="form-control" required>
+                                <option value="easy">Easy</option>
+                                <option value="medium" selected>Medium</option>
+                                <option value="hard">Hard</option>
+                            </select>
+                        </div>
+                    </div>
+                    <!-- Options fields would go here -->
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save Assessment</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script src="admin-script.js"></script>
+</body>
+</html>
