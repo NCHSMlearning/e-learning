@@ -947,196 +947,285 @@
                 }
             }
             
-            // ==================== COURSES ====================
-            async loadCourses() {
-                try {
-                    const { data: courses, error } = await this.supabase
-                        .from('courses')
-                        .select('*')
-                        .order('course_name');
-                    
-                    if (error) throw error;
-                    
-                    this.courses = courses || [];
-                    this.renderCoursesTable();
-                    
-                    // Populate course dropdown
-                    const courseSelect = document.getElementById('assessment-course');
-                    if (courseSelect && this.courses.length > 0) {
-                        courseSelect.innerHTML = '<option value="">Select Course</option>' +
-                            this.courses.filter(c => c.status === 'Active').map(course => `
-                                <option value="${course.id}">${course.course_name}</option>
-                            `).join('');
-                    }
-                    
-                } catch (error) {
-                    console.error('Error loading courses:', error);
-                    this.showNotification('Failed to load courses', 'error');
-                    this.courses = [];
-                    this.renderCoursesTable();
-                }
+          // ==================== COURSES ====================
+async loadCourses() {
+    console.log('🔄 [DEBUG] Starting loadCourses...');
+    
+    try {
+        // Show loading state
+        this.showLoader('Loading courses...');
+        
+        // Test Supabase connection first
+        console.log('📡 [DEBUG] Testing Supabase connection...');
+        console.log('Supabase URL:', this.config.supabaseUrl);
+        console.log('Supabase client exists:', !!this.supabase);
+        
+        // Try to fetch courses
+        console.log('📡 [DEBUG] Fetching courses...');
+        const { data: courses, error } = await this.supabase
+            .from('courses')
+            .select('*')
+            .order('course_name')
+            .limit(100);
+        
+        console.log('[DEBUG] Supabase response received');
+        
+        if (error) {
+            console.error('❌ [DEBUG] SUPABASE ERROR:', {
+                message: error.message,
+                code: error.code,
+                details: error.details,
+                hint: error.hint
+            });
+            
+            // Try alternative table name
+            console.log('🔄 [DEBUG] Trying alternative table name...');
+            const { data: altData, error: altError } = await this.supabase
+                .from('course')
+                .select('*')
+                .limit(1);
+            
+            if (!altError) {
+                console.log('✅ [DEBUG] Found table "course" instead of "courses"');
+                // Update to use correct table name
+                // You would need to change all references from 'courses' to 'course'
             }
             
-            renderCoursesTable() {
-                const tableBody = document.querySelector('#courses-table tbody');
-                if (!tableBody) return;
-                
-                if (this.courses.length === 0) {
-                    tableBody.innerHTML = '<tr><td colspan="7" class="text-center">No courses found</td></tr>';
-                    return;
-                }
-                
-                tableBody.innerHTML = this.courses.map(course => {
-                    return `
-                        <tr>
-                            <td>${course.id.substring(0, 8)}...</td>
-                            <td>${course.course_name}</td>
-                            <td>${course.unit_code || 'N/A'}</td>
-                            <td>${course.target_program || 'All'}</td>
-                            <td>${course.intake_year || 'All'}</td>
-                            <td><span class="status-badge ${course.status === 'Active' ? 'active' : 'inactive'}">${course.status}</span></td>
-                            <td>
-                                <button onclick="admin.editCourse('${course.id}')" class="btn-action">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button onclick="admin.toggleCourseStatus('${course.id}')" class="btn-action">
-                                    <i class="fas fa-power-off"></i>
-                                </button>
-                            </td>
-                        </tr>
-                    `;
-                }).join('');
-            }
-            
-            async saveCourse() {
-                try {
-                    const formData = {
-                        course_name: document.getElementById('course-name').value,
-                        unit_code: document.getElementById('course-code').value,
-                        color: document.getElementById('course-color').value,
-                        description: document.getElementById('course-description').value || null,
-                        target_program: document.getElementById('course-program').value || null,
-                        intake_year: parseInt(document.getElementById('course-year').value) || null,
-                        status: 'Active',
-                        created_at: new Date().toISOString()
-                    };
-                    
-                    if (!formData.course_name || !formData.unit_code) {
-                        this.showNotification('Please fill in all required fields', 'error');
-                        return;
-                    }
-                    
-                    const { error } = await this.supabase
-                        .from('courses')
-                        .insert([formData]);
-                    
-                    if (error) throw error;
-                    
-                    this.showNotification('Course saved successfully!', 'success');
-                    this.closeModal();
-                    await this.loadCourses();
-                    await this.loadDashboardData();
-                    await this.loadAssessments();
-                    this.triggerStudentUpdate();
-                    
-                } catch (error) {
-                    console.error('Error saving course:', error);
-                    this.showNotification('Failed to save course', 'error');
-                }
-            }
-            
-            async editCourse(courseId) {
-                try {
-                    const { data: course, error } = await this.supabase
-                        .from('courses')
-                        .select('*')
-                        .eq('id', courseId)
-                        .single();
-                    
-                    if (error) throw error;
-                    
-                    document.getElementById('course-name').value = course.course_name || '';
-                    document.getElementById('course-code').value = course.unit_code || '';
-                    document.getElementById('course-color').value = course.color || '#4f46e5';
-                    document.getElementById('course-description').value = course.description || '';
-                    document.getElementById('course-program').value = course.target_program || '';
-                    document.getElementById('course-year').value = course.intake_year || '2024';
-                    
-                    const form = document.getElementById('course-form');
-                    form.dataset.editId = courseId;
-                    form.onsubmit = async (e) => {
-                        e.preventDefault();
-                        await this.updateCourse(courseId);
-                    };
-                    
-                    this.openModal('add-course-modal');
-                    
-                } catch (error) {
-                    console.error('Error loading course:', error);
-                    this.showNotification('Failed to load course', 'error');
-                }
-            }
-            
-            async updateCourse(courseId) {
-                try {
-                    const formData = {
-                        course_name: document.getElementById('course-name').value,
-                        unit_code: document.getElementById('course-code').value,
-                        color: document.getElementById('course-color').value,
-                        description: document.getElementById('course-description').value || null,
-                        target_program: document.getElementById('course-program').value || null,
-                        intake_year: parseInt(document.getElementById('course-year').value) || null,
-                        updated_at: new Date().toISOString()
-                    };
-                    
-                    const { error } = await this.supabase
-                        .from('courses')
-                        .update(formData)
-                        .eq('id', courseId);
-                    
-                    if (error) throw error;
-                    
-                    this.showNotification('Course updated successfully!', 'success');
-                    this.closeModal();
-                    await this.loadCourses();
-                    await this.loadAssessments();
-                    this.triggerStudentUpdate();
-                    
-                } catch (error) {
-                    console.error('Error updating course:', error);
-                    this.showNotification('Failed to update course', 'error');
-                }
-            }
-            
-            async toggleCourseStatus(courseId) {
-                try {
-                    const { data: course } = await this.supabase
-                        .from('courses')
-                        .select('status')
-                        .eq('id', courseId)
-                        .single();
-                    
-                    const newStatus = course.status === 'Active' ? 'Inactive' : 'Active';
-                    
-                    const { error } = await this.supabase
-                        .from('courses')
-                        .update({ status: newStatus })
-                        .eq('id', courseId);
-                    
-                    if (error) throw error;
-                    
-                    this.showNotification(`Course ${newStatus.toLowerCase()}d!`, 'success');
-                    await this.loadCourses();
-                    await this.loadDashboardData();
-                    await this.loadAssessments();
-                    this.triggerStudentUpdate();
-                    
-                } catch (error) {
-                    console.error('Error toggling course status:', error);
-                    this.showNotification('Failed to update course status', 'error');
-                }
-            }
-            
+            throw error;
+        }
+        
+        console.log(`✅ [DEBUG] Found ${courses?.length || 0} courses`);
+        
+        if (courses && courses.length > 0) {
+            console.log('[DEBUG] First course:', courses[0]);
+            console.log('[DEBUG] Course columns:', Object.keys(courses[0]));
+        }
+        
+        this.courses = courses || [];
+        
+        // Update UI
+        this.renderCoursesTable();
+        
+        // Update dashboard stats
+        const totalCoursesEl = document.getElementById('total-courses');
+        if (totalCoursesEl) {
+            totalCoursesEl.textContent = this.courses.filter(c => c.status === 'Active').length;
+        }
+        
+        // Populate course dropdown in assessment form
+        this.populateCourseDropdown();
+        
+        // Show success message
+        if (this.courses.length > 0) {
+            this.showNotification(`Loaded ${this.courses.length} courses`, 'success');
+        } else {
+            this.showNotification('No courses found. Add your first course!', 'info');
+        }
+        
+        console.log('✅ [DEBUG] loadCourses completed successfully');
+        
+    } catch (error) {
+        console.error('❌ [DEBUG] ERROR in loadCourses:', error);
+        
+        // Show specific error messages
+        let errorMessage = 'Failed to load courses';
+        if (error.message.includes('JWT')) {
+            errorMessage = 'Invalid API key. Check your Supabase credentials.';
+        } else if (error.message.includes('does not exist')) {
+            errorMessage = 'Courses table not found in database.';
+        } else if (error.message.includes('permission denied')) {
+            errorMessage = 'Permission denied. Check Row Level Security (RLS).';
+        }
+        
+        this.showNotification(errorMessage, 'error');
+        
+        // Fallback: Show test data
+        this.showTestCourses();
+        
+    } finally {
+        // Hide loader
+        const loader = document.getElementById('config-loader');
+        if (loader && loader.style.display !== 'none') {
+            loader.style.display = 'none';
+        }
+    }
+}
+
+// Helper function to populate course dropdown
+populateCourseDropdown() {
+    const courseSelect = document.getElementById('assessment-course');
+    if (!courseSelect) {
+        console.log('[DEBUG] Course dropdown not found');
+        return;
+    }
+    
+    const activeCourses = this.courses.filter(c => c.status === 'Active');
+    console.log(`[DEBUG] Found ${activeCourses.length} active courses for dropdown`);
+    
+    if (activeCourses.length === 0) {
+        courseSelect.innerHTML = '<option value="">No courses available</option>';
+        return;
+    }
+    
+    const options = activeCourses.map(course => {
+        const displayName = course.course_name || 'Unnamed Course';
+        const displayCode = course.unit_code || course.code || '';
+        return `<option value="${course.id}">${displayName} ${displayCode ? `(${displayCode})` : ''}</option>`;
+    }).join('');
+    
+    courseSelect.innerHTML = '<option value="">Select Course</option>' + options;
+    console.log('[DEBUG] Course dropdown populated');
+}
+
+// Show test courses when real data fails
+showTestCourses() {
+    console.log('[DEBUG] Showing test courses...');
+    
+    this.courses = [
+        {
+            id: 'test-001',
+            course_name: 'Anatomy and Physiology',
+            unit_code: 'ANP101',
+            target_program: 'KRCHN',
+            intake_year: '2024',
+            status: 'Active',
+            color: '#3b82f6'
+        },
+        {
+            id: 'test-002',
+            course_name: 'Fundamentals of Nursing',
+            unit_code: 'FUN101',
+            target_program: 'KRCHN',
+            intake_year: '2024',
+            status: 'Active',
+            color: '#10b981'
+        },
+        {
+            id: 'test-003',
+            course_name: 'Pharmacology',
+            unit_code: 'PHA101',
+            target_program: 'KRCHN',
+            intake_year: '2024',
+            status: 'Active',
+            color: '#8b5cf6'
+        }
+    ];
+    
+    this.renderCoursesTable();
+    
+    // Also populate dropdown with test data
+    this.populateCourseDropdown();
+    
+    this.showNotification('Showing test data. Check console for connection errors.', 'warning');
+}
+
+renderCoursesTable() {
+    console.log('[DEBUG] Rendering courses table...');
+    
+    const tableBody = document.querySelector('#courses-table tbody');
+    if (!tableBody) {
+        console.error('❌ [DEBUG] Courses table body not found!');
+        return;
+    }
+    
+    console.log(`[DEBUG] Rendering ${this.courses.length} courses`);
+    
+    if (this.courses.length === 0) {
+        tableBody.innerHTML = `
+            <tr>
+                <td colspan="7" class="text-center">
+                    <div style="padding: 40px; text-align: center;">
+                        <i class="fas fa-book" style="font-size: 48px; color: #9ca3af; margin-bottom: 16px;"></i>
+                        <h3 style="color: #6b7280; margin-bottom: 8px;">No Courses Found</h3>
+                        <p style="color: #9ca3af; margin-bottom: 20px;">Add your first course to get started</p>
+                        <button onclick="openAddCourseModal()" class="btn btn-primary">
+                            <i class="fas fa-plus"></i> Add First Course
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    tableBody.innerHTML = this.courses.map(course => {
+        // Use default color if missing
+        const courseColor = course.color || '#4f46e5';
+        
+        // Determine status badge color
+        let statusClass = 'inactive';
+        let statusText = course.status || 'Unknown';
+        
+        if (course.status === 'Active') {
+            statusClass = 'active';
+        } else if (course.status === 'Draft') {
+            statusClass = 'draft';
+        }
+        
+        return `
+            <tr>
+                <td>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <div style="width: 12px; height: 12px; border-radius: 50%; background: ${courseColor};"></div>
+                        <span>${course.id.substring(0, 8)}...</span>
+                    </div>
+                </td>
+                <td>
+                    <strong>${course.course_name || 'Unnamed Course'}</strong>
+                    ${course.description ? `<div style="color: #6b7280; font-size: 12px; margin-top: 4px;">${course.description.substring(0, 50)}...</div>` : ''}
+                </td>
+                <td>${course.unit_code || course.code || 'N/A'}</td>
+                <td>${course.target_program || 'All'}</td>
+                <td>${course.intake_year || 'All'}</td>
+                <td>
+                    <span class="status-badge ${statusClass}">${statusText}</span>
+                </td>
+                <td>
+                    <div style="display: flex; gap: 8px;">
+                        <button onclick="admin.editCourse('${course.id}')" class="btn-action" title="Edit">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button onclick="admin.toggleCourseStatus('${course.id}')" class="btn-action" title="${course.status === 'Active' ? 'Deactivate' : 'Activate'}">
+                            <i class="fas fa-power-off"></i>
+                        </button>
+                        <button onclick="admin.viewCourseDetails('${course.id}')" class="btn-action" title="View Details">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
+    
+    console.log('[DEBUG] Courses table rendered');
+}
+
+// Add these helper functions
+viewCourseDetails(courseId) {
+    const course = this.courses.find(c => c.id === courseId);
+    if (course) {
+        const details = `
+            Course Name: ${course.course_name}
+            Unit Code: ${course.unit_code || 'N/A'}
+            Program: ${course.target_program || 'All'}
+            Intake Year: ${course.intake_year || 'All'}
+            Status: ${course.status}
+            ${course.description ? `Description: ${course.description}` : ''}
+        `;
+        alert(details);
+    }
+}
+
+// Add this to your setupEventListeners function
+setupEventListeners() {
+    // ... existing code ...
+    
+    // Add refresh button for courses tab
+    const refreshBtn = document.querySelector('[onclick*="refreshCourses"]');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', () => this.loadCourses());
+    }
+}
             // ==================== USERS ====================
             async loadUsers() {
                 try {
