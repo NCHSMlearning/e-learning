@@ -2008,11 +2008,9 @@ document.querySelectorAll('[onclick*="showTab"]').forEach(element => {
                     if (uploadButton) uploadButton.disabled = false;
                 });
             }
-            // *************************************************************************
-// *** NURSEIQ ASSESSMENT SYSTEM ***
+       // *** NURSEIQ ASSESSMENT SYSTEM - FIXED COURSE LOADING ***
 // *************************************************************************
 
-// Make function globally accessible
 window.loadNurseIQAssessments = async function() {
     const emptyState = document.getElementById('nurseiqEmpty');
     const loadingState = document.getElementById('nurseiqLoading');
@@ -2149,70 +2147,113 @@ window.loadNurseIQAssessments = async function() {
         if (courseIds.length === 0) return assessments;
         
         try {
-            // Check if courses table exists
-            const { error: tableError } = await supabase
-                .from('courses')
-                .select('id')
-                .limit(1);
+            // First, check if user profile is loaded
+            if (!window.currentUserProfile && window.currentUserId) {
+                await loadProfile(window.currentUserId);
+            }
             
-            if (tableError) {
-                console.warn('Courses table not found, using default course info');
+            const userProfile = window.currentUserProfile;
+            if (!userProfile) {
+                console.warn('User profile not available, using default course info');
                 return assessments.map(assessment => ({
                     ...assessment,
                     course: getDefaultCourseInfo(assessment.course_id)
                 }));
             }
             
-            // Fetch courses with better selection
-            const { data: courses, error } = await supabase
+            // Get user's program and department from profile
+            const program = userProfile.program || userProfile.department;
+            const intakeYear = userProfile.intake_year;
+            
+            if (!program || !intakeYear) {
+                console.warn('Missing program or intake year in user profile');
+                return assessments.map(assessment => ({
+                    ...assessment,
+                    course: getDefaultCourseInfo(assessment.course_id)
+                }));
+            }
+            
+            console.log('Fetching courses for:', { program, intakeYear, courseIds });
+            
+            // Fetch courses based on user's program and intake year
+            let { data: courses, error } = await supabase
                 .from('courses')
                 .select(`
                     id,
                     course_name,
-                    course_code,
                     unit_code,
                     description,
                     color,
-                    category,
-                    icon,
-                    is_active
+                    target_program,
+                    intake_year,
+                    block,
+                    status
                 `)
-                .in('id', courseIds)
-                .eq('is_active', true)
+                .in('id', courseIds)  // Filter by assessment course IDs
+                .or(`target_program.eq.${program},target_program.eq.General`)
+                .eq('intake_year', intakeYear)
+                .eq('status', 'Active')
                 .order('course_name');
             
             if (error) {
-                console.warn('Error fetching courses:', error);
-                return assessments.map(assessment => ({
-                    ...assessment,
-                    course: getDefaultCourseInfo(assessment.course_id)
-                }));
+                console.error('Error fetching courses:', error);
+                // Try without intake year filter
+                const { data: fallbackCourses } = await supabase
+                    .from('courses')
+                    .select(`
+                        id,
+                        course_name,
+                        unit_code,
+                        description,
+                        color,
+                        target_program
+                    `)
+                    .in('id', courseIds)
+                    .eq('status', 'Active');
+                
+                courses = fallbackCourses;
             }
             
             if (!courses || courses.length === 0) {
+                console.warn('No courses found for the given criteria');
                 return assessments.map(assessment => ({
                     ...assessment,
                     course: getDefaultCourseInfo(assessment.course_id)
                 }));
             }
             
-            // Create comprehensive course map
-            const courseMap = courses.reduce((map, course) => ({
-                ...map,
-                [course.id]: {
-                    course_code: course.course_code || course.unit_code || 'N/A',
+            console.log('Found courses:', courses);
+            
+            // Create course map with proper field mapping
+            const courseMap = courses.reduce((map, course) => {
+                map[course.id] = {
+                    course_id: course.id,
+                    course_code: course.unit_code || 'N/A',
                     course_name: course.course_name || 'Unknown Course',
                     description: course.description || '',
                     color: course.color || getRandomColor(course.id),
-                    category: course.category || 'General',
-                    icon: course.icon || 'fa-book-medical'
-                }
-            }), {});
+                    target_program: course.target_program || program,
+                    icon: 'fa-book-medical'
+                };
+                return map;
+            }, {});
             
-            return assessments.map(assessment => ({
-                ...assessment,
-                course: courseMap[assessment.course_id] || getDefaultCourseInfo(assessment.course_id)
-            }));
+            // Enrich assessments with course info
+            const enrichedAssessments = assessments.map(assessment => {
+                const courseInfo = courseMap[assessment.course_id] || getDefaultCourseInfo(assessment.course_id);
+                
+                // Debug log
+                if (!courseMap[assessment.course_id]) {
+                    console.log('No course found for ID:', assessment.course_id, 'in assessment:', assessment.id);
+                }
+                
+                return {
+                    ...assessment,
+                    course: courseInfo
+                };
+            });
+            
+            return enrichedAssessments;
             
         } catch (error) {
             console.error('Error enriching course info:', error);
@@ -2224,23 +2265,13 @@ window.loadNurseIQAssessments = async function() {
     }
     
     function getDefaultCourseInfo(courseId) {
-        const defaultCourses = {
-            'default': {
-                course_code: 'GEN',
-                course_name: 'General Nursing',
-                description: 'General nursing principles and practices',
-                color: '#6c757d',
-                category: 'General',
-                icon: 'fa-book-medical'
-            }
-        };
-        
-        return defaultCourses['default'] || {
-            course_code: 'N/A',
-            course_name: 'Unknown Course',
-            description: '',
+        return {
+            course_id: courseId,
+            course_code: 'GEN',
+            course_name: 'General Nursing',
+            description: 'General nursing principles and practices',
             color: '#6c757d',
-            category: 'General',
+            target_program: 'KRCHN',
             icon: 'fa-book-medical'
         };
     }
@@ -2264,6 +2295,7 @@ window.loadNurseIQAssessments = async function() {
     }
     
     function calculateEnhancedStats(assessments, progress) {
+        // ... [keep existing calculateEnhancedStats function] ...
         const totalAssessments = assessments.length;
         const completedAssessments = progress.length;
         const correctAnswers = progress.filter(p => p.is_correct).length;
@@ -2774,19 +2806,26 @@ window.loadNurseIQAssessments = async function() {
         const courseFilter = document.getElementById('nurseiqCourseFilter');
         if (!courseFilter) return;
         
-        const courses = assessments.reduce((acc, assessment) => {
+        // Group assessments by course
+        const courseMap = {};
+        assessments.forEach(assessment => {
             const course = assessment.course;
-            if (course && !acc.some(c => c.id === course.course_name)) {
-                acc.push({
-                    id: course.course_name,
-                    name: course.course_name,
-                    code: course.course_code,
-                    color: course.color,
-                    count: assessments.filter(a => a.course?.course_name === course.course_name).length
-                });
+            if (course) {
+                const key = course.course_id || course.course_name;
+                if (!courseMap[key]) {
+                    courseMap[key] = {
+                        id: key,
+                        name: course.course_name,
+                        code: course.course_code,
+                        color: course.color,
+                        count: 0
+                    };
+                }
+                courseMap[key].count++;
             }
-            return acc;
-        }, []);
+        });
+        
+        const courses = Object.values(courseMap);
         
         courseFilter.innerHTML = `
             <option value="all">
@@ -2796,7 +2835,7 @@ window.loadNurseIQAssessments = async function() {
                 </span>
             </option>
             ${courses.map(course => `
-                <option value="${course.id}">
+                <option value="${course.name}">
                     <span class="course-option">
                         <span class="course-color" style="background: ${course.color}"></span>
                         ${course.name} (${course.count})
@@ -2806,366 +2845,6 @@ window.loadNurseIQAssessments = async function() {
         `;
     }
 }
-
-// Make helper functions globally accessible
-window.renderEnhancedAssessmentsList = function(assessments, userProgress) {
-    if (!assessments.length) return '<p>No assessments available.</p>';
-    
-    let html = `
-        <div class="assessments-header">
-            <h3><i class="fas fa-clipboard-check"></i> Available Questions</h3>
-            <div class="assessments-controls">
-                <div class="filter-group">
-                    <select id="nurseiqCourseFilter" class="filter-select">
-                        <option value="all">All Courses</option>
-                    </select>
-                    <select id="nurseiqDifficultyFilter" class="filter-select">
-                        <option value="all">All Difficulties</option>
-                        <option value="easy">Easy</option>
-                        <option value="medium">Medium</option>
-                        <option value="hard">Hard</option>
-                    </select>
-                    <select id="nurseiqStatusFilter" class="filter-select">
-                        <option value="all">All Status</option>
-                        <option value="completed">Completed</option>
-                        <option value="pending">Pending</option>
-                        <option value="needs-review">Needs Review</option>
-                    </select>
-                </div>
-                <div class="search-box">
-                    <i class="fas fa-search"></i>
-                    <input type="text" id="nurseiqSearch" placeholder="Search questions...">
-                </div>
-            </div>
-        </div>
-        
-        <div class="assessments-grid">
-    `;
-    
-    assessments.forEach(assessment => {
-        const progress = userProgress?.find(p => p.assessment_id === assessment.id);
-        const isCompleted = !!progress;
-        const isCorrect = progress?.is_correct;
-        const attempts = progress?.attempts || 0;
-        const timeSpent = progress?.time_spent || 0;
-        const lastAttempt = progress?.completed_at;
-        const needsReview = isCompleted && !isCorrect;
-        
-        html += `
-            <div class="assessment-card ${isCompleted ? 'completed' : ''} ${assessment.difficulty || 'medium'}"
-                 data-course="${assessment.course?.course_name || ''}"
-                 data-difficulty="${assessment.difficulty || 'medium'}"
-                 data-status="${isCompleted ? (needsReview ? 'needs-review' : 'completed') : 'pending'}">
-                
-                <div class="assessment-header">
-                    <div class="course-badge" style="background: ${assessment.course?.color || '#6c757d'}20; color: ${assessment.course?.color || '#6c757d'}; border-left: 3px solid ${assessment.course?.color || '#6c757d'}">
-                        <i class="fas ${assessment.course?.icon || 'fa-book-medical'}"></i>
-                        <span>${assessment.course?.course_code || 'N/A'}</span>
-                    </div>
-                    <div class="difficulty-badge ${assessment.difficulty || 'medium'}">
-                        <i class="fas fa-${getDifficultyIcon(assessment.difficulty)}"></i>
-                        ${(assessment.difficulty || 'medium').toUpperCase()}
-                    </div>
-                </div>
-                
-                <div class="assessment-body">
-                    <div class="assessment-topic">
-                        <h4>${assessment.topic || 'Assessment Question'}</h4>
-                        ${assessment.image_url ? `
-                            <div class="assessment-image-preview">
-                                <i class="fas fa-image"></i>
-                                <span>Includes image</span>
-                            </div>
-                        ` : ''}
-                    </div>
-                    
-                    <p class="assessment-text">${truncateText(assessment.question_text, 120)}</p>
-                    
-                    <div class="assessment-meta">
-                        <div class="meta-item">
-                            <i class="fas fa-star"></i>
-                            <span>${assessment.marks || 1} Point${assessment.marks !== 1 ? 's' : ''}</span>
-                        </div>
-                        <div class="meta-item">
-                            <i class="fas fa-clock"></i>
-                            <span>${assessment.estimated_time || 2} min</span>
-                        </div>
-                        <div class="meta-item">
-                            <i class="fas fa-calendar-alt"></i>
-                            <span>${formatDate(assessment.created_at)}</span>
-                        </div>
-                    </div>
-                    
-                    ${isCompleted ? `
-                        <div class="progress-info">
-                            <div class="attempt-stats">
-                                <span class="attempt-count">${attempts} attempt${attempts !== 1 ? 's' : ''}</span>
-                                <span class="time-spent">${formatTime(timeSpent)} spent</span>
-                            </div>
-                            ${lastAttempt ? `
-                                <div class="last-attempt">
-                                    <i class="fas fa-history"></i>
-                                    Last attempt: ${formatRelativeTime(lastAttempt)}
-                                </div>
-                            ` : ''}
-                        </div>
-                    ` : ''}
-                </div>
-                
-                <div class="assessment-footer">
-                    ${isCompleted ? 
-                        `<div class="result-badge ${isCorrect ? 'correct' : 'incorrect'}">
-                            <div class="result-icon">
-                                <i class="fas fa-${isCorrect ? 'check' : 'times'}"></i>
-                            </div>
-                            <div class="result-text">
-                                <strong>${isCorrect ? 'Correct' : 'Needs Review'}</strong>
-                                <span>Click to review</span>
-                            </div>
-                        </div>` 
-                        : 
-                        `<button class="btn-start-assessment" onclick="startNurseIQAssessment('${assessment.id}')">
-                            <span class="btn-content">
-                                <i class="fas fa-play"></i>
-                                <span>Start Practice</span>
-                            </span>
-                            <span class="btn-hover">
-                                <i class="fas fa-arrow-right"></i>
-                            </span>
-                        </button>`
-                    }
-                </div>
-                
-                ${isCompleted ? `
-                    <div class="assessment-actions">
-                        <button class="action-btn" onclick="reviewAssessment('${assessment.id}')" title="Review">
-                            <i class="fas fa-eye"></i>
-                        </button>
-                        <button class="action-btn" onclick="retryAssessment('${assessment.id}')" title="Try Again">
-                            <i class="fas fa-redo"></i>
-                        </button>
-                        <button class="action-btn" onclick="shareAssessment('${assessment.id}')" title="Share">
-                            <i class="fas fa-share-alt"></i>
-                        </button>
-                    </div>
-                ` : ''}
-            </div>
-        `;
-    });
-    
-    html += `
-        </div>
-        
-        <div class="assessments-footer">
-            <div class="results-count">
-                <i class="fas fa-info-circle"></i>
-                Showing ${assessments.length} of ${assessments.length} questions
-            </div>
-            <div class="view-options">
-                <button class="view-option active" data-view="grid">
-                    <i class="fas fa-th-large"></i>
-                </button>
-                <button class="view-option" data-view="list">
-                    <i class="fas fa-list"></i>
-                </button>
-            </div>
-        </div>
-    `;
-    
-    return html;
-};
-
-// Helper functions (make them globally accessible)
-window.getRandomColor = function(seed) {
-    const colors = [
-        '#4f46e5', '#7c3aed', '#db2777', '#ea580c', '#059669',
-        '#0ea5e9', '#8b5cf6', '#ef4444', '#f59e0b', '#10b981'
-    ];
-    let hash = 0;
-    for (let i = 0; i < seed.length; i++) {
-        hash = seed.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    return colors[Math.abs(hash) % colors.length];
-};
-
-window.getDifficultyIcon = function(difficulty) {
-    switch (difficulty) {
-        case 'easy': return 'seedling';
-        case 'medium': return 'balance-scale';
-        case 'hard': return 'fire';
-        default: return 'question-circle';
-    }
-};
-
-window.truncateText = function(text, maxLength) {
-    if (!text) return '';
-    if (text.length <= maxLength) return text;
-    return text.substring(0, maxLength).trim() + '...';
-};
-
-window.formatDate = function(dateString) {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
-    
-    if (diffDays === 0) return 'Today';
-    if (diffDays === 1) return 'Yesterday';
-    if (diffDays < 7) return `${diffDays} days ago`;
-    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-};
-
-window.formatTime = function(seconds) {
-    if (seconds < 60) return `${seconds}s`;
-    if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
-    return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
-};
-
-window.formatRelativeTime = function(dateString) {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now - date;
-    const diffMins = Math.floor(diffMs / (1000 * 60));
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    
-    if (diffMins < 60) return `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
-    if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
-    if (diffDays < 7) return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
-    return date.toLocaleDateString();
-};
-
-// Initialize event listeners
-window.initNurseIQListeners = function() {
-    // Debounce search
-    let searchTimeout;
-    document.addEventListener('input', (e) => {
-        if (e.target.id === 'nurseiqSearch') {
-            clearTimeout(searchTimeout);
-            searchTimeout = setTimeout(() => {
-                filterAssessments();
-            }, 300);
-        }
-    });
-    
-    // Filter changes
-    document.addEventListener('change', (e) => {
-        if (e.target.matches('#nurseiqCourseFilter, #nurseiqDifficultyFilter, #nurseiqStatusFilter')) {
-            filterAssessments();
-        }
-    });
-    
-    // View options
-    document.addEventListener('click', (e) => {
-        if (e.target.closest('.view-option')) {
-            const view = e.target.closest('.view-option').dataset.view;
-            document.querySelectorAll('.view-option').forEach(btn => btn.classList.remove('active'));
-            e.target.closest('.view-option').classList.add('active');
-            document.querySelector('.assessments-grid').classList.toggle('list-view', view === 'list');
-        }
-    });
-};
-
-// Filter assessments function
-window.filterAssessments = function() {
-    const searchTerm = document.getElementById('nurseiqSearch')?.value.toLowerCase() || '';
-    const courseFilter = document.getElementById('nurseiqCourseFilter')?.value || 'all';
-    const difficultyFilter = document.getElementById('nurseiqDifficultyFilter')?.value || 'all';
-    const statusFilter = document.getElementById('nurseiqStatusFilter')?.value || 'all';
-    
-    const cards = document.querySelectorAll('.assessment-card');
-    let visibleCount = 0;
-    
-    cards.forEach(card => {
-        const course = card.dataset.course;
-        const difficulty = card.dataset.difficulty;
-        const status = card.dataset.status;
-        const text = card.textContent.toLowerCase();
-        
-        const matchesSearch = !searchTerm || text.includes(searchTerm);
-        const matchesCourse = courseFilter === 'all' || course === courseFilter;
-        const matchesDifficulty = difficultyFilter === 'all' || difficulty === difficultyFilter;
-        const matchesStatus = statusFilter === 'all' || status === statusFilter;
-        
-        if (matchesSearch && matchesCourse && matchesDifficulty && matchesStatus) {
-            card.style.display = 'block';
-            visibleCount++;
-            setTimeout(() => {
-                card.classList.add('visible');
-            }, 10);
-        } else {
-            card.classList.remove('visible');
-            setTimeout(() => {
-                card.style.display = 'none';
-            }, 300);
-        }
-    });
-    
-    // Update results count
-    const resultsCount = document.querySelector('.results-count');
-    if (resultsCount) {
-        resultsCount.innerHTML = `<i class="fas fa-info-circle"></i> Showing ${visibleCount} of ${cards.length} questions`;
-    }
-};
-
-// Call this after DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
-    // Load NurseIQ when tab is shown
-    const nurseiqTab = document.querySelector('[data-tab="nurseiq"]');
-    if (nurseiqTab) {
-        nurseiqTab.addEventListener('click', () => {
-            setTimeout(() => {
-                loadNurseIQAssessments();
-                initNurseIQListeners();
-            }, 100);
-        });
-    }
-    
-    // Also load immediately if on NurseIQ tab by default
-    if (window.location.hash === '#nurseiq' || 
-        document.querySelector('[data-tab="nurseiq"].active')) {
-        setTimeout(() => {
-            loadNurseIQAssessments();
-            initNurseIQListeners();
-        }, 500);
-    }
-});
-
-// Add placeholder functions for unimplemented features
-window.startNurseIQAssessment = function(assessmentId) {
-    alert(`Starting assessment ${assessmentId} - This feature is coming soon!`);
-    console.log('Starting assessment:', assessmentId);
-};
-
-window.reviewAssessment = function(assessmentId) {
-    alert(`Reviewing assessment ${assessmentId} - This feature is coming soon!`);
-    console.log('Reviewing assessment:', assessmentId);
-};
-
-window.retryAssessment = function(assessmentId) {
-    alert(`Retrying assessment ${assessmentId} - This feature is coming soon!`);
-    console.log('Retrying assessment:', assessmentId);
-};
-
-window.shareAssessment = function(assessmentId) {
-    alert(`Sharing assessment ${assessmentId} - This feature is coming soon!`);
-    console.log('Sharing assessment:', assessmentId);
-};
-
-window.showUpcomingFeatures = function() {
-    alert('Viewing roadmap - This feature is coming soon!');
-    console.log('Showing upcoming features');
-};
-
-window.subscribeNotifications = function() {
-    alert('Subscribing to notifications - This feature is coming soon!');
-    console.log('Subscribing to notifications');
-};
-
-window.reportIssue = function(errorMessage) {
-    alert(`Reporting issue: ${errorMessage} - This feature is coming soon!`);
-    console.log('Reporting issue:', errorMessage);
-};
             // *************************************************************************
             // *** ATTENDANCE SYSTEM ***
             // *************************************************************************
