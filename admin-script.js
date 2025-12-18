@@ -1404,7 +1404,54 @@ class NurseIQAdmin {
         this.showNotification('Import feature coming soon!', 'info');
     }
 }
-
+    // ==================== MISSING FUNCTIONS ====================
+    
+    showLoader(message) {
+        const loader = document.getElementById('config-loader');
+        if (loader) {
+            const messageEl = loader.querySelector('p');
+            if (messageEl && message) {
+                messageEl.textContent = message;
+            }
+        }
+    }
+    
+    showError(title, message) {
+        const loader = document.getElementById('config-loader');
+        if (loader) {
+            loader.innerHTML = `
+                <div style="text-align: center; color: white; max-width: 500px; padding: 40px;">
+                    <div style="font-size: 60px; color: #ff6b6b; margin-bottom: 20px;">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <h3 style="margin-bottom: 10px;">${title}</h3>
+                    <p style="margin-bottom: 30px;">${message}</p>
+                    <div>
+                        <button onclick="location.reload()" style="background: white; color: #4f46e5; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-right: 10px;">
+                            <i class="fas fa-redo"></i> Retry
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+    }
+    
+    updateConnectionStatus(status) {
+        const indicator = document.querySelector('.status-indicator');
+        if (indicator) {
+            const dot = indicator.querySelector('.status-dot');
+            const text = indicator.querySelector('span:last-child');
+            
+            if (dot) {
+                dot.className = 'status-dot';
+                dot.classList.add(status);
+            }
+            
+            if (text) {
+                text.textContent = status === 'connected' ? 'Connected' : 'Error';
+            }
+        }
+    }
 // Initialize admin panel when page loads
 document.addEventListener('DOMContentLoaded', () => {
     window.admin = new NurseIQAdmin();
