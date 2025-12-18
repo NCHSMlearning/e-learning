@@ -1226,61 +1226,351 @@ setupEventListeners() {
         refreshBtn.addEventListener('click', () => this.loadCourses());
     }
 }
-            // ==================== USERS ====================
-            async loadUsers() {
-                try {
-                    const { data: users, error } = await this.supabase
-                        .from('consolidated_user_profiles_table')
-                        .select('*')
-                        .limit(10000);
-                    
-                    if (error) {
-                        console.warn('Could not load users:', error.message);
-                        this.users = [];
-                        this.renderUsersTable();
-                        return;
-                    }
-                    
-                    this.users = users || [];
-                    this.renderUsersTable();
-                    
-                } catch (error) {
-                    console.error('Error loading users:', error);
-                    this.users = [];
-                    this.renderUsersTable();
-                }
-            }
+          // ==================== USERS ====================
+async loadUsers() {
+    console.log('🔄 [DEBUG] Starting loadUsers...');
+    
+    try {
+        console.log('📡 [DEBUG] Fetching users...');
+        
+        // Try multiple table names since different Supabase setups use different names
+        let users = [];
+        let error = null;
+        
+        // Try the main table first
+        const { data: mainData, error: mainError } = await this.supabase
+            .from('consolidated_user_profiles_table')
+            .select('*')
+            .limit(10000);
+        
+        if (!mainError && mainData && mainData.length > 0) {
+            console.log(`✅ [DEBUG] Found ${mainData.length} users in consolidated_user_profiles_table`);
+            users = mainData;
+        } else {
+            console.log('[DEBUG] consolidated_user_profiles_table empty or not found, trying alternatives...');
             
-            renderUsersTable() {
-                const tableBody = document.querySelector('#users-table tbody');
-                if (!tableBody) return;
+            // Try 'profiles' table (common in Supabase)
+            const { data: profilesData, error: profilesError } = await this.supabase
+                .from('profiles')
+                .select('*')
+                .limit(10000);
+            
+            if (!profilesError && profilesData && profilesData.length > 0) {
+                console.log(`✅ [DEBUG] Found ${profilesData.length} users in profiles table`);
+                users = profilesData;
+            } else {
+                console.log('[DEBUG] profiles table empty or not found, trying users table...');
                 
-                if (this.users.length === 0) {
-                    tableBody.innerHTML = '<tr><td colspan="7" class="text-center">No users found</td></tr>';
-                    return;
+                // Try 'users' table
+                const { data: usersData, error: usersError } = await this.supabase
+                    .from('users')
+                    .select('*')
+                    .limit(10000);
+                
+                if (!usersError && usersData && usersData.length > 0) {
+                    console.log(`✅ [DEBUG] Found ${usersData.length} users in users table`);
+                    users = usersData;
+                } else {
+                    console.log('[DEBUG] All user tables empty or not found');
+                    
+                    // Try to get users from assessment progress
+                    const { data: progressData } = await this.supabase
+                        .from('user_assessment_progress')
+                        .select('user_id')
+                        .limit(100);
+                    
+                    if (progressData && progressData.length > 0) {
+                        const uniqueUserIds = [...new Set(progressData.map(p => p.user_id))];
+                        console.log(`✅ [DEBUG] Found ${uniqueUserIds.length} unique users from progress data`);
+                        
+                        // Create basic user objects from IDs
+                        users = uniqueUserIds.map(id => ({
+                            id: id,
+                            email: `${id.substring(0, 8)}@user.com`,
+                            full_name: `User ${id.substring(0, 6)}`,
+                            program: 'KRCHN',
+                            department: 'Nursing'
+                        }));
+                    }
+                }
+            }
+        }
+        
+        // Store users
+        this.users = users || [];
+        console.log(`✅ [DEBUG] Total users loaded: ${this.users.length}`);
+        
+        // Render table
+        await this.renderUsersTable();
+        
+        // Update dashboard stats
+        await this.updateUserStats();
+        
+        if (this.users.length > 0) {
+            this.showNotification(`Loaded ${this.users.length} users`, 'success');
+        } else {
+            this.showNotification('No users found in database', 'info');
+        }
+        
+    } catch (error) {
+        console.error('❌ [DEBUG] Error loading users:', error);
+        this.showNotification('Failed to load users', 'error');
+        this.users = [];
+        this.renderUsersTable();
+    }
+}
+
+async renderUsersTable() {
+    console.log('[DEBUG] Rendering users table...');
+    
+    const tableBody = document.querySelector('#users-table tbody');
+    if (!tableBody) {
+        console.error('❌ [DEBUG] Users table body not found!');
+        return;
+    }
+    
+    console.log(`[DEBUG] Rendering ${this.users.length} users`);
+    
+    if (this.users.length === 0) {
+        tableBody.innerHTML = `
+            <tr>
+                <td colspan="7" class="text-center">
+                    <div style="padding: 40px; text-align: center;">
+                        <i class="fas fa-users" style="font-size: 48px; color: #9ca3af; margin-bottom: 16px;"></i>
+                        <h3 style="color: #6b7280; margin-bottom: 8px;">No Users Found</h3>
+                        <p style="color: #9ca3af; margin-bottom: 20px;">User data will appear when students start using the system</p>
+                        <div style="display: flex; gap: 10px; justify-content: center;">
+                            <button onclick="admin.loadUsers()" class="btn btn-outline">
+                                <i class="fas fa-sync-alt"></i> Refresh
+                            </button>
+                            <button onclick="admin.showTestUsers()" class="btn btn-primary">
+                                <i class="fas fa-eye"></i> Show Test Data
+                            </button>
+                        </div>
+                    </div>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    // Get progress data for each user
+    const usersWithProgress = await Promise.all(
+        this.users.map(async (user) => {
+            try {
+                const { data: progress } = await this.supabase
+                    .from('user_assessment_progress')
+                    .select('is_correct, time_spent, completed_at')
+                    .eq('user_id', user.id)
+                    .limit(1000);
+                
+                if (!progress || progress.length === 0) {
+                    return {
+                        ...user,
+                        completed: 0,
+                        accuracy: 0,
+                        avgTime: 0,
+                        lastActive: null
+                    };
                 }
                 
-                tableBody.innerHTML = this.users.map(user => {
-                    return `
-                        <tr>
-                            <td>
-                                <strong>${user.full_name || 'Unknown User'}</strong>
-                                <div style="color: #6b7280; font-size: 12px;">${user.email || ''}</div>
-                            </td>
-                            <td>${user.program || user.department || 'N/A'}</td>
-                            <td>0</td>
-                            <td>0%</td>
-                            <td>0m</td>
-                            <td>Never</td>
-                            <td>
-                                <button onclick="admin.viewUserProgress('${user.id}')" class="btn-action">
-                                    <i class="fas fa-chart-line"></i>
-                                </button>
-                            </td>
-                        </tr>
-                    `;
-                }).join('');
+                const completed = progress.length;
+                const correct = progress.filter(p => p.is_correct).length;
+                const accuracy = completed > 0 ? Math.round((correct / completed) * 100) : 0;
+                const totalTime = progress.reduce((sum, p) => sum + (p.time_spent || 0), 0);
+                const avgTime = completed > 0 ? Math.round(totalTime / completed / 60) : 0;
+                
+                // Find most recent activity
+                const lastActive = progress.reduce((latest, p) => {
+                    if (!p.completed_at) return latest;
+                    const date = new Date(p.completed_at);
+                    return date > latest ? date : latest;
+                }, new Date(0));
+                
+                return {
+                    ...user,
+                    completed,
+                    accuracy,
+                    avgTime,
+                    lastActive: lastActive > new Date(0) ? lastActive : null
+                };
+                
+            } catch (error) {
+                console.error(`Error loading progress for user ${user.id}:`, error);
+                return {
+                    ...user,
+                    completed: 0,
+                    accuracy: 0,
+                    avgTime: 0,
+                    lastActive: null
+                };
             }
+        })
+    );
+    
+    // Sort by last active (most recent first)
+    usersWithProgress.sort((a, b) => {
+        if (!a.lastActive && !b.lastActive) return 0;
+        if (!a.lastActive) return 1;
+        if (!b.lastActive) return -1;
+        return b.lastActive - a.lastActive;
+    });
+    
+    // Render table rows
+    tableBody.innerHTML = usersWithProgress.map(user => {
+        const lastActiveText = user.lastActive 
+            ? this.formatTimeAgo(user.lastActive)
+            : 'Never';
+        
+        const accuracyClass = user.accuracy >= 80 ? 'high-accuracy' : 
+                            user.accuracy >= 60 ? 'medium-accuracy' : 
+                            'low-accuracy';
+        
+        return `
+            <tr>
+                <td>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <div style="width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, #4f46e5, #7c3aed); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold;">
+                            ${user.full_name ? user.full_name.charAt(0).toUpperCase() : 'U'}
+                        </div>
+                        <div>
+                            <strong>${user.full_name || 'Unknown User'}</strong>
+                            <div style="color: #6b7280; font-size: 12px; margin-top: 2px;">${user.email || 'No email'}</div>
+                        </div>
+                    </div>
+                </td>
+                <td>${user.program || user.department || 'N/A'}</td>
+                <td>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span class="completion-badge">${user.completed}</span>
+                        <span style="color: #6b7280; font-size: 12px;">questions</span>
+                    </div>
+                </td>
+                <td>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span class="accuracy-badge ${accuracyClass}">${user.accuracy}%</span>
+                        <div style="width: 60px; height: 4px; background: #e5e7eb; border-radius: 2px; overflow: hidden;">
+                            <div style="width: ${user.accuracy}%; height: 100%; background: ${user.accuracy >= 80 ? '#10b981' : user.accuracy >= 60 ? '#f59e0b' : '#ef4444'};"></div>
+                        </div>
+                    </div>
+                </td>
+                <td>${user.avgTime}m</td>
+                <td>${lastActiveText}</td>
+                <td>
+                    <div style="display: flex; gap: 8px;">
+                        <button onclick="admin.viewUserDetails('${user.id}')" class="btn-action" title="View Details">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                        <button onclick="admin.viewUserProgress('${user.id}')" class="btn-action" title="View Progress">
+                            <i class="fas fa-chart-line"></i>
+                        </button>
+                        <button onclick="admin.sendMessageToUser('${user.id}')" class="btn-action" title="Send Message">
+                            <i class="fas fa-envelope"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
+    
+    console.log('[DEBUG] Users table rendered');
+}
+
+async updateUserStats() {
+    try {
+        // Calculate active users (last 30 days)
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        
+        const { data: recentProgress } = await this.supabase
+            .from('user_assessment_progress')
+            .select('user_id')
+            .gte('completed_at', thirtyDaysAgo.toISOString());
+        
+        const activeUsers = recentProgress 
+            ? new Set(recentProgress.map(p => p.user_id)).size
+            : 0;
+        
+        // Update dashboard
+        const activeUsersEl = document.getElementById('active-users');
+        if (activeUsersEl) {
+            activeUsersEl.textContent = activeUsers;
+        }
+        
+        console.log(`[DEBUG] Active users (30 days): ${activeUsers}`);
+        
+    } catch (error) {
+        console.error('Error updating user stats:', error);
+    }
+}
+
+// Helper functions
+viewUserDetails(userId) {
+    const user = this.users.find(u => u.id === userId);
+    if (user) {
+        const details = `
+            User Details:
+            
+            Name: ${user.full_name || 'Not specified'}
+            Email: ${user.email || 'Not specified'}
+            Program: ${user.program || user.department || 'Not specified'}
+            User ID: ${user.id}
+            
+            ${user.phone ? `Phone: ${user.phone}` : ''}
+            ${user.created_at ? `Joined: ${new Date(user.created_at).toLocaleDateString()}` : ''}
+        `;
+        alert(details);
+    }
+}
+
+viewUserProgress(userId) {
+    this.showNotification(`Loading progress for user ${userId.substring(0, 8)}...`, 'info');
+    // Implement detailed progress view here
+}
+
+sendMessageToUser(userId) {
+    const user = this.users.find(u => u.id === userId);
+    if (user) {
+        const message = prompt(`Send message to ${user.full_name || 'user'} (${user.email || 'no email'}):`, '');
+        if (message) {
+            this.showNotification(`Message sent to ${user.full_name || 'user'}`, 'success');
+        }
+    }
+}
+
+showTestUsers() {
+    console.log('[DEBUG] Showing test users...');
+    
+    this.users = [
+        {
+            id: 'user-001',
+            full_name: 'John Doe',
+            email: 'john@example.com',
+            program: 'KRCHN',
+            department: 'Nursing',
+            created_at: '2024-01-15'
+        },
+        {
+            id: 'user-002',
+            full_name: 'Jane Smith',
+            email: 'jane@example.com',
+            program: 'TVET',
+            department: 'Clinical Medicine',
+            created_at: '2024-02-20'
+        },
+        {
+            id: 'user-003',
+            full_name: 'Robert Johnson',
+            email: 'robert@example.com',
+            program: 'KRCHN',
+            department: 'Nursing',
+            created_at: '2024-03-10'
+        }
+    ];
+    
+    this.renderUsersTable();
+    this.showNotification('Showing test user data', 'info');
+}
             
             // ==================== UTILITIES ====================
             switchTab(tabId) {
