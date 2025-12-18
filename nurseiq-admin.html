@@ -5,25 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NurseIQ Admin Panel</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="admin-styles.css"> <!-- Admin-specific styles -->
+    <link rel="stylesheet" href="admin-styles.css">
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script src="admin-script.js" defer></script>
 </head>
 <body>
-    <div class="admin-container">
-        <!-- Header -->
-        <div class="admin-header">
-            <div>
-                <h1><i class="fas fa-stethoscope"></i> NurseIQ Admin Panel</h1>
-                <p class="text-muted">Manage assessments, courses, and user progress</p>
-            </div>
-            <div class="admin-status">
-                <div class="status-indicator">
-                    <span class="status-dot connected"></span>
-                    <span>Connected to Database</span>
-                </div>
-            </div>
-        </div>
-  <!-- Configuration Loader -->
+    <!-- Configuration Loader -->
     <div id="config-loader" class="config-loader">
         <div class="loader-content">
             <div class="loader-spinner"></div>
@@ -33,6 +20,20 @@
     </div>
 
     <div class="admin-container" style="display: none;">
+        <!-- Header -->
+        <div class="admin-header">
+            <div>
+                <h1><i class="fas fa-stethoscope"></i> NurseIQ Admin Panel</h1>
+                <p class="text-muted">Manage assessments, courses, and user progress</p>
+            </div>
+            <div class="admin-status">
+                <div class="status-indicator">
+                    <span class="status-dot connecting"></span>
+                    <span>Connecting...</span>
+                </div>
+            </div>
+        </div>
+
         <!-- Tabs Navigation -->
         <div class="admin-tabs">
             <button class="admin-tab active" data-tab="dashboard">
@@ -55,7 +56,6 @@
         <!-- Dashboard Tab -->
         <div id="dashboard-tab" class="admin-tab-content active">
             <div class="dashboard-stats">
-                <!-- Stats Cards -->
                 <div class="stat-card">
                     <div class="stat-icon">
                         <i class="fas fa-clipboard-check"></i>
@@ -98,22 +98,33 @@
             <div class="quick-actions">
                 <h2><i class="fas fa-bolt"></i> Quick Actions</h2>
                 <div class="actions-grid">
-                    <button class="action-btn" onclick="openModal('add-assessment')">
+                    <button class="action-btn" onclick="openAddAssessmentModal()">
                         <i class="fas fa-plus-circle"></i>
                         <span>Add New Assessment</span>
                     </button>
-                    <button class="action-btn" onclick="openModal('add-course')">
+                    <button class="action-btn" onclick="openAddCourseModal()">
                         <i class="fas fa-book-medical"></i>
                         <span>Add New Course</span>
                     </button>
-                    <button class="action-btn" onclick="openModal('import-data')">
+                    <button class="action-btn" onclick="openImportModal()">
                         <i class="fas fa-file-import"></i>
                         <span>Import Questions</span>
                     </button>
-                    <button class="action-btn" onclick="generateReports()">
+                    <button class="action-btn" onclick="generateReport()">
                         <i class="fas fa-chart-bar"></i>
-                        <span>Generate Reports</span>
+                        <span>Generate Report</span>
                     </button>
+                </div>
+            </div>
+
+            <!-- Recent Activity -->
+            <div class="recent-activity">
+                <h2><i class="fas fa-history"></i> Recent Activity</h2>
+                <div id="activity-list" class="activity-list">
+                    <div class="activity-item">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <span>Loading recent activity...</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -123,8 +134,11 @@
             <div class="table-header">
                 <h2><i class="fas fa-clipboard-list"></i> Manage Assessments</h2>
                 <div>
-                    <button class="btn btn-primary" onclick="openModal('add-assessment')">
+                    <button class="btn btn-primary" onclick="openAddAssessmentModal()">
                         <i class="fas fa-plus"></i> Add Assessment
+                    </button>
+                    <button class="btn btn-outline" onclick="refreshAssessments()">
+                        <i class="fas fa-sync-alt"></i> Refresh
                     </button>
                 </div>
             </div>
@@ -139,6 +153,12 @@
                     <option value="easy">Easy</option>
                     <option value="medium">Medium</option>
                     <option value="hard">Hard</option>
+                </select>
+                <select id="filter-status" class="filter-select">
+                    <option value="all">All Status</option>
+                    <option value="published">Published</option>
+                    <option value="draft">Draft</option>
+                    <option value="inactive">Inactive</option>
                 </select>
             </div>
 
@@ -156,9 +176,23 @@
                         </tr>
                     </thead>
                     <tbody>
-                        <!-- Will be populated by JavaScript -->
+                        <tr>
+                            <td colspan="7" class="text-center">Loading assessments...</td>
+                        </tr>
                     </tbody>
                 </table>
+            </div>
+            
+            <div class="table-footer">
+                <div class="pagination">
+                    <button class="pagination-btn" disabled>
+                        <i class="fas fa-chevron-left"></i> Previous
+                    </button>
+                    <span class="pagination-info">Page 1 of 1</span>
+                    <button class="pagination-btn" disabled>
+                        Next <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -167,8 +201,11 @@
             <div class="table-header">
                 <h2><i class="fas fa-book-medical"></i> Manage Courses</h2>
                 <div>
-                    <button class="btn btn-primary" onclick="openModal('add-course')">
+                    <button class="btn btn-primary" onclick="openAddCourseModal()">
                         <i class="fas fa-plus"></i> Add Course
+                    </button>
+                    <button class="btn btn-outline" onclick="refreshCourses()">
+                        <i class="fas fa-sync-alt"></i> Refresh
                     </button>
                 </div>
             </div>
@@ -187,7 +224,9 @@
                         </tr>
                     </thead>
                     <tbody>
-                        <!-- Will be populated by JavaScript -->
+                        <tr>
+                            <td colspan="7" class="text-center">Loading courses...</td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
@@ -197,23 +236,31 @@
         <div id="users-tab" class="admin-tab-content">
             <div class="table-header">
                 <h2><i class="fas fa-users"></i> User Progress</h2>
+                <div>
+                    <input type="text" id="search-users" placeholder="Search users..." class="search-input">
+                    <button class="btn btn-outline" onclick="refreshUsers()">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                </div>
             </div>
 
             <div class="table-responsive">
                 <table id="users-table">
                     <thead>
                         <tr>
-                            <th>User ID</th>
-                            <th>Name</th>
+                            <th>User</th>
                             <th>Program</th>
-                            <th>Assessments Completed</th>
+                            <th>Completed</th>
                             <th>Accuracy</th>
+                            <th>Avg Time</th>
                             <th>Last Active</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <!-- Will be populated by JavaScript -->
+                        <tr>
+                            <td colspan="7" class="text-center">Loading users...</td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
@@ -223,17 +270,26 @@
         <div id="settings-tab" class="admin-tab-content">
             <div class="settings-grid">
                 <div class="settings-card">
-                    <h3><i class="fas fa-database"></i> Database Settings</h3>
-                    <div class="setting-item">
-                        <label>Supabase URL</label>
-                        <input type="text" id="supabase-url" class="form-control" placeholder="https://your-project.supabase.co">
-                    </div>
-                    <div class="setting-item">
-                        <label>Anon Key</label>
-                        <input type="password" id="supabase-key" class="form-control" placeholder="eyJhbGciOiJIUzI1NiIsIn...">
+                    <h3><i class="fas fa-database"></i> Database Connection</h3>
+                    <div class="connection-info">
+                        <div class="info-item">
+                            <label>Status:</label>
+                            <span id="connection-status" class="status-badge connecting">Connecting...</span>
+                        </div>
+                        <div class="info-item">
+                            <label>URL:</label>
+                            <code id="connection-url">Not connected</code>
+                        </div>
+                        <div class="info-item">
+                            <label>Last Check:</label>
+                            <span id="last-check">Never</span>
+                        </div>
                     </div>
                     <button class="btn btn-success" onclick="testConnection()">
                         <i class="fas fa-plug"></i> Test Connection
+                    </button>
+                    <button class="btn btn-outline" onclick="showConnectionDetails()">
+                        <i class="fas fa-info-circle"></i> Show Details
                     </button>
                 </div>
 
@@ -241,16 +297,56 @@
                     <h3><i class="fas fa-bell"></i> Notifications</h3>
                     <div class="setting-item">
                         <label class="checkbox-label">
-                            <input type="checkbox" id="notify-new-assessments" checked>
-                            <span>Notify when new assessments added</span>
+                            <input type="checkbox" id="notify-new" checked>
+                            <span>New assessments added</span>
                         </label>
                     </div>
                     <div class="setting-item">
                         <label class="checkbox-label">
                             <input type="checkbox" id="notify-errors" checked>
-                            <span>Notify on system errors</span>
+                            <span>System errors</span>
                         </label>
                     </div>
+                    <div class="setting-item">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="notify-user-activity">
+                            <span>User activity</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="settings-card">
+                    <h3><i class="fas fa-palette"></i> Appearance</h3>
+                    <div class="setting-item">
+                        <label>Theme</label>
+                        <select id="theme-select" class="form-control">
+                            <option value="light">Light</option>
+                            <option value="dark">Dark</option>
+                            <option value="auto">Auto (System)</option>
+                        </select>
+                    </div>
+                    <div class="setting-item">
+                        <label>Items per page</label>
+                        <select id="page-size" class="form-control">
+                            <option value="10">10</option>
+                            <option value="25" selected>25</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="settings-card">
+                    <h3><i class="fas fa-tools"></i> Maintenance</h3>
+                    <button class="btn btn-outline" onclick="clearCache()">
+                        <i class="fas fa-broom"></i> Clear Cache
+                    </button>
+                    <button class="btn btn-outline" onclick="exportData()">
+                        <i class="fas fa-download"></i> Export Data
+                    </button>
+                    <button class="btn btn-danger" onclick="resetSettings()">
+                        <i class="fas fa-redo"></i> Reset Settings
+                    </button>
                 </div>
             </div>
         </div>
@@ -267,8 +363,9 @@
                 <form id="assessment-form">
                     <div class="form-group">
                         <label>Question Text *</label>
-                        <textarea id="question-text" class="form-control" rows="3" required></textarea>
+                        <textarea id="question-text" class="form-control" rows="3" required placeholder="Enter the question..."></textarea>
                     </div>
+                    
                     <div class="form-row">
                         <div class="form-group">
                             <label>Course *</label>
@@ -285,17 +382,102 @@
                             </select>
                         </div>
                     </div>
-                    <!-- Options fields would go here -->
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Topic</label>
+                            <input type="text" id="assessment-topic" class="form-control" placeholder="Enter topic...">
+                        </div>
+                        <div class="form-group">
+                            <label>Marks</label>
+                            <input type="number" id="assessment-marks" class="form-control" value="1" min="1" max="10">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Question Type</label>
+                        <select id="assessment-type" class="form-control">
+                            <option value="multiple_choice">Multiple Choice</option>
+                            <option value="true_false">True/False</option>
+                            <option value="short_answer">Short Answer</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="assessment-published" checked>
+                            <span>Publish immediately</span>
+                        </label>
+                    </div>
+                    
                     <div class="modal-footer">
                         <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
-                        <button type="submit" class="btn btn-primary">Save Assessment</button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> Save Assessment
+                        </button>
                     </div>
                 </form>
             </div>
         </div>
     </div>
 
-    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-    <script src="admin-script.js"></script>
+    <div id="add-course-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-book-medical"></i> Add New Course</h3>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="course-form">
+                    <div class="form-group">
+                        <label>Course Name *</label>
+                        <input type="text" id="course-name" class="form-control" required placeholder="e.g., Anatomy and Physiology">
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Unit Code *</label>
+                            <input type="text" id="course-code" class="form-control" required placeholder="e.g., NUR101">
+                        </div>
+                        <div class="form-group">
+                            <label>Color</label>
+                            <input type="color" id="course-color" class="form-control-color" value="#4f46e5">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Description</label>
+                        <textarea id="course-description" class="form-control" rows="2" placeholder="Course description..."></textarea>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Target Program</label>
+                            <select id="course-program" class="form-control">
+                                <option value="">All Programs</option>
+                                <option value="KRCHN">KRCHN</option>
+                                <option value="TVET">TVET</option>
+                                <option value="Nursing">Nursing</option>
+                                <option value="Clinical Medicine">Clinical Medicine</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Intake Year</label>
+                            <input type="number" id="course-year" class="form-control" min="2020" max="2030" value="2024">
+                        </div>
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> Save Course
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="notification-container"></div>
 </body>
 </html>
