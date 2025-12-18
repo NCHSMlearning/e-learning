@@ -1,8 +1,9 @@
-// NurseIQ Admin Panel - Complete Script
+// NurseIQ Admin Panel - Complete Working Version
 class NurseIQAdmin {
     constructor() {
         this.supabase = null;
         this.config = {
+            // ============================================
             // ============================================
             // ADD YOUR SUPABASE CREDENTIALS HERE
             // ============================================
@@ -60,29 +61,19 @@ class NurseIQAdmin {
                 return;
             }
             
-            // Try multiple configuration sources
-            const sources = [
-                this.loadFromGitHubSecrets.bind(this),
-                this.loadFromEnvironment.bind(this),
-                this.loadFromLocalStorage.bind(this),
-                this.loadFromURL.bind(this),
-                this.promptForConfiguration.bind(this)
-            ];
-            
-            for (const source of sources) {
-                try {
-                    await source();
-                    if (this.config.supabaseUrl && this.config.supabaseKey) {
-                        console.log('✅ Configuration loaded');
-                        this.config.loaded = true;
-                        return;
-                    }
-                } catch (error) {
-                    console.warn(`⚠️ ${source.name}:`, error.message);
-                }
+            // Try to load from localStorage
+            const saved = localStorage.getItem('nurseiq_admin_config');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                this.config.supabaseUrl = parsed.supabaseUrl || '';
+                this.config.supabaseKey = parsed.supabaseKey || '';
+                console.log('✅ Using saved credentials');
+                this.config.loaded = true;
+                return;
             }
             
-            throw new Error('Could not load configuration');
+            // If no credentials, prompt user
+            await this.promptForConfiguration();
             
         } catch (error) {
             console.error('❌ Configuration error:', error);
@@ -90,126 +81,61 @@ class NurseIQAdmin {
         }
     }
     
-    async loadFromGitHubSecrets() {
-        // GitHub Pages injects secrets
-        if (window.GITHUB_SECRETS) {
-            console.log('📁 Loading from GitHub Secrets');
-            this.config.supabaseUrl = window.GITHUB_SECRETS.supabaseUrl || '';
-            this.config.supabaseKey = window.GITHUB_SECRETS.supabaseKey || '';
-            this.config.environment = window.GITHUB_SECRETS.environment || 'production';
-            return;
-        }
-        
-        // Check for GitHub Actions injected secrets
-        if (window.SUPABASE_URL && window.SUPABASE_ANON_KEY) {
-            this.config.supabaseUrl = window.SUPABASE_URL;
-            this.config.supabaseKey = window.SUPABASE_ANON_KEY;
-            return;
-        }
-        
-        throw new Error('GitHub secrets not found');
-    }
-    
-    async loadFromEnvironment() {
-        // Netlify, Vercel, etc.
-        if (typeof process !== 'undefined' && process.env) {
-            console.log('📁 Loading from environment variables');
-            this.config.supabaseUrl = process.env.SUPABASE_URL || '';
-            this.config.supabaseKey = process.env.SUPABASE_ANON_KEY || '';
-        }
-        
-        // Check for global environment
-        if (window.__ENV__) {
-            this.config.supabaseUrl = window.__ENV__.SUPABASE_URL || this.config.supabaseUrl;
-            this.config.supabaseKey = window.__ENV__.SUPABASE_ANON_KEY || this.config.supabaseKey;
-        }
-        
-        if (this.config.supabaseUrl && this.config.supabaseKey) {
-            return;
-        }
-        
-        throw new Error('Environment variables not found');
-    }
-    
-    async loadFromLocalStorage() {
-        const saved = localStorage.getItem('nurseiq_admin_config');
-        if (saved) {
-            console.log('📁 Loading from localStorage');
-            const parsed = JSON.parse(saved);
-            
-            // Check if config is less than 7 days old
-            const weekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
-            const savedTime = new Date(parsed.timestamp).getTime();
-            
-            if (savedTime > weekAgo) {
-                this.config.supabaseUrl = parsed.supabaseUrl || '';
-                this.config.supabaseKey = parsed.supabaseKey || '';
-                this.config.environment = parsed.environment || 'production';
-                return;
-            } else {
-                console.log('⚠️ Saved configuration expired');
-                localStorage.removeItem('nurseiq_admin_config');
-            }
-        }
-        
-        throw new Error('No valid configuration in localStorage');
-    }
-    
-    async loadFromURL() {
-        const params = new URLSearchParams(window.location.search);
-        const url = params.get('supabase_url');
-        const key = params.get('supabase_key');
-        
-        if (url && key) {
-            console.log('📁 Loading from URL parameters');
-            this.config.supabaseUrl = decodeURIComponent(url);
-            this.config.supabaseKey = decodeURIComponent(key);
-            
-            // Save for future use
-            this.saveToLocalStorage();
-            return;
-        }
-        
-        throw new Error('No configuration in URL');
-    }
-    
     async promptForConfiguration() {
         return new Promise((resolve, reject) => {
             const modal = document.createElement('div');
-            modal.className = 'modal active';
+            modal.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0,0,0,0.8);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 10000;
+            `;
+            
             modal.innerHTML = `
-                <div class="modal-content" style="max-width: 500px;">
-                    <div class="modal-header">
-                        <h3><i class="fas fa-cog"></i> Configuration Required</h3>
+                <div style="background: white; border-radius: 10px; padding: 30px; max-width: 500px; width: 90%;">
+                    <h2 style="color: #4f46e5; margin-top: 0;">
+                        <i class="fas fa-cog"></i> Setup Required
+                    </h2>
+                    <p>Enter your Supabase credentials:</p>
+                    
+                    <div style="margin: 20px 0;">
+                        <label style="display: block; margin-bottom: 8px; font-weight: bold;">
+                            Supabase URL *
+                        </label>
+                        <input type="text" id="config-url" 
+                               style="width: 100%; padding: 10px; border: 2px solid #e5e7eb; border-radius: 6px;"
+                               placeholder="https://your-project.supabase.co">
                     </div>
-                    <div class="modal-body">
-                        <p>Please enter your Supabase credentials:</p>
-                        <div class="form-group">
-                            <label>Supabase URL *</label>
-                            <input type="text" id="config-url" class="form-control" 
-                                   placeholder="https://your-project.supabase.co"
-                                   value="${this.config.supabaseUrl}">
-                        </div>
-                        <div class="form-group">
-                            <label>Supabase Anon Key *</label>
-                            <input type="password" id="config-key" class="form-control" 
-                                   placeholder="eyJhbGciOiJIUzI1NiIsIn..."
-                                   value="${this.config.supabaseKey}">
-                        </div>
-                        <div class="form-group">
-                            <label>Environment</label>
-                            <select id="config-env" class="form-control">
-                                <option value="production" ${this.config.environment === 'production' ? 'selected' : ''}>Production</option>
-                                <option value="development" ${this.config.environment === 'development' ? 'selected' : ''}>Development</option>
-                            </select>
-                        </div>
-                        <div class="alert alert-info" style="margin-top: 1rem; padding: 0.75rem; background: #dbeafe; border-radius: 0.375rem; font-size: 0.875rem;">
-                            <i class="fas fa-info-circle"></i> Get these from your Supabase project: Settings → API
-                        </div>
+                    
+                    <div style="margin: 20px 0;">
+                        <label style="display: block; margin-bottom: 8px; font-weight: bold;">
+                            Supabase Anon Key *
+                        </label>
+                        <input type="password" id="config-key" 
+                               style="width: 100%; padding: 10px; border: 2px solid #e5e7eb; border-radius: 6px;"
+                               placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
                     </div>
-                    <div class="modal-footer">
-                        <button id="config-cancel" class="btn btn-outline">Cancel</button>
-                        <button id="config-save" class="btn btn-primary">Connect</button>
+                    
+                    <div style="background: #dbeafe; padding: 15px; border-radius: 6px; margin: 20px 0; font-size: 14px;">
+                        <i class="fas fa-info-circle"></i>
+                        Get these from your Supabase project: Settings → API
+                    </div>
+                    
+                    <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                        <button id="config-cancel" 
+                                style="padding: 10px 20px; border: 2px solid #e5e7eb; background: white; border-radius: 6px; cursor: pointer;">
+                            Cancel
+                        </button>
+                        <button id="config-save" 
+                                style="padding: 10px 20px; background: #4f46e5; color: white; border: none; border-radius: 6px; cursor: pointer;">
+                            Connect
+                        </button>
                     </div>
                 </div>
             `;
@@ -223,23 +149,23 @@ class NurseIQAdmin {
             modal.querySelector('#config-save').addEventListener('click', () => {
                 const url = document.getElementById('config-url').value.trim();
                 const key = document.getElementById('config-key').value.trim();
-                const env = document.getElementById('config-env').value;
                 
                 if (!url || !key) {
                     this.showNotification('Please fill in all required fields', 'error');
                     return;
                 }
                 
-                if (!url.startsWith('https://')) {
-                    this.showNotification('URL must start with https://', 'error');
-                    return;
-                }
-                
                 this.config.supabaseUrl = url;
                 this.config.supabaseKey = key;
-                this.config.environment = env;
+                this.config.loaded = true;
                 
-                this.saveToLocalStorage();
+                // Save to localStorage
+                localStorage.setItem('nurseiq_admin_config', JSON.stringify({
+                    supabaseUrl: url,
+                    supabaseKey: key,
+                    timestamp: new Date().toISOString()
+                }));
+                
                 document.body.removeChild(modal);
                 resolve();
             });
@@ -248,25 +174,7 @@ class NurseIQAdmin {
                 document.body.removeChild(modal);
                 reject(new Error('Configuration cancelled'));
             });
-            
-            // Close on escape
-            modal.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape') {
-                    document.body.removeChild(modal);
-                    reject(new Error('Configuration cancelled'));
-                }
-            });
         });
-    }
-    
-    saveToLocalStorage() {
-        const config = {
-            supabaseUrl: this.config.supabaseUrl,
-            supabaseKey: this.config.supabaseKey,
-            environment: this.config.environment,
-            timestamp: new Date().toISOString()
-        };
-        localStorage.setItem('nurseiq_admin_config', JSON.stringify(config));
     }
     
     async initializeSupabase() {
@@ -280,16 +188,12 @@ class NurseIQAdmin {
                 this.config.supabaseKey,
                 {
                     auth: {
-                        persistSession: true,
-                        autoRefreshToken: true
+                        persistSession: false
                     },
                     global: {
                         headers: {
                             'X-Client-Info': 'nurseiq-admin/1.0'
                         }
-                    },
-                    db: {
-                        schema: 'public'
                     }
                 }
             );
@@ -306,21 +210,22 @@ class NurseIQAdmin {
         this.showLoader('Verifying database connection...');
         
         try {
-            // Test connection with a simple query
-            const { data, error } = await this.supabase
+            // Try to connect to medical_assessments table
+            const { error } = await this.supabase
                 .from('medical_assessments')
-                .select('count')
-                .limit(1)
-                .single();
+                .select('id')
+                .limit(1);
             
             if (error && error.code !== 'PGRST116') {
-                // Try courses table instead
+                // Try courses table if assessments doesn't exist
                 const { error: courseError } = await this.supabase
                     .from('courses')
                     .select('id')
                     .limit(1);
                 
-                if (courseError) throw courseError;
+                if (courseError) {
+                    throw new Error(`Database error: ${courseError.message}`);
+                }
             }
             
             console.log('✅ Database connection verified');
@@ -337,19 +242,13 @@ class NurseIQAdmin {
         // Hide loader
         const loader = document.getElementById('config-loader');
         if (loader) {
-            loader.classList.add('hidden');
-            setTimeout(() => {
-                loader.style.display = 'none';
-            }, 500);
+            loader.style.display = 'none';
         }
         
         // Show admin container
         const container = document.querySelector('.admin-container');
         if (container) {
             container.style.display = 'block';
-            setTimeout(() => {
-                container.classList.add('reveal');
-            }, 100);
         }
         
         this.showNotification('Connected to database successfully!', 'success');
@@ -360,14 +259,16 @@ class NurseIQAdmin {
             // Setup event listeners first
             this.setupEventListeners();
             
-            // Load data in parallel
-            await Promise.all([
-                this.loadDashboardData(),
-                this.loadCourses(),
-                this.loadAssessments()
-            ]);
+            // Load dashboard data
+            await this.loadDashboardData();
             
-            // Load users separately
+            // Load courses for dropdowns
+            await this.loadCourses();
+            
+            // Load assessments
+            await this.loadAssessments();
+            
+            // Load users
             await this.loadUsers();
             
             console.log('✅ All initial data loaded');
@@ -387,7 +288,7 @@ class NurseIQAdmin {
             });
         });
         
-        // Search and filter events
+        // Search assessments
         const searchInput = document.getElementById('search-assessments');
         if (searchInput) {
             searchInput.addEventListener('input', this.debounce(() => {
@@ -428,22 +329,13 @@ class NurseIQAdmin {
             });
         }
         
-        // Settings changes
-        const themeSelect = document.getElementById('theme-select');
-        if (themeSelect) {
-            themeSelect.addEventListener('change', (e) => {
-                this.setTheme(e.target.value);
-            });
-        }
-        
-        // Close modals on escape
+        // Close modals
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 this.closeModal();
             }
         });
         
-        // Close modals on outside click
         document.addEventListener('click', (e) => {
             if (e.target.classList.contains('modal')) {
                 this.closeModal();
@@ -451,22 +343,7 @@ class NurseIQAdmin {
         });
     }
     
-    switchTab(tabId) {
-        this.currentTab = tabId;
-        
-        // Update active tab button
-        document.querySelectorAll('.admin-tab').forEach(t => {
-            t.classList.remove('active');
-        });
-        document.querySelector(`[data-tab="${tabId}"]`).classList.add('active');
-        
-        // Update active tab content
-        document.querySelectorAll('.admin-tab-content').forEach(content => {
-            content.classList.remove('active');
-        });
-        document.getElementById(`${tabId}-tab`).classList.add('active');
-    }
-    
+    // ==================== DASHBOARD TAB ====================
     async loadDashboardData() {
         try {
             // Load total assessments
@@ -497,7 +374,7 @@ class NurseIQAdmin {
             const uniqueUsers = new Set(progress?.map(u => u.user_id) || []);
             document.getElementById('active-users').textContent = uniqueUsers.size;
             
-            // Load average completion rate
+            // Load completion rate
             const { data: allProgress } = await this.supabase
                 .from('user_assessment_progress')
                 .select('is_correct');
@@ -512,64 +389,43 @@ class NurseIQAdmin {
             await this.loadRecentActivity();
             
         } catch (error) {
-            console.error('Error loading dashboard data:', error);
-            throw error;
+            console.error('Error loading dashboard:', error);
         }
     }
     
     async loadRecentActivity() {
         try {
-            const { data: activity, error } = await this.supabase
+            const { data: activity } = await this.supabase
                 .from('user_assessment_progress')
                 .select(`
                     completed_at,
                     is_correct,
-                    medical_assessments!inner(topic),
-                    profiles!inner(full_name)
+                    medical_assessments!inner(topic)
                 `)
                 .order('completed_at', { ascending: false })
                 .limit(10);
-            
-            if (error) throw error;
             
             const activityList = document.getElementById('activity-list');
             if (!activityList) return;
             
             if (!activity || activity.length === 0) {
-                activityList.innerHTML = `
-                    <div class="activity-item">
-                        <i class="fas fa-info-circle"></i>
-                        <span>No recent activity</span>
-                    </div>
-                `;
+                activityList.innerHTML = '<div class="activity-item">No recent activity</div>';
                 return;
             }
             
             activityList.innerHTML = activity.map(item => `
                 <div class="activity-item">
-                    <i class="fas fa-${item.is_correct ? 'check-circle text-success' : 'times-circle text-danger'}"></i>
-                    <span>
-                        <strong>${item.profiles.full_name || 'User'}</strong>
-                        ${item.is_correct ? 'correctly answered' : 'attempted'}
-                        "${item.medical_assessments.topic?.substring(0, 30) || 'question'}"
-                    </span>
-                    <span class="text-muted" style="margin-left: auto; font-size: 0.75rem;">
-                        ${this.formatTimeAgo(item.completed_at)}
-                    </span>
+                    <i class="fas fa-${item.is_correct ? 'check-circle' : 'times-circle'}"></i>
+                    <span>Question "${item.medical_assessments?.topic?.substring(0, 30) || 'unknown'}" was ${item.is_correct ? 'correct' : 'incorrect'}</span>
                 </div>
             `).join('');
             
         } catch (error) {
-            console.error('Error loading recent activity:', error);
-            document.getElementById('activity-list').innerHTML = `
-                <div class="activity-item">
-                    <i class="fas fa-exclamation-triangle text-warning"></i>
-                    <span>Failed to load activity</span>
-                </div>
-            `;
+            console.error('Error loading activity:', error);
         }
     }
     
+    // ==================== ASSESSMENTS TAB ====================
     async loadAssessments() {
         try {
             this.showLoader('Loading assessments...');
@@ -612,18 +468,6 @@ class NurseIQAdmin {
         } catch (error) {
             console.error('Error loading assessments:', error);
             this.showNotification('Failed to load assessments', 'error');
-            
-            const tableBody = document.querySelector('#assessments-table tbody');
-            if (tableBody) {
-                tableBody.innerHTML = `
-                    <tr>
-                        <td colspan="7" class="text-center">
-                            <i class="fas fa-exclamation-triangle"></i>
-                            Failed to load assessments: ${error.message}
-                        </td>
-                    </tr>
-                `;
-            }
         }
     }
     
@@ -632,14 +476,7 @@ class NurseIQAdmin {
         if (!tableBody) return;
         
         if (this.assessments.length === 0) {
-            tableBody.innerHTML = `
-                <tr>
-                    <td colspan="7" class="text-center">
-                        <i class="fas fa-info-circle"></i>
-                        No assessments found
-                    </td>
-                </tr>
-            `;
+            tableBody.innerHTML = '<tr><td colspan="7" class="text-center">No assessments found</td></tr>';
             return;
         }
         
@@ -653,11 +490,11 @@ class NurseIQAdmin {
             
             let statusBadge = '';
             if (!assessment.is_active) {
-                statusBadge = '<span class="badge" style="background: #ef4444; color: white;">Inactive</span>';
+                statusBadge = '<span class="badge" style="background: #ef4444; color: white; padding: 2px 8px; border-radius: 10px; font-size: 12px;">Inactive</span>';
             } else if (!assessment.is_published) {
-                statusBadge = '<span class="badge" style="background: #f59e0b; color: white;">Draft</span>';
+                statusBadge = '<span class="badge" style="background: #f59e0b; color: white; padding: 2px 8px; border-radius: 10px; font-size: 12px;">Draft</span>';
             } else {
-                statusBadge = '<span class="badge" style="background: #10b981; color: white;">Published</span>';
+                statusBadge = '<span class="badge" style="background: #10b981; color: white; padding: 2px 8px; border-radius: 10px; font-size: 12px;">Published</span>';
             }
             
             return `
@@ -673,18 +510,15 @@ class NurseIQAdmin {
                     <td>${statusBadge}</td>
                     <td>${formattedDate}</td>
                     <td>
-                        <div class="btn-group">
-                            <button class="btn-action" onclick="admin.editAssessment('${assessment.id}')" title="Edit">
-                                <i class="fas fa-edit"></i>
-                            </button>
-                            <button class="btn-action" onclick="admin.toggleAssessmentStatus('${assessment.id}')" 
-                                    title="${assessment.is_published ? 'Unpublish' : 'Publish'}">
-                                <i class="fas ${assessment.is_published ? 'fa-eye-slash' : 'fa-eye'}"></i>
-                            </button>
-                            <button class="btn-action" onclick="admin.deleteAssessment('${assessment.id}')" title="Delete">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </div>
+                        <button onclick="admin.editAssessment('${assessment.id}')" class="btn-action" title="Edit">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button onclick="admin.toggleAssessmentStatus('${assessment.id}')" class="btn-action" title="${assessment.is_published ? 'Unpublish' : 'Publish'}">
+                            <i class="fas ${assessment.is_published ? 'fa-eye-slash' : 'fa-eye'}"></i>
+                        </button>
+                        <button onclick="admin.deleteAssessment('${assessment.id}')" class="btn-action" title="Delete">
+                            <i class="fas fa-trash"></i>
+                        </button>
                     </td>
                 </tr>
             `;
@@ -698,7 +532,6 @@ class NurseIQAdmin {
         const statusFilter = document.getElementById('filter-status')?.value || 'all';
         
         const rows = document.querySelectorAll('#assessments-table tbody tr');
-        let visibleCount = 0;
         
         rows.forEach(row => {
             if (row.cells.length < 7) return;
@@ -716,18 +549,200 @@ class NurseIQAdmin {
                 (statusFilter === 'draft' && status.includes('draft')) ||
                 (statusFilter === 'inactive' && status.includes('inactive'));
             
-            const shouldShow = matchesSearch && matchesCourse && matchesDifficulty && matchesStatus;
-            row.style.display = shouldShow ? '' : 'none';
-            if (shouldShow) visibleCount++;
+            row.style.display = matchesSearch && matchesCourse && matchesDifficulty && matchesStatus ? '' : 'none';
         });
-        
-        // Update pagination info
-        const paginationInfo = document.querySelector('.pagination-info');
-        if (paginationInfo) {
-            paginationInfo.textContent = `Showing ${visibleCount} of ${rows.length} assessments`;
+    }
+    
+    async saveAssessment() {
+        try {
+            const formData = {
+                question_text: document.getElementById('question-text').value,
+                course_id: document.getElementById('assessment-course').value,
+                difficulty: document.getElementById('assessment-difficulty').value,
+                topic: document.getElementById('assessment-topic').value || null,
+                marks: parseInt(document.getElementById('assessment-marks').value) || 1,
+                question_type: document.getElementById('assessment-type').value,
+                is_published: document.getElementById('assessment-published').checked,
+                is_active: true,
+                curriculum: 'KRCHN',
+                created_at: new Date().toISOString(),
+                option_a: 'Option A', // Placeholders - you should add input fields for these
+                option_b: 'Option B',
+                option_c: 'Option C',
+                option_d: 'Option D',
+                correct_answer: 'A', // Default to option A
+                explanation: 'Explanation will be added here',
+                estimated_time: 2
+            };
+            
+            if (!formData.question_text || !formData.course_id) {
+                this.showNotification('Please fill in all required fields', 'error');
+                return;
+            }
+            
+            const { error } = await this.supabase
+                .from('medical_assessments')
+                .insert([formData]);
+            
+            if (error) throw error;
+            
+            this.showNotification('Assessment saved successfully!', 'success');
+            this.closeModal();
+            
+            // Refresh data
+            await this.loadAssessments();
+            await this.loadDashboardData();
+            
+            // Trigger real-time update for students
+            this.triggerStudentUpdate();
+            
+        } catch (error) {
+            console.error('Error saving assessment:', error);
+            this.showNotification('Failed to save assessment', 'error');
         }
     }
     
+    async editAssessment(assessmentId) {
+        try {
+            const { data: assessment, error } = await this.supabase
+                .from('medical_assessments')
+                .select('*')
+                .eq('id', assessmentId)
+                .single();
+            
+            if (error) throw error;
+            
+            // Populate form
+            document.getElementById('question-text').value = assessment.question_text || '';
+            document.getElementById('assessment-course').value = assessment.course_id || '';
+            document.getElementById('assessment-difficulty').value = assessment.difficulty || 'medium';
+            document.getElementById('assessment-topic').value = assessment.topic || '';
+            document.getElementById('assessment-marks').value = assessment.marks || 1;
+            document.getElementById('assessment-type').value = assessment.question_type || 'multiple_choice';
+            document.getElementById('assessment-published').checked = assessment.is_published;
+            
+            // Update modal title
+            document.querySelector('#add-assessment-modal h3').innerHTML = `
+                <i class="fas fa-edit"></i> Edit Assessment
+            `;
+            
+            // Update form submission
+            const form = document.getElementById('assessment-form');
+            form.dataset.editId = assessmentId;
+            form.onsubmit = async (e) => {
+                e.preventDefault();
+                await this.updateAssessment(assessmentId);
+            };
+            
+            this.openModal('add-assessment-modal');
+            
+        } catch (error) {
+            console.error('Error loading assessment:', error);
+            this.showNotification('Failed to load assessment', 'error');
+        }
+    }
+    
+    async updateAssessment(assessmentId) {
+        try {
+            const formData = {
+                question_text: document.getElementById('question-text').value,
+                course_id: document.getElementById('assessment-course').value,
+                difficulty: document.getElementById('assessment-difficulty').value,
+                topic: document.getElementById('assessment-topic').value || null,
+                marks: parseInt(document.getElementById('assessment-marks').value) || 1,
+                question_type: document.getElementById('assessment-type').value,
+                is_published: document.getElementById('assessment-published').checked,
+                updated_at: new Date().toISOString()
+            };
+            
+            const { error } = await this.supabase
+                .from('medical_assessments')
+                .update(formData)
+                .eq('id', assessmentId);
+            
+            if (error) throw error;
+            
+            this.showNotification('Assessment updated successfully!', 'success');
+            this.closeModal();
+            
+            // Refresh data
+            await this.loadAssessments();
+            
+            // Trigger real-time update for students
+            this.triggerStudentUpdate();
+            
+        } catch (error) {
+            console.error('Error updating assessment:', error);
+            this.showNotification('Failed to update assessment', 'error');
+        }
+    }
+    
+    async deleteAssessment(assessmentId) {
+        if (!confirm('Are you sure you want to delete this assessment? This action cannot be undone.')) {
+            return;
+        }
+        
+        try {
+            const { error } = await this.supabase
+                .from('medical_assessments')
+                .delete()
+                .eq('id', assessmentId);
+            
+            if (error) throw error;
+            
+            this.showNotification('Assessment deleted successfully!', 'success');
+            
+            // Refresh data
+            await this.loadAssessments();
+            await this.loadDashboardData();
+            
+            // Trigger real-time update for students
+            this.triggerStudentUpdate();
+            
+        } catch (error) {
+            console.error('Error deleting assessment:', error);
+            this.showNotification('Failed to delete assessment', 'error');
+        }
+    }
+    
+    async toggleAssessmentStatus(assessmentId) {
+        try {
+            // Get current status
+            const { data: assessment, error: fetchError } = await this.supabase
+                .from('medical_assessments')
+                .select('is_published')
+                .eq('id', assessmentId)
+                .single();
+            
+            if (fetchError) throw fetchError;
+            
+            const newStatus = !assessment.is_published;
+            
+            const { error } = await this.supabase
+                .from('medical_assessments')
+                .update({ is_published: newStatus })
+                .eq('id', assessmentId);
+            
+            if (error) throw error;
+            
+            this.showNotification(
+                `Assessment ${newStatus ? 'published' : 'unpublished'} successfully!`,
+                'success'
+            );
+            
+            // Refresh data
+            await this.loadAssessments();
+            
+            // Trigger real-time update for students
+            this.triggerStudentUpdate();
+            
+        } catch (error) {
+            console.error('Error toggling assessment status:', error);
+            this.showNotification('Failed to update assessment status', 'error');
+        }
+    }
+    
+    // ==================== COURSES TAB ====================
     async loadCourses() {
         try {
             const { data: courses, error } = await this.supabase
@@ -764,14 +779,7 @@ class NurseIQAdmin {
         if (!tableBody) return;
         
         if (this.courses.length === 0) {
-            tableBody.innerHTML = `
-                <tr>
-                    <td colspan="7" class="text-center">
-                        <i class="fas fa-info-circle"></i>
-                        No courses found
-                    </td>
-                </tr>
-            `;
+            tableBody.innerHTML = '<tr><td colspan="7" class="text-center">No courses found</td></tr>';
             return;
         }
         
@@ -784,29 +792,186 @@ class NurseIQAdmin {
                     <td>${course.target_program || 'All'}</td>
                     <td>${course.intake_year || 'All'}</td>
                     <td>
-                        <span class="badge ${course.status === 'Active' ? 'bg-success' : 'bg-danger'}">
+                        <span style="background: ${course.status === 'Active' ? '#10b981' : '#ef4444'}; color: white; padding: 2px 8px; border-radius: 10px; font-size: 12px;">
                             ${course.status}
                         </span>
                     </td>
                     <td>
-                        <div class="btn-group">
-                            <button class="btn-action" onclick="admin.editCourse('${course.id}')" title="Edit">
-                                <i class="fas fa-edit"></i>
-                            </button>
-                            <button class="btn-action" onclick="admin.toggleCourseStatus('${course.id}')" 
-                                    title="${course.status === 'Active' ? 'Deactivate' : 'Activate'}">
-                                <i class="fas fa-power-off"></i>
-                            </button>
-                        </div>
+                        <button onclick="admin.editCourse('${course.id}')" class="btn-action" title="Edit">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button onclick="admin.toggleCourseStatus('${course.id}')" class="btn-action" title="${course.status === 'Active' ? 'Deactivate' : 'Activate'}">
+                            <i class="fas fa-power-off"></i>
+                        </button>
                     </td>
                 </tr>
             `;
         }).join('');
     }
     
+    async saveCourse() {
+        try {
+            const formData = {
+                course_name: document.getElementById('course-name').value,
+                unit_code: document.getElementById('course-code').value,
+                color: document.getElementById('course-color').value,
+                description: document.getElementById('course-description').value || null,
+                target_program: document.getElementById('course-program').value || null,
+                intake_year: parseInt(document.getElementById('course-year').value) || null,
+                status: 'Active',
+                created_at: new Date().toISOString()
+            };
+            
+            if (!formData.course_name || !formData.unit_code) {
+                this.showNotification('Please fill in all required fields', 'error');
+                return;
+            }
+            
+            const { error } = await this.supabase
+                .from('courses')
+                .insert([formData]);
+            
+            if (error) throw error;
+            
+            this.showNotification('Course saved successfully!', 'success');
+            this.closeModal();
+            
+            // Refresh data
+            await this.loadCourses();
+            await this.loadDashboardData();
+            
+            // Refresh assessments to update course dropdown
+            await this.loadAssessments();
+            
+            // Trigger real-time update for students
+            this.triggerStudentUpdate();
+            
+        } catch (error) {
+            console.error('Error saving course:', error);
+            this.showNotification('Failed to save course', 'error');
+        }
+    }
+    
+    async editCourse(courseId) {
+        try {
+            const { data: course, error } = await this.supabase
+                .from('courses')
+                .select('*')
+                .eq('id', courseId)
+                .single();
+            
+            if (error) throw error;
+            
+            // Populate form
+            document.getElementById('course-name').value = course.course_name || '';
+            document.getElementById('course-code').value = course.unit_code || '';
+            document.getElementById('course-color').value = course.color || '#4f46e5';
+            document.getElementById('course-description').value = course.description || '';
+            document.getElementById('course-program').value = course.target_program || '';
+            document.getElementById('course-year').value = course.intake_year || '2024';
+            
+            // Update modal title
+            document.querySelector('#add-course-modal h3').innerHTML = `
+                <i class="fas fa-edit"></i> Edit Course
+            `;
+            
+            // Update form submission
+            const form = document.getElementById('course-form');
+            form.dataset.editId = courseId;
+            form.onsubmit = async (e) => {
+                e.preventDefault();
+                await this.updateCourse(courseId);
+            };
+            
+            this.openModal('add-course-modal');
+            
+        } catch (error) {
+            console.error('Error loading course:', error);
+            this.showNotification('Failed to load course', 'error');
+        }
+    }
+    
+    async updateCourse(courseId) {
+        try {
+            const formData = {
+                course_name: document.getElementById('course-name').value,
+                unit_code: document.getElementById('course-code').value,
+                color: document.getElementById('course-color').value,
+                description: document.getElementById('course-description').value || null,
+                target_program: document.getElementById('course-program').value || null,
+                intake_year: parseInt(document.getElementById('course-year').value) || null,
+                updated_at: new Date().toISOString()
+            };
+            
+            const { error } = await this.supabase
+                .from('courses')
+                .update(formData)
+                .eq('id', courseId);
+            
+            if (error) throw error;
+            
+            this.showNotification('Course updated successfully!', 'success');
+            this.closeModal();
+            
+            // Refresh data
+            await this.loadCourses();
+            
+            // Refresh assessments to update course dropdown
+            await this.loadAssessments();
+            
+            // Trigger real-time update for students
+            this.triggerStudentUpdate();
+            
+        } catch (error) {
+            console.error('Error updating course:', error);
+            this.showNotification('Failed to update course', 'error');
+        }
+    }
+    
+    async toggleCourseStatus(courseId) {
+        try {
+            const { data: course, error: fetchError } = await this.supabase
+                .from('courses')
+                .select('status')
+                .eq('id', courseId)
+                .single();
+            
+            if (fetchError) throw fetchError;
+            
+            const newStatus = course.status === 'Active' ? 'Inactive' : 'Active';
+            
+            const { error } = await this.supabase
+                .from('courses')
+                .update({ status: newStatus })
+                .eq('id', courseId);
+            
+            if (error) throw error;
+            
+            this.showNotification(
+                `Course ${newStatus.toLowerCase()}d successfully!`,
+                'success'
+            );
+            
+            // Refresh data
+            await this.loadCourses();
+            await this.loadDashboardData();
+            
+            // Refresh assessments to update course dropdown
+            await this.loadAssessments();
+            
+            // Trigger real-time update for students
+            this.triggerStudentUpdate();
+            
+        } catch (error) {
+            console.error('Error toggling course status:', error);
+            this.showNotification('Failed to update course status', 'error');
+        }
+    }
+    
+    // ==================== USERS TAB ====================
     async loadUsers() {
         try {
-            // This is a simplified version - adjust based on your user table
+            // Try to load users from profiles table
             const { data: users, error } = await this.supabase
                 .from('profiles')
                 .select('*')
@@ -819,11 +984,10 @@ class NurseIQAdmin {
             }
             
             this.users = users || [];
-            this.renderUsersTable();
+            await this.renderUsersTable();
             
         } catch (error) {
             console.error('Error loading users:', error);
-            this.showNotification('Failed to load users', 'warning');
         }
     }
     
@@ -832,14 +996,7 @@ class NurseIQAdmin {
         if (!tableBody) return;
         
         if (this.users.length === 0) {
-            tableBody.innerHTML = `
-                <tr>
-                    <td colspan="7" class="text-center">
-                        <i class="fas fa-info-circle"></i>
-                        No users found
-                    </td>
-                </tr>
-            `;
+            tableBody.innerHTML = '<tr><td colspan="7" class="text-center">No users found</td></tr>';
             return;
         }
         
@@ -881,20 +1038,20 @@ class NurseIQAdmin {
                     <td>
                         <div>
                             <strong>${user.full_name || 'Unknown User'}</strong>
-                            <div class="text-muted" style="font-size: 0.75rem;">${user.email || ''}</div>
+                            <div style="color: #6b7280; font-size: 12px;">${user.email || ''}</div>
                         </div>
                     </td>
                     <td>${user.program || user.department || 'N/A'}</td>
                     <td>${user.completed}</td>
                     <td>
-                        <span class="${user.accuracy >= 70 ? 'text-success' : user.accuracy >= 50 ? 'text-warning' : 'text-danger'}">
+                        <span style="color: ${user.accuracy >= 70 ? '#10b981' : user.accuracy >= 50 ? '#f59e0b' : '#ef4444'}">
                             ${user.accuracy}%
                         </span>
                     </td>
                     <td>${user.avgTime}m</td>
                     <td>${lastActive}</td>
                     <td>
-                        <button class="btn-action" onclick="admin.viewUserProgress('${user.id}')" title="View Progress">
+                        <button onclick="admin.viewUserProgress('${user.id}')" class="btn-action" title="View Progress">
                             <i class="fas fa-chart-line"></i>
                         </button>
                     </td>
@@ -911,335 +1068,61 @@ class NurseIQAdmin {
             if (row.cells.length < 7) return;
             
             const userName = row.cells[0].textContent.toLowerCase();
-            const userEmail = row.cells[0].querySelector('.text-muted')?.textContent.toLowerCase() || '';
-            const program = row.cells[1].textContent.toLowerCase();
-            
-            const matches = !searchTerm || 
-                userName.includes(searchTerm) || 
-                userEmail.includes(searchTerm) ||
-                program.includes(searchTerm);
-            
+            const matches = !searchTerm || userName.includes(searchTerm);
             row.style.display = matches ? '' : 'none';
         });
     }
     
-    // Assessment CRUD Operations
-    async saveAssessment() {
+    // ==================== SETTINGS TAB ====================
+    async testConnection() {
         try {
-            const formData = {
-                question_text: document.getElementById('question-text').value,
-                course_id: document.getElementById('assessment-course').value,
-                difficulty: document.getElementById('assessment-difficulty').value,
-                topic: document.getElementById('assessment-topic').value || null,
-                marks: parseInt(document.getElementById('assessment-marks').value) || 1,
-                question_type: document.getElementById('assessment-type').value,
-                is_published: document.getElementById('assessment-published').checked,
-                is_active: true,
-                curriculum: 'KRCHN',
-                created_at: new Date().toISOString()
-            };
-            
-            if (!formData.question_text || !formData.course_id) {
-                this.showNotification('Please fill in all required fields', 'error');
-                return;
-            }
+            this.showNotification('Testing connection...', 'info');
             
             const { error } = await this.supabase
                 .from('medical_assessments')
-                .insert([formData]);
+                .select('id')
+                .limit(1);
             
             if (error) throw error;
             
-            this.showNotification('Assessment saved successfully!', 'success');
-            this.closeModal();
-            await this.loadAssessments();
-            await this.loadDashboardData();
+            this.showNotification('Connection test successful!', 'success');
+            this.updateConnectionStatus('connected');
             
         } catch (error) {
-            console.error('Error saving assessment:', error);
-            this.showNotification('Failed to save assessment', 'error');
+            console.error('Connection test failed:', error);
+            this.showNotification('Connection test failed', 'error');
+            this.updateConnectionStatus('error');
         }
     }
     
-    async editAssessment(assessmentId) {
-        try {
-            const { data: assessment, error } = await this.supabase
-                .from('medical_assessments')
-                .select('*')
-                .eq('id', assessmentId)
-                .single();
-            
-            if (error) throw error;
-            
-            // Populate form
-            document.getElementById('question-text').value = assessment.question_text || '';
-            document.getElementById('assessment-course').value = assessment.course_id || '';
-            document.getElementById('assessment-difficulty').value = assessment.difficulty || 'medium';
-            document.getElementById('assessment-topic').value = assessment.topic || '';
-            document.getElementById('assessment-marks').value = assessment.marks || 1;
-            document.getElementById('assessment-type').value = assessment.question_type || 'multiple_choice';
-            document.getElementById('assessment-published').checked = assessment.is_published;
-            
-            // Update modal title
-            document.querySelector('#add-assessment-modal h3').innerHTML = `
-                <i class="fas fa-edit"></i> Edit Assessment
-            `;
-            
-            // Update form submission
-            const form = document.getElementById('assessment-form');
-            form.onsubmit = async (e) => {
-                e.preventDefault();
-                await this.updateAssessment(assessmentId);
-            };
-            
-            this.openModal('add-assessment-modal');
-            
-        } catch (error) {
-            console.error('Error loading assessment:', error);
-            this.showNotification('Failed to load assessment', 'error');
-        }
-    }
-    
-    async updateAssessment(assessmentId) {
-        try {
-            const formData = {
-                question_text: document.getElementById('question-text').value,
-                course_id: document.getElementById('assessment-course').value,
-                difficulty: document.getElementById('assessment-difficulty').value,
-                topic: document.getElementById('assessment-topic').value || null,
-                marks: parseInt(document.getElementById('assessment-marks').value) || 1,
-                question_type: document.getElementById('assessment-type').value,
-                is_published: document.getElementById('assessment-published').checked,
-                updated_at: new Date().toISOString()
-            };
-            
-            const { error } = await this.supabase
-                .from('medical_assessments')
-                .update(formData)
-                .eq('id', assessmentId);
-            
-            if (error) throw error;
-            
-            this.showNotification('Assessment updated successfully!', 'success');
-            this.closeModal();
-            await this.loadAssessments();
-            
-        } catch (error) {
-            console.error('Error updating assessment:', error);
-            this.showNotification('Failed to update assessment', 'error');
-        }
-    }
-    
-    async deleteAssessment(assessmentId) {
-        if (!confirm('Are you sure you want to delete this assessment? This action cannot be undone.')) {
-            return;
-        }
+    // ==================== UTILITY FUNCTIONS ====================
+    switchTab(tabId) {
+        this.currentTab = tabId;
         
-        try {
-            const { error } = await this.supabase
-                .from('medical_assessments')
-                .delete()
-                .eq('id', assessmentId);
-            
-            if (error) throw error;
-            
-            this.showNotification('Assessment deleted successfully!', 'success');
-            await this.loadAssessments();
-            await this.loadDashboardData();
-            
-        } catch (error) {
-            console.error('Error deleting assessment:', error);
-            this.showNotification('Failed to delete assessment', 'error');
-        }
+        // Update active tab button
+        document.querySelectorAll('.admin-tab').forEach(t => {
+            t.classList.remove('active');
+        });
+        document.querySelector(`[data-tab="${tabId}"]`).classList.add('active');
+        
+        // Update active tab content
+        document.querySelectorAll('.admin-tab-content').forEach(content => {
+            content.classList.remove('active');
+        });
+        document.getElementById(`${tabId}-tab`).classList.add('active');
     }
     
-    async toggleAssessmentStatus(assessmentId) {
-        try {
-            // Get current status
-            const { data: assessment, error: fetchError } = await this.supabase
-                .from('medical_assessments')
-                .select('is_published')
-                .eq('id', assessmentId)
-                .single();
-            
-            if (fetchError) throw fetchError;
-            
-            const newStatus = !assessment.is_published;
-            
-            const { error } = await this.supabase
-                .from('medical_assessments')
-                .update({ is_published: newStatus })
-                .eq('id', assessmentId);
-            
-            if (error) throw error;
-            
-            this.showNotification(
-                `Assessment ${newStatus ? 'published' : 'unpublished'} successfully!`,
-                'success'
-            );
-            
-            await this.loadAssessments();
-            
-        } catch (error) {
-            console.error('Error toggling assessment status:', error);
-            this.showNotification('Failed to update assessment status', 'error');
-        }
-    }
-    
-    // Course CRUD Operations
-    async saveCourse() {
-        try {
-            const formData = {
-                course_name: document.getElementById('course-name').value,
-                unit_code: document.getElementById('course-code').value,
-                color: document.getElementById('course-color').value,
-                description: document.getElementById('course-description').value || null,
-                target_program: document.getElementById('course-program').value || null,
-                intake_year: parseInt(document.getElementById('course-year').value) || null,
-                status: 'Active',
-                created_at: new Date().toISOString()
-            };
-            
-            if (!formData.course_name || !formData.unit_code) {
-                this.showNotification('Please fill in all required fields', 'error');
-                return;
-            }
-            
-            const { error } = await this.supabase
-                .from('courses')
-                .insert([formData]);
-            
-            if (error) throw error;
-            
-            this.showNotification('Course saved successfully!', 'success');
-            this.closeModal();
-            await this.loadCourses();
-            await this.loadDashboardData();
-            
-        } catch (error) {
-            console.error('Error saving course:', error);
-            this.showNotification('Failed to save course', 'error');
-        }
-    }
-    
-    async editCourse(courseId) {
-        try {
-            const { data: course, error } = await this.supabase
-                .from('courses')
-                .select('*')
-                .eq('id', courseId)
-                .single();
-            
-            if (error) throw error;
-            
-            // Populate form
-            document.getElementById('course-name').value = course.course_name || '';
-            document.getElementById('course-code').value = course.unit_code || '';
-            document.getElementById('course-color').value = course.color || '#4f46e5';
-            document.getElementById('course-description').value = course.description || '';
-            document.getElementById('course-program').value = course.target_program || '';
-            document.getElementById('course-year').value = course.intake_year || '2024';
-            
-            // Update modal title
-            document.querySelector('#add-course-modal h3').innerHTML = `
-                <i class="fas fa-edit"></i> Edit Course
-            `;
-            
-            // Update form submission
-            const form = document.getElementById('course-form');
-            form.onsubmit = async (e) => {
-                e.preventDefault();
-                await this.updateCourse(courseId);
-            };
-            
-            this.openModal('add-course-modal');
-            
-        } catch (error) {
-            console.error('Error loading course:', error);
-            this.showNotification('Failed to load course', 'error');
-        }
-    }
-    
-    async updateCourse(courseId) {
-        try {
-            const formData = {
-                course_name: document.getElementById('course-name').value,
-                unit_code: document.getElementById('course-code').value,
-                color: document.getElementById('course-color').value,
-                description: document.getElementById('course-description').value || null,
-                target_program: document.getElementById('course-program').value || null,
-                intake_year: parseInt(document.getElementById('course-year').value) || null,
-                updated_at: new Date().toISOString()
-            };
-            
-            const { error } = await this.supabase
-                .from('courses')
-                .update(formData)
-                .eq('id', courseId);
-            
-            if (error) throw error;
-            
-            this.showNotification('Course updated successfully!', 'success');
-            this.closeModal();
-            await this.loadCourses();
-            
-        } catch (error) {
-            console.error('Error updating course:', error);
-            this.showNotification('Failed to update course', 'error');
-        }
-    }
-    
-    async toggleCourseStatus(courseId) {
-        try {
-            const { data: course, error: fetchError } = await this.supabase
-                .from('courses')
-                .select('status')
-                .eq('id', courseId)
-                .single();
-            
-            if (fetchError) throw fetchError;
-            
-            const newStatus = course.status === 'Active' ? 'Inactive' : 'Active';
-            
-            const { error } = await this.supabase
-                .from('courses')
-                .update({ status: newStatus })
-                .eq('id', courseId);
-            
-            if (error) throw error;
-            
-            this.showNotification(
-                `Course ${newStatus.toLowerCase()}d successfully!`,
-                'success'
-            );
-            
-            await this.loadCourses();
-            await this.loadDashboardData();
-            
-        } catch (error) {
-            console.error('Error toggling course status:', error);
-            this.showNotification('Failed to update course status', 'error');
-        }
-    }
-    
-    // User Operations
-    async viewUserProgress(userId) {
-        this.showNotification(`Viewing progress for user ${userId.substring(0, 8)}...`, 'info');
-        // You would implement a detailed progress view here
-    }
-    
-    // Modal Functions
     openModal(modalId) {
         const modal = document.getElementById(modalId);
         if (modal) {
-            modal.classList.add('active');
+            modal.style.display = 'flex';
             document.body.style.overflow = 'hidden';
         }
     }
     
     closeModal() {
         document.querySelectorAll('.modal').forEach(modal => {
-            modal.classList.remove('active');
+            modal.style.display = 'none';
         });
         document.body.style.overflow = 'auto';
         
@@ -1247,6 +1130,7 @@ class NurseIQAdmin {
         const assessmentForm = document.getElementById('assessment-form');
         if (assessmentForm) {
             assessmentForm.reset();
+            delete assessmentForm.dataset.editId;
             assessmentForm.onsubmit = (e) => {
                 e.preventDefault();
                 this.saveAssessment();
@@ -1259,6 +1143,7 @@ class NurseIQAdmin {
         const courseForm = document.getElementById('course-form');
         if (courseForm) {
             courseForm.reset();
+            delete courseForm.dataset.editId;
             courseForm.onsubmit = (e) => {
                 e.preventDefault();
                 this.saveCourse();
@@ -1269,19 +1154,6 @@ class NurseIQAdmin {
         }
     }
     
-    openAddAssessmentModal() {
-        this.openModal('add-assessment-modal');
-    }
-    
-    openAddCourseModal() {
-        this.openModal('add-course-modal');
-    }
-    
-    openImportModal() {
-        this.showNotification('Import feature coming soon!', 'info');
-    }
-    
-    // Utility Functions
     showLoader(message) {
         const loader = document.getElementById('config-loader');
         if (loader) {
@@ -1298,12 +1170,26 @@ class NurseIQAdmin {
         
         const notification = document.createElement('div');
         notification.className = `notification ${type}`;
+        notification.style.cssText = `
+            background: ${type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#3b82f6'};
+            color: white;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        `;
+        
         notification.innerHTML = `
-            <div class="notification-content">
-                <i class="fas fa-${this.getNotificationIcon(type)}"></i>
-                <span>${message}</span>
+            <div>
+                <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'}"></i>
+                <span style="margin-left: 10px;">${message}</span>
             </div>
-            <button class="notification-close" onclick="this.parentElement.remove()">&times;</button>
+            <button onclick="this.parentElement.remove()" style="background: none; border: none; color: white; cursor: pointer;">
+                &times;
+            </button>
         `;
         
         container.appendChild(notification);
@@ -1314,38 +1200,6 @@ class NurseIQAdmin {
                 notification.remove();
             }
         }, 5000);
-    }
-    
-    getNotificationIcon(type) {
-        switch (type) {
-            case 'success': return 'check-circle';
-            case 'error': return 'exclamation-circle';
-            case 'warning': return 'exclamation-triangle';
-            default: return 'info-circle';
-        }
-    }
-    
-    showError(title, message) {
-        const loader = document.getElementById('config-loader');
-        if (loader) {
-            loader.innerHTML = `
-                <div class="error-content">
-                    <div class="error-icon">
-                        <i class="fas fa-exclamation-triangle"></i>
-                    </div>
-                    <h3>${title}</h3>
-                    <p>${message}</p>
-                    <div class="error-actions">
-                        <button onclick="location.reload()" class="btn btn-primary">
-                            <i class="fas fa-redo"></i> Retry
-                        </button>
-                        <button onclick="admin.showHelp()" class="btn btn-outline">
-                            <i class="fas fa-question-circle"></i> Get Help
-                        </button>
-                    </div>
-                </div>
-            `;
-        }
     }
     
     updateConnectionStatus(status) {
@@ -1360,30 +1214,8 @@ class NurseIQAdmin {
             }
             
             if (text) {
-                const messages = {
-                    connecting: 'Connecting...',
-                    connected: 'Connected',
-                    error: 'Connection Error'
-                };
-                text.textContent = messages[status] || status;
+                text.textContent = status === 'connected' ? 'Connected' : 'Error';
             }
-        }
-        
-        // Update settings tab
-        const connectionStatus = document.getElementById('connection-status');
-        if (connectionStatus) {
-            connectionStatus.className = `status-badge ${status}`;
-            connectionStatus.textContent = status.charAt(0).toUpperCase() + status.slice(1);
-        }
-        
-        const connectionUrl = document.getElementById('connection-url');
-        if (connectionUrl && this.config.supabaseUrl) {
-            connectionUrl.textContent = this.config.supabaseUrl;
-        }
-        
-        const lastCheck = document.getElementById('last-check');
-        if (lastCheck) {
-            lastCheck.textContent = new Date().toLocaleTimeString();
         }
     }
     
@@ -1414,60 +1246,86 @@ class NurseIQAdmin {
         };
     }
     
-    // Settings Functions
-    async testConnection() {
-        try {
-            this.showNotification('Testing connection...', 'info');
-            
-            const { error } = await this.supabase
-                .from('medical_assessments')
-                .select('id')
-                .limit(1);
-            
-            if (error) throw error;
-            
-            this.showNotification('Connection test successful!', 'success');
-            this.updateConnectionStatus('connected');
-            
-        } catch (error) {
-            console.error('Connection test failed:', error);
-            this.showNotification('Connection test failed', 'error');
-            this.updateConnectionStatus('error');
+    // ==================== REAL-TIME UPDATES ====================
+    
+    // This function triggers updates in the student view
+    triggerStudentUpdate() {
+        console.log('🔄 Triggering student view update...');
+        
+        // Method 1: Broadcast via localStorage (works within same browser)
+        const updateEvent = {
+            type: 'nurseiq_update',
+            timestamp: new Date().toISOString(),
+            message: 'New assessments available'
+        };
+        
+        localStorage.setItem('nurseiq_last_update', JSON.stringify(updateEvent));
+        
+        // Method 2: Dispatch a storage event (works across tabs)
+        window.dispatchEvent(new StorageEvent('storage', {
+            key: 'nurseiq_last_update',
+            newValue: JSON.stringify(updateEvent)
+        }));
+        
+        // Method 3: Set a flag that student view can check
+        sessionStorage.setItem('force_refresh_nurseiq', 'true');
+        
+        this.showNotification('Student view will be updated automatically', 'success');
+    }
+    
+    showError(title, message) {
+        const loader = document.getElementById('config-loader');
+        if (loader) {
+            loader.innerHTML = `
+                <div style="text-align: center; color: white; max-width: 500px; padding: 40px;">
+                    <div style="font-size: 60px; color: #ff6b6b; margin-bottom: 20px;">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <h3 style="margin-bottom: 10px;">${title}</h3>
+                    <p style="margin-bottom: 30px;">${message}</p>
+                    <div>
+                        <button onclick="location.reload()" style="background: white; color: #4f46e5; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-right: 10px;">
+                            <i class="fas fa-redo"></i> Retry
+                        </button>
+                    </div>
+                </div>
+            `;
         }
+    }
+    
+    // ==================== GLOBAL FUNCTIONS ====================
+    
+    openAddAssessmentModal() {
+        this.openModal('add-assessment-modal');
+    }
+    
+    openAddCourseModal() {
+        this.openModal('add-course-modal');
+    }
+    
+    viewUserProgress(userId) {
+        this.showNotification(`Viewing progress for user ${userId.substring(0, 8)}...`, 'info');
+    }
+    
+    refreshAssessments() {
+        this.loadAssessments();
+    }
+    
+    refreshCourses() {
+        this.loadCourses();
+    }
+    
+    refreshUsers() {
+        this.loadUsers();
     }
     
     showConnectionDetails() {
-        alert(`
-Connection Details:
-- URL: ${this.config.supabaseUrl}
-- Environment: ${this.config.environment}
-- Loaded: ${this.config.loaded ? 'Yes' : 'No'}
-- User: ${this.config.currentUser?.email || 'Not authenticated'}
-
-Check browser console for more details.
-        `);
-    }
-    
-    setTheme(theme) {
-        if (theme === 'dark') {
-            document.documentElement.style.setProperty('--bg-primary', '#1f2937');
-            document.documentElement.style.setProperty('--bg-secondary', '#111827');
-            document.documentElement.style.setProperty('--bg-tertiary', '#374151');
-            document.documentElement.style.setProperty('--text-primary', '#f9fafb');
-            document.documentElement.style.setProperty('--text-secondary', '#d1d5db');
-            document.documentElement.style.setProperty('--border-color', '#4b5563');
-        } else {
-            // Reset to light theme
-            document.documentElement.style = '';
-        }
-        
-        localStorage.setItem('nurseiq_theme', theme);
-        this.showNotification(`Theme changed to ${theme}`, 'success');
+        alert(`Connection Details:\nURL: ${this.config.supabaseUrl}\nEnvironment: ${this.config.environment}`);
     }
     
     clearCache() {
-        localStorage.removeItem('nurseiq_admin_config');
-        this.showNotification('Cache cleared successfully', 'success');
+        localStorage.clear();
+        this.showNotification('Cache cleared!', 'success');
     }
     
     exportData() {
@@ -1492,10 +1350,9 @@ Check browser console for more details.
     }
     
     resetSettings() {
-        if (confirm('Are you sure you want to reset all settings? This will clear all saved preferences.')) {
+        if (confirm('Reset all settings?')) {
             localStorage.clear();
-            this.showNotification('Settings reset successfully. Page will reload.', 'success');
-            setTimeout(() => location.reload(), 1500);
+            location.reload();
         }
     }
     
@@ -1503,45 +1360,8 @@ Check browser console for more details.
         this.showNotification('Report generation coming soon!', 'info');
     }
     
-    refreshAssessments() {
-        this.loadAssessments();
-    }
-    
-    refreshCourses() {
-        this.loadCourses();
-    }
-    
-    refreshUsers() {
-        this.loadUsers();
-    }
-    
-    showHelp() {
-        alert(`
-NurseIQ Admin Panel Help:
-
-1. CONFIGURATION:
-   - Get Supabase URL and Key from your project: Settings → API
-   - For GitHub Pages: Add as GitHub Secrets
-   - For local testing: Enter in configuration prompt
-
-2. FEATURES:
-   - Dashboard: Overview of system statistics
-   - Assessments: Manage all questions
-   - Courses: Manage courses and programs
-   - Users: View user progress
-   - Settings: Configure connection and preferences
-
-3. TROUBLESHOOTING:
-   - Check browser console for errors
-   - Verify Supabase credentials
-   - Ensure tables exist in database
-   - Clear cache if experiencing issues
-
-4. SUPPORT:
-   - Contact your system administrator
-   - Check documentation
-   - Report bugs with console output
-        `);
+    openImportModal() {
+        this.showNotification('Import feature coming soon!', 'info');
     }
 }
 
@@ -1550,5 +1370,17 @@ document.addEventListener('DOMContentLoaded', () => {
     window.admin = new NurseIQAdmin();
 });
 
-// Make admin globally available
-window.NurseIQAdmin = NurseIQAdmin;
+// Make functions globally available
+window.openAddAssessmentModal = () => window.admin.openAddAssessmentModal();
+window.openAddCourseModal = () => window.admin.openAddCourseModal();
+window.openImportModal = () => window.admin.openImportModal();
+window.generateReport = () => window.admin.generateReport();
+window.testConnection = () => window.admin.testConnection();
+window.showConnectionDetails = () => window.admin.showConnectionDetails();
+window.clearCache = () => window.admin.clearCache();
+window.exportData = () => window.admin.exportData();
+window.resetSettings = () => window.admin.resetSettings();
+window.refreshAssessments = () => window.admin.refreshAssessments();
+window.refreshCourses = () => window.admin.refreshCourses();
+window.refreshUsers = () => window.admin.refreshUsers();
+window.closeModal = () => window.admin.closeModal();
