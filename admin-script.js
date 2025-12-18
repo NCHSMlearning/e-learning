@@ -1,10 +1,14 @@
-
+// NurseIQ Admin Panel - Complete Script
 class NurseIQAdmin {
     constructor() {
         this.supabase = null;
         this.config = {
-            supabaseUrl: '',
-            supabaseKey: '',
+            // ============================================
+            // ADD YOUR SUPABASE CREDENTIALS HERE
+            // ============================================
+            supabaseUrl: 'https://lwhtjozfsmbyihenfunw.supabase.co',  // CHANGE THIS
+            supabaseKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk',  // CHANGE THIS
+            // ============================================
             environment: 'production',
             loaded: false,
             currentUser: null
@@ -49,6 +53,13 @@ class NurseIQAdmin {
         this.showLoader('Loading configuration...');
         
         try {
+            // First check if credentials are already set
+            if (this.config.supabaseUrl && this.config.supabaseKey) {
+                console.log('✅ Using direct credentials from code');
+                this.config.loaded = true;
+                return;
+            }
+            
             // Try multiple configuration sources
             const sources = [
                 this.loadFromGitHubSecrets.bind(this),
@@ -797,9 +808,9 @@ class NurseIQAdmin {
         try {
             // This is a simplified version - adjust based on your user table
             const { data: users, error } = await this.supabase
-                .from('consolidated_user_profiles_table')
+                .from('profiles')
                 .select('*')
-                .limit(10000);
+                .limit(50);
             
             if (error) {
                 console.warn('Could not load users:', error.message);
