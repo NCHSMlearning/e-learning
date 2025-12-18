@@ -480,117 +480,63 @@
             }
         });
 
-        // Check admin status in consolidated_user_profiles_table
-        async function checkAdminStatus(userId) {
-            try {
-                console.log('Checking admin status for user ID:', userId);
-                
-                const { data, error } = await supabase
-                    .from('consolidated_user_profiles_table')
-                    .select('user_id, full_name, email, role, program, department')
-                    .eq('user_id', userId)
-                    .in('role', ['superadmin', 'admin'])
-                    .single();
-                
-                console.log('Admin check result:', { data, error });
-                
-                if (error || !data) {
-                    console.log('User is not admin in consolidated table');
-                    return { isAdmin: false };
-                }
-                
-                return {
-                    isAdmin: true,
-                    role: data.role,
-                    name: data.full_name || 'Admin User',
-                    email: data.email,
-                    program: data.program,
-                    department: data.department,
-                    userId: data.user_id
-                };
-            } catch (error) {
-                console.error('Error checking admin status:', error);
-                return { isAdmin: false };
-            }
+       // Check admin status in consolidated_user_profiles_table - UPDATED VERSION
+async function checkAdminStatus(userId, userEmail) {
+    try {
+        console.log('Checking admin status for:', { userId, userEmail });
+        
+        // Try by user_id first, then by email as fallback
+        let query = supabase
+            .from('consolidated_user_profiles_table')
+            .select('user_id, full_name, email, role, program, department')
+            .in('role', ['superadmin', 'admin']);
+        
+        // Try user_id first
+        const { data: dataById, error: errorById } = await query
+            .eq('user_id', userId)
+            .single();
+        
+        // If found by user_id, return it
+        if (dataById && !errorById) {
+            console.log('Found admin by user_id:', dataById);
+            return {
+                isAdmin: true,
+                role: dataById.role,
+                name: dataById.full_name || 'Admin User',
+                email: dataById.email,
+                program: dataById.program,
+                department: dataById.department,
+                userId: dataById.user_id
+            };
         }
-
-        // Helper functions
-        function isValidEmail(email) {
-            return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+        
+        // If not found by user_id, try by email
+        console.log('Not found by user_id, trying by email:', userEmail);
+        const { data: dataByEmail, error: errorByEmail } = await query
+            .eq('email', userEmail)
+            .single();
+        
+        if (errorByEmail || !dataByEmail) {
+            console.log('User is not admin in consolidated table');
+            return { isAdmin: false };
         }
-
-        function setLoading(isLoading) {
-            if (isLoading) {
-                loginBtn.disabled = true;
-                btnText.innerHTML = '<span class="spinner"></span> Verifying superadmin access...';
-            } else {
-                loginBtn.disabled = false;
-                btnText.innerHTML = '<i class="fas fa-shield-alt"></i> Sign In as Superadmin';
-            }
-        }
-
-        function showError(message) {
-            errorText.textContent = message;
-            errorMessage.classList.add('show');
-            
-            // Auto-hide error after 5 seconds
-            setTimeout(() => {
-                errorMessage.classList.remove('show');
-            }, 5000);
-        }
-
-        function hideError() {
-            errorMessage.classList.remove('show');
-        }
-
-        function showSuccess(message) {
-            successText.textContent = message;
-            successMessage.classList.add('show');
-        }
-
-        function hideSuccess() {
-            successMessage.classList.remove('show');
-        }
-
-        function showAdminInfo(adminInfoData) {
-            // Set user info
-            userName.textContent = adminInfoData.name;
-            userEmail.textContent = adminInfoData.email;
-            
-            // Set avatar initial
-            const initial = adminInfoData.name.charAt(0).toUpperCase();
-            userAvatar.textContent = initial;
-            
-            // Set role badge
-            userRole.textContent = adminInfoData.role.toUpperCase();
-            userRole.className = 'admin-badge';
-            if (adminInfoData.role === 'superadmin') {
-                userRole.classList.add('superadmin-badge');
-            }
-            
-            // Show the info panel
-            adminInfo.style.display = 'block';
-        }
-
-        function hideAdminInfo() {
-            adminInfo.style.display = 'none';
-        }
-
-        function showForgotPassword() {
-            const email = emailInput.value.trim() || prompt('Enter your email to reset password:');
-            if (email && isValidEmail(email)) {
-                supabase.auth.resetPasswordForEmail(email, {
-                    redirectTo: window.location.origin + '/reset-password.html'
-                }).then(({ error }) => {
-                    if (error) {
-                        showError('Failed to send reset email: ' + error.message);
-                    } else {
-                        showSuccess('Password reset email sent! Check your inbox.');
-                    }
-                });
-            }
-        }
-
+        
+        console.log('Found admin by email:', dataByEmail);
+        return {
+            isAdmin: true,
+            role: dataByEmail.role,
+            name: dataByEmail.full_name || 'Admin User',
+            email: dataByEmail.email,
+            program: dataByEmail.program,
+            department: dataByEmail.department,
+            userId: dataByEmail.user_id
+        };
+        
+    } catch (error) {
+        console.error('Error checking admin status:', error);
+        return { isAdmin: false };
+    }
+}
         // Check for existing session on load
         async function checkExistingSession() {
             try {
