@@ -394,7 +394,7 @@
             }
         }
         
-      document.getElementById('login-form').addEventListener('submit', async function(e) {
+    document.getElementById('login-form').addEventListener('submit', async function(e) {
     e.preventDefault();
     
     const email = document.getElementById('login-email').value.trim();
@@ -407,25 +407,27 @@
     
     try {
         // REAL DATABASE CHECK: Verify admin user
-        // Use .maybeSingle() instead of .single() - it returns null instead of throwing error
-        const { data: profile, error } = await supabase
+        // Use .limit(1) instead of .single() to avoid 406 error
+        const { data: profiles, error } = await supabase
             .from('consolidated_user_profiles_table')
             .select('*')
             .eq('email', email)
-            .maybeSingle();  // CHANGED: .single() → .maybeSingle()
+            .limit(1);  // CHANGED: Use limit instead of single
         
         if (error) {
             console.error('Supabase error:', error);
             throw new Error('Database connection error');
         }
         
-        if (!profile) {
+        if (!profiles || profiles.length === 0) {
             throw new Error('User not found in database');
         }
         
+        const profile = profiles[0];  // Get first result
+        
         // Check if user has admin role
         if (profile.role !== 'superadmin' && profile.role !== 'admin') {
-            throw new Error('Admin access required');
+            throw new Error('Admin access required. Current role: ' + profile.role);
         }
         
         // Store session
