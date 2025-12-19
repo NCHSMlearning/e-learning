@@ -106,6 +106,10 @@
                     <button onclick="showPage('manage-courses')" style="width: 100%; text-align: left; background: white; border: 1px solid #e5e7eb; padding: 10px 15px; margin-bottom: 8px; border-radius: 5px; cursor: pointer;">
                         <i class="fas fa-book-medical" style="color: #8b5cf6;"></i> Manage Courses
                     </button>
+                    <!-- In your sidebar section (around line 178), add this button: -->
+<button onclick="showPage('generate-questions')" style="width: 100%; text-align: left; background: white; border: 1px solid #e5e7eb; padding: 10px 15px; margin-bottom: 8px; border-radius: 5px; cursor: pointer;">
+    <i class="fas fa-robot" style="color: #8b5cf6;"></i> Generate Questions
+</button>
                 </div>
 
                 <!-- Main Panel -->
@@ -2331,119 +2335,231 @@ function showPage(pageName) {
             }
         }
         
-        async function loadManageQuestionsPage() {
-            const contentDiv = document.getElementById('questions-management-content');
-            contentDiv.innerHTML = '<div style="text-align: center; padding: 40px;"><i class="fas fa-spinner fa-spin"></i> Loading questions...</div>';
-            
-            try {
-                // Fetch questions with course names
-                const { data: questions, error } = await supabase
-                    .from('medical_assessments')
-                    .select(`
-                        *,
-                        courses (
-                            course_name,
-                            unit_code
-                        )
-                    `)
-                    .order('created_at', { ascending: false })
-                    .limit(100);
-                
-                if (error) throw error;
-                
-                if (!questions || questions.length === 0) {
-                    contentDiv.innerHTML = `
-                        <div style="background: white; padding: 40px; border-radius: 10px; text-align: center;">
-                            <i class="fas fa-inbox" style="font-size: 48px; color: #e5e7eb;"></i>
-                            <h3 style="color: #6b7280;">No questions found</h3>
-                            <p style="color: #9ca3af;">Create your first question using the "Create Question" page</p>
-                        </div>
-                    `;
-                    return;
-                }
-                
-                // Render questions table
-                const tableHtml = `
-                    <div style="background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-                        <div style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
-                            <h3 style="margin: 0;">${questions.length} Questions</h3>
-                            <button onclick="loadManageQuestionsPage()" style="background: #4f46e5; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer;">
-                                <i class="fas fa-sync-alt"></i> Refresh
-                            </button>
-                        </div>
-                        
-                        <div style="overflow-x: auto;">
-                            <table style="width: 100%; border-collapse: collapse;">
-                                <thead style="background: #f8f9fa;">
-                                    <tr>
-                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e5e7eb;">Question</th>
-                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e5e7eb;">Course</th>
-                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e5e7eb;">Difficulty</th>
-                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e5e7eb;">Created</th>
-                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e5e7eb;">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    ${questions.map(q => {
-                                        const difficultyColor = {
-                                            'easy': '#10b981',
-                                            'medium': '#f59e0b',
-                                            'hard': '#ef4444'
-                                        }[q.difficulty] || '#6b7280';
-                                        
-                                        const courseName = q.courses?.course_name || 'No course';
-                                        const courseCode = q.courses?.unit_code || '';
-                                        
-                                        return `
-                                            <tr style="border-bottom: 1px solid #e5e7eb;">
-                                                <td style="padding: 12px;">
-                                                    <div style="font-weight: 500; margin-bottom: 4px;">${q.question_text?.substring(0, 80) || 'No question'}${q.question_text?.length > 80 ? '...' : ''}</div>
-                                                    <div style="font-size: 12px; color: #6b7280;">Answer: ${q.correct_answer || 'No answer'}</div>
-                                                </td>
-                                                <td style="padding: 12px;">
-                                                    <span style="background: #f3f4f6; padding: 4px 10px; border-radius: 12px; font-size: 12px;">
-                                                        ${courseName} ${courseCode ? `(${courseCode})` : ''}
-                                                    </span>
-                                                </td>
-                                                <td style="padding: 12px;">
-                                                    <span style="color: ${difficultyColor}; font-weight: bold;">
-                                                        ${q.difficulty || 'medium'}
-                                                    </span>
-                                                </td>
-                                                <td style="padding: 12px; font-size: 14px; color: #6b7280;">
-                                                    ${q.created_at ? new Date(q.created_at).toLocaleDateString() : 'Unknown'}
-                                                </td>
-                                                <td style="padding: 12px;">
-                                                    <div style="display: flex; gap: 5px;">
-                                                        <button onclick="viewQuestion('${q.id}')" style="background: #3b82f6; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px;">
-                                                            <i class="fas fa-eye"></i>
-                                                        </button>
-                                                        <button onclick="deleteQuestion('${q.id}')" style="background: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px;">
-                                                            <i class="fas fa-trash"></i>
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        `;
-                                    }).join('')}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                `;
-                
-                contentDiv.innerHTML = tableHtml;
-                
-            } catch (error) {
-                console.error('Error loading questions:', error);
-                contentDiv.innerHTML = `
-                    <div style="background: #fee; color: #c00; padding: 20px; border-radius: 10px;">
-                        <i class="fas fa-exclamation-circle"></i> Error loading questions: ${error.message}
-                    </div>
-                `;
-            }
+      async function loadManageQuestionsPage() {
+    const contentDiv = document.getElementById('questions-management-content');
+    contentDiv.innerHTML = '<div style="text-align: center; padding: 40px;"><i class="fas fa-spinner fa-spin"></i> Loading questions...</div>';
+    
+    try {
+        // Fetch questions with course names
+        const { data: questions, error } = await supabase
+            .from('medical_assessments')
+            .select(`
+                id,
+                question_text,
+                correct_answer,
+                difficulty,
+                topic,
+                created_at,
+                question_type,
+                marks,
+                course_id,
+                courses (
+                    id,
+                    course_name,
+                    unit_code,
+                    target_program
+                )
+            `)
+            .order('created_at', { ascending: false })
+            .limit(200);
+        
+        if (error) throw error;
+        
+        if (!questions || questions.length === 0) {
+            contentDiv.innerHTML = `
+                <div style="background: white; padding: 40px; border-radius: 10px; text-align: center;">
+                    <i class="fas fa-inbox" style="font-size: 48px; color: #e5e7eb;"></i>
+                    <h3 style="color: #6b7280;">No questions found</h3>
+                    <p style="color: #9ca3af;">Create your first question using the "Create Question" page</p>
+                </div>
+            `;
+            return;
         }
         
+        // Render questions with course names
+        const tableHtml = `
+            <div style="background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+                <div style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
+                    <h3 style="margin: 0;">${questions.length} Questions</h3>
+                    <div style="display: flex; gap: 10px;">
+                        <button onclick="loadManageQuestionsPage()" style="background: #4f46e5; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer;">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
+                    </div>
+                </div>
+                
+                <div style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead style="background: #f8f9fa;">
+                            <tr>
+                                <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e5e7eb; width: 50px;">#</th>
+                                <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e5e7eb;">Question</th>
+                                <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e5e7eb; width: 180px;">Course</th>
+                                <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e5e7eb; width: 100px;">Type</th>
+                                <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e5e7eb; width: 100px;">Difficulty</th>
+                                <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e5e7eb; width: 120px;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${questions.map((q, index) => {
+                                const difficultyColor = {
+                                    'easy': '#10b981',
+                                    'medium': '#f59e0b',
+                                    'hard': '#ef4444'
+                                }[q.difficulty] || '#6b7280';
+                                
+                                const typeColor = {
+                                    'multiple_choice': '#8b5cf6',
+                                    'short_answer': '#f59e0b',
+                                    'true_false': '#ef4444'
+                                }[q.question_type] || '#6b7280';
+                                
+                                const courseName = q.courses?.course_name || 'No course';
+                                const courseCode = q.courses?.unit_code || '';
+                                
+                                return `
+                                    <tr style="border-bottom: 1px solid #e5e7eb;">
+                                        <td style="padding: 12px; font-weight: bold; color: #6b7280;">${index + 1}</td>
+                                        <td style="padding: 12px;">
+                                            <div style="font-weight: 500; margin-bottom: 4px;">${q.question_text?.substring(0, 80) || 'No question'}${q.question_text?.length > 80 ? '...' : ''}</div>
+                                            <div style="font-size: 12px; color: #6b7280;">Answer: ${q.correct_answer?.substring(0, 50) || 'No answer'}${q.correct_answer?.length > 50 ? '...' : ''}</div>
+                                        </td>
+                                        <td style="padding: 12px;">
+                                            <div style="cursor: pointer; display: inline-block;">
+                                                <span style="background: #e0e7ff; color: #4f46e5; padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 500; display: flex; align-items: center; gap: 6px;">
+                                                    <i class="fas fa-book"></i>
+                                                    ${courseName}
+                                                    ${courseCode ? `(${courseCode})` : ''}
+                                                </span>
+                                            </div>
+                                        </td>
+                                        <td style="padding: 12px;">
+                                            <span style="background: ${typeColor}20; color: ${typeColor}; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 500;">
+                                                ${q.question_type?.replace('_', ' ') || 'unknown'}
+                                            </span>
+                                        </td>
+                                        <td style="padding: 12px;">
+                                            <span style="color: ${difficultyColor}; font-weight: bold;">
+                                                ${q.difficulty || 'medium'}
+                                            </span>
+                                        </td>
+                                        <td style="padding: 12px;">
+                                            <div style="display: flex; gap: 5px;">
+                                                <button onclick="viewQuestion('${q.id}')" style="background: #3b82f6; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px;">
+                                                    <i class="fas fa-eye"></i>
+                                                </button>
+                                                <button onclick="deleteQuestion('${q.id}')" style="background: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px;">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+        
+        contentDiv.innerHTML = tableHtml;
+        
+    } catch (error) {
+        console.error('Error loading questions:', error);
+        contentDiv.innerHTML = `
+            <div style="background: #fee; color: #c00; padding: 20px; border-radius: 10px;">
+                <i class="fas fa-exclamation-circle"></i> Error loading questions: ${error.message}
+            </div>
+        `;
+    }
+}
+   async function viewQuestion(questionId) {
+    // Fetch full question details
+    const { data: question, error } = await supabase
+        .from('medical_assessments')
+        .select(`
+            *,
+            courses (
+                course_name,
+                unit_code
+            )
+        `)
+        .eq('id', questionId)
+        .single();
+    
+    if (error) {
+        console.error('Error fetching question:', error);
+        alert('Error loading question details');
+        return;
+    }
+    
+    // Show in modal
+    const modalContent = `
+        <div style="max-width: 600px;">
+            <h3 style="color: #4f46e5; margin-bottom: 20px;">Question Details</h3>
+            
+            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px;">
+                <div style="margin-bottom: 15px;">
+                    <strong>Course:</strong>
+                    <div style="background: #e0e7ff; color: #4f46e5; padding: 6px 12px; border-radius: 20px; display: inline-block; margin-left: 10px;">
+                        ${question.courses?.course_name || 'Unknown'} (${question.courses?.unit_code || 'No code'})
+                    </div>
+                </div>
+                
+                <div style="margin-bottom: 15px;">
+                    <strong>Question:</strong>
+                    <div style="padding: 15px; background: white; border-radius: 6px; margin-top: 8px; border: 1px solid #e5e7eb;">
+                        ${question.question_text || 'No question text'}
+                    </div>
+                </div>
+                
+                <div style="margin-bottom: 15px;">
+                    <strong>Correct Answer:</strong>
+                    <div style="padding: 15px; background: #d1fae5; border-radius: 6px; margin-top: 8px; border: 1px solid #10b981;">
+                        ${question.correct_answer || 'No answer'}
+                    </div>
+                </div>
+                
+                ${question.explanation ? `
+                    <div style="margin-bottom: 15px;">
+                        <strong>Explanation:</strong>
+                        <div style="padding: 15px; background: #fef3c7; border-radius: 6px; margin-top: 8px;">
+                            ${question.explanation}
+                        </div>
+                    </div>
+                ` : ''}
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                    <div>
+                        <strong>Type:</strong>
+                        <div style="margin-top: 5px;">${question.question_type?.replace('_', ' ') || 'Unknown'}</div>
+                    </div>
+                    <div>
+                        <strong>Difficulty:</strong>
+                        <div style="margin-top: 5px;">${question.difficulty || 'Medium'}</div>
+                    </div>
+                    <div>
+                        <strong>Marks:</strong>
+                        <div style="margin-top: 5px;">${question.marks || 1}</div>
+                    </div>
+                    <div>
+                        <strong>Created:</strong>
+                        <div style="margin-top: 5px;">${question.created_at ? new Date(question.created_at).toLocaleDateString() : 'Unknown'}</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="text-align: right; margin-top: 20px;">
+                <button onclick="closeModal()" style="background: #6b7280; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer;">
+                    Close
+                </button>
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('modal-content').innerHTML = modalContent;
+    document.getElementById('question-modal').style.display = 'flex';
+}     
         async function loadManageStudentsPage() {
             const contentDiv = document.getElementById('students-management-content');
             contentDiv.innerHTML = '<div style="text-align: center; padding: 40px;"><i class="fas fa-spinner fa-spin"></i> Loading students...</div>';
