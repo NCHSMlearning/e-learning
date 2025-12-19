@@ -22,6 +22,10 @@
                         <i class="fas fa-exclamation-circle"></i> <span id="error-message"></span>
                     </div>
                     
+                    <div id="login-success" style="background: #dfd; color: #070; padding: 10px; border-radius: 5px; margin-bottom: 15px; display: none;">
+                        <i class="fas fa-check-circle"></i> <span id="success-message"></span>
+                    </div>
+                    
                     <form id="login-form">
                         <div style="margin-bottom: 15px;">
                             <label style="display: block; margin-bottom: 5px; font-weight: bold;">Email</label>
@@ -58,7 +62,7 @@
                 
                 <div style="display: flex; align-items: center; gap: 15px;">
                     <div id="user-info" style="background: rgba(255,255,255,0.2); padding: 8px 15px; border-radius: 20px;">
-                        <i class="fas fa-user"></i> <span id="user-name">Admin</span>
+                        <i class="fas fa-user"></i> <span id="dashboard-username">Admin</span>
                     </div>
                     <button onclick="logout()" style="background: rgba(255,255,255,0.2); border: none; color: white; padding: 8px 15px; border-radius: 5px; cursor: pointer;">
                         <i class="fas fa-sign-out-alt"></i> Logout
@@ -190,7 +194,7 @@
                             </button>
                             
                             <div id="ai-loading" style="display: none; margin-top: 20px; text-align: center;">
-                                <div style="width: 40px; height: 40px; border: 3px solid #f3f3f3; border-top: 3px solid #4f46e5; border-radius: 50%; margin: 0 auto 10px; animation: spin 1s linear infinite;"></div>
+                                <div id="ai-spinner" style="width: 40px; height: 40px; border: 3px solid #f3f3f3; border-top: 3px solid #4f46e5; border-radius: 50%; margin: 0 auto 10px;"></div>
                                 <p>Generating questions with AI...</p>
                             </div>
                             
@@ -336,12 +340,12 @@ question,correct_answer,topic,difficulty,explanation
             
             // Show loading
             document.getElementById('login-error').style.display = 'none';
-            document.getElementById('login-button').disabled = true;
-            document.getElementById('login-button').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing in...';
+            const loginButton = document.getElementById('login-button');
+            loginButton.disabled = true;
+            loginButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing in...';
             
             try {
                 // For demo, accept any email/password
-                // In real app, verify with Supabase
                 const userData = {
                     email: email,
                     full_name: email.split('@')[0],
@@ -367,8 +371,8 @@ question,correct_answer,topic,difficulty,explanation
             } catch (error) {
                 document.getElementById('error-message').textContent = error.message || 'Login failed';
                 document.getElementById('login-error').style.display = 'block';
-                document.getElementById('login-button').disabled = false;
-                document.getElementById('login-button').innerHTML = '<i class="fas fa-sign-in-alt"></i> Sign In';
+                loginButton.disabled = false;
+                loginButton.innerHTML = '<i class="fas fa-sign-in-alt"></i> Sign In';
             }
         });
         
@@ -389,9 +393,12 @@ question,correct_answer,topic,difficulty,explanation
             document.getElementById('login-section').style.display = 'none';
             document.getElementById('admin-section').style.display = 'block';
             
-            // Update user info
+            // Update user info - FIXED SELECTOR
             if (currentUser) {
-                document.getElementById('user-name').textContent = currentUser.full_name || currentUser.email || 'Admin';
+                const usernameElement = document.getElementById('dashboard-username');
+                if (usernameElement) {
+                    usernameElement.textContent = currentUser.full_name || currentUser.email || 'Admin';
+                }
             }
             
             // Show first page
@@ -446,7 +453,6 @@ question,correct_answer,topic,difficulty,explanation
                 
             } catch (error) {
                 console.error('Error saving question:', error);
-                alert('Error saving question. Saved locally only.');
                 
                 // Save locally as fallback
                 const localQuestions = JSON.parse(localStorage.getItem('nurseiq_questions') || '[]');
@@ -470,7 +476,9 @@ question,correct_answer,topic,difficulty,explanation
         }
         
         function resetQuestionForm() {
-            document.getElementById('question-form').reset();
+            document.getElementById('question-text').value = '';
+            document.getElementById('correct-answer').value = '';
+            document.getElementById('question-explanation').value = '';
         }
         
         async function loadQuestions() {
@@ -527,6 +535,8 @@ question,correct_answer,topic,difficulty,explanation
         function updateQuestionsTable(questions) {
             const tbody = document.getElementById('questions-list');
             
+            if (!tbody) return;
+            
             if (questions.length === 0) {
                 tbody.innerHTML = `
                     <tr>
@@ -548,8 +558,8 @@ question,correct_answer,topic,difficulty,explanation
                 
                 return `
                     <tr style="border-bottom: 1px solid #e5e7eb;">
-                        <td style="padding: 15px;">${q.id.substring(0, 8)}...</td>
-                        <td style="padding: 15px;">${q.question_text.substring(0, 80)}${q.question_text.length > 80 ? '...' : ''}</td>
+                        <td style="padding: 15px;">${q.id ? q.id.substring(0, 8) + '...' : 'N/A'}</td>
+                        <td style="padding: 15px;">${q.question_text ? q.question_text.substring(0, 80) + (q.question_text.length > 80 ? '...' : '') : 'No question'}</td>
                         <td style="padding: 15px;">
                             <span style="background: #f3f4f6; padding: 3px 8px; border-radius: 12px; font-size: 12px;">
                                 ${q.topic || 'General'}
@@ -557,7 +567,7 @@ question,correct_answer,topic,difficulty,explanation
                         </td>
                         <td style="padding: 15px;">
                             <span style="color: ${difficultyColor}; font-weight: bold;">
-                                ${q.difficulty}
+                                ${q.difficulty || 'medium'}
                             </span>
                         </td>
                         <td style="padding: 15px;">
@@ -578,7 +588,7 @@ question,correct_answer,topic,difficulty,explanation
             
             try {
                 // Try to delete from Supabase
-                if (supabase && !questionId.startsWith('local_')) {
+                if (supabase && questionId && !questionId.startsWith('local_') && !questionId.startsWith('ai_') && !questionId.startsWith('csv_')) {
                     const { error } = await supabase
                         .from('medical_assessments')
                         .delete()
@@ -623,13 +633,13 @@ question,correct_answer,topic,difficulty,explanation
             modalContent.innerHTML = `
                 <div style="margin-bottom: 20px;">
                     <h4 style="margin-top: 0; color: #4f46e5;">Question:</h4>
-                    <p style="background: #f8f9fa; padding: 15px; border-radius: 5px;">${question.question_text}</p>
+                    <p style="background: #f8f9fa; padding: 15px; border-radius: 5px;">${question.question_text || 'No question text'}</p>
                 </div>
                 
                 <div style="margin-bottom: 20px;">
                     <h4 style="color: #10b981;">Correct Answer:</h4>
                     <p style="background: #f0fdf4; padding: 15px; border-radius: 5px; border-left: 4px solid #10b981;">
-                        ${question.correct_answer}
+                        ${question.correct_answer || 'No answer'}
                     </p>
                 </div>
                 
@@ -641,7 +651,7 @@ question,correct_answer,topic,difficulty,explanation
                     <div>
                         <h4 style="color: #666;">Difficulty:</h4>
                         <p><span style="color: ${question.difficulty === 'easy' ? '#10b981' : question.difficulty === 'medium' ? '#f59e0b' : '#ef4444'}; font-weight: bold;">
-                            ${question.difficulty}
+                            ${question.difficulty || 'medium'}
                         </span></p>
                     </div>
                 </div>
@@ -654,7 +664,7 @@ question,correct_answer,topic,difficulty,explanation
                 ` : ''}
                 
                 <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 12px;">
-                    Created: ${new Date(question.created_at).toLocaleDateString()}
+                    Created: ${question.created_at ? new Date(question.created_at).toLocaleDateString() : 'Unknown'}
                     ${question.created_by ? `<br>By: ${question.created_by}` : ''}
                 </div>
             `;
@@ -674,27 +684,64 @@ question,correct_answer,topic,difficulty,explanation
             }
             
             // Show loading
-            document.getElementById('ai-generate-btn').disabled = true;
+            const aiButton = document.getElementById('ai-generate-btn');
+            aiButton.disabled = true;
             document.getElementById('ai-loading').style.display = 'block';
             document.getElementById('ai-results').style.display = 'none';
             
+            // Start spinner animation
+            const spinner = document.getElementById('ai-spinner');
+            if (spinner) {
+                spinner.style.animation = 'spin 1s linear infinite';
+            }
+            
             try {
-                // Mock AI generation (in real app, call an AI API)
-                // Here we'll create sample questions based on the topic
-                const generatedQuestions = [];
+                // Mock AI generation - in real app, call an AI API
+                await new Promise(resolve => setTimeout(resolve, 1500));
                 
-                for (let i = 0; i < count; i++) {
+                const generatedQuestions = [];
+                const sampleQuestions = [
+                    {
+                        question: `What is the primary function of the ${topic} system?`,
+                        answer: `The primary function is to maintain homeostasis through specific physiological processes.`,
+                        explanation: `This system plays a crucial role in maintaining internal balance.`
+                    },
+                    {
+                        question: `What are common assessment findings related to ${topic}?`,
+                        answer: `Common findings include specific clinical signs and symptoms.`,
+                        explanation: `These findings help in diagnosis and monitoring.`
+                    },
+                    {
+                        question: `What nursing interventions are important for patients with ${topic} issues?`,
+                        answer: `Key interventions include monitoring, patient education, and specific care measures.`,
+                        explanation: `These interventions promote recovery and prevent complications.`
+                    },
+                    {
+                        question: `What medications are commonly used in treating ${topic} conditions?`,
+                        answer: `Common medications include specific drug classes with their mechanisms.`,
+                        explanation: `Understanding pharmacology is essential for safe administration.`
+                    },
+                    {
+                        question: `What patient education should be provided regarding ${topic}?`,
+                        answer: `Education should cover prevention, signs to watch for, and when to seek help.`,
+                        explanation: `Patient education improves outcomes and adherence.`
+                    }
+                ];
+                
+                for (let i = 0; i < Math.min(count, 5); i++) {
+                    const sample = sampleQuestions[i % sampleQuestions.length];
                     generatedQuestions.push({
-                        question_text: `Sample question about ${topic} ${i + 1}: What is an important concept?`,
-                        correct_answer: `Sample correct answer for ${topic}`,
-                        explanation: `This is a sample explanation about ${topic}.`,
+                        question_text: sample.question,
+                        correct_answer: sample.answer,
+                        explanation: sample.explanation,
                         topic: topic.toLowerCase(),
                         difficulty: difficulty
                     });
                 }
                 
                 // Show results
-                document.getElementById('ai-questions-list').innerHTML = generatedQuestions.map((q, index) => `
+                const questionsList = document.getElementById('ai-questions-list');
+                questionsList.innerHTML = generatedQuestions.map((q, index) => `
                     <div style="background: #f8f9fa; padding: 15px; margin-bottom: 15px; border-radius: 5px; border-left: 4px solid #4f46e5;">
                         <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
                             <strong>Question ${index + 1}:</strong>
@@ -722,8 +769,11 @@ question,correct_answer,topic,difficulty,explanation
                 console.error('AI generation error:', error);
                 alert('Error generating questions. Please try again.');
             } finally {
-                document.getElementById('ai-generate-btn').disabled = false;
+                aiButton.disabled = false;
                 document.getElementById('ai-loading').style.display = 'none';
+                if (spinner) {
+                    spinner.style.animation = 'none';
+                }
             }
         }
         
@@ -782,15 +832,30 @@ question,correct_answer,topic,difficulty,explanation
                         const row = rows[i].trim();
                         if (!row) continue;
                         
-                        const columns = row.split(',').map(col => col.trim());
+                        // Simple CSV parsing (for commas inside quotes)
+                        const columns = [];
+                        let current = '';
+                        let inQuotes = false;
+                        
+                        for (let char of row) {
+                            if (char === '"') {
+                                inQuotes = !inQuotes;
+                            } else if (char === ',' && !inQuotes) {
+                                columns.push(current.trim());
+                                current = '';
+                            } else {
+                                current += char;
+                            }
+                        }
+                        columns.push(current.trim());
                         
                         if (columns.length >= 2) {
                             const questionData = {
-                                question_text: columns[0],
-                                correct_answer: columns[1],
-                                topic: columns[2] || 'General',
-                                difficulty: columns[3] || 'medium',
-                                explanation: columns[4] || '',
+                                question_text: columns[0].replace(/^"|"$/g, ''),
+                                correct_answer: columns[1].replace(/^"|"$/g, ''),
+                                topic: columns[2] ? columns[2].replace(/^"|"$/g, '') : 'General',
+                                difficulty: columns[3] ? columns[3].replace(/^"|"$/g, '') : 'medium',
+                                explanation: columns[4] ? columns[4].replace(/^"|"$/g, '') : '',
                                 created_at: new Date().toISOString(),
                                 created_by: currentUser?.email || 'admin',
                                 csv_import: true
@@ -811,7 +876,8 @@ question,correct_answer,topic,difficulty,explanation
                     }
                     
                     // Show results
-                    document.getElementById('upload-stats').innerHTML = `
+                    const uploadStats = document.getElementById('upload-stats');
+                    uploadStats.innerHTML = `
                         <div style="background: ${errorCount > 0 ? '#fef3f2' : '#f0fdf4'}; padding: 15px; border-radius: 5px;">
                             <h4 style="margin-top: 0;">Upload Complete</h4>
                             <p>✅ Successfully imported: ${savedCount} questions</p>
@@ -835,15 +901,21 @@ question,correct_answer,topic,difficulty,explanation
         }
         
         // ==================== DASHBOARD FUNCTIONS ====================
-        async function loadDashboardStats() {
+        function loadDashboardStats() {
             try {
                 // Count questions
                 const totalQuestions = allQuestions.length;
-                document.getElementById('total-questions').textContent = totalQuestions;
+                const totalElement = document.getElementById('total-questions');
+                if (totalElement) {
+                    totalElement.textContent = totalQuestions;
+                }
                 
                 // Count active students (mock)
                 const activeStudents = Math.min(totalQuestions * 2, 100);
-                document.getElementById('active-students').textContent = activeStudents;
+                const studentsElement = document.getElementById('active-students');
+                if (studentsElement) {
+                    studentsElement.textContent = activeStudents;
+                }
                 
             } catch (error) {
                 console.error('Error loading stats:', error);
@@ -854,13 +926,16 @@ question,correct_answer,topic,difficulty,explanation
         function showPage(pageName) {
             // Hide all pages
             document.querySelectorAll('.page').forEach(page => {
-                page.style.display = 'none';
+                if (page.style) {
+                    page.style.display = 'none';
+                }
             });
             
             // Show selected page
-            document.getElementById('page-' + pageName).style.display = 'block';
-            
-            // Update active button style (optional)
+            const pageElement = document.getElementById('page-' + pageName);
+            if (pageElement) {
+                pageElement.style.display = 'block';
+            }
         }
         
         function closeModal() {
@@ -869,22 +944,28 @@ question,correct_answer,topic,difficulty,explanation
         
         function setupEventListeners() {
             // Search questions
-            document.getElementById('search-questions').addEventListener('input', function() {
-                const searchTerm = this.value.toLowerCase();
-                const filtered = allQuestions.filter(q => 
-                    q.question_text.toLowerCase().includes(searchTerm) ||
-                    (q.topic && q.topic.toLowerCase().includes(searchTerm)) ||
-                    (q.explanation && q.explanation.toLowerCase().includes(searchTerm))
-                );
-                updateQuestionsTable(filtered);
-            });
+            const searchInput = document.getElementById('search-questions');
+            if (searchInput) {
+                searchInput.addEventListener('input', function() {
+                    const searchTerm = this.value.toLowerCase();
+                    const filtered = allQuestions.filter(q => 
+                        (q.question_text && q.question_text.toLowerCase().includes(searchTerm)) ||
+                        (q.topic && q.topic.toLowerCase().includes(searchTerm)) ||
+                        (q.explanation && q.explanation.toLowerCase().includes(searchTerm))
+                    );
+                    updateQuestionsTable(filtered);
+                });
+            }
             
             // Close modal on background click
-            document.getElementById('question-modal').addEventListener('click', function(e) {
-                if (e.target === this) {
-                    closeModal();
-                }
-            });
+            const modal = document.getElementById('question-modal');
+            if (modal) {
+                modal.addEventListener('click', function(e) {
+                    if (e.target === this) {
+                        closeModal();
+                    }
+                });
+            }
             
             // Close modal on escape key
             document.addEventListener('keydown', function(e) {
@@ -901,18 +982,19 @@ question,correct_answer,topic,difficulty,explanation
                 0% { transform: rotate(0deg); }
                 100% { transform: rotate(360deg); }
             }
-            .alert-success {
-                background: #d1fae5;
-                color: #065f46;
-                padding: 12px;
-                border-radius: 6px;
-                border: 1px solid #a7f3d0;
-            }
         `;
         document.head.appendChild(style);
         
         // Initialize
         console.log('✅ Simple NurseIQ Admin ready!');
+        
+        // Test function to check elements
+        window.debugElements = function() {
+            console.log('Checking elements:');
+            console.log('dashboard-username:', document.getElementById('dashboard-username'));
+            console.log('total-questions:', document.getElementById('total-questions'));
+            console.log('questions-list:', document.getElementById('questions-list'));
+        };
     </script>
 </body>
 </html>
