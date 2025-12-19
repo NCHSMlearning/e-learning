@@ -178,7 +178,116 @@
                             </form>
                         </div>
                     </div>
+<!-- Page: Document Upload (PDF/Word) -->
+<div id="page-document-upload" class="page" style="display: none;">
+    <h2><i class="fas fa-file-upload"></i> Bulk Add Questions (Copy-Paste)</h2>
+    
+    <div style="background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+        <div style="margin-bottom: 25px;">
+            <h3 style="margin-top: 0; color: #4f46e5;">Copy-Paste Questions</h3>
+            <p style="color: #666; margin-bottom: 15px;">Simply copy-paste questions from any document. Each question should be on a new line with answers.</p>
+            
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 5px; font-weight: bold;">Select Course *</label>
+                <select id="document-course" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+                    <option value="">Select a course</option>
+                </select>
+            </div>
+            
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 5px; font-weight: bold;">Paste Questions Here *</label>
+                <textarea id="questions-text" style="width: 100%; padding: 15px; border: 2px solid #e5e7eb; border-radius: 8px; min-height: 300px; font-family: monospace; line-height: 1.5;" 
+                          placeholder="Paste your questions here. Use any format!
 
+Examples:
+1. What is normal BP?
+Answer: 120/80 mmHg
+Explanation: Normal adult reading.
+
+Q2. Vitamin from sunlight?
+Ans: Vitamin D
+Explanation: Skin produces it.
+
+3) Heart chambers?
+- Right atrium
+- Right ventricle  
+- Left atrium
+- Left ventricle
+Answer: All of the above
+
+Or simple format:
+Question: What is CPR?
+Answer: Cardiopulmonary resuscitation
+"></textarea>
+            </div>
+            
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 10px; font-weight: bold;">Question Format</label>
+                <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                    <label style="display: flex; align-items: center; gap: 8px;">
+                        <input type="radio" name="format-type" value="auto" checked> Auto-detect
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px;">
+                        <input type="radio" name="format-type" value="numbered"> Numbered (1., 2., etc.)
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px;">
+                        <input type="radio" name="format-type" value="qprefix"> Q-prefix (Q1, Q2, etc.)
+                    </label>
+                </div>
+            </div>
+            
+            <div style="display: flex; gap: 10px;">
+                <button onclick="processTextQuestions()" id="process-btn" style="background: #4f46e5; color: white; border: none; padding: 12px 25px; border-radius: 5px; cursor: pointer;">
+                    <i class="fas fa-cogs"></i> Extract Questions
+                </button>
+                <button onclick="clearTextArea()" style="background: #6b7280; color: white; border: none; padding: 12px 25px; border-radius: 5px; cursor: pointer;">
+                    <i class="fas fa-times"></i> Clear
+                </button>
+                <button onclick="showExample()" style="background: #f59e0b; color: white; border: none; padding: 12px 25px; border-radius: 5px; cursor: pointer;">
+                    <i class="fas fa-question-circle"></i> Show Example
+                </button>
+            </div>
+        </div>
+        
+        <!-- Extracted Questions Preview -->
+        <div id="extraction-results" style="display: none;">
+            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <div>
+                        <h3 style="margin: 0;">Extracted Questions</h3>
+                        <p style="margin: 5px 0 0 0; color: #666; font-size: 14px;">
+                            Found <span id="questions-count" style="font-weight: bold; color: #4f46e5;">0</span> questions
+                            <span id="saved-count" style="margin-left: 15px; color: #10b981; font-weight: bold;">0 saved</span>
+                        </p>
+                    </div>
+                    <div>
+                        <button onclick="saveAllExtractedQuestions()" style="background: #10b981; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-right: 10px;">
+                            <i class="fas fa-save"></i> Save All Questions
+                        </button>
+                        <button onclick="clearExtractionResults()" style="background: #6b7280; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer;">
+                            <i class="fas fa-times"></i> Clear
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Questions List -->
+                <div id="questions-list" style="max-height: 400px; overflow-y: auto; margin-bottom: 20px;">
+                    <!-- Questions will be listed here -->
+                </div>
+                
+                <!-- Quick Actions -->
+                <div style="display: flex; gap: 10px; justify-content: center;">
+                    <button onclick="saveAllExtractedQuestions()" style="background: #4f46e5; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer;">
+                        <i class="fas fa-save"></i> Save All Now
+                    </button>
+                    <button onclick="editInBulk()" style="background: #f59e0b; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer;">
+                        <i class="fas fa-edit"></i> Edit All
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
                     <!-- Page: Document Upload (PDF/Word) -->
                     <div id="page-document-upload" class="page" style="display: none;">
                         <h2><i class="fas fa-file-upload"></i> Upload Document & Extract Questions</h2>
@@ -686,7 +795,378 @@ document.addEventListener('DOMContentLoaded', async function() {
         function resetQuestionForm() {
             document.getElementById('question-form').reset();
         }
+        // ==================== SIMPLE COPY-PASTE QUESTION EXTRACTION ====================
+let extractedQuestions = [];
+let savedQuestionsCount = 0;
+
+function clearTextArea() {
+    document.getElementById('questions-text').value = '';
+}
+
+function showExample() {
+    const exampleText = `1. What is the normal range for adult blood pressure?
+Answer: 120/80 mmHg
+Explanation: Normal adult blood pressure is typically around 120/80 mmHg.
+
+2. Which vitamin is produced by the skin when exposed to sunlight?
+Answer: Vitamin D
+Explanation: Vitamin D is synthesized in the skin upon exposure to UVB radiation.
+
+3. What is the primary function of red blood cells?
+Answer: Transport oxygen
+Explanation: Red blood cells contain hemoglobin which carries oxygen.
+
+Q4. Name the chambers of the human heart.
+Ans: Right atrium, right ventricle, left atrium, left ventricle
+Explain: The heart has four chambers that work together.
+
+5) What does "ABC" stand for in basic life support?
+- Airway
+- Breathing  
+- Circulation
+Correct answer: All of the above`;
+
+    document.getElementById('questions-text').value = exampleText;
+}
+
+function processTextQuestions() {
+    const text = document.getElementById('questions-text').value.trim();
+    const courseId = document.getElementById('document-course').value;
+    
+    if (!text) {
+        alert('Please paste some questions first');
+        return;
+    }
+    
+    if (!courseId) {
+        alert('Please select a course for these questions');
+        return;
+    }
+    
+    const processBtn = document.getElementById('process-btn');
+    processBtn.disabled = true;
+    processBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+    
+    try {
+        // Simple extraction logic
+        extractedQuestions = extractQuestionsSimple(text);
         
+        if (extractedQuestions.length === 0) {
+            // Try alternative method
+            extractedQuestions = extractQuestionsFallback(text);
+        }
+        
+        console.log(`Extracted ${extractedQuestions.length} questions`);
+        
+        if (extractedQuestions.length === 0) {
+            throw new Error('No questions found. Please check your format.');
+        }
+        
+        // Display results
+        displayQuestionsList();
+        
+    } catch (error) {
+        console.error('Error processing text:', error);
+        alert('Error: ' + error.message);
+    } finally {
+        processBtn.disabled = false;
+        processBtn.innerHTML = '<i class="fas fa-cogs"></i> Extract Questions';
+    }
+}
+
+function extractQuestionsSimple(text) {
+    const questions = [];
+    const blocks = text.split(/\n\s*\n/); // Split by blank lines
+    
+    for (const block of blocks) {
+        if (!block.trim()) continue;
+        
+        const lines = block.split('\n').map(l => l.trim()).filter(l => l);
+        if (lines.length < 2) continue;
+        
+        // Find question (usually first line)
+        let question = '';
+        let answer = '';
+        let explanation = '';
+        
+        // Try to identify question line
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            
+            // Check if this looks like a question
+            if (line.match(/^(\d+[\.\)]|Q\d+\.|Question|^\?|.*\?$)/i) || i === 0) {
+                question = line.replace(/^(\d+[\.\)]|Q\d+\.|Question\s*\d*[:.]?\s*)/i, '').trim();
+                
+                // Look for answer in next lines
+                for (let j = i + 1; j < lines.length; j++) {
+                    if (lines[j].match(/^(Answer|Ans|Correct|A\.|-\s*)/i)) {
+                        answer = lines[j].replace(/^(Answer|Ans|Correct|A\.)[:.]?\s*/i, '').trim();
+                        
+                        // Check for explanation
+                        if (j + 1 < lines.length && lines[j + 1].match(/^(Explanation|Explain|Reason)/i)) {
+                            explanation = lines[j + 1].replace(/^(Explanation|Explain|Reason)[:.]?\s*/i, '').trim();
+                        }
+                        break;
+                    } else if (j === i + 1 && lines[j].length < 200) {
+                        // If next line is short, assume it's the answer
+                        answer = lines[j];
+                    }
+                }
+                break;
+            }
+        }
+        
+        if (question && answer) {
+            questions.push({
+                id: questions.length + 1,
+                question: question.endsWith('?') ? question : question + '?',
+                answer: answer,
+                explanation: explanation,
+                saved: false
+            });
+        }
+    }
+    
+    return questions;
+}
+
+function extractQuestionsFallback(text) {
+    const questions = [];
+    
+    // Very simple fallback: split by lines ending with ?
+    const lines = text.split('\n');
+    let currentQuestion = '';
+    let currentAnswer = '';
+    
+    for (const line of lines) {
+        const trimmed = line.trim();
+        
+        if (trimmed.endsWith('?')) {
+            // Save previous if exists
+            if (currentQuestion && currentAnswer) {
+                questions.push({
+                    id: questions.length + 1,
+                    question: currentQuestion,
+                    answer: currentAnswer,
+                    explanation: '',
+                    saved: false
+                });
+            }
+            
+            currentQuestion = trimmed;
+            currentAnswer = '';
+        } else if (currentQuestion && !currentAnswer && trimmed && 
+                   !trimmed.startsWith('Explanation:') && !trimmed.startsWith('Explain:')) {
+            currentAnswer = trimmed;
+        }
+    }
+    
+    // Add last one
+    if (currentQuestion && currentAnswer) {
+        questions.push({
+            id: questions.length + 1,
+            question: currentQuestion,
+            answer: currentAnswer,
+            explanation: '',
+            saved: false
+        });
+    }
+    
+    return questions;
+}
+
+function displayQuestionsList() {
+    const questionsList = document.getElementById('questions-list');
+    const questionsCount = document.getElementById('questions-count');
+    
+    questionsCount.textContent = extractedQuestions.length;
+    savedQuestionsCount = extractedQuestions.filter(q => q.saved).length;
+    document.getElementById('saved-count').textContent = savedQuestionsCount + ' saved';
+    
+    let html = '<div style="display: grid; gap: 10px;">';
+    
+    extractedQuestions.forEach((q, index) => {
+        const statusColor = q.saved ? '#10b981' : '#6b7280';
+        const statusIcon = q.saved ? 'fa-check-circle' : 'fa-clock';
+        
+        html += `
+            <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid ${statusColor};">
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
+                    <div style="flex: 1;">
+                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 5px;">
+                            <span style="background: #f3f4f6; color: #4f46e5; font-weight: bold; padding: 2px 8px; border-radius: 4px; font-size: 12px;">
+                                ${index + 1}
+                            </span>
+                            <span style="color: ${statusColor}; font-size: 14px;">
+                                <i class="fas ${statusIcon}"></i> ${q.saved ? 'Saved' : 'Pending'}
+                            </span>
+                        </div>
+                        <div style="font-weight: 500; margin-bottom: 8px;">${q.question}</div>
+                        <div style="background: #f0f9ff; padding: 8px; border-radius: 4px; margin-bottom: 8px;">
+                            <strong style="color: #3b82f6;">Answer:</strong> ${q.answer}
+                        </div>
+                        ${q.explanation ? `<div style="color: #666; font-size: 14px; padding: 8px; background: #f9fafb; border-radius: 4px;">
+                            <strong>Explanation:</strong> ${q.explanation}
+                        </div>` : ''}
+                    </div>
+                    <div style="margin-left: 15px;">
+                        <button onclick="saveSingleQuestion(${index})" style="background: ${q.saved ? '#6b7280' : '#4f46e5'}; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px;" ${q.saved ? 'disabled' : ''}>
+                            <i class="fas ${q.saved ? 'fa-check' : 'fa-save'}"></i> ${q.saved ? 'Saved' : 'Save'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    questionsList.innerHTML = html;
+    
+    // Show results section
+    document.getElementById('extraction-results').style.display = 'block';
+    document.getElementById('extraction-results').scrollIntoView({ behavior: 'smooth' });
+}
+
+async function saveSingleQuestion(index) {
+    const courseId = document.getElementById('document-course').value;
+    const question = extractedQuestions[index];
+    
+    if (!question || question.saved) return;
+    
+    try {
+        const questionData = {
+            question_text: question.question,
+            correct_answer: question.answer,
+            course_id: courseId,
+            difficulty: 'medium',
+            explanation: question.explanation || null,
+            curriculum: 'KRCHN',
+            is_published: true,
+            is_active: true,
+            created_at: new Date().toISOString(),
+            question_type: 'short_answer',
+            marks: 1,
+            estimated_time: 2
+        };
+        
+        const { error } = await supabase
+            .from('medical_assessments')
+            .insert([questionData]);
+        
+        if (error) throw error;
+        
+        // Mark as saved
+        extractedQuestions[index].saved = true;
+        savedQuestionsCount++;
+        
+        // Update display
+        document.getElementById('saved-count').textContent = savedQuestionsCount + ' saved';
+        
+        // Update the button
+        const buttons = document.querySelectorAll(`button[onclick="saveSingleQuestion(${index})"]`);
+        buttons.forEach(btn => {
+            btn.innerHTML = '<i class="fas fa-check"></i> Saved';
+            btn.style.background = '#6b7280';
+            btn.disabled = true;
+        });
+        
+        // Update dashboard stats
+        loadDashboardStats();
+        
+    } catch (error) {
+        console.error('Error saving question:', error);
+        alert('Error saving question: ' + error.message);
+    }
+}
+
+async function saveAllExtractedQuestions() {
+    const courseId = document.getElementById('document-course').value;
+    
+    if (!courseId) {
+        alert('Please select a course');
+        return;
+    }
+    
+    const unsavedQuestions = extractedQuestions.filter(q => !q.saved);
+    
+    if (unsavedQuestions.length === 0) {
+        alert('All questions are already saved!');
+        return;
+    }
+    
+    if (!confirm(`Save ${unsavedQuestions.length} unsaved questions?`)) {
+        return;
+    }
+    
+    try {
+        const questionsToSave = unsavedQuestions.map(q => ({
+            question_text: q.question,
+            correct_answer: q.answer,
+            course_id: courseId,
+            difficulty: 'medium',
+            explanation: q.explanation || null,
+            curriculum: 'KRCHN',
+            is_published: true,
+            is_active: true,
+            created_at: new Date().toISOString(),
+            question_type: 'short_answer',
+            marks: 1,
+            estimated_time: 2
+        }));
+        
+        const { error } = await supabase
+            .from('medical_assessments')
+            .insert(questionsToSave);
+        
+        if (error) throw error;
+        
+        // Mark all as saved
+        extractedQuestions.forEach(q => q.saved = true);
+        savedQuestionsCount = extractedQuestions.length;
+        
+        // Update display
+        displayQuestionsList();
+        
+        alert(`✅ Successfully saved ${questionsToSave.length} questions!`);
+        
+        // Update dashboard stats
+        loadDashboardStats();
+        
+    } catch (error) {
+        console.error('Error saving questions:', error);
+        alert('Error saving questions: ' + error.message);
+    }
+}
+
+function clearExtractionResults() {
+    if (extractedQuestions.filter(q => !q.saved).length > 0) {
+        if (!confirm('You have unsaved questions. Clear anyway?')) {
+            return;
+        }
+    }
+    
+    extractedQuestions = [];
+    savedQuestionsCount = 0;
+    document.getElementById('extraction-results').style.display = 'none';
+    document.getElementById('questions-text').value = '';
+}
+
+function editInBulk() {
+    // Simple bulk edit - just reload the text with current questions
+    let text = '';
+    extractedQuestions.forEach((q, i) => {
+        text += `${i + 1}. ${q.question}\n`;
+        text += `Answer: ${q.answer}\n`;
+        if (q.explanation) {
+            text += `Explanation: ${q.explanation}\n`;
+        }
+        text += '\n';
+    });
+    
+    document.getElementById('questions-text').value = text;
+    document.getElementById('extraction-results').style.display = 'none';
+    alert('Questions loaded back into editor. Edit and re-extract.');
+}
         // ==================== DOCUMENT UPLOAD & PROCESSING ====================
         document.getElementById('document-file').addEventListener('change', function(e) {
             const file = e.target.files[0];
