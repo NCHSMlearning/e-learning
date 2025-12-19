@@ -848,18 +848,28 @@ function processTextQuestions() {
     processBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
     
     try {
-        // Simple extraction logic
-        extractedQuestions = extractQuestionsSimple(text);
+        // Clear previous results
+        extractedQuestions = [];
         
-        if (extractedQuestions.length === 0) {
-            // Try alternative method
-            extractedQuestions = extractQuestionsFallback(text);
+        // Process the text based on format type
+        const formatType = document.querySelector('input[name="format-type"]:checked').value;
+        
+        switch(formatType) {
+            case 'auto':
+                extractedQuestions = extractExamPaperQuestions(text);
+                break;
+            case 'numbered':
+                extractedQuestions = extractNumberedQuestions(text);
+                break;
+            case 'qprefix':
+                extractedQuestions = extractQPrefixQuestions(text);
+                break;
         }
         
         console.log(`Extracted ${extractedQuestions.length} questions`);
         
         if (extractedQuestions.length === 0) {
-            throw new Error('No questions found. Please check your format.');
+            throw new Error('No questions found. Try selecting a different format.');
         }
         
         // Display results
@@ -874,98 +884,257 @@ function processTextQuestions() {
     }
 }
 
-function extractQuestionsSimple(text) {
+function extractExamPaperQuestions(text) {
     const questions = [];
-    const blocks = text.split(/\n\s*\n/); // Split by blank lines
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
     
-    for (const block of blocks) {
-        if (!block.trim()) continue;
+    let section = '';
+    let currentQuestion = null;
+    let options = [];
+    let correctAnswer = '';
+    let inMcqSection = false;
+    let inShortAnswerSection = false;
+    
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
         
-        const lines = block.split('\n').map(l => l.trim()).filter(l => l);
-        if (lines.length < 2) continue;
+        // Detect sections
+        if (line.includes('SECTION A:') || line.includes('MULTIPLE CHOICE')) {
+            section = 'MCQ';
+            inMcqSection = true;
+            inShortAnswerSection = false;
+            continue;
+        }
         
-        // Find question (usually first line)
-        let question = '';
-        let answer = '';
-        let explanation = '';
+        if (line.includes('SECTION B:') || line.includes('SHORT ANSWER')) {
+            section = 'Short Answer';
+            inMcqSection = false;
+            inShortAnswerSection = true;
+            continue;
+        }
         
-        // Try to identify question line
-        for (let i = 0; i < lines.length; i++) {
-            const line = lines[i];
+        // Extract numbered questions (both MCQ and Short Answer)
+        const questionMatch = line.match(/^(\d+\.|\d+\))\s+(.+)$/);
+        
+        if (questionMatch) {
+            // Save previous question if exists
+            if (currentQuestion) {
+                const questionObj = {
+                    id: questions.length + 1,
+                    question: currentQuestion,
+                    answer: correctAnswer || '',
+                    explanation: '',
+                    type: section === 'MCQ' ? 'multiple_choice' : 'short_answer',
+                    options: options.length > 0 ? options : null,
+                    saved: false
+                };
+                questions.push(questionObj);
+            }
             
-            // Check if this looks like a question
-            if (line.match(/^(\d+[\.\)]|Q\d+\.|Question|^\?|.*\?$)/i) || i === 0) {
-                question = line.replace(/^(\d+[\.\)]|Q\d+\.|Question\s*\d*[:.]?\s*)/i, '').trim();
-                
-                // Look for answer in next lines
-                for (let j = i + 1; j < lines.length; j++) {
-                    if (lines[j].match(/^(Answer|Ans|Correct|A\.|-\s*)/i)) {
-                        answer = lines[j].replace(/^(Answer|Ans|Correct|A\.)[:.]?\s*/i, '').trim();
-                        
-                        // Check for explanation
-                        if (j + 1 < lines.length && lines[j + 1].match(/^(Explanation|Explain|Reason)/i)) {
-                            explanation = lines[j + 1].replace(/^(Explanation|Explain|Reason)[:.]?\s*/i, '').trim();
-                        }
-                        break;
-                    } else if (j === i + 1 && lines[j].length < 200) {
-                        // If next line is short, assume it's the answer
-                        answer = lines[j];
+            // Start new question
+            currentQuestion = questionMatch[2].trim();
+            options = [];
+            correctAnswer = '';
+            
+            // For MCQs, collect options from following lines
+            if (inMcqSection) {
+                let j = i + 1;
+                while (j < lines.length && !lines[j].match(/^\d+[\.\)]/)) {
+                    const optionMatch = lines[j].match(/^([A-D])\.\s+(.+)$/);
+                    if (optionMatch) {
+                        options.push(optionMatch[2].trim());
                     }
+                    j++;
                 }
-                break;
+                
+                // Try to find correct answer in question text
+                const answerMatch = currentQuestion.match(/correct.*answer.*is.*([A-D])/i);
+                if (answerMatch && answerMatch[1] && options.length > 0) {
+                    const answerIndex = answerMatch[1].charCodeAt(0) - 65; // A=0, B=1, etc.
+                    correctAnswer = options[answerIndex] || options[0];
+                } else if (options.length > 0) {
+                    // If no answer specified, use first option
+                    correctAnswer = options[0];
+                }
+            }
+            
+        } 
+        // Detect standalone questions ending with ?
+        else if (line.endsWith('?') && line.length > 10 && !currentQuestion) {
+            currentQuestion = line;
+            section = inShortAnswerSection ? 'Short Answer' : 'General';
+        }
+        // Collect options for current MCQ
+        else if (currentQuestion && inMcqSection && line.match(/^[A-D]\.\s+.+$/)) {
+            const optionMatch = line.match(/^[A-D]\.\s+(.+)$/);
+            if (optionMatch) {
+                options.push(optionMatch[1].trim());
             }
         }
-        
-        if (question && answer) {
-            questions.push({
-                id: questions.length + 1,
-                question: question.endsWith('?') ? question : question + '?',
-                answer: answer,
-                explanation: explanation,
-                saved: false
-            });
+        // Detect answer indicators
+        else if (currentQuestion && (line.toLowerCase().includes('answer:') || 
+                 line.toLowerCase().includes('correct:'))) {
+            const answerText = line.replace(/.*(answer|correct):?\s*/i, '').trim();
+            if (answerText) {
+                correctAnswer = answerText;
+            }
         }
+        // Continue question text
+        else if (currentQuestion && !inMcqSection && line.length < 200 && 
+                 !line.match(/^\d+[\.\)]/) && !line.includes('SECTION')) {
+            currentQuestion += ' ' + line;
+        }
+    }
+    
+    // Add the last question
+    if (currentQuestion) {
+        const questionObj = {
+            id: questions.length + 1,
+            question: currentQuestion,
+            answer: correctAnswer || '',
+            explanation: '',
+            type: (section === 'MCQ' || options.length > 0) ? 'multiple_choice' : 'short_answer',
+            options: options.length > 0 ? options : null,
+            saved: false
+        };
+        questions.push(questionObj);
+    }
+    
+    // Post-process: Clean up questions
+    return questions.map(q => {
+        // Remove question numbers from beginning
+        q.question = q.question.replace(/^\d+[\.\)]\s*/, '');
+        
+        // Ensure question ends with ?
+        if (!q.question.endsWith('?')) {
+            q.question = q.question + '?';
+        }
+        
+        return q;
+    });
+}
+
+function extractNumberedQuestions(text) {
+    const questions = [];
+    const lines = text.split('\n').map(l => l.trim());
+    
+    let currentQuestion = null;
+    let currentAnswer = '';
+    let currentExplanation = '';
+    
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        
+        // Find numbered questions
+        const questionMatch = line.match(/^(\d+[\.\)])\s+(.+)$/);
+        
+        if (questionMatch) {
+            // Save previous question
+            if (currentQuestion) {
+                questions.push({
+                    id: questions.length + 1,
+                    question: currentQuestion.endsWith('?') ? currentQuestion : currentQuestion + '?',
+                    answer: currentAnswer,
+                    explanation: currentExplanation,
+                    saved: false
+                });
+            }
+            
+            // Start new question
+            currentQuestion = questionMatch[2];
+            currentAnswer = '';
+            currentExplanation = '';
+            
+            // Look for answer in next lines
+            for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
+                if (lines[j].match(/^[A-D]\.\s+.+$/)) {
+                    // Option line
+                    if (!currentAnswer) {
+                        currentAnswer = lines[j].replace(/^[A-D]\.\s+/, '');
+                    }
+                } else if (lines[j].toLowerCase().includes('answer:')) {
+                    currentAnswer = lines[j].replace(/.*answer:?\s*/i, '').trim();
+                    break;
+                } else if (lines[j].length < 100 && lines[j] && !lines[j].match(/^\d+[\.\)]/)) {
+                    // Short line might be answer
+                    currentAnswer = lines[j];
+                    break;
+                }
+            }
+            
+        }
+        // Find answer lines
+        else if (currentQuestion && line.toLowerCase().includes('answer:')) {
+            currentAnswer = line.replace(/.*answer:?\s*/i, '').trim();
+        }
+        // Find explanation lines
+        else if (currentQuestion && line.toLowerCase().includes('explanation:')) {
+            currentExplanation = line.replace(/.*explanation:?\s*/i, '').trim();
+        }
+    }
+    
+    // Add last question
+    if (currentQuestion) {
+        questions.push({
+            id: questions.length + 1,
+            question: currentQuestion.endsWith('?') ? currentQuestion : currentQuestion + '?',
+            answer: currentAnswer,
+            explanation: currentExplanation,
+            saved: false
+        });
     }
     
     return questions;
 }
 
-function extractQuestionsFallback(text) {
+function extractQPrefixQuestions(text) {
     const questions = [];
+    const lines = text.split('\n').map(l => l.trim());
     
-    // Very simple fallback: split by lines ending with ?
-    const lines = text.split('\n');
-    let currentQuestion = '';
+    let currentQuestion = null;
     let currentAnswer = '';
     
-    for (const line of lines) {
-        const trimmed = line.trim();
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
         
-        if (trimmed.endsWith('?')) {
-            // Save previous if exists
-            if (currentQuestion && currentAnswer) {
+        // Find Q-prefixed questions
+        const questionMatch = line.match(/^(Q\d+\.?\s*|Question\s*\d+:?\s*)(.+)$/i);
+        
+        if (questionMatch) {
+            // Save previous
+            if (currentQuestion) {
                 questions.push({
                     id: questions.length + 1,
-                    question: currentQuestion,
+                    question: currentQuestion.endsWith('?') ? currentQuestion : currentQuestion + '?',
                     answer: currentAnswer,
                     explanation: '',
                     saved: false
                 });
             }
             
-            currentQuestion = trimmed;
+            // Start new
+            currentQuestion = questionMatch[2];
             currentAnswer = '';
-        } else if (currentQuestion && !currentAnswer && trimmed && 
-                   !trimmed.startsWith('Explanation:') && !trimmed.startsWith('Explain:')) {
-            currentAnswer = trimmed;
+            
+            // Look for answer
+            for (let j = i + 1; j < Math.min(i + 3, lines.length); j++) {
+                if (lines[j].toLowerCase().includes('answer:') || 
+                    lines[j].toLowerCase().includes('ans:')) {
+                    currentAnswer = lines[j].replace(/.*(answer|ans):?\s*/i, '').trim();
+                    break;
+                } else if (lines[j].length < 150 && lines[j]) {
+                    currentAnswer = lines[j];
+                    break;
+                }
+            }
         }
     }
     
-    // Add last one
-    if (currentQuestion && currentAnswer) {
+    // Add last
+    if (currentQuestion) {
         questions.push({
             id: questions.length + 1,
-            question: currentQuestion,
+            question: currentQuestion.endsWith('?') ? currentQuestion : currentQuestion + '?',
             answer: currentAnswer,
             explanation: '',
             saved: false
@@ -983,35 +1152,67 @@ function displayQuestionsList() {
     savedQuestionsCount = extractedQuestions.filter(q => q.saved).length;
     document.getElementById('saved-count').textContent = savedQuestionsCount + ' saved';
     
-    let html = '<div style="display: grid; gap: 10px;">';
+    let html = '<div style="display: grid; gap: 15px;">';
     
     extractedQuestions.forEach((q, index) => {
         const statusColor = q.saved ? '#10b981' : '#6b7280';
         const statusIcon = q.saved ? 'fa-check-circle' : 'fa-clock';
+        const questionType = q.options ? 'MCQ' : 'Short Answer';
+        const typeColor = q.options ? '#8b5cf6' : '#f59e0b';
         
         html += `
-            <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid ${statusColor};">
-                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
+            <div style="background: white; padding: 20px; border-radius: 8px; border-left: 4px solid ${statusColor}; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 15px;">
                     <div style="flex: 1;">
-                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 5px;">
-                            <span style="background: #f3f4f6; color: #4f46e5; font-weight: bold; padding: 2px 8px; border-radius: 4px; font-size: 12px;">
-                                ${index + 1}
+                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap;">
+                            <span style="background: #f3f4f6; color: #4f46e5; font-weight: bold; padding: 4px 10px; border-radius: 4px; font-size: 12px;">
+                                Q${index + 1}
+                            </span>
+                            <span style="background: ${typeColor}20; color: ${typeColor}; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 500;">
+                                <i class="fas ${q.options ? 'fa-list-check' : 'fa-pen'}"></i> ${questionType}
                             </span>
                             <span style="color: ${statusColor}; font-size: 14px;">
                                 <i class="fas ${statusIcon}"></i> ${q.saved ? 'Saved' : 'Pending'}
                             </span>
                         </div>
-                        <div style="font-weight: 500; margin-bottom: 8px;">${q.question}</div>
-                        <div style="background: #f0f9ff; padding: 8px; border-radius: 4px; margin-bottom: 8px;">
-                            <strong style="color: #3b82f6;">Answer:</strong> ${q.answer}
+                        <div style="font-weight: 600; margin-bottom: 12px; font-size: 16px; color: #1f2937;">${q.question}</div>
+                        
+                        ${q.options ? `
+                            <div style="margin-bottom: 12px;">
+                                <div style="color: #6b7280; font-size: 14px; margin-bottom: 8px;"><strong>Options:</strong></div>
+                                <div style="display: grid; gap: 8px;">
+                                    ${q.options.map((opt, optIndex) => `
+                                        <div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: ${opt === q.answer ? '#d1fae5' : '#f9fafb'}; border-radius: 6px; border: 1px solid ${opt === q.answer ? '#10b981' : '#e5e7eb'};">
+                                            <span style="width: 24px; height: 24px; border-radius: 50%; background: ${opt === q.answer ? '#10b981' : '#e5e7eb'}; color: ${opt === q.answer ? 'white' : '#6b7280'}; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold;">
+                                                ${String.fromCharCode(65 + optIndex)}
+                                            </span>
+                                            <span style="${opt === q.answer ? 'color: #065f46; font-weight: 500;' : 'color: #4b5563;'}">
+                                                ${opt}
+                                            </span>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        ` : ''}
+                        
+                        <div style="background: ${q.options ? '#f0f9ff' : '#f9fafb'}; padding: 12px; border-radius: 6px; margin-bottom: ${q.explanation ? '12px' : '0'};">
+                            <strong style="color: ${q.options ? '#3b82f6' : '#10b981'};">Correct Answer:</strong> 
+                            <span style="color: #1f2937; font-weight: 500; margin-left: 8px;">${q.answer}</span>
                         </div>
-                        ${q.explanation ? `<div style="color: #666; font-size: 14px; padding: 8px; background: #f9fafb; border-radius: 4px;">
-                            <strong>Explanation:</strong> ${q.explanation}
-                        </div>` : ''}
+                        
+                        ${q.explanation ? `
+                            <div style="color: #666; font-size: 14px; padding: 12px; background: #f9fafb; border-radius: 6px; border-left: 3px solid #f59e0b;">
+                                <strong style="color: #f59e0b;">Explanation:</strong> 
+                                <span style="margin-left: 8px;">${q.explanation}</span>
+                            </div>
+                        ` : ''}
                     </div>
-                    <div style="margin-left: 15px;">
-                        <button onclick="saveSingleQuestion(${index})" style="background: ${q.saved ? '#6b7280' : '#4f46e5'}; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px;" ${q.saved ? 'disabled' : ''}>
+                    <div style="margin-left: 15px; min-width: 100px;">
+                        <button onclick="saveSingleQuestion(${index})" style="width: 100%; background: ${q.saved ? '#6b7280' : '#4f46e5'}; color: white; border: none; padding: 8px 15px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500;" ${q.saved ? 'disabled' : ''}>
                             <i class="fas ${q.saved ? 'fa-check' : 'fa-save'}"></i> ${q.saved ? 'Saved' : 'Save'}
+                        </button>
+                        <button onclick="editQuestion(${index})" style="width: 100%; background: #f3f4f6; color: #4b5563; border: 1px solid #e5e7eb; padding: 8px 15px; border-radius: 6px; cursor: pointer; font-size: 14px; margin-top: 8px;">
+                            <i class="fas fa-edit"></i> Edit
                         </button>
                     </div>
                 </div>
@@ -1027,6 +1228,70 @@ function displayQuestionsList() {
     document.getElementById('extraction-results').scrollIntoView({ behavior: 'smooth' });
 }
 
+function editQuestion(index) {
+    const question = extractedQuestions[index];
+    
+    // Create edit form
+    const editHtml = `
+        <div style="background: white; padding: 20px; border-radius: 8px; margin-top: 20px;">
+            <h4>Edit Question ${index + 1}</h4>
+            <div style="margin-bottom: 15px;">
+                <label>Question:</label>
+                <textarea id="edit-question-${index}" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; min-height: 80px;">${question.question}</textarea>
+            </div>
+            <div style="margin-bottom: 15px;">
+                <label>Answer:</label>
+                <input type="text" id="edit-answer-${index}" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;" value="${question.answer}">
+            </div>
+            ${question.options ? `
+                <div style="margin-bottom: 15px;">
+                    <label>Options (one per line):</label>
+                    <textarea id="edit-options-${index}" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; min-height: 100px;">${question.options.join('\n')}</textarea>
+                </div>
+            ` : ''}
+            <div style="display: flex; gap: 10px;">
+                <button onclick="saveEditedQuestion(${index})" style="background: #10b981; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer;">
+                    <i class="fas fa-check"></i> Save Changes
+                </button>
+                <button onclick="cancelEdit(${index})" style="background: #6b7280; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer;">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+            </div>
+        </div>
+    `;
+    
+    // Replace question with edit form
+    const questionElement = document.querySelectorAll('#questions-list > div > div')[index];
+    if (questionElement) {
+        questionElement.parentElement.innerHTML = editHtml;
+    }
+}
+
+function saveEditedQuestion(index) {
+    const questionText = document.getElementById(`edit-question-${index}`).value.trim();
+    const answerText = document.getElementById(`edit-answer-${index}`).value.trim();
+    const optionsText = document.getElementById(`edit-options-${index}`)?.value.trim();
+    
+    if (!questionText || !answerText) {
+        alert('Question and answer are required');
+        return;
+    }
+    
+    extractedQuestions[index].question = questionText;
+    extractedQuestions[index].answer = answerText;
+    
+    if (optionsText) {
+        extractedQuestions[index].options = optionsText.split('\n').map(o => o.trim()).filter(o => o);
+    }
+    
+    // Redisplay
+    displayQuestionsList();
+    alert('Question updated!');
+}
+
+function cancelEdit(index) {
+    displayQuestionsList();
+}
 async function saveSingleQuestion(index) {
     const courseId = document.getElementById('document-course').value;
     const question = extractedQuestions[index];
