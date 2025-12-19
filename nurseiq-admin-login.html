@@ -377,7 +377,65 @@
                 alert(`${title}: ${message}`);
             }
         }
+        // ==================== DEBUG FUNCTION ====================
+async function debugSupabase() {
+    console.log('🔍 Debugging Supabase connection...');
+    
+    try {
+        // Test 1: Check if we can query the table
+        console.log('Test 1: Querying table...');
+        const { data: allUsers, error: allError } = await supabase
+            .from('consolidated_user_profiles_table')
+            .select('*')
+            .limit(3);
         
+        console.log('All users (first 3):', allUsers);
+        console.log('All users error:', allError);
+        
+        // Test 2: Try to find the specific email
+        console.log('Test 2: Searching for specific email...');
+        const testEmail = 'tiongikevin99@gmail.com';
+        const { data: specificUser, error: specificError } = await supabase
+            .from('consolidated_user_profiles_table')
+            .select('*')
+            .eq('email', testEmail)
+            .limit(1);
+        
+        console.log('Specific user query result:', specificUser);
+        console.log('Specific user error:', specificError);
+        console.log('User found?', specificUser && specificUser.length > 0 ? 'YES' : 'NO');
+        
+        if (specificUser && specificUser.length > 0) {
+            console.log('User details:', specificUser[0]);
+            console.log('User role:', specificUser[0].role);
+        }
+        
+    } catch (err) {
+        console.error('Debug error:', err);
+    }
+}
+
+// Call this function after initializing Supabase
+document.addEventListener('DOMContentLoaded', async function() {
+    console.log('🚀 Starting NurseIQ Admin (Real Database)...');
+    
+    try {
+        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+            auth: { persistSession: false }
+        });
+        console.log('✅ Supabase connected');
+        
+        // Run debug
+        await debugSupabase();
+        
+    } catch (error) {
+        console.error('❌ Supabase error:', error);
+        showError('Database Connection Error', 'Cannot connect to database');
+        return;
+    }
+    
+    checkLoginStatus();
+});
         // ==================== AUTHENTICATION ====================
         function checkLoginStatus() {
             const userData = localStorage.getItem('nurseiq_admin_session');
