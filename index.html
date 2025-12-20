@@ -2163,12 +2163,9 @@ document.querySelectorAll('[onclick*="showTab"]').forEach(element => {
 let currentTestQuestions = [];
 let currentQuestionIndex = 0;
 let userTestAnswers = {};
-let testStartTime = null;
-let currentAssessmentId = null;
 let currentCourseForTest = null;
 let currentCourseQuestions = [];
-let showAnswersMode = false;
-let autoAdvanceEnabled = false;
+let showAnswersMode = true; // Always show answers immediately for Q&A mode
 
 // ==================== INITIALIZATION ====================
 
@@ -2530,7 +2527,7 @@ function clearQuestionBankSearch() {
 window.loadQuestionBankCards = loadQuestionBankCards;
 window.clearQuestionBankSearch = clearQuestionBankSearch;
 
-// ==================== COURSE QUESTIONS VIEW ====================
+// ==================== COURSE QUESTIONS VIEW (LIKE YOUR MCK SYSTEM) ====================
 
 // View questions for a specific course
 async function viewCourseQuestions(courseId, courseName) {
@@ -2562,9 +2559,10 @@ async function viewCourseQuestions(courseId, courseName) {
         }
         
         currentCourseQuestions = questions;
+        currentCourseForTest = { id: courseId, name: courseName };
         
-        // Display questions in Q&A format
-        displayCourseQuestions(courseName, questions, courseId);
+        // Display questions in Q&A format (like your MCK system)
+        displayInteractiveQuestions(courseName, questions, courseId);
         
     } catch (error) {
         console.error('Error loading course questions:', error);
@@ -2572,71 +2570,200 @@ async function viewCourseQuestions(courseId, courseName) {
     }
 }
 
-// Display questions for a course
-function displayCourseQuestions(courseName, questions, courseId) {
+// Display interactive questions (like your MCK system)
+function displayInteractiveQuestions(courseName, questions, courseId) {
     const contentEl = document.getElementById('studentQuestionBankContent');
     if (!contentEl) return;
     
     const courseColor = questions[0]?.courses?.color || '#4f46e5';
     
     let html = `
-        <div class="course-questions-container">
-            <!-- Course Header -->
-            <div class="course-questions-header" style="border-bottom-color: ${courseColor}20;">
-                <div class="course-questions-title">
-                    <button onclick="loadQuestionBankCards()" class="btn-back">
-                        <i class="fas fa-arrow-left"></i> Back to Courses
-                    </button>
+        <div class="interactive-questions-container">
+            <!-- Header like your MCK system -->
+            <div class="questions-header" style="background: ${courseColor}; color: white; padding: 15px; border-radius: 8px 8px 0 0;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
                     <div>
-                        <h2><i class="fas fa-book-medical"></i> ${courseName}</h2>
-                        <p class="questions-count">${questions.length} Questions & Answers</p>
+                        <button onclick="loadQuestionBankCards()" class="btn-back" style="background: rgba(255,255,255,0.2); color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer;">
+                            <i class="fas fa-arrow-left"></i> Back to Courses
+                        </button>
+                        <h3 style="margin: 10px 0 5px 0;">${courseName}</h3>
+                        <p style="margin: 0; opacity: 0.9;">${questions.length} Questions</p>
                     </div>
-                </div>
-                <div class="course-actions">
-                    <button onclick="startCourseTest('${courseId}', '${courseName.replace(/'/g, "\\'")}')" 
-                            class="btn-primary" style="background: ${courseColor};">
-                        <i class="fas fa-play-circle"></i> Take Test
-                    </button>
+                    <div class="question-counter">
+                        <div style="font-size: 1.5rem; font-weight: bold;">Q: <span id="currentQuestionCount">1</span>/<span id="totalQuestions">${questions.length}</span></div>
+                        <div style="font-size: 0.9rem;">Accuracy: <span id="accuracyRate">0%</span></div>
+                    </div>
                 </div>
             </div>
             
-            <!-- Questions List -->
-            <div class="questions-list-container">
+            <!-- Question Navigation Dots (like your pill navigation) -->
+            <div class="question-nav-dots" style="background: #f8f9fa; padding: 10px; border-bottom: 1px solid #e9ecef; overflow-x: auto; white-space: nowrap;">
+                <div style="display: flex; gap: 8px;">
     `;
     
-    // Display questions
-    questions.forEach((question, index) => {
-        html += createQuestionCard(question, index);
+    // Add question dots
+    questions.forEach((_, index) => {
+        html += `
+            <button onclick="goToQuestion(${index})" 
+                    class="question-dot ${index === 0 ? 'active' : ''}" 
+                    id="questionDot${index}"
+                    style="width: 40px; height: 40px; border-radius: 50%; border: 2px solid ${courseColor}; background: ${index === 0 ? courseColor : 'white'}; color: ${index === 0 ? 'white' : courseColor}; cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: bold;">
+                ${index + 1}
+            </button>
+        `;
     });
     
     html += `
+                </div>
             </div>
             
-            <!-- Footer -->
-            <div class="course-questions-footer">
-                <div class="questions-summary">
-                    <span><i class="fas fa-question-circle"></i> Total: ${questions.length} questions</span>
-                    <span><i class="fas fa-check-circle"></i> ${questions.filter(q => q.difficulty === 'easy').length} easy</span>
-                    <span><i class="fas fa-clock"></i> ${questions.filter(q => q.difficulty === 'medium').length} medium</span>
-                    <span><i class="fas fa-fire"></i> ${questions.filter(q => q.difficulty === 'hard').length} hard</span>
+            <!-- Main Content Area -->
+            <div class="questions-content" style="display: flex; min-height: 500px;">
+                <!-- Left Column: Question and Options -->
+                <div class="question-column" style="flex: 1; padding: 20px; border-right: 1px solid #e9ecef;">
+                    <div class="question-box" style="background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; border: 2px solid ${courseColor};">
+                        <div id="questionText" style="font-size: 1.1rem; line-height: 1.5; color: #333;">
+                            <!-- Question will be loaded here -->
+                        </div>
+                    </div>
+                    
+                    <div id="optionsContainer" style="margin-bottom: 20px;">
+                        <!-- Options will be loaded here -->
+                    </div>
+                    
+                    <!-- Action Buttons -->
+                    <div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px;">
+                        <button onclick="checkAnswer()" id="checkAnswerBtn" style="background: ${courseColor}; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: bold;">
+                            <i class="fas fa-check-circle"></i> Check Answer
+                        </button>
+                        <button onclick="resetQuestion()" id="resetBtn" style="background: #6c757d; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer;">
+                            <i class="fas fa-redo"></i> Reset
+                        </button>
+                        <button onclick="showAnswer()" id="showAnswerBtn" style="background: #17a2b8; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer;">
+                            <i class="fas fa-lightbulb"></i> Show Answer
+                        </button>
+                    </div>
+                    
+                    <!-- Answer Box (initially hidden) -->
+                    <div id="answerBox" style="display: none; margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #28a745;">
+                        <p style="margin: 0; font-weight: bold; color: #28a745;">Correct Answer: <span id="correctAnswerText"></span></p>
+                    </div>
+                </div>
+                
+                <!-- Right Column: Explanation -->
+                <div class="explanation-column" style="flex: 1; padding: 20px; background: #f8f9fa;">
+                    <div id="explanationContainer" style="display: none;">
+                        <h4 style="color: ${courseColor}; margin-bottom: 15px;">
+                            <i class="fas fa-info-circle"></i> Explanation
+                        </h4>
+                        <div id="explanationText" style="background: white; padding: 20px; border-radius: 8px; border: 1px solid #dee2e6; line-height: 1.6;">
+                            <!-- Explanation will be loaded here -->
+                        </div>
+                        
+                        <!-- Additional Features -->
+                        <div style="margin-top: 20px;">
+                            <button onclick="showHint()" id="hintBtn" style="background: #ffc107; color: #333; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; margin-right: 10px;">
+                                <i class="fas fa-lightbulb"></i> Show Hint
+                            </button>
+                            <button onclick="showRelatedQuestions()" id="relatedBtn" style="background: #6610f2; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer;">
+                                <i class="fas fa-link"></i> Related Questions
+                            </button>
+                        </div>
+                        
+                        <!-- Hint Section (hidden by default) -->
+                        <div id="hintSection" style="display: none; margin-top: 15px; padding: 15px; background: #fff3cd; border-radius: 8px; border: 1px solid #ffeaa7;">
+                            <h5 style="color: #856404; margin-bottom: 10px;"><i class="fas fa-lightbulb"></i> Hint</h5>
+                            <div id="hintText"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- Placeholder when no explanation shown -->
+                    <div id="explanationPlaceholder" style="text-align: center; padding: 40px 20px; color: #6c757d;">
+                        <i class="fas fa-info-circle" style="font-size: 3rem; color: #dee2e6; margin-bottom: 15px;"></i>
+                        <p>Select an option and click "Check Answer" to see the explanation here.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Navigation Buttons -->
+            <div style="display: flex; justify-content: space-between; padding: 20px; background: white; border-top: 1px solid #e9ecef;">
+                <div>
+                    <button onclick="prevQuestion()" id="prevBtn" style="background: #6c757d; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; display: none;">
+                        <i class="fas fa-arrow-left"></i> Previous
+                    </button>
+                </div>
+                <div>
+                    <button onclick="markForReview()" id="markBtn" style="background: #ffc107; color: #333; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer;">
+                        <i class="fas fa-flag"></i> Mark for Review
+                    </button>
+                </div>
+                <div>
+                    <button onclick="nextQuestion()" id="nextBtn" style="background: ${courseColor}; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer;">
+                        Next <i class="fas fa-arrow-right"></i>
+                    </button>
                 </div>
             </div>
         </div>
     `;
     
     contentEl.innerHTML = html;
+    
+    // Initialize first question
+    currentQuestionIndex = 0;
+    userTestAnswers = {};
+    loadCurrentInteractiveQuestion();
 }
 
-// Create question card
-function createQuestionCard(question, index) {
-    const difficultyColor = {
-        'easy': '#10b981',
-        'medium': '#f59e0b',
-        'hard': '#ef4444'
-    }[question.difficulty] || '#6b7280';
+// Load current interactive question
+function loadCurrentInteractiveQuestion() {
+    if (currentQuestionIndex >= currentCourseQuestions.length) return;
     
-    // Get options for multiple choice
-    let optionsHtml = '';
+    const question = currentCourseQuestions[currentQuestionIndex];
+    const questionText = document.getElementById('questionText');
+    const optionsContainer = document.getElementById('optionsContainer');
+    const answerBox = document.getElementById('answerBox');
+    const explanationContainer = document.getElementById('explanationContainer');
+    const explanationPlaceholder = document.getElementById('explanationPlaceholder');
+    const checkAnswerBtn = document.getElementById('checkAnswerBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const showAnswerBtn = document.getElementById('showAnswerBtn');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const currentQuestionCount = document.getElementById('currentQuestionCount');
+    const totalQuestions = document.getElementById('totalQuestions');
+    const accuracyRate = document.getElementById('accuracyRate');
+    
+    // Update counters
+    currentQuestionCount.textContent = currentQuestionIndex + 1;
+    totalQuestions.textContent = currentCourseQuestions.length;
+    
+    // Calculate accuracy
+    const totalAnswered = Object.keys(userTestAnswers).filter(key => userTestAnswers[key]?.answered).length;
+    const totalCorrect = Object.keys(userTestAnswers).filter(key => userTestAnswers[key]?.correct).length;
+    const accuracy = totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0;
+    accuracyRate.textContent = `${accuracy}%`;
+    
+    // Update question text
+    questionText.innerHTML = `
+        <div style="margin-bottom: 10px; font-weight: bold; color: #4f46e5;">
+            Question ${currentQuestionIndex + 1}
+        </div>
+        <div>${question.question_text || 'No question text available'}</div>
+    `;
+    
+    // Reset display
+    answerBox.style.display = 'none';
+    explanationContainer.style.display = 'none';
+    explanationPlaceholder.style.display = 'block';
+    
+    // Check if user has answered this question
+    const userAnswer = userTestAnswers[currentQuestionIndex]?.answer;
+    const isAnswered = !!userAnswer;
+    
+    // Clear options
+    optionsContainer.innerHTML = '';
+    
+    // Add options based on question type
     if (question.question_type === 'multiple_choice') {
         const options = [
             { key: 'option_a', letter: 'A' },
@@ -2649,100 +2776,432 @@ function createQuestionCard(question, index) {
             const optionText = question[opt.key];
             if (!optionText) return;
             
+            const isSelected = userAnswer === optionText;
             const isCorrect = question.correct_answer?.trim() === optionText.trim();
             
-            optionsHtml += `
-                <div class="option-item ${isCorrect ? 'correct' : ''}">
-                    <div class="option-letter">${opt.letter}</div>
-                    <div class="option-text">${optionText}</div>
-                    ${isCorrect ? '<div class="option-check"><i class="fas fa-check"></i></div>' : ''}
-                </div>
+            let backgroundColor = 'white';
+            let textColor = '#333';
+            let borderColor = '#dee2e6';
+            
+            if (isAnswered) {
+                if (isSelected) {
+                    if (isCorrect) {
+                        backgroundColor = '#d4edda';
+                        textColor = '#155724';
+                        borderColor = '#c3e6cb';
+                    } else {
+                        backgroundColor = '#f8d7da';
+                        textColor = '#721c24';
+                        borderColor = '#f5c6cb';
+                    }
+                } else if (isCorrect) {
+                    backgroundColor = '#d4edda';
+                    textColor = '#155724';
+                    borderColor = '#c3e6cb';
+                }
+            } else if (isSelected) {
+                backgroundColor = '#e7f3ff';
+                borderColor = '#4f46e5';
+            }
+            
+            const optionElement = document.createElement('div');
+            optionElement.className = 'option-item';
+            optionElement.style.cssText = `
+                padding: 15px;
+                margin-bottom: 10px;
+                border: 2px solid ${borderColor};
+                border-radius: 8px;
+                background: ${backgroundColor};
+                color: ${textColor};
+                cursor: ${isAnswered ? 'default' : 'pointer'};
+                transition: all 0.3s;
+                display: flex;
+                align-items: center;
             `;
+            
+            if (!isAnswered) {
+                optionElement.onclick = () => selectInteractiveAnswer(optionText);
+                optionElement.onmouseenter = () => {
+                    if (!isAnswered) {
+                        optionElement.style.backgroundColor = '#f8f9fa';
+                        optionElement.style.transform = 'translateY(-2px)';
+                    }
+                };
+                optionElement.onmouseleave = () => {
+                    if (!isAnswered) {
+                        optionElement.style.backgroundColor = backgroundColor;
+                        optionElement.style.transform = 'translateY(0)';
+                    }
+                };
+            }
+            
+            optionElement.innerHTML = `
+                <div style="width: 30px; height: 30px; border-radius: 50%; background: ${isSelected ? '#4f46e5' : '#f8f9fa'}; color: ${isSelected ? 'white' : '#6c757d'}; display: flex; align-items: center; justify-content: center; margin-right: 15px; font-weight: bold;">
+                    ${opt.letter}
+                </div>
+                <div style="flex: 1;">${optionText}</div>
+                ${isSelected ? `
+                    <div style="color: ${isCorrect ? '#28a745' : '#dc3545'}; font-size: 1.2rem;">
+                        <i class="fas ${isCorrect ? 'fa-check-circle' : 'fa-times-circle'}"></i>
+                    </div>
+                ` : ''}
+            `;
+            
+            optionsContainer.appendChild(optionElement);
         });
     }
     
-    return `
-        <div class="question-answer-card" style="border-left-color: ${difficultyColor};">
-            <div class="question-header" onclick="toggleQuestionAnswer(${index})">
-                <div class="question-meta">
-                    <span class="question-number">Q${index + 1}</span>
-                    <span class="difficulty-badge" style="background: ${difficultyColor}20; color: ${difficultyColor};">
-                        <i class="fas fa-circle"></i> ${question.difficulty?.toUpperCase() || 'MEDIUM'}
-                    </span>
-                </div>
-                <div class="question-text-preview">
-                    ${question.question_text || 'No question text available'}
-                </div>
-                <div class="toggle-answer">
-                    <i class="fas fa-chevron-down" id="toggleIcon${index}"></i>
-                </div>
-            </div>
-            
-            <div class="answer-content" id="answerContent${index}" style="display: none;">
-                <!-- Full Question -->
-                <div class="full-question">
-                    <h4><i class="fas fa-question-circle"></i> Question:</h4>
-                    <div class="question-full-text">${question.question_text}</div>
-                </div>
-                
-                <!-- Options (for multiple choice) -->
-                ${optionsHtml ? `
-                <div class="question-options">
-                    <h4><i class="fas fa-list-check"></i> Options:</h4>
-                    <div class="options-grid">
-                        ${optionsHtml}
-                    </div>
-                </div>
-                ` : ''}
-                
-                <!-- Correct Answer -->
-                <div class="correct-answer-section">
-                    <h4><i class="fas fa-check-circle" style="color: #10b981;"></i> Correct Answer:</h4>
-                    <div class="answer-display">
-                        ${question.correct_answer || 'No answer provided'}
-                    </div>
-                </div>
-                
-                <!-- Explanation -->
-                ${question.explanation ? `
-                <div class="explanation-section">
-                    <h4><i class="fas fa-info-circle" style="color: #0ea5e9;"></i> Explanation:</h4>
-                    <div class="explanation-text">
-                        ${question.explanation}
-                    </div>
-                </div>
-                ` : ''}
-            </div>
-        </div>
+    // Update question dot
+    document.querySelectorAll('.question-dot').forEach((dot, index) => {
+        dot.classList.remove('active');
+        if (index === currentQuestionIndex) {
+            dot.classList.add('active');
+        }
+        
+        // Update dot color based on answer status
+        if (userTestAnswers[index]?.answered) {
+            if (userTestAnswers[index]?.correct) {
+                dot.style.backgroundColor = '#28a745';
+                dot.style.borderColor = '#28a745';
+                dot.style.color = 'white';
+            } else {
+                dot.style.backgroundColor = '#dc3545';
+                dot.style.borderColor = '#dc3545';
+                dot.style.color = 'white';
+            }
+        } else {
+            dot.style.backgroundColor = index === currentQuestionIndex ? '#4f46e5' : 'white';
+            dot.style.borderColor = '#4f46e5';
+            dot.style.color = index === currentQuestionIndex ? 'white' : '#4f46e5';
+        }
+    });
+    
+    // Update button states
+    checkAnswerBtn.disabled = isAnswered;
+    resetBtn.disabled = !isAnswered;
+    showAnswerBtn.disabled = isAnswered;
+    
+    if (isAnswered) {
+        checkAnswerBtn.innerHTML = `<i class="fas fa-check-circle"></i> Already Answered`;
+        checkAnswerBtn.style.backgroundColor = '#6c757d';
+        
+        // Show answer and explanation
+        answerBox.style.display = 'block';
+        document.getElementById('correctAnswerText').textContent = question.correct_answer || 'No answer provided';
+        
+        explanationContainer.style.display = 'block';
+        explanationPlaceholder.style.display = 'none';
+        document.getElementById('explanationText').innerHTML = question.explanation || 'No explanation available.';
+    } else {
+        checkAnswerBtn.innerHTML = `<i class="fas fa-check-circle"></i> Check Answer`;
+        checkAnswerBtn.style.backgroundColor = '#4f46e5';
+    }
+    
+    // Update navigation buttons
+    prevBtn.style.display = currentQuestionIndex > 0 ? 'inline-block' : 'none';
+    nextBtn.style.display = currentQuestionIndex < currentCourseQuestions.length - 1 ? 'inline-block' : 'none';
+    
+    // Update mark button
+    const markBtn = document.getElementById('markBtn');
+    if (userTestAnswers[currentQuestionIndex]?.marked) {
+        markBtn.innerHTML = `<i class="fas fa-flag"></i> Unmark`;
+        markBtn.style.backgroundColor = '#dc3545';
+        markBtn.style.color = 'white';
+    } else {
+        markBtn.innerHTML = `<i class="fas fa-flag"></i> Mark for Review`;
+        markBtn.style.backgroundColor = '#ffc107';
+        markBtn.style.color = '#333';
+    }
+}
+
+// Select answer in interactive mode
+function selectInteractiveAnswer(answer) {
+    const question = currentCourseQuestions[currentQuestionIndex];
+    userTestAnswers[currentQuestionIndex] = {
+        ...userTestAnswers[currentQuestionIndex],
+        answer: answer,
+        selected: true,
+        timestamp: new Date()
+    };
+    
+    // Update the display
+    loadCurrentInteractiveQuestion();
+}
+
+// Check answer
+function checkAnswer() {
+    const question = currentCourseQuestions[currentQuestionIndex];
+    const userAnswer = userTestAnswers[currentQuestionIndex]?.answer;
+    
+    if (!userAnswer) {
+        alert('Please select an answer first.');
+        return;
+    }
+    
+    const isCorrect = userAnswer.trim().toLowerCase() === question.correct_answer?.trim().toLowerCase();
+    
+    userTestAnswers[currentQuestionIndex] = {
+        ...userTestAnswers[currentQuestionIndex],
+        answered: true,
+        correct: isCorrect,
+        checked: true
+    };
+    
+    // Update the display
+    loadCurrentInteractiveQuestion();
+    
+    // Auto-scroll to explanation
+    setTimeout(() => {
+        document.querySelector('.explanation-column').scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'start' 
+        });
+    }, 300);
+}
+
+// Reset question
+function resetQuestion() {
+    delete userTestAnswers[currentQuestionIndex];
+    loadCurrentInteractiveQuestion();
+}
+
+// Show answer (without checking)
+function showAnswer() {
+    const question = currentCourseQuestions[currentQuestionIndex];
+    
+    userTestAnswers[currentQuestionIndex] = {
+        ...userTestAnswers[currentQuestionIndex],
+        answered: true,
+        checked: false,
+        shown: true
+    };
+    
+    // Update the display
+    loadCurrentInteractiveQuestion();
+}
+
+// Show hint
+function showHint() {
+    const question = currentCourseQuestions[currentQuestionIndex];
+    const hintSection = document.getElementById('hintSection');
+    const hintText = document.getElementById('hintText');
+    
+    if (hintSection.style.display === 'none') {
+        hintSection.style.display = 'block';
+        hintText.innerHTML = question.hint || 'No hint available for this question.';
+    } else {
+        hintSection.style.display = 'none';
+    }
+}
+
+// Show related questions
+function showRelatedQuestions() {
+    const question = currentCourseQuestions[currentQuestionIndex];
+    const explanationText = document.getElementById('explanationText');
+    
+    explanationText.innerHTML = `
+        <h5>Related Questions on "${question.topic || 'this topic'}":</h5>
+        <ul style="padding-left: 20px;">
+            <li>What are the key concepts in ${question.topic || 'this topic'}?</li>
+            <li>How does this relate to clinical practice?</li>
+            <li>What are the common misconceptions about this topic?</li>
+            <li>How would you apply this knowledge in a real-world scenario?</li>
+        </ul>
+        <p style="margin-top: 15px; font-style: italic; color: #6c757d;">
+            Note: These are sample related questions. In a full implementation, these would be fetched from the database.
+        </p>
     `;
 }
 
-// Toggle question answer
-window.toggleQuestionAnswer = function(index) {
-    const answerContent = document.getElementById(`answerContent${index}`);
-    const toggleIcon = document.getElementById(`toggleIcon${index}`);
+// Mark for review
+function markForReview() {
+    const isMarked = !userTestAnswers[currentQuestionIndex]?.marked;
+    userTestAnswers[currentQuestionIndex] = {
+        ...userTestAnswers[currentQuestionIndex],
+        marked: isMarked
+    };
     
-    if (answerContent.style.display === 'none') {
-        answerContent.style.display = 'block';
-        toggleIcon.className = 'fas fa-chevron-up';
+    // Update the display
+    loadCurrentInteractiveQuestion();
+    
+    // Update question dot for marking
+    const dot = document.getElementById(`questionDot${currentQuestionIndex}`);
+    if (isMarked) {
+        dot.style.backgroundColor = '#ffc107';
+        dot.style.borderColor = '#ffc107';
+        dot.style.color = '#333';
     } else {
-        answerContent.style.display = 'none';
-        toggleIcon.className = 'fas fa-chevron-down';
+        dot.style.backgroundColor = userTestAnswers[currentQuestionIndex]?.answered ? 
+            (userTestAnswers[currentQuestionIndex]?.correct ? '#28a745' : '#dc3545') : 
+            (currentQuestionIndex === currentQuestionIndex ? '#4f46e5' : 'white');
+        dot.style.color = userTestAnswers[currentQuestionIndex]?.answered ? 'white' : 
+            (currentQuestionIndex === currentQuestionIndex ? 'white' : '#4f46e5');
     }
-};
+}
 
-// ==================== TEST TAKING ====================
+// Navigation functions
+function goToQuestion(index) {
+    currentQuestionIndex = index;
+    loadCurrentInteractiveQuestion();
+    
+    // Scroll to top
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
 
-// Start test from course card
+function prevQuestion() {
+    if (currentQuestionIndex > 0) {
+        currentQuestionIndex--;
+        loadCurrentInteractiveQuestion();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+}
+
+function nextQuestion() {
+    if (currentQuestionIndex < currentCourseQuestions.length - 1) {
+        currentQuestionIndex++;
+        loadCurrentInteractiveQuestion();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+        // Last question - show completion message
+        alert('You have completed all questions!');
+    }
+}
+
+// Make functions available globally
+window.viewCourseQuestions = viewCourseQuestions;
+window.goToQuestion = goToQuestion;
+window.prevQuestion = prevQuestion;
+window.nextQuestion = nextQuestion;
+window.selectInteractiveAnswer = selectInteractiveAnswer;
+window.checkAnswer = checkAnswer;
+window.resetQuestion = resetQuestion;
+window.showAnswer = showAnswer;
+window.showHint = showHint;
+window.showRelatedQuestions = showRelatedQuestions;
+window.markForReview = markForReview;
+
+// ==================== CSS STYLES ====================
+
+// Add these styles to match your MCK design
+const mckStyles = `
+/* Interactive Questions Styles */
+.interactive-questions-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    overflow: hidden;
+}
+
+.questions-header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.question-nav-dots {
+    position: sticky;
+    top: 60px;
+    z-index: 99;
+}
+
+.question-nav-dots::-webkit-scrollbar {
+    height: 6px;
+}
+
+.question-nav-dots::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+.question-nav-dots::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 3px;
+}
+
+.question-nav-dots::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+.question-column, .explanation-column {
+    min-height: 500px;
+}
+
+.option-item:hover:not([style*="cursor: default"]) {
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    transform: translateY(-2px);
+}
+
+/* Responsive Design */
+@media (max-width: 992px) {
+    .questions-content {
+        flex-direction: column;
+    }
+    
+    .question-column {
+        border-right: none;
+        border-bottom: 1px solid #e9ecef;
+    }
+}
+
+@media (max-width: 768px) {
+    .questions-header {
+        padding: 10px !important;
+    }
+    
+    .question-dot {
+        width: 35px !important;
+        height: 35px !important;
+        font-size: 0.9rem;
+    }
+    
+    .option-item {
+        padding: 12px !important;
+    }
+    
+    #checkAnswerBtn, #resetBtn, #showAnswerBtn {
+        padding: 8px 15px !important;
+        font-size: 0.9rem;
+    }
+}
+
+/* Animation for answer checking */
+@keyframes highlightCorrect {
+    0% { background-color: #d4edda; }
+    50% { background-color: #f0f9ff; }
+    100% { background-color: #d4edda; }
+}
+
+.option-item.correct-highlight {
+    animation: highlightCorrect 1s ease-in-out;
+}
+
+@keyframes highlightIncorrect {
+    0% { background-color: #f8d7da; }
+    50% { background-color: #fff3cd; }
+    100% { background-color: #f8d7da; }
+}
+
+.option-item.incorrect-highlight {
+    animation: highlightIncorrect 1s ease-in-out;
+}
+`;
+
+// Add styles to document
+document.addEventListener('DOMContentLoaded', function() {
+    if (!document.getElementById('mck-styles')) {
+        const styleEl = document.createElement('style');
+        styleEl.id = 'mck-styles';
+        styleEl.textContent = mckStyles;
+        document.head.appendChild(styleEl);
+    }
+});
+
+// ==================== TEST TAKING (OPTIONAL - SIMPLIFIED) ====================
+
+// Start test from course card (simplified version)
 async function startCourseTest(courseId, courseName) {
     try {
-        console.log(`Starting test for course: ${courseName} (${courseId})`);
-        
-        // Ask user about immediate feedback mode
-        const feedbackMode = confirm('Do you want immediate feedback?\n\nClick OK to see correct answers immediately after selecting.\nClick Cancel for regular test mode.');
-        showAnswersMode = feedbackMode;
-        autoAdvanceEnabled = false;
-        
         // Fetch questions for this course
         const { data: questions, error } = await sb
             .from('medical_assessments')
@@ -2759,7 +3218,7 @@ async function startCourseTest(courseId, courseName) {
             .eq('is_active', true)
             .eq('is_published', true)
             .order('difficulty', { ascending: true })
-            .limit(10);
+            .limit(20);
         
         if (error) throw error;
         
@@ -2769,14 +3228,12 @@ async function startCourseTest(courseId, courseName) {
         }
         
         currentCourseForTest = { id: courseId, name: courseName };
-        currentTestQuestions = questions;
+        currentCourseQuestions = questions;
         currentQuestionIndex = 0;
         userTestAnswers = {};
-        testStartTime = new Date();
-        currentAssessmentId = `course_${courseId}_${Date.now()}`;
         
-        // Start the test
-        startCourseAssessment(questions[0]);
+        // Start the interactive Q&A mode (same as view questions)
+        displayInteractiveQuestions(courseName, questions, courseId);
         
     } catch (error) {
         console.error('Error starting course test:', error);
@@ -2784,564 +3241,8 @@ async function startCourseTest(courseId, courseName) {
     }
 }
 
-// Start course assessment
-function startCourseAssessment(assessment) {
-    const container = document.getElementById('studentQuestionBankContent');
-    if (!container) return;
-    
-    const courseColor = assessment.courses?.color || '#4f46e5';
-    const feedbackModeText = showAnswersMode ? 
-        '<span class="feedback-mode-badge" style="background: #10b981; color: white;"><i class="fas fa-bolt"></i> Immediate Feedback Mode</span>' : 
-        '<span class="feedback-mode-badge" style="background: #6b7280; color: white;"><i class="fas fa-clock"></i> Standard Mode</span>';
-    
-    container.innerHTML = `
-        <div class="test-container">
-            <!-- Test Header -->
-            <div class="test-header" style="border-bottom-color: ${courseColor}20;">
-                <div>
-                    <div class="test-navigation">
-                        <button onclick="loadQuestionBankCards()" class="btn-back">
-                            <i class="fas fa-arrow-left"></i> Back to Courses
-                        </button>
-                        <span class="test-badge" style="background: ${courseColor}20; color: ${courseColor};">
-                            ${assessment.courses?.course_name || 'Course Test'}
-                        </span>
-                        ${feedbackModeText}
-                    </div>
-                    <h3>${currentCourseForTest?.name || 'Course Assessment'}</h3>
-                    <p class="test-info">${currentTestQuestions.length} questions • ${showAnswersMode ? 'Learning Mode' : 'Test Mode'}</p>
-                </div>
-                <div class="test-counter">
-                    <div class="question-number">${currentQuestionIndex + 1}/${currentTestQuestions.length}</div>
-                    <div class="question-label">Question</div>
-                </div>
-            </div>
-            
-            <!-- Progress Bar -->
-            <div class="progress-container">
-                <div class="progress-info">
-                    <span>Progress</span>
-                    <span style="color: #4f46e5;">${Math.round(((currentQuestionIndex + 1) / currentTestQuestions.length) * 100)}%</span>
-                </div>
-                <div class="progress-bar">
-                    <div class="progress-fill" style="width: ${((currentQuestionIndex + 1) / currentTestQuestions.length) * 100}%; background: ${courseColor};"></div>
-                </div>
-            </div>
-            
-            <!-- Question Display Area -->
-            <div id="courseTestQuestionContainer" class="question-container">
-                <!-- Question will be loaded here -->
-            </div>
-            
-            <!-- Feedback Container (for immediate feedback) -->
-            <div id="immediateFeedbackContainer" style="display: none;"></div>
-            
-            <!-- Navigation Buttons -->
-            <div class="test-navigation-buttons">
-                <div>
-                    ${currentQuestionIndex > 0 ? `
-                        <button onclick="previousCourseQuestion()" class="btn-secondary">
-                            <i class="fas fa-arrow-left"></i> Previous
-                        </button>
-                    ` : ''}
-                </div>
-                <div class="nav-buttons-right">
-                    <button onclick="flagCourseQuestion()" class="btn-flag ${userTestAnswers[currentQuestionIndex]?.flagged ? 'flagged' : ''}">
-                        <i class="fas fa-flag"></i> ${userTestAnswers[currentQuestionIndex]?.flagged ? 'Flagged' : 'Flag'}
-                    </button>
-                    ${currentQuestionIndex < currentTestQuestions.length - 1 ? `
-                        <button onclick="nextCourseQuestion()" class="btn-primary" id="nextQuestionBtn">
-                            Next <i class="fas fa-arrow-right"></i>
-                        </button>
-                    ` : showAnswersMode ? `
-                        <button onclick="completeLearningMode()" class="btn-success">
-                            <i class="fas fa-graduation-cap"></i> Complete Review
-                        </button>
-                    ` : `
-                        <button onclick="submitCourseTest()" class="btn-success">
-                            <i class="fas fa-paper-plane"></i> Submit Test
-                        </button>
-                    `}
-                </div>
-            </div>
-            
-            <!-- Question Navigation Dots -->
-            <div class="question-dots-container">
-                <div class="dots-label">
-                    <i class="fas fa-list-ol"></i> Question Navigation:
-                </div>
-                <div class="question-dots">
-                    ${currentTestQuestions.map((_, index) => `
-                        <button onclick="goToCourseQuestion(${index})" 
-                                class="question-dot ${index === currentQuestionIndex ? 'active' : ''}"
-                                style="background: ${getCourseQuestionDotColor(index)}; 
-                                       color: ${getCourseQuestionDotTextColor(index)};
-                                       border-color: ${getCourseQuestionDotBorderColor(index)};">
-                            ${index + 1}
-                        </button>
-                    `).join('')}
-                </div>
-            </div>
-        </div>
-    `;
-    
-    // Load the current question
-    loadCurrentCourseQuestion();
-}
-
-// Load current course question
-function loadCurrentCourseQuestion() {
-    if (currentQuestionIndex >= currentTestQuestions.length) return;
-    
-    const question = currentTestQuestions[currentQuestionIndex];
-    const container = document.getElementById('courseTestQuestionContainer');
-    if (!container) return;
-    
-    const difficultyColor = {
-        'easy': '#10b981',
-        'medium': '#f59e0b',
-        'hard': '#ef4444'
-    }[question.difficulty] || '#6b7280';
-    
-    // Check if user has answered this question
-    const userAnswer = userTestAnswers[currentQuestionIndex]?.answer;
-    const isAnswered = !!userAnswer;
-    
-    let html = `
-        <div class="question-card" style="border-left-color: ${difficultyColor};">
-            <div class="question-header">
-                <div class="question-tags">
-                    <span class="difficulty-tag" style="background: ${difficultyColor}20; color: ${difficultyColor};">
-                        <i class="fas fa-circle"></i> ${question.difficulty || 'Medium'}
-                    </span>
-                    <span class="type-tag">
-                        ${question.question_type?.replace('_', ' ') || 'Question'}
-                    </span>
-                    <span class="marks-tag">
-                        <i class="fas fa-star"></i> ${question.marks || 1} mark
-                    </span>
-                </div>
-                <div class="question-text">
-                    ${question.question_text || 'No question text available'}
-                </div>
-            </div>
-    `;
-    
-    // Add options for multiple choice questions
-    if (question.question_type === 'multiple_choice') {
-        html += `
-            <div class="options-container">
-                <div class="options-label">
-                    <i class="fas fa-list-check"></i> Select your answer:
-                    ${showAnswersMode && isAnswered ? '<span class="feedback-label">(Feedback shown below)</span>' : ''}
-                </div>
-                <div class="options-grid">
-        `;
-        
-        const options = [
-            { key: 'option_a', letter: 'A' },
-            { key: 'option_b', letter: 'B' },
-            { key: 'option_c', letter: 'C' },
-            { key: 'option_d', letter: 'D' }
-        ];
-        
-        options.forEach(opt => {
-            const optionText = question[opt.key];
-            if (!optionText) return;
-            
-            const isSelected = userAnswer === optionText;
-            const isCorrect = question.correct_answer?.trim() === optionText.trim();
-            
-            let borderColor = '#e5e7eb';
-            let backgroundColor = 'white';
-            let textColor = '#4b5563';
-            
-            if (isSelected) {
-                if (showAnswersMode && isAnswered) {
-                    if (isCorrect) {
-                        backgroundColor = '#10b981';
-                        textColor = 'white';
-                        borderColor = '#10b981';
-                    } else {
-                        backgroundColor = '#ef4444';
-                        textColor = 'white';
-                        borderColor = '#ef4444';
-                    }
-                } else {
-                    backgroundColor = '#4f46e5';
-                    textColor = 'white';
-                    borderColor = '#4f46e5';
-                }
-            } else if (showAnswersMode && isAnswered && isCorrect) {
-                backgroundColor = '#10b98120';
-                borderColor = '#10b981';
-            }
-            
-            html += `
-                <div onclick="selectAnswer('${optionText.replace(/'/g, "\\'")}')" 
-                     class="option ${isSelected ? 'selected' : ''}"
-                     style="border-color: ${borderColor};
-                            background: ${backgroundColor};">
-                    <div class="option-letter" style="background: ${isSelected ? 'white' : '#f3f4f6'}; 
-                                                      color: ${isSelected ? (isCorrect && showAnswersMode ? '#10b981' : '#4f46e5') : '#6b7280'};">
-                        ${opt.letter}
-                    </div>
-                    <div class="option-text" style="color: ${textColor};">${optionText}</div>
-                    ${isSelected ? `
-                        <div class="option-check">
-                            <i class="fas ${isCorrect && showAnswersMode ? 'fa-check-circle' : 'fa-times-circle'}"></i>
-                        </div>
-                    ` : ''}
-                </div>
-            `;
-        });
-        
-        html += `
-                </div>
-            </div>
-        `;
-    }
-    
-    html += `
-            <div class="question-footer">
-                <span><i class="fas fa-clock"></i> Estimated: ${question.estimated_time || 2} min</span>
-                <span><i class="fas fa-book-medical"></i> Topic: ${question.topic || 'General'}</span>
-            </div>
-        </div>
-    `;
-    
-    container.innerHTML = html;
-    
-    // Show immediate feedback if in feedback mode and user has answered
-    if (showAnswersMode && isAnswered) {
-        showImmediateFeedback(question, userAnswer);
-    }
-}
-
-// Show immediate feedback after answer selection
-function showImmediateFeedback(question, userAnswer) {
-    const feedbackContainer = document.getElementById('immediateFeedbackContainer');
-    if (!feedbackContainer) return;
-    
-    const isCorrect = userAnswer?.trim().toLowerCase() === question.correct_answer?.trim().toLowerCase();
-    
-    let feedbackHtml = `
-        <div class="immediate-feedback ${isCorrect ? 'correct' : 'incorrect'}">
-            <div class="feedback-header">
-                <div class="feedback-icon">
-                    <i class="fas ${isCorrect ? 'fa-check-circle' : 'fa-times-circle'}"></i>
-                </div>
-                <div class="feedback-title">
-                    <h3>${isCorrect ? 'Correct!' : 'Incorrect'}</h3>
-                    <p>${isCorrect ? 'Well done!' : 'Let\'s review the correct answer:'}</p>
-                </div>
-            </div>
-    `;
-    
-    if (!isCorrect) {
-        feedbackHtml += `
-            <div class="feedback-content">
-                <div class="feedback-item">
-                    <div class="feedback-label">
-                        <i class="fas fa-user-circle"></i> Your Answer:
-                    </div>
-                    <div class="feedback-value user-answer">
-                        ${userAnswer || 'No answer provided'}
-                    </div>
-                </div>
-                <div class="feedback-item">
-                    <div class="feedback-label">
-                        <i class="fas fa-check-circle"></i> Correct Answer:
-                    </div>
-                    <div class="feedback-value correct-answer">
-                        ${question.correct_answer || 'No correct answer provided'}
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-    
-    if (question.explanation) {
-        feedbackHtml += `
-            <div class="explanation-section">
-                <div class="explanation-header">
-                    <i class="fas fa-lightbulb"></i>
-                    <strong>Explanation:</strong>
-                </div>
-                <div class="explanation-text">
-                    ${question.explanation}
-                </div>
-            </div>
-        `;
-    }
-    
-    feedbackHtml += `
-            <div class="feedback-footer">
-                <span class="feedback-tip">
-                    <i class="fas fa-info-circle"></i>
-                    ${isCorrect ? 'Great! Click Next when ready.' : 'Review the explanation before continuing.'}
-                </span>
-            </div>
-        </div>
-    `;
-    
-    feedbackContainer.innerHTML = feedbackHtml;
-    feedbackContainer.style.display = 'block';
-    
-    setTimeout(() => {
-        feedbackContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }, 300);
-}
-
-// Select answer with immediate feedback
-window.selectAnswer = function(answer) {
-    const previousAnswer = userTestAnswers[currentQuestionIndex]?.answer;
-    const question = currentTestQuestions[currentQuestionIndex];
-    
-    if (showAnswersMode && previousAnswer) {
-        return;
-    }
-    
-    userTestAnswers[currentQuestionIndex] = {
-        ...userTestAnswers[currentQuestionIndex],
-        answer: answer,
-        answered: true,
-        timestamp: new Date(),
-        correct: answer?.trim().toLowerCase() === question.correct_answer?.trim().toLowerCase()
-    };
-    
-    loadCurrentCourseQuestion();
-};
-
-// Flag question
-window.flagCourseQuestion = function() {
-    const isFlagged = !userTestAnswers[currentQuestionIndex]?.flagged;
-    userTestAnswers[currentQuestionIndex] = {
-        ...userTestAnswers[currentQuestionIndex],
-        flagged: isFlagged
-    };
-    
-    startCourseAssessment(currentTestQuestions[0]);
-};
-
-// Navigation functions
-window.nextCourseQuestion = function() {
-    if (currentQuestionIndex < currentTestQuestions.length - 1) {
-        currentQuestionIndex++;
-        startCourseAssessment(currentTestQuestions[0]);
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-};
-
-window.previousCourseQuestion = function() {
-    if (currentQuestionIndex > 0) {
-        currentQuestionIndex--;
-        startCourseAssessment(currentTestQuestions[0]);
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-};
-
-window.goToCourseQuestion = function(index) {
-    currentQuestionIndex = index;
-    startCourseAssessment(currentTestQuestions[0]);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-};
-
-// Complete learning mode
-window.completeLearningMode = function() {
-    let correctAnswers = 0;
-    let totalAnswered = 0;
-    
-    currentTestQuestions.forEach((question, index) => {
-        const userAnswer = userTestAnswers[index]?.answer;
-        if (userAnswer) {
-            totalAnswered++;
-            if (userAnswer.trim().toLowerCase() === question.correct_answer?.trim().toLowerCase()) {
-                correctAnswers++;
-            }
-        }
-    });
-    
-    const percentage = totalAnswered > 0 ? Math.round((correctAnswers / totalAnswered) * 100) : 0;
-    const container = document.getElementById('studentQuestionBankContent');
-    if (!container) return;
-    
-    const performanceColor = percentage >= 70 ? '#10b981' : percentage >= 50 ? '#f59e0b' : '#ef4444';
-    const performanceText = percentage >= 70 ? 'Excellent Learning!' : percentage >= 50 ? 'Good Progress' : 'Keep Practicing';
-    const performanceIcon = percentage >= 70 ? 'graduation-cap' : percentage >= 50 ? 'book-open' : 'redo';
-    
-    container.innerHTML = `
-        <div class="results-container">
-            <div class="results-header">
-                <div class="results-icon" style="background: ${performanceColor}20;">
-                    <i class="fas fa-${performanceIcon}" style="color: ${performanceColor};"></i>
-                </div>
-                <h2>Learning Session Complete!</h2>
-                <p class="results-subtitle">${currentCourseForTest?.name || 'Course'}</p>
-            </div>
-            
-            <div class="results-summary">
-                <div class="result-card">
-                    <div class="result-number" style="color: ${performanceColor};">${percentage}%</div>
-                    <div class="result-label">Accuracy Rate</div>
-                    <div class="result-status" style="color: ${performanceColor};">${performanceText}</div>
-                </div>
-                <div class="result-card">
-                    <div class="result-number" style="color: #10b981;">${correctAnswers}/${totalAnswered}</div>
-                    <div class="result-label">Correct Answers</div>
-                    <div class="result-status" style="color: #10b981;">
-                        Answered ${totalAnswered} of ${currentTestQuestions.length} questions
-                    </div>
-                </div>
-            </div>
-            
-            <div class="results-actions">
-                <button onclick="loadQuestionBankCards()" class="btn-primary">
-                    <i class="fas fa-home"></i> Back to Courses
-                </button>
-                <button onclick="retakeTestWithFeedback(true)" class="btn-secondary">
-                    <i class="fas fa-redo"></i> Practice Again
-                </button>
-            </div>
-        </div>
-    `;
-};
-
-// Submit course test
-window.submitCourseTest = async function() {
-    if (!confirm('Are you sure you want to submit your test?')) {
-        return;
-    }
-    
-    try {
-        let score = 0;
-        let correctAnswers = 0;
-        
-        currentTestQuestions.forEach((question, index) => {
-            const userAnswer = userTestAnswers[index]?.answer;
-            const correctAnswer = question.correct_answer;
-            
-            if (userAnswer && userAnswer.trim().toLowerCase() === correctAnswer?.trim().toLowerCase()) {
-                score += question.marks || 1;
-                correctAnswers++;
-            }
-        });
-        
-        const totalMarks = currentTestQuestions.reduce((total, q) => total + (q.marks || 1), 0);
-        const percentage = Math.round((score / totalMarks) * 100);
-        const timeSpent = Math.round((new Date() - testStartTime) / 60000);
-        
-        showCourseTestResults(score, totalMarks, percentage, correctAnswers);
-        
-    } catch (error) {
-        console.error('Error submitting course test:', error);
-        alert('Error submitting test. Please try again.');
-    }
-};
-
-// Show course test results
-function showCourseTestResults(score, totalMarks, percentage, correctAnswers) {
-    const container = document.getElementById('studentQuestionBankContent');
-    if (!container) return;
-    
-    const course = currentCourseForTest;
-    const performanceColor = percentage >= 70 ? '#10b981' : percentage >= 50 ? '#f59e0b' : '#ef4444';
-    const performanceText = percentage >= 70 ? 'Excellent!' : percentage >= 50 ? 'Good Attempt' : 'Needs Improvement';
-    const performanceIcon = percentage >= 70 ? 'trophy' : percentage >= 50 ? 'medal' : 'graduation-cap';
-    
-    container.innerHTML = `
-        <div class="results-container">
-            <div class="results-header">
-                <div class="results-icon" style="background: ${performanceColor}20;">
-                    <i class="fas fa-${performanceIcon}" style="color: ${performanceColor};"></i>
-                </div>
-                <h2>Test Completed!</h2>
-                <p class="results-subtitle">${course?.name || 'Course'}</p>
-            </div>
-            
-            <div class="results-summary">
-                <div class="result-card">
-                    <div class="result-number" style="color: #4f46e5;">${percentage}%</div>
-                    <div class="result-label">Overall Score</div>
-                    <div class="result-status" style="color: ${performanceColor};">${performanceText}</div>
-                </div>
-                <div class="result-card">
-                    <div class="result-number" style="color: #10b981;">${correctAnswers}/${currentTestQuestions.length}</div>
-                    <div class="result-label">Correct Answers</div>
-                    <div class="result-status" style="color: #10b981;">
-                        ${Math.round((correctAnswers / currentTestQuestions.length) * 100)}% Accuracy
-                    </div>
-                </div>
-                <div class="result-card">
-                    <div class="result-number" style="color: #f59e0b;">${score}/${totalMarks}</div>
-                    <div class="result-label">Marks Obtained</div>
-                    <div class="result-status" style="color: #f59e0b;">
-                        Total: ${totalMarks} marks
-                    </div>
-                </div>
-            </div>
-            
-            <div class="results-actions">
-                <button onclick="loadQuestionBankCards()" class="btn-primary">
-                    <i class="fas fa-home"></i> Back to Courses
-                </button>
-                <button onclick="retakeTestWithFeedback(false)" class="btn-secondary">
-                    <i class="fas fa-redo"></i> Retake Test
-                </button>
-                <button onclick="retakeTestWithFeedback(true)" class="btn-success">
-                    <i class="fas fa-graduation-cap"></i> Learn Mode
-                </button>
-            </div>
-        </div>
-    `;
-}
-
-// Retake test with feedback
-window.retakeTestWithFeedback = function(withFeedback) {
-    showAnswersMode = withFeedback;
-    currentQuestionIndex = 0;
-    userTestAnswers = {};
-    testStartTime = new Date();
-    startCourseAssessment(currentTestQuestions[0]);
-};
-
-// Make other functions available globally
-window.viewCourseQuestions = viewCourseQuestions;
+// Make test function available
 window.startCourseTest = startCourseTest;
-window.toggleQuestionAnswer = toggleQuestionAnswer;
-
-// ==================== HELPER FUNCTIONS ====================
-
-// Get question dot colors
-function getCourseQuestionDotColor(index) {
-    if (showAnswersMode && userTestAnswers[index]?.answered) {
-        const isCorrect = userTestAnswers[index]?.correct;
-        return isCorrect ? '#10b981' : '#ef4444';
-    } else if (userTestAnswers[index]?.answered) {
-        return userTestAnswers[index]?.flagged ? '#fef3c7' : '#4f46e5';
-    } else if (userTestAnswers[index]?.flagged) {
-        return '#fef3c7';
-    } else if (index === currentQuestionIndex) {
-        return '#4f46e5';
-    }
-    return '#f3f4f6';
-}
-
-function getCourseQuestionDotTextColor(index) {
-    if (userTestAnswers[index]?.answered || index === currentQuestionIndex) {
-        return 'white';
-    } else if (userTestAnswers[index]?.flagged) {
-        return '#92400e';
-    }
-    return '#4b5563';
-}
-
-function getCourseQuestionDotBorderColor(index) {
-    if (index === currentQuestionIndex) {
-        return '#4f46e5';
-    }
-    return '#e5e7eb';
-}
 
 
        // *************************************************************************
