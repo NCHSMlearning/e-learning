@@ -2551,7 +2551,6 @@ async function loadQuestionBankCourses() {
         console.error('Error loading courses:', error);
     }
 }
-
 // Load student question bank
 window.loadStudentQuestionBank = async function(forceLoad = false) {
     const loadingEl = document.getElementById('studentQuestionBankLoading');
@@ -2574,15 +2573,15 @@ window.loadStudentQuestionBank = async function(forceLoad = false) {
         const selectedType = typeFilter?.value || 'all';
         const searchTerm = searchInput?.value?.toLowerCase() || '';
         
-        // Build query
-        let query = supabase
+        // Build query - FIX 1: Change supabase to sb
+        let query = sb  // ← CHANGE THIS LINE
             .from('medical_assessments')
             .select(`
                 *,
                 courses (
                     id,
                     course_name,
-                    course_code,
+                    unit_code,  // ← CHANGE 2: course_code to unit_code
                     color
                 )
             `)
@@ -2618,7 +2617,8 @@ window.loadStudentQuestionBank = async function(forceLoad = false) {
                 q.topic?.toLowerCase().includes(searchTerm) ||
                 q.correct_answer?.toLowerCase().includes(searchTerm) ||
                 q.explanation?.toLowerCase().includes(searchTerm) ||
-                q.courses?.course_name?.toLowerCase().includes(searchTerm)
+                q.courses?.course_name?.toLowerCase().includes(searchTerm) ||
+                q.courses?.unit_code?.toLowerCase().includes(searchTerm)  // ← Also search unit_code
             );
         }
         
@@ -2641,7 +2641,6 @@ window.loadStudentQuestionBank = async function(forceLoad = false) {
         loadingEl.style.display = 'none';
     }
 };
-
 // Display student question bank
 function displayStudentQuestionBank(questions) {
     const contentEl = document.getElementById('studentQuestionBankContent');
@@ -2733,8 +2732,8 @@ function displayStudentQuestionBank(questions) {
                                 <h4 style="margin: 0; color: #1f2937; font-size: 16px;">${courseName}</h4>
                                 <div style="display: flex; gap: 15px; margin-top: 5px;">
                                     <span style="color: #6b7280; font-size: 13px;">
-                                        <i class="fas fa-hashtag"></i> ${course?.course_code || 'KRCHN'}
-                                    </span>
+    <i class="fas fa-hashtag"></i> ${course?.unit_code || 'KRCHN'}
+</span>
                                     <span style="color: #6b7280; font-size: 13px;">
                                         <i class="fas fa-list-check"></i> ${questions.length} questions
                                     </span>
