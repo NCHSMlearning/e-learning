@@ -2186,12 +2186,9 @@ document.querySelectorAll('[onclick*="showTab"]').forEach(element => {
                     if (uploadButton) uploadButton.disabled = false;
                 });
             }
-    // ==================== COMPLETE NURSEIQ SYSTEM ====================
+   // ==================== NURSEIQ QUESTION BANK SYSTEM ====================
 
 // Global variables
-let currentNurseIQMode = 'assessment';
-let studentQuestionBankQuestions = [];
-let currentExpandedCourse = null;
 let currentTestQuestions = [];
 let currentQuestionIndex = 0;
 let userTestAnswers = {};
@@ -2199,198 +2196,36 @@ let testStartTime = null;
 let currentAssessmentId = null;
 let currentCourseForTest = null;
 
-// ==================== MAIN FUNCTIONS ====================
+// ==================== INITIALIZATION ====================
 
-// Show different modes
-window.showNurseIQMode = function(mode) {
-    currentNurseIQMode = mode;
+// Initialize the system
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Initializing NurseIQ Question Bank...');
     
-    // Update button styles
-    const assessmentBtn = document.getElementById('assessmentModeBtn');
-    const questionBankBtn = document.getElementById('questionBankModeBtn');
+    // Load question bank on page load
+    window.loadQuestionBankCards();
     
-    if (assessmentBtn) {
-        assessmentBtn.style.background = mode === 'assessment' ? '#4f46e5' : '#f3f4f6';
-        assessmentBtn.style.color = mode === 'assessment' ? 'white' : '#4b5563';
-    }
+    // Initialize search
+    initQuestionBankSearch();
     
-    if (questionBankBtn) {
-        questionBankBtn.style.background = mode === 'questionBank' ? '#4f46e5' : '#f3f4f6';
-        questionBankBtn.style.color = mode === 'questionBank' ? 'white' : '#4b5563';
-    }
-    
-    // Show/hide content
-    const assessmentContent = document.getElementById('assessmentModeContent');
-    const questionBankContent = document.getElementById('questionBankModeContent');
-    
-    if (assessmentContent) {
-        assessmentContent.style.display = mode === 'assessment' ? 'block' : 'none';
-    }
-    
-    if (questionBankContent) {
-        questionBankContent.style.display = mode === 'questionBank' ? 'block' : 'none';
-    }
-    
-    // Load data for the selected mode
-    if (mode === 'assessment') {
-        window.loadNurseIQAssessments();
-    } else {
-        // Load question bank in card format
-        window.loadQuestionBankCards();
-    }
-};
+    console.log('NurseIQ Question Bank initialized');
+});
 
-// ==================== ASSESSMENT MODE ====================
-
-// Load NurseIQ assessments
-window.loadNurseIQAssessments = async function() {
-    try {
-        console.log('Loading NurseIQ assessments...');
-        
-        const loadingEl = document.getElementById('nurseiqLoading');
-        const contentEl = document.getElementById('assessmentModeContent');
-        
-        if (loadingEl) loadingEl.style.display = 'block';
-        if (contentEl) contentEl.innerHTML = '<div class="loading">Loading assessments...</div>';
-        
-        // Check if table exists
-        const { data, error } = await sb
-            .from('medical_assessments')
-            .select('id')
-            .limit(1);
-        
-        if (error) {
-            console.error('Error checking table:', error);
-            if (contentEl) {
-                contentEl.innerHTML = `
-                    <div class="empty-state">
-                        <i class="fas fa-tools"></i>
-                        <h3>Feature Coming Soon</h3>
-                        <p>Assessments will be available soon.</p>
-                    </div>
-                `;
-            }
-            return;
-        }
-        
-        // Fetch assessments
-        const { data: assessments, error: fetchError } = await sb
-            .from('medical_assessments')
-            .select(`
-                *,
-                courses (
-                    id,
-                    course_name,
-                    unit_code,
-                    color
-                )
-            `)
-            .eq('is_active', true)
-            .eq('is_published', true)
-            .order('created_at', { ascending: false });
-        
-        if (fetchError) {
-            console.error('Error fetching assessments:', fetchError);
-            throw fetchError;
-        }
-        
-        // Display assessments
-        displayAssessments(assessments || []);
-        
-    } catch (error) {
-        console.error('Error loading NurseIQ:', error);
-        const contentEl = document.getElementById('assessmentModeContent');
-        if (contentEl) {
-            contentEl.innerHTML = `
-                <div class="error-state">
-                    <i class="fas fa-exclamation-triangle"></i>
-                    <h3>Error Loading Assessments</h3>
-                    <p>${error.message || 'Please try again later'}</p>
-                    <button onclick="loadNurseIQAssessments()" class="btn-primary">
-                        Try Again
-                    </button>
-                </div>
-            `;
-        }
-    } finally {
-        const loadingEl = document.getElementById('nurseiqLoading');
-        if (loadingEl) loadingEl.style.display = 'none';
+// Initialize search for question bank
+function initQuestionBankSearch() {
+    const searchInput = document.getElementById('studentQuestionBankSearch');
+    if (searchInput) {
+        let searchTimeout;
+        searchInput.addEventListener('input', function() {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                window.loadQuestionBankCards();
+            }, 300);
+        });
     }
-};
-
-// Display assessments
-function displayAssessments(assessments) {
-    const contentEl = document.getElementById('assessmentModeContent');
-    if (!contentEl) return;
-    
-    if (!assessments || assessments.length === 0) {
-        contentEl.innerHTML = `
-            <div class="empty-state">
-                <i class="fas fa-clipboard-list"></i>
-                <h3>No Assessments Available</h3>
-                <p>Check back later for new assessments.</p>
-            </div>
-        `;
-        return;
-    }
-    
-    let html = `
-        <div class="assessments-container">
-            <div class="assessments-header">
-                <h3><i class="fas fa-list-check"></i> Available Assessments (${assessments.length})</h3>
-            </div>
-            <div class="assessments-grid">
-    `;
-    
-    assessments.forEach((assessment, index) => {
-        const courseColor = assessment.courses?.color || '#4f46e5';
-        const difficultyColor = {
-            'easy': '#10b981',
-            'medium': '#f59e0b',
-            'hard': '#ef4444'
-        }[assessment.difficulty] || '#6b7280';
-        
-        html += `
-            <div class="assessment-card">
-                <div class="assessment-header" style="border-left-color: ${courseColor};">
-                    <div class="assessment-tags">
-                        <span class="course-tag" style="background: ${courseColor}20; color: ${courseColor};">
-                            ${assessment.courses?.course_name || 'General'}
-                        </span>
-                        <span class="difficulty-tag" style="background: ${difficultyColor}20; color: ${difficultyColor};">
-                            ${assessment.difficulty || 'Medium'}
-                        </span>
-                    </div>
-                    <h4>${assessment.question_text?.substring(0, 100) || `Assessment ${index + 1}`}${assessment.question_text?.length > 100 ? '...' : ''}</h4>
-                    <p class="assessment-topic">${assessment.topic || 'No topic specified'}</p>
-                </div>
-                <div class="assessment-footer">
-                    <div class="assessment-meta">
-                        <span><i class="fas fa-star"></i> ${assessment.marks || 1} mark</span>
-                        <span><i class="fas fa-clock"></i> ${assessment.estimated_time || 2} min</span>
-                    </div>
-                    <button onclick="startAssessment('${assessment.id}')" class="btn-primary">
-                        <i class="fas fa-play"></i> Start
-                    </button>
-                </div>
-            </div>
-        `;
-    });
-    
-    html += `
-            </div>
-        </div>
-    `;
-    
-    contentEl.innerHTML = html;
 }
 
-// Start assessment
-window.startAssessment = function(assessmentId) {
-    alert(`Starting assessment: ${assessmentId}\nTest functionality will be implemented next.`);
-};
-
-// ==================== QUESTION BANK MODE ====================
+// ==================== QUESTION BANK CARD VIEW ====================
 
 // Load question bank in card format
 window.loadQuestionBankCards = async function() {
@@ -2400,6 +2235,7 @@ window.loadQuestionBankCards = async function() {
         const loadingEl = document.getElementById('studentQuestionBankLoading');
         const contentEl = document.getElementById('studentQuestionBankContent');
         
+        // Show loading
         if (loadingEl) loadingEl.style.display = 'block';
         if (contentEl) contentEl.innerHTML = '<div class="loading">Loading question bank...</div>';
         
@@ -2489,7 +2325,7 @@ window.loadQuestionBankCards = async function() {
                     <h3>Failed to Load Question Bank</h3>
                     <p>${error.message || 'Please try again'}</p>
                     <button onclick="loadQuestionBankCards()" class="btn-primary">
-                        Try Again
+                        <i class="fas fa-redo"></i> Try Again
                     </button>
                 </div>
             `;
@@ -2535,7 +2371,7 @@ window.displayQuestionBankCards = function(courses, overallStats) {
             <!-- Header Stats -->
             <div class="stats-header">
                 <div class="stats-title">
-                    <h2>Question Bank</h2>
+                    <h2><i class="fas fa-database"></i> Question Bank</h2>
                     <p>Organized by courses with detailed statistics</p>
                 </div>
                 <div class="stats-filter">
@@ -2573,7 +2409,7 @@ window.displayQuestionBankCards = function(courses, overallStats) {
         const difficultyColor = (count) => count > 0 ? '#ef4444' : '#9ca3af';
         
         html += `
-            <div class="course-card" onclick="startCourseTest('${course.id}', '${course.name}')">
+            <div class="course-card" onclick="startCourseTest('${course.id}', '${course.name.replace(/'/g, "\\'")}')">
                 <!-- Course Header -->
                 <div class="course-header" style="background: linear-gradient(135deg, ${courseColor}20, ${courseColor}10); border-bottom: 1px solid ${courseColor}20;">
                     <div class="course-title">
@@ -2692,10 +2528,12 @@ window.displayQuestionBankCards = function(courses, overallStats) {
         document.querySelectorAll('.start-test-btn').forEach(btn => {
             btn.addEventListener('mouseenter', function() {
                 this.style.transform = 'scale(1.02)';
+                this.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
             });
             
             btn.addEventListener('mouseleave', function() {
                 this.style.transform = 'scale(1)';
+                this.style.boxShadow = 'none';
             });
         });
     }, 100);
@@ -2760,7 +2598,7 @@ window.startCourseTest = async function(courseId, courseName) {
 
 // Start course assessment
 window.startCourseAssessment = function(assessment) {
-    const container = document.getElementById('questionBankModeContent');
+    const container = document.getElementById('studentQuestionBankContent');
     if (!container) return;
     
     const courseColor = assessment.courses?.color || '#4f46e5';
@@ -2771,7 +2609,7 @@ window.startCourseAssessment = function(assessment) {
             <div class="test-header" style="border-bottom-color: ${courseColor}20;">
                 <div>
                     <div class="test-navigation">
-                        <button onclick="showNurseIQMode('questionBank')" class="btn-back">
+                        <button onclick="loadQuestionBankCards()" class="btn-back">
                             <i class="fas fa-arrow-left"></i> Back to Courses
                         </button>
                         <span class="test-badge" style="background: ${courseColor}20; color: ${courseColor};">
@@ -3066,30 +2904,6 @@ window.submitCourseTest = async function() {
         const percentage = Math.round((score / totalMarks) * 100);
         const timeSpent = Math.round((new Date() - testStartTime) / 60000); // in minutes
         
-        // Save to database
-        if (window.currentUserId && currentCourseForTest) {
-            const testResult = {
-                user_id: window.currentUserId,
-                course_id: currentCourseForTest.id,
-                score: score,
-                total_score: totalMarks,
-                percentage: percentage,
-                correct_answers: correctAnswers,
-                total_questions: currentTestQuestions.length,
-                time_spent: timeSpent,
-                answers: userTestAnswers,
-                is_completed: true,
-                completed_at: new Date().toISOString(),
-                test_type: 'course_assessment'
-            };
-            
-            const { error } = await sb
-                .from('user_test_results')
-                .insert(testResult);
-            
-            if (error) throw error;
-        }
-        
         // Show results
         window.showCourseTestResults(score, totalMarks, percentage, correctAnswers);
         
@@ -3101,7 +2915,7 @@ window.submitCourseTest = async function() {
 
 // Show course test results
 window.showCourseTestResults = function(score, totalMarks, percentage, correctAnswers) {
-    const container = document.getElementById('questionBankModeContent');
+    const container = document.getElementById('studentQuestionBankContent');
     if (!container) return;
     
     const course = currentCourseForTest;
@@ -3119,7 +2933,7 @@ window.showCourseTestResults = function(score, totalMarks, percentage, correctAn
                     <i class="fas fa-${performanceIcon}" style="color: ${performanceColor};"></i>
                 </div>
                 <h2>Test Completed!</h2>
-                <p class="results-subtitle">${course?.name || 'Course'} • ${course?.name || 'Assessment'}</p>
+                <p class="results-subtitle">${course?.name || 'Course'}</p>
             </div>
             
             <!-- Results Summary -->
@@ -3145,9 +2959,16 @@ window.showCourseTestResults = function(score, totalMarks, percentage, correctAn
                 </div>
             </div>
             
+            <!-- Review Button -->
+            <div class="review-section">
+                <button onclick="reviewTestQuestions()" class="btn-secondary">
+                    <i class="fas fa-list-check"></i> Review Questions
+                </button>
+            </div>
+            
             <!-- Action Buttons -->
             <div class="results-actions">
-                <button onclick="showNurseIQMode('questionBank')" class="btn-primary">
+                <button onclick="loadQuestionBankCards()" class="btn-primary">
                     <i class="fas fa-home"></i> Back to Courses
                 </button>
                 <button onclick="retakeTest()" class="btn-secondary">
@@ -3156,6 +2977,12 @@ window.showCourseTestResults = function(score, totalMarks, percentage, correctAn
             </div>
         </div>
     `;
+};
+
+// Review test questions
+window.reviewTestQuestions = function() {
+    currentQuestionIndex = 0;
+    window.startCourseAssessment(currentTestQuestions[0]);
 };
 
 // Retake test
@@ -3199,65 +3026,6 @@ function getCourseQuestionDotBorderColor(index) {
         return '#4f46e5';
     }
     return '#e5e7eb';
-}
-
-// Initialize search for question bank
-function initQuestionBankSearch() {
-    const searchInput = document.getElementById('studentQuestionBankSearch');
-    if (searchInput) {
-        let searchTimeout;
-        searchInput.addEventListener('input', function() {
-            clearTimeout(searchTimeout);
-            searchTimeout = setTimeout(() => {
-                window.loadQuestionBankCards();
-            }, 300);
-        });
-    }
-}
-
-// ==================== INITIALIZATION ====================
-
-// Initialize the system
-document.addEventListener('DOMContentLoaded', function() {
-    // Initialize search
-    initQuestionBankSearch();
-    
-    // Add event listeners for mode switching
-    const assessmentBtn = document.getElementById('assessmentModeBtn');
-    const questionBankBtn = document.getElementById('questionBankModeBtn');
-    
-    if (assessmentBtn) {
-        assessmentBtn.addEventListener('click', function(e) {
-            e.preventDefault();
-            window.showNurseIQMode('assessment');
-        });
-    }
-    
-    if (questionBankBtn) {
-        questionBankBtn.addEventListener('click', function(e) {
-            e.preventDefault();
-            window.showNurseIQMode('questionBank');
-        });
-    }
-    
-    console.log('NurseIQ system initialized');
-});
-
-// Make sure all functions are available globally
-if (typeof window !== 'undefined') {
-    // Already assigned above with window.functionName
-}
-
-// Export for module systems (optional)
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = {
-        showNurseIQMode,
-        loadNurseIQAssessments,
-        loadQuestionBankCards,
-        startCourseTest,
-        startCourseAssessment,
-        // ... export other functions as needed
-    };
 }
 
        // *************************************************************************
