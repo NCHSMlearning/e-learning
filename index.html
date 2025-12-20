@@ -1598,7 +1598,7 @@
                 document.body.style.overflow = 'auto';
             }
             
-         // Tab navigation - FIXED VERSION
+       // Tab navigation - FIXED VERSION
 function showTab(tabId) {
     // Highlight active link
     navLinks.forEach(l => l.classList.remove('active'));
@@ -1648,9 +1648,31 @@ function showTab(tabId) {
             if (currentUserId) loadAcademicCalendar();
             break;
         case 'nurseiq':
-            if (currentUserId) loadNurseIQAssessments();
+            if (currentUserId) {
+                // Check if NurseIQ functions exist before calling them
+                if (typeof showNurseIQMode === 'function' && 
+                    typeof loadNurseIQAssessments === 'function' &&
+                    typeof loadQuestionBankCourses === 'function') {
+                    showNurseIQMode('assessment');
+                    loadNurseIQAssessments();
+                    loadQuestionBankCourses();
+                } else {
+                    console.warn('NurseIQ functions not loaded yet');
+                    // Show a loading message
+                    const tabContent = document.getElementById('nurseiq');
+                    if (tabContent) {
+                        tabContent.innerHTML = `
+                            <div style="text-align: center; padding: 60px 20px;">
+                                <div style="display: inline-block; width: 50px; height: 50px; border: 3px solid #e5e7eb; border-top-color: #4f46e5; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                                <h2 style="color: #4f46e5; margin-top: 20px;">Loading NurseIQ...</h2>
+                                <p style="color: #6b7280;">Initializing assessment system</p>
+                            </div>
+                        `;
+                    }
+                }
+            }
             break;
-        case 'coming-soon-quizlets':  // ✅ FIXED: No spaces
+        case 'coming-soon-quizlets':
             if (currentUserId) {
                 // Add a simple content loader
                 const tabContent = document.getElementById('coming-soon-quizlets');
@@ -1680,7 +1702,8 @@ function showTab(tabId) {
     // Always refresh latest announcement
     if (currentUserId) loadLatestOfficialAnnouncement();
 }
-        // ✅ CRITICAL FIX: Add event listeners to all navigation links
+
+// ✅ CRITICAL FIX: Add event listeners to all navigation links
 navLinks.forEach(link => {
     link.addEventListener('click', function(e) {
         e.preventDefault();
@@ -1702,7 +1725,7 @@ document.querySelectorAll('[onclick*="showTab"]').forEach(element => {
             showTab(tabId);
         });
     }
-});    
+});
             // *************************************************************************
             // *** DASHBOARD FUNCTIONS ***
             // *************************************************************************
