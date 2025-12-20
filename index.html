@@ -2168,17 +2168,24 @@ let currentAssessmentId = null;
 let currentCourseForTest = null;
 let currentCourseQuestions = [];
 let showAnswersMode = false;
-let autoAdvanceEnabled = false; // New: Control for auto-advance
+let autoAdvanceEnabled = false;
 
 // ==================== INITIALIZATION ====================
 
+// Initialize the system
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Initializing NurseIQ Question Bank...');
-    window.loadQuestionBankCards();
+    
+    // Load question bank on page load
+    loadQuestionBankCards();
+    
+    // Initialize search
     initQuestionBankSearch();
+    
     console.log('NurseIQ Question Bank initialized');
 });
 
+// Initialize search for question bank
 function initQuestionBankSearch() {
     const searchInput = document.getElementById('studentQuestionBankSearch');
     if (searchInput) {
@@ -2186,7 +2193,7 @@ function initQuestionBankSearch() {
         searchInput.addEventListener('input', function() {
             clearTimeout(searchTimeout);
             searchTimeout = setTimeout(() => {
-                window.loadQuestionBankCards();
+                loadQuestionBankCards();
             }, 300);
         });
     }
@@ -2194,14 +2201,19 @@ function initQuestionBankSearch() {
 
 // ==================== QUESTION BANK CARD VIEW ====================
 
-window.loadQuestionBankCards = async function() {
+// Load question bank in card format
+async function loadQuestionBankCards() {
     try {
+        console.log('Loading question bank cards...');
+        
         const loadingEl = document.getElementById('studentQuestionBankLoading');
         const contentEl = document.getElementById('studentQuestionBankContent');
         
+        // Show loading
         if (loadingEl) loadingEl.style.display = 'block';
         if (contentEl) contentEl.innerHTML = '<div class="loading">Loading question bank...</div>';
         
+        // Fetch all questions with course info
         const { data: questions, error } = await sb
             .from('medical_assessments')
             .select(`
@@ -2219,6 +2231,7 @@ window.loadQuestionBankCards = async function() {
         
         if (error) throw error;
         
+        // Group by course
         const coursesMap = {};
         questions.forEach(question => {
             const courseId = question.course_id || 'general';
@@ -2233,17 +2246,27 @@ window.loadQuestionBankCards = async function() {
                     color: question.courses?.color || '#4f46e5',
                     description: question.courses?.description || '',
                     questions: [],
-                    stats: { total: 0, active: 0, hard: 0, medium: 0, easy: 0, lastUpdated: null }
+                    stats: {
+                        total: 0,
+                        active: 0,
+                        hard: 0,
+                        medium: 0,
+                        easy: 0,
+                        lastUpdated: null
+                    }
                 };
             }
             
             coursesMap[courseId].questions.push(question);
             coursesMap[courseId].stats.total++;
+            coursesMap[courseId].stats.active++;
             
+            // Count by difficulty
             if (question.difficulty === 'hard') coursesMap[courseId].stats.hard++;
             else if (question.difficulty === 'medium') coursesMap[courseId].stats.medium++;
             else if (question.difficulty === 'easy') coursesMap[courseId].stats.easy++;
             
+            // Track last updated
             if (question.updated_at) {
                 const updatedDate = new Date(question.updated_at);
                 if (!coursesMap[courseId].stats.lastUpdated || updatedDate > coursesMap[courseId].stats.lastUpdated) {
@@ -2252,7 +2275,10 @@ window.loadQuestionBankCards = async function() {
             }
         });
         
+        // Convert to array
         const coursesArray = Object.values(coursesMap);
+        
+        // Calculate overall stats
         const overallStats = {
             totalCourses: coursesArray.length,
             totalQuestions: questions.length,
@@ -2260,7 +2286,8 @@ window.loadQuestionBankCards = async function() {
             activeRate: '100%'
         };
         
-        window.displayQuestionBankCards(coursesArray, overallStats);
+        // Display the card view
+        displayQuestionBankCards(coursesArray, overallStats);
         
     } catch (error) {
         console.error('Error loading question bank:', error);
@@ -2281,19 +2308,440 @@ window.loadQuestionBankCards = async function() {
         const loadingEl = document.getElementById('studentQuestionBankLoading');
         if (loadingEl) loadingEl.style.display = 'none';
     }
+}
+
+// Display question bank cards
+function displayQuestionBankCards(courses, overallStats) {
+    const contentEl = document.getElementById('studentQuestionBankContent');
+    if (!contentEl) return;
+    
+    const searchTerm = document.getElementById('studentQuestionBankSearch')?.value?.toLowerCase() || '';
+    
+    // Filter courses if search term exists
+    let filteredCourses = courses;
+    if (searchTerm) {
+        filteredCourses = courses.filter(course => 
+            course.name.toLowerCase().includes(searchTerm) ||
+            course.unit_code.toLowerCase().includes(searchTerm) ||
+            course.description.toLowerCase().includes(searchTerm)
+        );
+    }
+    
+    // Format date
+    function formatDate(date) {
+        if (!date) return 'Never';
+        const now = new Date();
+        const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
+        
+        if (diffDays === 0) return 'Today';
+        if (diffDays === 1) return 'Yesterday';
+        if (diffDays < 7) return `${diffDays} days ago`;
+        if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+    
+    let html = `
+        <div class="question-bank-container">
+            <!-- Header Stats -->
+            <div class="stats-header">
+                <div class="stats-title">
+                    <h2><i class="fas fa-database"></i> Question Bank</h2>
+                    <p>Organized by courses with detailed statistics</p>
+                </div>
+                <div class="stats-filter">
+                    <i class="fas fa-filter"></i> Showing ${filteredCourses.length} of ${courses.length} courses
+                </div>
+            </div>
+            
+            <!-- Overall Stats Cards -->
+            <div class="overall-stats">
+                <div class="stat-card">
+                    <div class="stat-number" style="color: #4f46e5;">${overallStats.totalCourses}</div>
+                    <div class="stat-label">Total Courses</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" style="color: #10b981;">${overallStats.totalQuestions}</div>
+                    <div class="stat-label">Total Questions</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" style="color: #0ea5e9;">${overallStats.activeQuestions}</div>
+                    <div class="stat-label">Active Questions</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" style="color: #f59e0b;">${overallStats.activeRate}</div>
+                    <div class="stat-label">Active Rate</div>
+                </div>
+            </div>
+            
+            <!-- Course Cards -->
+            <div class="courses-grid">
+    `;
+    
+    filteredCourses.forEach(course => {
+        const courseColor = course.color || '#4f46e5';
+        const lastUpdated = formatDate(course.stats.lastUpdated);
+        
+        html += `
+            <div class="course-card">
+                <!-- Course Header -->
+                <div class="course-header" style="background: linear-gradient(135deg, ${courseColor}20, ${courseColor}10); border-bottom: 1px solid ${courseColor}20;">
+                    <div class="course-title">
+                        <div>
+                            <h3>${course.name}</h3>
+                            <div class="course-subtitle">
+                                <span class="unit-code" style="background: ${courseColor}30; color: ${courseColor};">
+                                    ${course.unit_code}
+                                </span>
+                                <span class="question-count">
+                                    <i class="fas fa-question-circle"></i> ${course.stats.total} questions
+                                </span>
+                            </div>
+                        </div>
+                        <div class="course-icon" style="background: ${courseColor};">
+                            <i class="fas fa-book-medical"></i>
+                        </div>
+                    </div>
+                    
+                    <!-- Active Questions Badge -->
+                    <div class="active-badge">
+                        <i class="fas fa-check-circle"></i> Active Questions
+                    </div>
+                </div>
+                
+                <!-- Course Stats -->
+                <div class="course-stats">
+                    <!-- Stats Grid -->
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <div class="stat-value" style="color: #4f46e5;">${course.stats.active}</div>
+                            <div class="stat-label">ACTIVE</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" style="color: #ef4444;">${course.stats.hard}</div>
+                            <div class="stat-label">HARD</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" style="color: #f59e0b;">${course.stats.medium}</div>
+                            <div class="stat-label">MEDIUM</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-date-label">UPDATED</div>
+                            <div class="stat-date" style="color: #4f46e5;">${lastUpdated}</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Action Buttons -->
+                    <div class="course-actions-grid">
+                        <button class="view-questions-btn" onclick="viewCourseQuestions('${course.id}', '${course.name.replace(/'/g, "\\'")}')">
+                            <i class="fas fa-eye"></i> VIEW Q&A
+                        </button>
+                        <button class="start-test-btn" onclick="startCourseTest('${course.id}', '${course.name.replace(/'/g, "\\'")}')" style="background: ${courseColor};">
+                            <i class="fas fa-play-circle"></i> TEST
+                        </button>
+                    </div>
+                    
+                    <!-- Quick Stats -->
+                    <div class="quick-stats">
+                        <div class="quick-stat">
+                            <div class="quick-value" style="color: #10b981;">${course.stats.easy}</div>
+                            <div class="quick-label">Easy</div>
+                        </div>
+                        <div class="quick-stat">
+                            <div class="quick-value" style="color: #f59e0b;">${course.stats.medium}</div>
+                            <div class="quick-label">Medium</div>
+                        </div>
+                        <div class="quick-stat">
+                            <div class="quick-value" style="color: #ef4444;">${course.stats.hard}</div>
+                            <div class="quick-label">Hard</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    // Empty state
+    if (filteredCourses.length === 0) {
+        html += `
+            <div class="empty-state">
+                <i class="fas fa-search"></i>
+                <h3>No Courses Found</h3>
+                <p>No courses match your search. Try a different search term.</p>
+                <button onclick="clearQuestionBankSearch()" class="btn-primary">
+                    <i class="fas fa-times"></i> Clear Search
+                </button>
+            </div>
+        `;
+    }
+    
+    html += `
+            </div>
+            
+            <!-- Footer Info -->
+            <div class="question-bank-footer">
+                <div class="info-message">
+                    <i class="fas fa-info-circle"></i>
+                    <span>Click VIEW Q&A to see questions and answers, TEST to take a practice exam</span>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    contentEl.innerHTML = html;
+    
+    // Add hover effects
+    setTimeout(() => {
+        document.querySelectorAll('.course-card').forEach(card => {
+            card.addEventListener('mouseenter', function() {
+                this.style.transform = 'translateY(-5px)';
+                this.style.boxShadow = '0 8px 25px rgba(0,0,0,0.12)';
+            });
+            
+            card.addEventListener('mouseleave', function() {
+                this.style.transform = 'translateY(0)';
+                this.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
+            });
+        });
+        
+        document.querySelectorAll('.start-test-btn, .view-questions-btn').forEach(btn => {
+            btn.addEventListener('mouseenter', function() {
+                this.style.transform = 'scale(1.02)';
+                this.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+            });
+            
+            btn.addEventListener('mouseleave', function() {
+                this.style.transform = 'scale(1)';
+                this.style.boxShadow = 'none';
+            });
+        });
+    }, 100);
+}
+
+// Clear search
+function clearQuestionBankSearch() {
+    const searchInput = document.getElementById('studentQuestionBankSearch');
+    if (searchInput) {
+        searchInput.value = '';
+        loadQuestionBankCards();
+    }
+}
+
+// Make functions available globally (if needed for onclick attributes)
+window.loadQuestionBankCards = loadQuestionBankCards;
+window.clearQuestionBankSearch = clearQuestionBankSearch;
+
+// ==================== COURSE QUESTIONS VIEW ====================
+
+// View questions for a specific course
+async function viewCourseQuestions(courseId, courseName) {
+    try {
+        console.log(`Viewing questions for course: ${courseName} (${courseId})`);
+        
+        // Fetch questions for this course
+        const { data: questions, error } = await sb
+            .from('medical_assessments')
+            .select(`
+                *,
+                courses (
+                    id,
+                    course_name,
+                    unit_code,
+                    color
+                )
+            `)
+            .eq('course_id', courseId)
+            .eq('is_active', true)
+            .eq('is_published', true)
+            .order('created_at', { ascending: false });
+        
+        if (error) throw error;
+        
+        if (!questions || questions.length === 0) {
+            alert('No questions available for this course yet.');
+            return;
+        }
+        
+        currentCourseQuestions = questions;
+        
+        // Display questions in Q&A format
+        displayCourseQuestions(courseName, questions, courseId);
+        
+    } catch (error) {
+        console.error('Error loading course questions:', error);
+        alert('Failed to load questions. Please try again.');
+    }
+}
+
+// Display questions for a course
+function displayCourseQuestions(courseName, questions, courseId) {
+    const contentEl = document.getElementById('studentQuestionBankContent');
+    if (!contentEl) return;
+    
+    const courseColor = questions[0]?.courses?.color || '#4f46e5';
+    
+    let html = `
+        <div class="course-questions-container">
+            <!-- Course Header -->
+            <div class="course-questions-header" style="border-bottom-color: ${courseColor}20;">
+                <div class="course-questions-title">
+                    <button onclick="loadQuestionBankCards()" class="btn-back">
+                        <i class="fas fa-arrow-left"></i> Back to Courses
+                    </button>
+                    <div>
+                        <h2><i class="fas fa-book-medical"></i> ${courseName}</h2>
+                        <p class="questions-count">${questions.length} Questions & Answers</p>
+                    </div>
+                </div>
+                <div class="course-actions">
+                    <button onclick="startCourseTest('${courseId}', '${courseName.replace(/'/g, "\\'")}')" 
+                            class="btn-primary" style="background: ${courseColor};">
+                        <i class="fas fa-play-circle"></i> Take Test
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Questions List -->
+            <div class="questions-list-container">
+    `;
+    
+    // Display questions
+    questions.forEach((question, index) => {
+        html += createQuestionCard(question, index);
+    });
+    
+    html += `
+            </div>
+            
+            <!-- Footer -->
+            <div class="course-questions-footer">
+                <div class="questions-summary">
+                    <span><i class="fas fa-question-circle"></i> Total: ${questions.length} questions</span>
+                    <span><i class="fas fa-check-circle"></i> ${questions.filter(q => q.difficulty === 'easy').length} easy</span>
+                    <span><i class="fas fa-clock"></i> ${questions.filter(q => q.difficulty === 'medium').length} medium</span>
+                    <span><i class="fas fa-fire"></i> ${questions.filter(q => q.difficulty === 'hard').length} hard</span>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    contentEl.innerHTML = html;
+}
+
+// Create question card
+function createQuestionCard(question, index) {
+    const difficultyColor = {
+        'easy': '#10b981',
+        'medium': '#f59e0b',
+        'hard': '#ef4444'
+    }[question.difficulty] || '#6b7280';
+    
+    // Get options for multiple choice
+    let optionsHtml = '';
+    if (question.question_type === 'multiple_choice') {
+        const options = [
+            { key: 'option_a', letter: 'A' },
+            { key: 'option_b', letter: 'B' },
+            { key: 'option_c', letter: 'C' },
+            { key: 'option_d', letter: 'D' }
+        ];
+        
+        options.forEach(opt => {
+            const optionText = question[opt.key];
+            if (!optionText) return;
+            
+            const isCorrect = question.correct_answer?.trim() === optionText.trim();
+            
+            optionsHtml += `
+                <div class="option-item ${isCorrect ? 'correct' : ''}">
+                    <div class="option-letter">${opt.letter}</div>
+                    <div class="option-text">${optionText}</div>
+                    ${isCorrect ? '<div class="option-check"><i class="fas fa-check"></i></div>' : ''}
+                </div>
+            `;
+        });
+    }
+    
+    return `
+        <div class="question-answer-card" style="border-left-color: ${difficultyColor};">
+            <div class="question-header" onclick="toggleQuestionAnswer(${index})">
+                <div class="question-meta">
+                    <span class="question-number">Q${index + 1}</span>
+                    <span class="difficulty-badge" style="background: ${difficultyColor}20; color: ${difficultyColor};">
+                        <i class="fas fa-circle"></i> ${question.difficulty?.toUpperCase() || 'MEDIUM'}
+                    </span>
+                </div>
+                <div class="question-text-preview">
+                    ${question.question_text || 'No question text available'}
+                </div>
+                <div class="toggle-answer">
+                    <i class="fas fa-chevron-down" id="toggleIcon${index}"></i>
+                </div>
+            </div>
+            
+            <div class="answer-content" id="answerContent${index}" style="display: none;">
+                <!-- Full Question -->
+                <div class="full-question">
+                    <h4><i class="fas fa-question-circle"></i> Question:</h4>
+                    <div class="question-full-text">${question.question_text}</div>
+                </div>
+                
+                <!-- Options (for multiple choice) -->
+                ${optionsHtml ? `
+                <div class="question-options">
+                    <h4><i class="fas fa-list-check"></i> Options:</h4>
+                    <div class="options-grid">
+                        ${optionsHtml}
+                    </div>
+                </div>
+                ` : ''}
+                
+                <!-- Correct Answer -->
+                <div class="correct-answer-section">
+                    <h4><i class="fas fa-check-circle" style="color: #10b981;"></i> Correct Answer:</h4>
+                    <div class="answer-display">
+                        ${question.correct_answer || 'No answer provided'}
+                    </div>
+                </div>
+                
+                <!-- Explanation -->
+                ${question.explanation ? `
+                <div class="explanation-section">
+                    <h4><i class="fas fa-info-circle" style="color: #0ea5e9;"></i> Explanation:</h4>
+                    <div class="explanation-text">
+                        ${question.explanation}
+                    </div>
+                </div>
+                ` : ''}
+            </div>
+        </div>
+    `;
+}
+
+// Toggle question answer
+window.toggleQuestionAnswer = function(index) {
+    const answerContent = document.getElementById(`answerContent${index}`);
+    const toggleIcon = document.getElementById(`toggleIcon${index}`);
+    
+    if (answerContent.style.display === 'none') {
+        answerContent.style.display = 'block';
+        toggleIcon.className = 'fas fa-chevron-up';
+    } else {
+        answerContent.style.display = 'none';
+        toggleIcon.className = 'fas fa-chevron-down';
+    }
 };
 
-// ==================== TEST TAKING WITH IMMEDIATE FEEDBACK ====================
+// ==================== TEST TAKING ====================
 
 // Start test from course card
-window.startCourseTest = async function(courseId, courseName) {
+async function startCourseTest(courseId, courseName) {
     try {
         console.log(`Starting test for course: ${courseName} (${courseId})`);
         
         // Ask user about immediate feedback mode
         const feedbackMode = confirm('Do you want immediate feedback?\n\nClick OK to see correct answers immediately after selecting.\nClick Cancel for regular test mode.');
         showAnswersMode = feedbackMode;
-        autoAdvanceEnabled = false; // Disable auto-advance by default
+        autoAdvanceEnabled = false;
         
         // Fetch questions for this course
         const { data: questions, error } = await sb
@@ -2328,16 +2776,16 @@ window.startCourseTest = async function(courseId, courseName) {
         currentAssessmentId = `course_${courseId}_${Date.now()}`;
         
         // Start the test
-        window.startCourseAssessment(questions[0]);
+        startCourseAssessment(questions[0]);
         
     } catch (error) {
         console.error('Error starting course test:', error);
         alert('Failed to start test. Please try again.');
     }
-};
+}
 
 // Start course assessment
-window.startCourseAssessment = function(assessment) {
+function startCourseAssessment(assessment) {
     const container = document.getElementById('studentQuestionBankContent');
     if (!container) return;
     
@@ -2345,17 +2793,6 @@ window.startCourseAssessment = function(assessment) {
     const feedbackModeText = showAnswersMode ? 
         '<span class="feedback-mode-badge" style="background: #10b981; color: white;"><i class="fas fa-bolt"></i> Immediate Feedback Mode</span>' : 
         '<span class="feedback-mode-badge" style="background: #6b7280; color: white;"><i class="fas fa-clock"></i> Standard Mode</span>';
-    
-    // Add auto-advance toggle in feedback mode
-    const autoAdvanceToggle = showAnswersMode ? `
-        <div class="auto-advance-toggle">
-            <label class="toggle-switch">
-                <input type="checkbox" id="autoAdvanceToggle" ${autoAdvanceEnabled ? 'checked' : ''} onchange="toggleAutoAdvance(this.checked)">
-                <span class="toggle-slider"></span>
-            </label>
-            <span class="toggle-label">Auto-advance to next question</span>
-        </div>
-    ` : '';
     
     container.innerHTML = `
         <div class="test-container">
@@ -2373,7 +2810,6 @@ window.startCourseAssessment = function(assessment) {
                     </div>
                     <h3>${currentCourseForTest?.name || 'Course Assessment'}</h3>
                     <p class="test-info">${currentTestQuestions.length} questions • ${showAnswersMode ? 'Learning Mode' : 'Test Mode'}</p>
-                    ${autoAdvanceToggle}
                 </div>
                 <div class="test-counter">
                     <div class="question-number">${currentQuestionIndex + 1}/${currentTestQuestions.length}</div>
@@ -2450,11 +2886,11 @@ window.startCourseAssessment = function(assessment) {
     `;
     
     // Load the current question
-    window.loadCurrentCourseQuestion();
-};
+    loadCurrentCourseQuestion();
+}
 
-// Load current course question with immediate feedback option
-window.loadCurrentCourseQuestion = function() {
+// Load current course question
+function loadCurrentCourseQuestion() {
     if (currentQuestionIndex >= currentTestQuestions.length) return;
     
     const question = currentTestQuestions[currentQuestionIndex];
@@ -2516,14 +2952,12 @@ window.loadCurrentCourseQuestion = function() {
             const isSelected = userAnswer === optionText;
             const isCorrect = question.correct_answer?.trim() === optionText.trim();
             
-            // Determine styling based on answer state
             let borderColor = '#e5e7eb';
             let backgroundColor = 'white';
             let textColor = '#4b5563';
             
             if (isSelected) {
                 if (showAnswersMode && isAnswered) {
-                    // Show if correct or incorrect
                     if (isCorrect) {
                         backgroundColor = '#10b981';
                         textColor = 'white';
@@ -2534,13 +2968,11 @@ window.loadCurrentCourseQuestion = function() {
                         borderColor = '#ef4444';
                     }
                 } else {
-                    // Normal selection
                     backgroundColor = '#4f46e5';
                     textColor = 'white';
                     borderColor = '#4f46e5';
                 }
             } else if (showAnswersMode && isAnswered && isCorrect) {
-                // Highlight correct answer if not selected
                 backgroundColor = '#10b98120';
                 borderColor = '#10b981';
             }
@@ -2568,72 +3000,6 @@ window.loadCurrentCourseQuestion = function() {
                 </div>
             </div>
         `;
-    } else if (question.question_type === 'true_false') {
-        // True/False question type
-        html += `
-            <div class="true-false-container">
-                <div class="options-label">
-                    <i class="fas fa-toggle-on"></i> Select True or False:
-                    ${showAnswersMode && isAnswered ? '<span class="feedback-label">(Feedback shown below)</span>' : ''}
-                </div>
-                <div class="true-false-grid">
-        `;
-        
-        const options = [
-            { value: 'True', color: '#10b981' },
-            { value: 'False', color: '#ef4444' }
-        ];
-        
-        options.forEach(opt => {
-            const isSelected = userAnswer === opt.value;
-            const isCorrect = question.correct_answer?.trim() === opt.value;
-            const isTrue = opt.value === 'True';
-            
-            let backgroundColor = 'white';
-            let textColor = isTrue ? '#065f46' : '#991b1b';
-            let borderColor = isTrue ? '#10b98140' : '#ef444440';
-            
-            if (isSelected) {
-                if (showAnswersMode && isAnswered) {
-                    backgroundColor = isCorrect ? '#10b981' : '#ef4444';
-                    textColor = 'white';
-                    borderColor = isCorrect ? '#10b981' : '#ef4444';
-                } else {
-                    backgroundColor = isTrue ? '#10b981' : '#ef4444';
-                    textColor = 'white';
-                    borderColor = isTrue ? '#10b981' : '#ef4444';
-                }
-            }
-            
-            html += `
-                <div onclick="selectAnswer('${opt.value}')" 
-                     class="true-false-option ${isSelected ? 'selected' : ''}"
-                     style="background: ${backgroundColor}; 
-                            color: ${textColor}; 
-                            border-color: ${borderColor};">
-                    <i class="fas ${isTrue ? 'fa-check-circle' : 'fa-times-circle'}"></i> ${opt.value}
-                </div>
-            `;
-        });
-        
-        html += `
-                </div>
-            </div>
-        `;
-    } else {
-        // Short answer or essay type
-        html += `
-            <div class="short-answer-container">
-                <div class="options-label">
-                    <i class="fas fa-edit"></i> Type your answer:
-                </div>
-                <textarea id="shortAnswerInput" 
-                          class="short-answer-input"
-                          placeholder="Type your answer here..."
-                          oninput="updateShortAnswer(this.value)"
-                          ${showAnswersMode && isAnswered ? 'readonly' : ''}>${userAnswer || ''}</textarea>
-            </div>
-        `;
     }
     
     html += `
@@ -2648,12 +3014,12 @@ window.loadCurrentCourseQuestion = function() {
     
     // Show immediate feedback if in feedback mode and user has answered
     if (showAnswersMode && isAnswered) {
-        window.showImmediateFeedback(question, userAnswer);
+        showImmediateFeedback(question, userAnswer);
     }
-};
+}
 
 // Show immediate feedback after answer selection
-window.showImmediateFeedback = function(question, userAnswer) {
+function showImmediateFeedback(question, userAnswer) {
     const feedbackContainer = document.getElementById('immediateFeedbackContainer');
     if (!feedbackContainer) return;
     
@@ -2695,64 +3061,15 @@ window.showImmediateFeedback = function(question, userAnswer) {
         `;
     }
     
-    // Check if explanation exists in database
     if (question.explanation) {
-        // Use admin-provided explanation from database
         feedbackHtml += `
             <div class="explanation-section">
                 <div class="explanation-header">
                     <i class="fas fa-lightbulb"></i>
                     <strong>Explanation:</strong>
-                    <span class="explanation-source" style="font-size: 0.8rem; color: #6b7280; margin-left: auto;">
-                        <i class="fas fa-database"></i> From Database
-                    </span>
                 </div>
                 <div class="explanation-text">
                     ${question.explanation}
-                </div>
-            </div>
-        `;
-    } else if (isCorrect && !question.explanation) {
-        // Show minimal feedback for correct answers without explanation
-        feedbackHtml += `
-            <div class="explanation-section">
-                <div class="explanation-header">
-                    <i class="fas fa-check-circle"></i>
-                    <strong>Great job!</strong>
-                </div>
-                <div class="explanation-text">
-                    Your answer is correct. Keep up the good work!
-                </div>
-            </div>
-        `;
-    } else if (!isCorrect && !question.explanation) {
-        // Offer to generate AI explanation for incorrect answers
-        feedbackHtml += `
-            <div class="explanation-section">
-                <div class="explanation-header">
-                    <i class="fas fa-robot"></i>
-                    <strong>AI Explanation (Optional):</strong>
-                </div>
-                <div class="explanation-text">
-                    No explanation available in database. 
-                    <button onclick="generateAIExplanation(${currentQuestionIndex})" class="btn-small">
-                        <i class="fas fa-magic"></i> Generate AI Explanation
-                    </button>
-                </div>
-            </div>
-        `;
-    }
-    
-    // Add additional notes if available
-    if (question.notes) {
-        feedbackHtml += `
-            <div class="notes-section">
-                <div class="notes-header">
-                    <i class="fas fa-sticky-note"></i>
-                    <strong>Important Note:</strong>
-                </div>
-                <div class="notes-text">
-                    ${question.notes}
                 </div>
             </div>
         `;
@@ -2762,11 +3079,7 @@ window.showImmediateFeedback = function(question, userAnswer) {
             <div class="feedback-footer">
                 <span class="feedback-tip">
                     <i class="fas fa-info-circle"></i>
-                    ${isCorrect ? 
-                        'Great! Click Next when ready to continue.' : 
-                        'Review the explanation before continuing.'
-                    }
-                    ${autoAdvanceEnabled ? '<br><small>Auto-advance is enabled (3 seconds)</small>' : ''}
+                    ${isCorrect ? 'Great! Click Next when ready.' : 'Review the explanation before continuing.'}
                 </span>
             </div>
         </div>
@@ -2775,155 +3088,18 @@ window.showImmediateFeedback = function(question, userAnswer) {
     feedbackContainer.innerHTML = feedbackHtml;
     feedbackContainer.style.display = 'block';
     
-    // Scroll to feedback
     setTimeout(() => {
         feedbackContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }, 300);
-    
-    // Auto-advance if enabled
-    if (autoAdvanceEnabled && currentQuestionIndex < currentTestQuestions.length - 1) {
-        const nextBtn = document.getElementById('nextQuestionBtn');
-        if (nextBtn) {
-            let countdown = 3;
-            nextBtn.innerHTML = `<i class="fas fa-arrow-right"></i> Next (${countdown}s)`;
-            nextBtn.style.background = '#10b981';
-            
-            const countdownInterval = setInterval(() => {
-                countdown--;
-                if (countdown > 0) {
-                    nextBtn.innerHTML = `<i class="fas fa-arrow-right"></i> Next (${countdown}s)`;
-                } else {
-                    clearInterval(countdownInterval);
-                    window.nextCourseQuestion();
-                }
-            }, 1000);
-        }
-    }
-};
-
-// Generate AI explanation for a question
-window.generateAIExplanation = async function(questionIndex) {
-    try {
-        const question = currentTestQuestions[questionIndex];
-        const userAnswer = userTestAnswers[questionIndex]?.answer;
-        
-        if (!question || !userAnswer) {
-            alert('No question or answer found.');
-            return;
-        }
-        
-        // Show loading state
-        const explanationSection = document.querySelector('.explanation-section');
-        if (explanationSection) {
-            explanationSection.innerHTML = `
-                <div class="explanation-header">
-                    <i class="fas fa-spinner fa-spin"></i>
-                    <strong>Generating AI Explanation...</strong>
-                </div>
-                <div class="explanation-text">
-                    Please wait while AI analyzes the question...
-                </div>
-            `;
-        }
-        
-        // Prepare prompt for AI
-        const prompt = `
-        Question: ${question.question_text}
-        
-        Options:
-        A: ${question.option_a || ''}
-        B: ${question.option_b || ''}
-        C: ${question.option_c || ''}
-        D: ${question.option_d || ''}
-        
-        Student's Answer: ${userAnswer}
-        Correct Answer: ${question.correct_answer}
-        
-        Please provide a clear, educational explanation for why the correct answer is correct and why the student's answer (if incorrect) is not the best choice.
-        Focus on nursing/medical knowledge.
-        `;
-        
-        // Call AI service (you'll need to implement this based on your AI provider)
-        const aiExplanation = await callAIService(prompt);
-        
-        // Display the AI explanation
-        if (explanationSection) {
-            explanationSection.innerHTML = `
-                <div class="explanation-header">
-                    <i class="fas fa-robot" style="color: #8b5cf6;"></i>
-                    <strong>AI Explanation:</strong>
-                    <span class="explanation-source" style="font-size: 0.8rem; color: #6b7280; margin-left: auto;">
-                        <i class="fas fa-brain"></i> AI Generated
-                    </span>
-                </div>
-                <div class="explanation-text">
-                    ${aiExplanation}
-                </div>
-                <div class="ai-disclaimer">
-                    <small><i class="fas fa-exclamation-triangle"></i> This explanation was generated by AI and should be reviewed for accuracy.</small>
-                </div>
-            `;
-        }
-        
-        // Store the AI explanation temporarily (not in database)
-        userTestAnswers[questionIndex].aiExplanation = aiExplanation;
-        
-    } catch (error) {
-        console.error('Error generating AI explanation:', error);
-        alert('Failed to generate AI explanation. Please try again.');
-        
-        // Restore original state
-        const explanationSection = document.querySelector('.explanation-section');
-        if (explanationSection) {
-            explanationSection.innerHTML = `
-                <div class="explanation-header">
-                    <i class="fas fa-exclamation-triangle"></i>
-                    <strong>AI Explanation Failed</strong>
-                </div>
-                <div class="explanation-text">
-                    Unable to generate AI explanation. Please try again or contact your instructor.
-                </div>
-            `;
-        }
-    }
-};
-
-// Toggle auto-advance feature
-window.toggleAutoAdvance = function(enabled) {
-    autoAdvanceEnabled = enabled;
-    
-    // Update UI indication
-    const feedbackTip = document.querySelector('.feedback-tip');
-    if (feedbackTip) {
-        const existingText = feedbackTip.textContent.replace(/Auto-advance.*/, '').trim();
-        feedbackTip.innerHTML = `<i class="fas fa-info-circle"></i> ${existingText}`;
-        
-        if (enabled) {
-            const small = document.createElement('small');
-            small.innerHTML = '<br>Auto-advance is enabled (3 seconds)';
-            feedbackTip.appendChild(small);
-        }
-    }
-    
-    // Update next button if user has answered
-    const userAnswer = userTestAnswers[currentQuestionIndex]?.answer;
-    if (userAnswer && autoAdvanceEnabled && currentQuestionIndex < currentTestQuestions.length - 1) {
-        const nextBtn = document.getElementById('nextQuestionBtn');
-        if (nextBtn) {
-            nextBtn.innerHTML = '<i class="fas fa-arrow-right"></i> Next (3s)';
-            nextBtn.style.background = '#10b981';
-        }
-    }
-};
+}
 
 // Select answer with immediate feedback
 window.selectAnswer = function(answer) {
     const previousAnswer = userTestAnswers[currentQuestionIndex]?.answer;
     const question = currentTestQuestions[currentQuestionIndex];
     
-    // Only allow changing answer if not in immediate feedback mode or if no answer yet
     if (showAnswersMode && previousAnswer) {
-        return; // Don't allow changing answer in immediate feedback mode
+        return;
     }
     
     userTestAnswers[currentQuestionIndex] = {
@@ -2934,81 +3110,209 @@ window.selectAnswer = function(answer) {
         correct: answer?.trim().toLowerCase() === question.correct_answer?.trim().toLowerCase()
     };
     
-    // Update the question display
-    window.loadCurrentCourseQuestion();
+    loadCurrentCourseQuestion();
+};
+
+// Flag question
+window.flagCourseQuestion = function() {
+    const isFlagged = !userTestAnswers[currentQuestionIndex]?.flagged;
+    userTestAnswers[currentQuestionIndex] = {
+        ...userTestAnswers[currentQuestionIndex],
+        flagged: isFlagged
+    };
     
-    // If auto-advance is disabled, just show feedback without auto-advancing
-    if (showAnswersMode && !autoAdvanceEnabled) {
-        // Enable next button but don't auto-advance
-        const nextBtn = document.getElementById('nextQuestionBtn');
-        if (nextBtn && currentQuestionIndex < currentTestQuestions.length - 1) {
-            nextBtn.innerHTML = '<i class="fas fa-arrow-right"></i> Next';
-            nextBtn.style.background = '';
-        }
+    startCourseAssessment(currentTestQuestions[0]);
+};
+
+// Navigation functions
+window.nextCourseQuestion = function() {
+    if (currentQuestionIndex < currentTestQuestions.length - 1) {
+        currentQuestionIndex++;
+        startCourseAssessment(currentTestQuestions[0]);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 };
 
-// ==================== AI SERVICE INTEGRATION ====================
+window.previousCourseQuestion = function() {
+    if (currentQuestionIndex > 0) {
+        currentQuestionIndex--;
+        startCourseAssessment(currentTestQuestions[0]);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+};
 
-// Placeholder function for AI service call
-async function callAIService(prompt) {
-    // This is a placeholder. You'll need to implement this based on your AI provider.
-    // Examples: OpenAI, Anthropic, Google Gemini, etc.
+window.goToCourseQuestion = function(index) {
+    currentQuestionIndex = index;
+    startCourseAssessment(currentTestQuestions[0]);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+};
+
+// Complete learning mode
+window.completeLearningMode = function() {
+    let correctAnswers = 0;
+    let totalAnswered = 0;
     
-    // For now, return a mock explanation
-    return new Promise((resolve) => {
-        setTimeout(() => {
-            resolve(`
-                <p>The correct answer is <strong>${currentTestQuestions[currentQuestionIndex]?.correct_answer}</strong> because:</p>
-                <ul>
-                    <li>In nursing practice, this protocol is standard for postpartum care</li>
-                    <li>It aligns with WHO guidelines for maternal health</li>
-                    <li>Research shows this timing reduces complications by 40%</li>
-                </ul>
-                <p>Your answer "${userTestAnswers[currentQuestionIndex]?.answer}" is not optimal because it doesn't account for the specific postpartum considerations mentioned in the question.</p>
-                <p><em>Remember: Always consider the patient's specific condition and current medical guidelines when making clinical decisions.</em></p>
-            `);
-        }, 1500);
+    currentTestQuestions.forEach((question, index) => {
+        const userAnswer = userTestAnswers[index]?.answer;
+        if (userAnswer) {
+            totalAnswered++;
+            if (userAnswer.trim().toLowerCase() === question.correct_answer?.trim().toLowerCase()) {
+                correctAnswers++;
+            }
+        }
     });
     
-    // Example using OpenAI (you'll need to add your API key):
-    /*
+    const percentage = totalAnswered > 0 ? Math.round((correctAnswers / totalAnswered) * 100) : 0;
+    const container = document.getElementById('studentQuestionBankContent');
+    if (!container) return;
+    
+    const performanceColor = percentage >= 70 ? '#10b981' : percentage >= 50 ? '#f59e0b' : '#ef4444';
+    const performanceText = percentage >= 70 ? 'Excellent Learning!' : percentage >= 50 ? 'Good Progress' : 'Keep Practicing';
+    const performanceIcon = percentage >= 70 ? 'graduation-cap' : percentage >= 50 ? 'book-open' : 'redo';
+    
+    container.innerHTML = `
+        <div class="results-container">
+            <div class="results-header">
+                <div class="results-icon" style="background: ${performanceColor}20;">
+                    <i class="fas fa-${performanceIcon}" style="color: ${performanceColor};"></i>
+                </div>
+                <h2>Learning Session Complete!</h2>
+                <p class="results-subtitle">${currentCourseForTest?.name || 'Course'}</p>
+            </div>
+            
+            <div class="results-summary">
+                <div class="result-card">
+                    <div class="result-number" style="color: ${performanceColor};">${percentage}%</div>
+                    <div class="result-label">Accuracy Rate</div>
+                    <div class="result-status" style="color: ${performanceColor};">${performanceText}</div>
+                </div>
+                <div class="result-card">
+                    <div class="result-number" style="color: #10b981;">${correctAnswers}/${totalAnswered}</div>
+                    <div class="result-label">Correct Answers</div>
+                    <div class="result-status" style="color: #10b981;">
+                        Answered ${totalAnswered} of ${currentTestQuestions.length} questions
+                    </div>
+                </div>
+            </div>
+            
+            <div class="results-actions">
+                <button onclick="loadQuestionBankCards()" class="btn-primary">
+                    <i class="fas fa-home"></i> Back to Courses
+                </button>
+                <button onclick="retakeTestWithFeedback(true)" class="btn-secondary">
+                    <i class="fas fa-redo"></i> Practice Again
+                </button>
+            </div>
+        </div>
+    `;
+};
+
+// Submit course test
+window.submitCourseTest = async function() {
+    if (!confirm('Are you sure you want to submit your test?')) {
+        return;
+    }
+    
     try {
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer YOUR_OPENAI_API_KEY`
-            },
-            body: JSON.stringify({
-                model: 'gpt-4',
-                messages: [
-                    {
-                        role: 'system',
-                        content: 'You are a nursing education expert. Provide clear, accurate explanations for medical questions.'
-                    },
-                    {
-                        role: 'user',
-                        content: prompt
-                    }
-                ],
-                temperature: 0.7,
-                max_tokens: 500
-            })
+        let score = 0;
+        let correctAnswers = 0;
+        
+        currentTestQuestions.forEach((question, index) => {
+            const userAnswer = userTestAnswers[index]?.answer;
+            const correctAnswer = question.correct_answer;
+            
+            if (userAnswer && userAnswer.trim().toLowerCase() === correctAnswer?.trim().toLowerCase()) {
+                score += question.marks || 1;
+                correctAnswers++;
+            }
         });
         
-        const data = await response.json();
-        return data.choices[0]?.message?.content || 'No explanation generated.';
+        const totalMarks = currentTestQuestions.reduce((total, q) => total + (q.marks || 1), 0);
+        const percentage = Math.round((score / totalMarks) * 100);
+        const timeSpent = Math.round((new Date() - testStartTime) / 60000);
+        
+        showCourseTestResults(score, totalMarks, percentage, correctAnswers);
+        
     } catch (error) {
-        console.error('AI API Error:', error);
-        throw error;
+        console.error('Error submitting course test:', error);
+        alert('Error submitting test. Please try again.');
     }
-    */
+};
+
+// Show course test results
+function showCourseTestResults(score, totalMarks, percentage, correctAnswers) {
+    const container = document.getElementById('studentQuestionBankContent');
+    if (!container) return;
+    
+    const course = currentCourseForTest;
+    const performanceColor = percentage >= 70 ? '#10b981' : percentage >= 50 ? '#f59e0b' : '#ef4444';
+    const performanceText = percentage >= 70 ? 'Excellent!' : percentage >= 50 ? 'Good Attempt' : 'Needs Improvement';
+    const performanceIcon = percentage >= 70 ? 'trophy' : percentage >= 50 ? 'medal' : 'graduation-cap';
+    
+    container.innerHTML = `
+        <div class="results-container">
+            <div class="results-header">
+                <div class="results-icon" style="background: ${performanceColor}20;">
+                    <i class="fas fa-${performanceIcon}" style="color: ${performanceColor};"></i>
+                </div>
+                <h2>Test Completed!</h2>
+                <p class="results-subtitle">${course?.name || 'Course'}</p>
+            </div>
+            
+            <div class="results-summary">
+                <div class="result-card">
+                    <div class="result-number" style="color: #4f46e5;">${percentage}%</div>
+                    <div class="result-label">Overall Score</div>
+                    <div class="result-status" style="color: ${performanceColor};">${performanceText}</div>
+                </div>
+                <div class="result-card">
+                    <div class="result-number" style="color: #10b981;">${correctAnswers}/${currentTestQuestions.length}</div>
+                    <div class="result-label">Correct Answers</div>
+                    <div class="result-status" style="color: #10b981;">
+                        ${Math.round((correctAnswers / currentTestQuestions.length) * 100)}% Accuracy
+                    </div>
+                </div>
+                <div class="result-card">
+                    <div class="result-number" style="color: #f59e0b;">${score}/${totalMarks}</div>
+                    <div class="result-label">Marks Obtained</div>
+                    <div class="result-status" style="color: #f59e0b;">
+                        Total: ${totalMarks} marks
+                    </div>
+                </div>
+            </div>
+            
+            <div class="results-actions">
+                <button onclick="loadQuestionBankCards()" class="btn-primary">
+                    <i class="fas fa-home"></i> Back to Courses
+                </button>
+                <button onclick="retakeTestWithFeedback(false)" class="btn-secondary">
+                    <i class="fas fa-redo"></i> Retake Test
+                </button>
+                <button onclick="retakeTestWithFeedback(true)" class="btn-success">
+                    <i class="fas fa-graduation-cap"></i> Learn Mode
+                </button>
+            </div>
+        </div>
+    `;
 }
+
+// Retake test with feedback
+window.retakeTestWithFeedback = function(withFeedback) {
+    showAnswersMode = withFeedback;
+    currentQuestionIndex = 0;
+    userTestAnswers = {};
+    testStartTime = new Date();
+    startCourseAssessment(currentTestQuestions[0]);
+};
+
+// Make other functions available globally
+window.viewCourseQuestions = viewCourseQuestions;
+window.startCourseTest = startCourseTest;
+window.toggleQuestionAnswer = toggleQuestionAnswer;
 
 // ==================== HELPER FUNCTIONS ====================
 
-// Get question dot colors (for course test)
+// Get question dot colors
 function getCourseQuestionDotColor(index) {
     if (showAnswersMode && userTestAnswers[index]?.answered) {
         const isCorrect = userTestAnswers[index]?.correct;
