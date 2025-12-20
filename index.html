@@ -2157,7 +2157,7 @@ document.querySelectorAll('[onclick*="showTab"]').forEach(element => {
                     if (uploadButton) uploadButton.disabled = false;
                 });
             }
- // ==================== NURSEIQ QUESTION BANK SYSTEM ====================
+// ==================== NURSEIQ QUESTION BANK SYSTEM ====================
 
 // Global variables
 let currentTestQuestions = [];
@@ -3099,7 +3099,283 @@ window.loadCurrentCourseQuestion = function() {
                          class="true-false-option ${userTestAnswers[currentQuestionIndex]?.answer === 'False' ? 'selected' : ''}"
                          style="background: ${userTestAnswers[currentQuestionIndex]?.answer === 'False' ? '#ef4444' : 'white'}; 
                                 color: ${userTestAnswers[currentQuestionIndex]?.answer === 'False' ? 'white' : '#991b1b'}; 
-                                border-color: ${userTestAnswers[currentQuestionIndex]?.answer === 'False' ? '#ef4444
+                                border-color: ${userTestAnswers[currentQuestionIndex]?.answer === 'False' ? '#ef4444' : '#ef444440'};">
+                        <i class="fas fa-times-circle"></i> False
+                    </div>
+                </div>
+            </div>
+        `;
+    } else {
+        // Short answer or essay type
+        html += `
+            <div class="short-answer-container">
+                <div class="options-label">
+                    <i class="fas fa-edit"></i> Type your answer:
+                </div>
+                <textarea id="shortAnswerInput" 
+                          class="short-answer-input"
+                          placeholder="Type your answer here..."
+                          oninput="updateShortAnswer(this.value)">${userTestAnswers[currentQuestionIndex]?.answer || ''}</textarea>
+            </div>
+        `;
+    }
+    
+    html += `
+            <div class="question-footer">
+                <span><i class="fas fa-clock"></i> Estimated: ${question.estimated_time || 2} min</span>
+                <span><i class="fas fa-book-medical"></i> Topic: ${question.topic || 'General'}</span>
+            </div>
+        </div>
+    `;
+    
+    container.innerHTML = html;
+};
+
+// Select answer
+window.selectAnswer = function(answer) {
+    userTestAnswers[currentQuestionIndex] = {
+        ...userTestAnswers[currentQuestionIndex],
+        answer: answer,
+        answered: true,
+        timestamp: new Date()
+    };
+    
+    // Update the question display
+    window.loadCurrentCourseQuestion();
+};
+
+// Update short answer
+window.updateShortAnswer = function(answer) {
+    userTestAnswers[currentQuestionIndex] = {
+        ...userTestAnswers[currentQuestionIndex],
+        answer: answer,
+        answered: answer.trim().length > 0,
+        timestamp: new Date()
+    };
+};
+
+// Flag question
+window.flagCourseQuestion = function() {
+    const isFlagged = !userTestAnswers[currentQuestionIndex]?.flagged;
+    userTestAnswers[currentQuestionIndex] = {
+        ...userTestAnswers[currentQuestionIndex],
+        flagged: isFlagged
+    };
+    
+    // Update the test interface
+    window.startCourseAssessment(currentTestQuestions[0]);
+};
+
+// Navigation functions
+window.nextCourseQuestion = function() {
+    if (currentQuestionIndex < currentTestQuestions.length - 1) {
+        currentQuestionIndex++;
+        window.startCourseAssessment(currentTestQuestions[0]);
+    }
+};
+
+window.previousCourseQuestion = function() {
+    if (currentQuestionIndex > 0) {
+        currentQuestionIndex--;
+        window.startCourseAssessment(currentTestQuestions[0]);
+    }
+};
+
+window.goToCourseQuestion = function(index) {
+    currentQuestionIndex = index;
+    window.startCourseAssessment(currentTestQuestions[0]);
+};
+
+// Submit course test
+window.submitCourseTest = async function() {
+    if (!confirm('Are you sure you want to submit your test? You cannot change answers after submission.')) {
+        return;
+    }
+    
+    try {
+        // Calculate score
+        let score = 0;
+        let correctAnswers = 0;
+        
+        currentTestQuestions.forEach((question, index) => {
+            const userAnswer = userTestAnswers[index]?.answer;
+            const correctAnswer = question.correct_answer;
+            
+            if (userAnswer && userAnswer.trim().toLowerCase() === correctAnswer?.trim().toLowerCase()) {
+                score += question.marks || 1;
+                correctAnswers++;
+            }
+        });
+        
+        const totalMarks = currentTestQuestions.reduce((total, q) => total + (q.marks || 1), 0);
+        const percentage = Math.round((score / totalMarks) * 100);
+        const timeSpent = Math.round((new Date() - testStartTime) / 60000); // in minutes
+        
+        // Show results
+        window.showCourseTestResults(score, totalMarks, percentage, correctAnswers);
+        
+    } catch (error) {
+        console.error('Error submitting course test:', error);
+        alert('Error submitting test. Please try again.');
+    }
+};
+
+// Show course test results
+window.showCourseTestResults = function(score, totalMarks, percentage, correctAnswers) {
+    const container = document.getElementById('studentQuestionBankContent');
+    if (!container) return;
+    
+    const course = currentCourseForTest;
+    const performanceColor = percentage >= 70 ? '#10b981' : 
+                           percentage >= 50 ? '#f59e0b' : '#ef4444';
+    const performanceText = percentage >= 70 ? 'Excellent!' : 
+                          percentage >= 50 ? 'Good Attempt' : 'Needs Improvement';
+    const performanceIcon = percentage >= 70 ? 'trophy' : 
+                          percentage >= 50 ? 'medal' : 'graduation-cap';
+    
+    container.innerHTML = `
+        <div class="results-container">
+            <div class="results-header">
+                <div class="results-icon" style="background: ${performanceColor}20;">
+                    <i class="fas fa-${performanceIcon}" style="color: ${performanceColor};"></i>
+                </div>
+                <h2>Test Completed!</h2>
+                <p class="results-subtitle">${course?.name || 'Course'}</p>
+            </div>
+            
+            <!-- Results Summary -->
+            <div class="results-summary">
+                <div class="result-card">
+                    <div class="result-number" style="color: #4f46e5;">${percentage}%</div>
+                    <div class="result-label">Overall Score</div>
+                    <div class="result-status" style="color: ${performanceColor};">${performanceText}</div>
+                </div>
+                <div class="result-card">
+                    <div class="result-number" style="color: #10b981;">${correctAnswers}/${currentTestQuestions.length}</div>
+                    <div class="result-label">Correct Answers</div>
+                    <div class="result-status" style="color: #10b981;">
+                        ${Math.round((correctAnswers / currentTestQuestions.length) * 100)}% Accuracy
+                    </div>
+                </div>
+                <div class="result-card">
+                    <div class="result-number" style="color: #f59e0b;">${score}/${totalMarks}</div>
+                    <div class="result-label">Marks Obtained</div>
+                    <div class="result-status" style="color: #f59e0b;">
+                        Total: ${totalMarks} marks
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Review Button -->
+            <div class="review-section">
+                <button onclick="reviewTestQuestions()" class="btn-secondary">
+                    <i class="fas fa-list-check"></i> Review Questions
+                </button>
+            </div>
+            
+            <!-- Action Buttons -->
+            <div class="results-actions">
+                <button onclick="loadQuestionBankCards()" class="btn-primary">
+                    <i class="fas fa-home"></i> Back to Courses
+                </button>
+                <button onclick="retakeTest()" class="btn-secondary">
+                    <i class="fas fa-redo"></i> Retake Test
+                </button>
+            </div>
+        </div>
+    `;
+};
+
+// Review test questions
+window.reviewTestQuestions = function() {
+    currentQuestionIndex = 0;
+    window.startCourseAssessment(currentTestQuestions[0]);
+};
+
+// Retake test
+window.retakeTest = function() {
+    currentQuestionIndex = 0;
+    userTestAnswers = {};
+    testStartTime = new Date();
+    window.startCourseAssessment(currentTestQuestions[0]);
+};
+
+// ==================== HELPER FUNCTIONS ====================
+
+// Calculate total time for test
+function calculateTotalTime() {
+    return currentTestQuestions.reduce((total, q) => total + (q.estimated_time || 2), 0);
+}
+
+// Get question dot colors (for course test)
+function getCourseQuestionDotColor(index) {
+    if (userTestAnswers[index]?.answered) {
+        return userTestAnswers[index]?.flagged ? '#fef3c7' : '#10b981';
+    } else if (userTestAnswers[index]?.flagged) {
+        return '#fef3c7';
+    } else if (index === currentQuestionIndex) {
+        return '#4f46e5';
+    }
+    return '#f3f4f6';
+}
+
+function getCourseQuestionDotTextColor(index) {
+    if (userTestAnswers[index]?.answered || index === currentQuestionIndex) {
+        return 'white';
+    } else if (userTestAnswers[index]?.flagged) {
+        return '#92400e';
+    }
+    return '#4b5563';
+}
+
+function getCourseQuestionDotBorderColor(index) {
+    if (index === currentQuestionIndex) {
+        return '#4f46e5';
+    }
+    return '#e5e7eb';
+}
+
+// Format question text
+function formatQuestionText(text) {
+    if (!text) return 'No question text available';
+    
+    // Convert markdown-like formatting
+    let formatted = text
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        .replace(/__(.*?)__/g, '<u>$1</u>')
+        .replace(/\n/g, '<br>');
+    
+    return formatted;
+}
+
+// Format answer text
+function formatAnswerText(answer, explanation) {
+    if (!answer) return 'No answer provided';
+    
+    let formatted = `<div class="answer-text">${answer}</div>`;
+    
+    if (explanation) {
+        formatted += `<div class="explanation-text"><strong>Explanation:</strong> ${explanation}</div>`;
+    }
+    
+    return formatted;
+}
+
+// Get question type icon
+function getQuestionTypeIcon(type) {
+    const icons = {
+        'multiple_choice': 'list-check',
+        'true_false': 'toggle-on',
+        'short_answer': 'pen',
+        'essay': 'file-alt',
+        'case_study': 'file-medical',
+        'matching': 'arrows-alt-h'
+    };
+    
+    return icons[type] || 'question-circle';
+}
+
 
        // *************************************************************************
             // *** ATTENDANCE SYSTEM ***
