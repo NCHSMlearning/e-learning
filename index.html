@@ -1703,6 +1703,29 @@ function showTab(tabId) {
     // Always refresh latest announcement
     if (currentUserId) loadLatestOfficialAnnouncement();
 }
+      // ✅ CRITICAL FIX: Add event listeners to all navigation links
+navLinks.forEach(link => {
+    link.addEventListener('click', function(e) {
+        e.preventDefault();
+        const tabId = this.getAttribute('data-tab');
+        console.log(`Clicked on tab: ${tabId}`);
+        showTab(tabId);
+    });
+});
+
+// ✅ Also add event listeners for footer links that use onclick="showTab()"
+document.querySelectorAll('[onclick*="showTab"]').forEach(element => {
+    const oldOnClick = element.getAttribute('onclick');
+    const match = oldOnClick.match(/showTab\('([^']+)'\)/);
+    if (match) {
+        const tabId = match[1];
+        element.removeAttribute('onclick');
+        element.addEventListener('click', function(e) {
+            e.preventDefault();
+            showTab(tabId);
+        });
+    }
+});
             // *************************************************************************
             // *** DASHBOARD FUNCTIONS ***
             // *************************************************************************
@@ -2249,7 +2272,7 @@ window.loadNurseIQAssessments = async function() {
 // Check if medical_assessments table exists
 async function checkMedicalAssessmentsTable() {
     try {
-        const { data, error } = await supabase
+        const { data, error } = await sb  // CHANGE: supabase -> sb
             .from('medical_assessments')
             .select('id')
             .limit(1);
@@ -2268,7 +2291,7 @@ async function checkMedicalAssessmentsTable() {
 async function fetchNurseIQData() {
     try {
         // Fetch assessments with course info
-        const { data: assessments, error } = await supabase
+        const { data: assessments, error } = await sb  // CHANGE: supabase -> sb
             .from('medical_assessments')
             .select(`
                 *,
@@ -2288,7 +2311,7 @@ async function fetchNurseIQData() {
         // Fetch user progress
         let userProgress = [];
         if (currentUserId) {
-            const { data: progress } = await supabase
+            const { data: progress } = await sb  // CHANGE: supabase -> sb
                 .from('user_assessment_progress')
                 .select('*')
                 .eq('user_id', currentUserId);
@@ -2306,7 +2329,6 @@ async function fetchNurseIQData() {
         throw error;
     }
 }
-
 // Calculate stats
 function calculateNurseIQStats(assessments, userProgress) {
     const totalAssessments = assessments.length;
