@@ -2157,7 +2157,7 @@ document.querySelectorAll('[onclick*="showTab"]').forEach(element => {
                     if (uploadButton) uploadButton.disabled = false;
                 });
             }
-   // ==================== NURSEIQ QUESTION BANK SYSTEM ====================
+ // ==================== NURSEIQ QUESTION BANK SYSTEM ====================
 
 // Global variables
 let currentTestQuestions = [];
@@ -2166,6 +2166,7 @@ let userTestAnswers = {};
 let testStartTime = null;
 let currentAssessmentId = null;
 let currentCourseForTest = null;
+let currentCourseQuestions = [];
 
 // ==================== INITIALIZATION ====================
 
@@ -2377,10 +2378,9 @@ window.displayQuestionBankCards = function(courses, overallStats) {
     filteredCourses.forEach(course => {
         const courseColor = course.color || '#4f46e5';
         const lastUpdated = formatDate(course.stats.lastUpdated);
-        const difficultyColor = (count) => count > 0 ? '#ef4444' : '#9ca3af';
         
         html += `
-            <div class="course-card" onclick="startCourseTest('${course.id}', '${course.name.replace(/'/g, "\\'")}')">
+            <div class="course-card">
                 <!-- Course Header -->
                 <div class="course-header" style="background: linear-gradient(135deg, ${courseColor}20, ${courseColor}10); border-bottom: 1px solid ${courseColor}20;">
                     <div class="course-title">
@@ -2415,7 +2415,7 @@ window.displayQuestionBankCards = function(courses, overallStats) {
                             <div class="stat-label">ACTIVE</div>
                         </div>
                         <div class="stat-item">
-                            <div class="stat-value" style="color: ${difficultyColor(course.stats.hard)};">${course.stats.hard}</div>
+                            <div class="stat-value" style="color: #ef4444;">${course.stats.hard}</div>
                             <div class="stat-label">HARD</div>
                         </div>
                         <div class="stat-item">
@@ -2428,10 +2428,15 @@ window.displayQuestionBankCards = function(courses, overallStats) {
                         </div>
                     </div>
                     
-                    <!-- Start Button -->
-                    <button class="start-test-btn" style="background: ${courseColor};">
-                        <i class="fas fa-play-circle"></i> START TEST
-                    </button>
+                    <!-- Action Buttons -->
+                    <div class="course-actions-grid">
+                        <button class="view-questions-btn" onclick="viewCourseQuestions('${course.id}', '${course.name.replace(/'/g, "\\'")}')">
+                            <i class="fas fa-eye"></i> VIEW Q&A
+                        </button>
+                        <button class="start-test-btn" onclick="startCourseTest('${course.id}', '${course.name.replace(/'/g, "\\'")}')" style="background: ${courseColor};">
+                            <i class="fas fa-play-circle"></i> TEST
+                        </button>
+                    </div>
                     
                     <!-- Quick Stats -->
                     <div class="quick-stats">
@@ -2474,7 +2479,7 @@ window.displayQuestionBankCards = function(courses, overallStats) {
             <div class="question-bank-footer">
                 <div class="info-message">
                     <i class="fas fa-info-circle"></i>
-                    <span>Click on any course card to start a test</span>
+                    <span>Click VIEW Q&A to see questions and answers, TEST to take a practice exam</span>
                 </div>
             </div>
         </div>
@@ -2496,7 +2501,7 @@ window.displayQuestionBankCards = function(courses, overallStats) {
             });
         });
         
-        document.querySelectorAll('.start-test-btn').forEach(btn => {
+        document.querySelectorAll('.start-test-btn, .view-questions-btn').forEach(btn => {
             btn.addEventListener('mouseenter', function() {
                 this.style.transform = 'scale(1.02)';
                 this.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
@@ -2517,6 +2522,337 @@ window.clearQuestionBankSearch = function() {
         searchInput.value = '';
         window.loadQuestionBankCards();
     }
+};
+
+// ==================== COURSE QUESTIONS VIEW ====================
+
+// View questions for a specific course
+window.viewCourseQuestions = async function(courseId, courseName) {
+    try {
+        console.log(`Viewing questions for course: ${courseName} (${courseId})`);
+        
+        // Fetch questions for this course
+        const { data: questions, error } = await sb
+            .from('medical_assessments')
+            .select(`
+                *,
+                courses (
+                    id,
+                    course_name,
+                    unit_code,
+                    color
+                )
+            `)
+            .eq('course_id', courseId)
+            .eq('is_active', true)
+            .eq('is_published', true)
+            .order('created_at', { ascending: false });
+        
+        if (error) throw error;
+        
+        if (!questions || questions.length === 0) {
+            alert('No questions available for this course yet.');
+            return;
+        }
+        
+        currentCourseQuestions = questions;
+        
+        // Display questions in Q&A format
+        displayCourseQuestions(courseName, questions, courseId);
+        
+    } catch (error) {
+        console.error('Error loading course questions:', error);
+        alert('Failed to load questions. Please try again.');
+    }
+};
+
+// Display questions for a course
+function displayCourseQuestions(courseName, questions, courseId) {
+    const contentEl = document.getElementById('studentQuestionBankContent');
+    if (!contentEl) return;
+    
+    const courseColor = questions[0]?.courses?.color || '#4f46e5';
+    
+    let html = `
+        <div class="course-questions-container">
+            <!-- Course Header -->
+            <div class="course-questions-header" style="border-bottom-color: ${courseColor}20;">
+                <div class="course-questions-title">
+                    <button onclick="loadQuestionBankCards()" class="btn-back">
+                        <i class="fas fa-arrow-left"></i> Back to Courses
+                    </button>
+                    <div>
+                        <h2><i class="fas fa-book-medical"></i> ${courseName}</h2>
+                        <p class="questions-count">${questions.length} Questions & Answers</p>
+                    </div>
+                </div>
+                <div class="course-actions">
+                    <button onclick="startCourseTest('${courseId}', '${courseName.replace(/'/g, "\\'")}')" 
+                            class="btn-primary" style="background: ${courseColor};">
+                        <i class="fas fa-play-circle"></i> Take Test
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Search and Filter -->
+            <div class="questions-search-filter">
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="courseQuestionsSearch" placeholder="Search in questions..." 
+                           oninput="filterCourseQuestions()">
+                </div>
+                <div class="filter-buttons">
+                    <button onclick="filterByDifficulty('all')" class="filter-btn active">
+                        All (${questions.length})
+                    </button>
+                    <button onclick="filterByDifficulty('easy')" class="filter-btn">
+                        Easy (${questions.filter(q => q.difficulty === 'easy').length})
+                    </button>
+                    <button onclick="filterByDifficulty('medium')" class="filter-btn">
+                        Medium (${questions.filter(q => q.difficulty === 'medium').length})
+                    </button>
+                    <button onclick="filterByDifficulty('hard')" class="filter-btn">
+                        Hard (${questions.filter(q => q.difficulty === 'hard').length})
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Questions List -->
+            <div class="questions-list-container">
+    `;
+    
+    // Display questions
+    questions.forEach((question, index) => {
+        html += createQuestionCard(question, index);
+    });
+    
+    html += `
+            </div>
+            
+            <!-- Footer -->
+            <div class="course-questions-footer">
+                <div class="questions-summary">
+                    <span><i class="fas fa-question-circle"></i> Total: ${questions.length} questions</span>
+                    <span><i class="fas fa-check-circle"></i> ${questions.filter(q => q.difficulty === 'easy').length} easy</span>
+                    <span><i class="fas fa-clock"></i> ${questions.filter(q => q.difficulty === 'medium').length} medium</span>
+                    <span><i class="fas fa-fire"></i> ${questions.filter(q => q.difficulty === 'hard').length} hard</span>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    contentEl.innerHTML = html;
+};
+
+// Create question card
+function createQuestionCard(question, index) {
+    const difficultyColor = {
+        'easy': '#10b981',
+        'medium': '#f59e0b',
+        'hard': '#ef4444'
+    }[question.difficulty] || '#6b7280';
+    
+    // Format question text with proper HTML
+    const questionText = formatQuestionText(question.question_text);
+    const answerText = formatAnswerText(question.correct_answer, question.explanation);
+    
+    // Get options for multiple choice
+    let optionsHtml = '';
+    if (question.question_type === 'multiple_choice') {
+        const options = [
+            { key: 'option_a', letter: 'A' },
+            { key: 'option_b', letter: 'B' },
+            { key: 'option_c', letter: 'C' },
+            { key: 'option_d', letter: 'D' }
+        ];
+        
+        options.forEach(opt => {
+            const optionText = question[opt.key];
+            if (!optionText) return;
+            
+            const isCorrect = question.correct_answer?.trim() === optionText.trim();
+            
+            optionsHtml += `
+                <div class="option-item ${isCorrect ? 'correct' : ''}">
+                    <div class="option-letter">${opt.letter}</div>
+                    <div class="option-text">${optionText}</div>
+                    ${isCorrect ? '<div class="option-check"><i class="fas fa-check"></i></div>' : ''}
+                </div>
+            `;
+        });
+    }
+    
+    return `
+        <div class="question-answer-card" style="border-left-color: ${difficultyColor};">
+            <div class="question-header" onclick="toggleQuestionAnswer(${index})">
+                <div class="question-meta">
+                    <span class="question-number">Q${index + 1}</span>
+                    <span class="difficulty-badge" style="background: ${difficultyColor}20; color: ${difficultyColor};">
+                        <i class="fas fa-circle"></i> ${question.difficulty?.toUpperCase() || 'MEDIUM'}
+                    </span>
+                    <span class="type-badge">
+                        <i class="fas fa-${getQuestionTypeIcon(question.question_type)}"></i>
+                        ${question.question_type?.replace('_', ' ') || 'Multiple Choice'}
+                    </span>
+                    <span class="marks-badge">
+                        <i class="fas fa-star"></i> ${question.marks || 1} mark
+                    </span>
+                </div>
+                <div class="question-text-preview">
+                    ${questionText.length > 150 ? questionText.substring(0, 150) + '...' : questionText}
+                </div>
+                <div class="toggle-answer">
+                    <i class="fas fa-chevron-down" id="toggleIcon${index}"></i>
+                </div>
+            </div>
+            
+            <div class="answer-content" id="answerContent${index}" style="display: none;">
+                <!-- Full Question -->
+                <div class="full-question">
+                    <h4><i class="fas fa-question-circle"></i> Question:</h4>
+                    <div class="question-full-text">${questionText}</div>
+                </div>
+                
+                <!-- Options (for multiple choice) -->
+                ${optionsHtml ? `
+                <div class="question-options">
+                    <h4><i class="fas fa-list-check"></i> Options:</h4>
+                    <div class="options-grid">
+                        ${optionsHtml}
+                    </div>
+                </div>
+                ` : ''}
+                
+                <!-- Correct Answer -->
+                <div class="correct-answer-section">
+                    <h4><i class="fas fa-check-circle" style="color: #10b981;"></i> Correct Answer:</h4>
+                    <div class="answer-display">
+                        ${answerText}
+                    </div>
+                </div>
+                
+                <!-- Explanation -->
+                ${question.explanation ? `
+                <div class="explanation-section">
+                    <h4><i class="fas fa-info-circle" style="color: #0ea5e9;"></i> Explanation:</h4>
+                    <div class="explanation-text">
+                        ${question.explanation}
+                    </div>
+                </div>
+                ` : ''}
+                
+                <!-- Additional Notes -->
+                ${question.notes ? `
+                <div class="notes-section">
+                    <h4><i class="fas fa-sticky-note" style="color: #8b5cf6;"></i> Notes:</h4>
+                    <div class="notes-text">
+                        ${question.notes}
+                    </div>
+                </div>
+                ` : ''}
+                
+                <!-- Footer -->
+                <div class="question-footer">
+                    <div class="footer-left">
+                        <span class="topic-tag">
+                            <i class="fas fa-tag"></i> ${question.topic || 'General'}
+                        </span>
+                        <span class="time-estimate">
+                            <i class="fas fa-clock"></i> ${question.estimated_time || 2} min
+                        </span>
+                    </div>
+                    <div class="footer-right">
+                        <button onclick="copyQuestionLink(${index})" class="btn-icon">
+                            <i class="fas fa-link"></i> Copy Link
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// Toggle question answer
+window.toggleQuestionAnswer = function(index) {
+    const answerContent = document.getElementById(`answerContent${index}`);
+    const toggleIcon = document.getElementById(`toggleIcon${index}`);
+    
+    if (answerContent.style.display === 'none') {
+        answerContent.style.display = 'block';
+        toggleIcon.className = 'fas fa-chevron-up';
+    } else {
+        answerContent.style.display = 'none';
+        toggleIcon.className = 'fas fa-chevron-down';
+    }
+};
+
+// Filter course questions
+window.filterCourseQuestions = function() {
+    const searchInput = document.getElementById('courseQuestionsSearch');
+    const searchTerm = searchInput?.value?.toLowerCase() || '';
+    
+    if (!searchTerm) {
+        // Show all questions
+        document.querySelectorAll('.question-answer-card').forEach(card => {
+            card.style.display = 'block';
+        });
+        return;
+    }
+    
+    document.querySelectorAll('.question-answer-card').forEach((card, index) => {
+        const question = currentCourseQuestions[index];
+        const questionText = question.question_text?.toLowerCase() || '';
+        const answerText = question.correct_answer?.toLowerCase() || '';
+        const explanationText = question.explanation?.toLowerCase() || '';
+        const topicText = question.topic?.toLowerCase() || '';
+        
+        const matches = questionText.includes(searchTerm) || 
+                       answerText.includes(searchTerm) || 
+                       explanationText.includes(searchTerm) ||
+                       topicText.includes(searchTerm);
+        
+        card.style.display = matches ? 'block' : 'none';
+    });
+};
+
+// Filter by difficulty
+window.filterByDifficulty = function(difficulty) {
+    // Update active button
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    event.target.classList.add('active');
+    
+    if (difficulty === 'all') {
+        // Show all questions
+        document.querySelectorAll('.question-answer-card').forEach(card => {
+            card.style.display = 'block';
+        });
+        return;
+    }
+    
+    document.querySelectorAll('.question-answer-card').forEach((card, index) => {
+        const question = currentCourseQuestions[index];
+        card.style.display = question.difficulty === difficulty ? 'block' : 'none';
+    });
+};
+
+// Copy question link
+window.copyQuestionLink = function(index) {
+    const question = currentCourseQuestions[index];
+    const link = `${window.location.origin}/question/${question.id}`;
+    
+    navigator.clipboard.writeText(link).then(() => {
+        const btn = event.target.closest('.btn-icon');
+        const originalHTML = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-check"></i> Copied!';
+        btn.classList.add('copied');
+        
+        setTimeout(() => {
+            btn.innerHTML = originalHTML;
+            btn.classList.remove('copied');
+        }, 2000);
+    });
 };
 
 // ==================== TEST TAKING ====================
@@ -2763,241 +3099,7 @@ window.loadCurrentCourseQuestion = function() {
                          class="true-false-option ${userTestAnswers[currentQuestionIndex]?.answer === 'False' ? 'selected' : ''}"
                          style="background: ${userTestAnswers[currentQuestionIndex]?.answer === 'False' ? '#ef4444' : 'white'}; 
                                 color: ${userTestAnswers[currentQuestionIndex]?.answer === 'False' ? 'white' : '#991b1b'}; 
-                                border-color: ${userTestAnswers[currentQuestionIndex]?.answer === 'False' ? '#ef4444' : '#ef444440'};">
-                        <i class="fas fa-times-circle"></i> False
-                    </div>
-                </div>
-            </div>
-        `;
-    } else {
-        // Short answer or essay type
-        html += `
-            <div class="short-answer-container">
-                <div class="options-label">
-                    <i class="fas fa-edit"></i> Type your answer:
-                </div>
-                <textarea id="shortAnswerInput" 
-                          class="short-answer-input"
-                          placeholder="Type your answer here..."
-                          oninput="updateShortAnswer(this.value)">${userTestAnswers[currentQuestionIndex]?.answer || ''}</textarea>
-            </div>
-        `;
-    }
-    
-    html += `
-            <div class="question-footer">
-                <span><i class="fas fa-clock"></i> Estimated: ${question.estimated_time || 2} min</span>
-                <span><i class="fas fa-book-medical"></i> Topic: ${question.topic || 'General'}</span>
-            </div>
-        </div>
-    `;
-    
-    container.innerHTML = html;
-};
-
-// Select answer
-window.selectAnswer = function(answer) {
-    userTestAnswers[currentQuestionIndex] = {
-        ...userTestAnswers[currentQuestionIndex],
-        answer: answer,
-        answered: true,
-        timestamp: new Date()
-    };
-    
-    // Update the question display
-    window.loadCurrentCourseQuestion();
-};
-
-// Update short answer
-window.updateShortAnswer = function(answer) {
-    userTestAnswers[currentQuestionIndex] = {
-        ...userTestAnswers[currentQuestionIndex],
-        answer: answer,
-        answered: answer.trim().length > 0,
-        timestamp: new Date()
-    };
-};
-
-// Flag question
-window.flagCourseQuestion = function() {
-    const isFlagged = !userTestAnswers[currentQuestionIndex]?.flagged;
-    userTestAnswers[currentQuestionIndex] = {
-        ...userTestAnswers[currentQuestionIndex],
-        flagged: isFlagged
-    };
-    
-    // Update the test interface
-    window.startCourseAssessment(currentTestQuestions[0]);
-};
-
-// Navigation functions
-window.nextCourseQuestion = function() {
-    if (currentQuestionIndex < currentTestQuestions.length - 1) {
-        currentQuestionIndex++;
-        window.startCourseAssessment(currentTestQuestions[0]);
-    }
-};
-
-window.previousCourseQuestion = function() {
-    if (currentQuestionIndex > 0) {
-        currentQuestionIndex--;
-        window.startCourseAssessment(currentTestQuestions[0]);
-    }
-};
-
-window.goToCourseQuestion = function(index) {
-    currentQuestionIndex = index;
-    window.startCourseAssessment(currentTestQuestions[0]);
-};
-
-// Submit course test
-window.submitCourseTest = async function() {
-    if (!confirm('Are you sure you want to submit your test? You cannot change answers after submission.')) {
-        return;
-    }
-    
-    try {
-        // Calculate score
-        let score = 0;
-        let correctAnswers = 0;
-        
-        currentTestQuestions.forEach((question, index) => {
-            const userAnswer = userTestAnswers[index]?.answer;
-            const correctAnswer = question.correct_answer;
-            
-            if (userAnswer && userAnswer.trim().toLowerCase() === correctAnswer?.trim().toLowerCase()) {
-                score += question.marks || 1;
-                correctAnswers++;
-            }
-        });
-        
-        const totalMarks = currentTestQuestions.reduce((total, q) => total + (q.marks || 1), 0);
-        const percentage = Math.round((score / totalMarks) * 100);
-        const timeSpent = Math.round((new Date() - testStartTime) / 60000); // in minutes
-        
-        // Show results
-        window.showCourseTestResults(score, totalMarks, percentage, correctAnswers);
-        
-    } catch (error) {
-        console.error('Error submitting course test:', error);
-        alert('Error submitting test. Please try again.');
-    }
-};
-
-// Show course test results
-window.showCourseTestResults = function(score, totalMarks, percentage, correctAnswers) {
-    const container = document.getElementById('studentQuestionBankContent');
-    if (!container) return;
-    
-    const course = currentCourseForTest;
-    const performanceColor = percentage >= 70 ? '#10b981' : 
-                           percentage >= 50 ? '#f59e0b' : '#ef4444';
-    const performanceText = percentage >= 70 ? 'Excellent!' : 
-                          percentage >= 50 ? 'Good Attempt' : 'Needs Improvement';
-    const performanceIcon = percentage >= 70 ? 'trophy' : 
-                          percentage >= 50 ? 'medal' : 'graduation-cap';
-    
-    container.innerHTML = `
-        <div class="results-container">
-            <div class="results-header">
-                <div class="results-icon" style="background: ${performanceColor}20;">
-                    <i class="fas fa-${performanceIcon}" style="color: ${performanceColor};"></i>
-                </div>
-                <h2>Test Completed!</h2>
-                <p class="results-subtitle">${course?.name || 'Course'}</p>
-            </div>
-            
-            <!-- Results Summary -->
-            <div class="results-summary">
-                <div class="result-card">
-                    <div class="result-number" style="color: #4f46e5;">${percentage}%</div>
-                    <div class="result-label">Overall Score</div>
-                    <div class="result-status" style="color: ${performanceColor};">${performanceText}</div>
-                </div>
-                <div class="result-card">
-                    <div class="result-number" style="color: #10b981;">${correctAnswers}/${currentTestQuestions.length}</div>
-                    <div class="result-label">Correct Answers</div>
-                    <div class="result-status" style="color: #10b981;">
-                        ${Math.round((correctAnswers / currentTestQuestions.length) * 100)}% Accuracy
-                    </div>
-                </div>
-                <div class="result-card">
-                    <div class="result-number" style="color: #f59e0b;">${score}/${totalMarks}</div>
-                    <div class="result-label">Marks Obtained</div>
-                    <div class="result-status" style="color: #f59e0b;">
-                        Total: ${totalMarks} marks
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Review Button -->
-            <div class="review-section">
-                <button onclick="reviewTestQuestions()" class="btn-secondary">
-                    <i class="fas fa-list-check"></i> Review Questions
-                </button>
-            </div>
-            
-            <!-- Action Buttons -->
-            <div class="results-actions">
-                <button onclick="loadQuestionBankCards()" class="btn-primary">
-                    <i class="fas fa-home"></i> Back to Courses
-                </button>
-                <button onclick="retakeTest()" class="btn-secondary">
-                    <i class="fas fa-redo"></i> Retake Test
-                </button>
-            </div>
-        </div>
-    `;
-};
-
-// Review test questions
-window.reviewTestQuestions = function() {
-    currentQuestionIndex = 0;
-    window.startCourseAssessment(currentTestQuestions[0]);
-};
-
-// Retake test
-window.retakeTest = function() {
-    currentQuestionIndex = 0;
-    userTestAnswers = {};
-    testStartTime = new Date();
-    window.startCourseAssessment(currentTestQuestions[0]);
-};
-
-// ==================== HELPER FUNCTIONS ====================
-
-// Calculate total time for test
-function calculateTotalTime() {
-    return currentTestQuestions.reduce((total, q) => total + (q.estimated_time || 2), 0);
-}
-
-// Get question dot colors (for course test)
-function getCourseQuestionDotColor(index) {
-    if (userTestAnswers[index]?.answered) {
-        return userTestAnswers[index]?.flagged ? '#fef3c7' : '#10b981';
-    } else if (userTestAnswers[index]?.flagged) {
-        return '#fef3c7';
-    } else if (index === currentQuestionIndex) {
-        return '#4f46e5';
-    }
-    return '#f3f4f6';
-}
-
-function getCourseQuestionDotTextColor(index) {
-    if (userTestAnswers[index]?.answered || index === currentQuestionIndex) {
-        return 'white';
-    } else if (userTestAnswers[index]?.flagged) {
-        return '#92400e';
-    }
-    return '#4b5563';
-}
-
-function getCourseQuestionDotBorderColor(index) {
-    if (index === currentQuestionIndex) {
-        return '#4f46e5';
-    }
-    return '#e5e7eb';
-}
+                                border-color: ${userTestAnswers[currentQuestionIndex]?.answer === 'False' ? '#ef4444
 
        // *************************************************************************
             // *** ATTENDANCE SYSTEM ***
