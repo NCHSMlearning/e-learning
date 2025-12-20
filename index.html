@@ -2291,14 +2291,14 @@ async function checkMedicalAssessmentsTable() {
 async function fetchNurseIQData() {
     try {
         // Fetch assessments with course info
-        const { data: assessments, error } = await sb  // CHANGE: supabase -> sb
+        const { data: assessments, error } = await sb
             .from('medical_assessments')
             .select(`
                 *,
                 courses (
                     id,
                     course_name,
-                    course_code,
+                    unit_code,
                     color
                 )
             `)
@@ -2311,7 +2311,7 @@ async function fetchNurseIQData() {
         // Fetch user progress
         let userProgress = [];
         if (currentUserId) {
-            const { data: progress } = await sb  // CHANGE: supabase -> sb
+            const { data: progress } = await sb
                 .from('user_assessment_progress')
                 .select('*')
                 .eq('user_id', currentUserId);
@@ -2525,9 +2525,9 @@ function displayAssessmentsList(assessments, userProgress) {
 // Load courses for question bank filter
 async function loadQuestionBankCourses() {
     try {
-        const { data: courses, error } = await supabase
+        const { data: courses, error } = await sb
             .from('courses')
-            .select('id, course_name, course_code')
+            .select('id, course_name, unit_code')
             .order('course_name');
         
         if (error) throw error;
@@ -2540,7 +2540,9 @@ async function loadQuestionBankCourses() {
                 courses.forEach(course => {
                     const option = document.createElement('option');
                     option.value = course.id;
-                    option.textContent = `${course.course_name} (${course.course_code || 'KRCHN'})`;
+                    // Use unit_code if available, otherwise just course_name
+                    const displayCode = course.unit_code ? `(${course.unit_code})` : '';
+                    option.textContent = `${course.course_name} ${displayCode}`;
                     courseSelect.appendChild(option);
                 });
             }
