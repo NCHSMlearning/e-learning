@@ -2117,119 +2117,192 @@ async function generateQuestions() {
     }
 }
 
-// Generate from pasted questions (with ✓ marks)
+// Generate from pasted questions - EXACT COPY VERSION
 function generateFromPastedQuestions(text, count) {
     const questions = [];
     const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
     
-    let currentQuestion = null;
+    let currentQuestion = '';
     let currentOptions = [];
-    let currentCorrectAnswer = '';
+    let currentAnswer = '';
+    let currentExplanation = '';
     let questionNumber = 1;
     
-    // First pass: Extract existing questions
-    const extractedQuestions = [];
+    // Simple state machine
+    let state = 'looking-for-question'; // looking-for-question, in-question, in-options, got-answer
     
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         
-        // Detect numbered questions
-        const questionMatch = line.match(/^(\d+[\.\)])\s+(.+[?])$/i);
-        const altMatch = line.match(/^Q?(\d+)[\.\:]\s+(.+[?])$/i);
+        // Look for numbered questions (1., 2., Q1, etc.)
+        const questionMatch = line.match(/^(\d+[\.\)]|Q?\d+[\.\:\)]|Question\s+\d+[:\.\)])\s*(.+)$/i);
         
-        if (questionMatch || altMatch) {
-            // Save previous question if exists
-            if (currentQuestion && currentOptions.length > 0) {
-                extractedQuestions.push({
+        if (questionMatch && state === 'looking-for-question') {
+            // If we have a previous question, save it
+            if (currentQuestion && currentAnswer) {
+                questions.push({
+                    id: questions.length + 1,
                     question: currentQuestion,
-                    options: [...currentOptions],
-                    answer: currentCorrectAnswer,
-                    type: 'mcq'
+                    answer: currentAnswer,
+                    options: currentOptions.length > 0 ? currentOptions : null,
+                    type: currentOptions.length > 0 ? 'mcq' : 'short',
+                    difficulty: getRandomDifficulty(),
+                    topic: 'Pasted',
+                    saved: false,
+                    explanation: currentExplanation || generateExplanation(currentQuestion, currentAnswer)
                 });
+                
+                // Reset for next question
+                currentQuestion = '';
+                currentOptions = [];
+                currentAnswer = '';
+                currentExplanation = '';
             }
             
             // Start new question
-            const match = questionMatch || altMatch;
-            currentQuestion = match[2];
-            currentOptions = [];
-            currentCorrectAnswer = '';
+            currentQuestion = questionMatch[2];
+            state = 'in-question';
             
-            // Look for options in next lines
-            for (let j = i + 1; j < Math.min(i + 6, lines.length); j++) {
-                const optionLine = lines[j];
-                const optionMatch = optionLine.match(/^([A-D])[\.\)]\s+(.+?)(?:\s+[✓✔√])?$/i);
-                
-                if (optionMatch) {
-                    const optionText = optionMatch[2].trim();
-                    currentOptions.push(optionText);
-                    
-                    // Check if this is correct answer (has ✓ symbol)
-                    if (optionLine.includes('✓') || optionLine.includes('✔') || optionLine.includes('√')) {
-                        currentCorrectAnswer = optionText;
-                    }
-                } else if (!optionLine.match(/^[A-D][\.\)]/)) {
-                    // Stop if not an option line
-                    break;
-                }
+        } 
+        // If we're in a question and the line is a question continuation
+        else if (state === 'in-question' && line.length > 0 && 
+                 !line.match(/^[A-D][\.\)]/) && 
+                 !line.toLowerCase().includes('answer:') &&
+                 !line.toLowerCase().includes('ans:')) {
+            currentQuestion += ' ' + line;
+        }
+        // Look for options (A., B., etc.)
+        else if (state === 'in-question' && line.match(/^[A-D][\.\)]\s+.+$/i)) {
+            state = 'in-options';
+            const optionMatch = line.match(/^[A-D][\.\)]\s+(.+)$/i);
+            if (optionMatch) {
+                currentOptions.push(optionMatch[1]);
+            }
+        }
+        // Continue collecting options
+        else if (state === 'in-options' && line.match(/^[A-D][\.\)]\s+.+$/i)) {
+            const optionMatch = line.match(/^[A-D][\.\)]\s+(.+)$/i);
+            if (optionMatch) {
+                currentOptions.push(optionMatch[1]);
+            }
+        }
+        // Look for answer
+        else if ((state === 'in-question' || state === 'in-options') && 
+                (line.toLowerCase().includes('answer:') || 
+                 line.toLowerCase().includes('ans:'))) {
+            const answerMatch = line.match(/(?:answer|ans):?\s*(.+)/i);
+            if (answerMatch) {
+                currentAnswer = answerMatch[1].trim();
+                state = 'got-answer';
+            }
+        }
+        // Look for explanation
+        else if (state === 'got-answer' && 
+                (line.toLowerCase().includes('explanation:') || 
+                 line.toLowerCase().includes('explain:'))) {
+            const explanationMatch = line.match(/(?:explanation|explain):?\s*(.+)/i);
+            if (explanationMatch) {
+                currentExplanation = explanationMatch[1].trim();
             }
         }
     }
     
-    // Add last question
-    if (currentQuestion && currentOptions.length > 0) {
-        extractedQuestions.push({
-            question: currentQuestion,
-            options: [...currentOptions],
-            answer: currentCorrectAnswer,
-            type: 'mcq'
-        });
-    }
-    
-    console.log(`Extracted ${extractedQuestions.length} questions from paste`);
-    
-    // Generate new questions based on extracted patterns
-    for (let i = 0; i < count && i < extractedQuestions.length * 3; i++) {
-        const source = extractedQuestions[i % extractedQuestions.length];
-        
-        // Create variations
-        const newQuestion = createQuestionVariation(source.question);
-        const newOptions = createOptionsVariation(source.options, source.answer);
-        
+    // Don't forget the last question
+    if (currentQuestion && currentAnswer) {
         questions.push({
             id: questions.length + 1,
-            question: newQuestion,
-            answer: newOptions.correct,
-            options: newOptions.all,
-            type: 'mcq',
+            question: currentQuestion,
+            answer: currentAnswer,
+            options: currentOptions.length > 0 ? currentOptions : null,
+            type: currentOptions.length > 0 ? 'mcq' : 'short',
             difficulty: getRandomDifficulty(),
-            topic: 'Generated',
+            topic: 'Pasted',
             saved: false,
-            explanation: generateExplanation(newQuestion, newOptions.correct)
+            explanation: currentExplanation || generateExplanation(currentQuestion, currentAnswer)
         });
     }
     
-    // Fill remaining with database questions
-    if (questions.length < count) {
-        const remaining = count - questions.length;
-        const dbQuestions = getAllDatabaseQuestions();
-        const shuffled = [...dbQuestions].sort(() => Math.random() - 0.5);
+    console.log(`Exact copy: Found ${questions.length} questions`);
+    
+    // If we found questions, use them as-is
+    if (questions.length > 0) {
+        return questions.slice(0, Math.min(count, questions.length));
+    }
+    
+    // Fallback: Simple line-by-line extraction
+    return simpleExtractPastedQuestions(text, count);
+}
+
+// SIMPLE EXTRACTION - Preserves exact format
+function simpleExtractPastedQuestions(text, count) {
+    const questions = [];
+    const blocks = text.split(/\n\s*\n/); // Split by blank lines
+    
+    blocks.forEach((block, index) => {
+        if (index >= count) return;
         
-        shuffled.slice(0, Math.min(remaining, shuffled.length)).forEach((q, idx) => {
+        const lines = block.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        if (lines.length === 0) return;
+        
+        let question = '';
+        let answer = '';
+        let options = [];
+        let explanation = '';
+        
+        // First line is usually the question
+        if (lines[0]) {
+            // Remove question number if present
+            question = lines[0].replace(/^(\d+[\.\)]|Q?\d+[\.\:]|Question\s+\d+[:\.\)])\s*/i, '');
+        }
+        
+        // Look through remaining lines
+        for (let i = 1; i < lines.length; i++) {
+            const line = lines[i];
+            
+            // Check for options
+            const optionMatch = line.match(/^([A-D])[\.\)]\s+(.+)$/i);
+            if (optionMatch) {
+                options.push(optionMatch[2]);
+            }
+            // Check for answer
+            else if (line.toLowerCase().includes('answer:') || 
+                    line.toLowerCase().includes('ans:')) {
+                const answerMatch = line.match(/(?:answer|ans):?\s*(.+)/i);
+                if (answerMatch) answer = answerMatch[1];
+            }
+            // Check for explanation
+            else if (line.toLowerCase().includes('explanation:') || 
+                    line.toLowerCase().includes('explain:')) {
+                const explanationMatch = line.match(/(?:explanation|explain):?\s*(.+)/i);
+                if (explanationMatch) explanation = explanationMatch[1];
+            }
+            // If no markers, assume it's continuation of question or answer
+            else if (!answer && line.length < 100) {
+                if (!question.includes('?')) {
+                    question += ' ' + line;
+                } else if (!answer) {
+                    answer = line;
+                }
+            }
+        }
+        
+        // If we have a question and answer
+        if (question && answer) {
             questions.push({
-                id: questions.length + 1,
-                question: q.question,
-                answer: q.answer,
-                options: q.options || null,
-                type: q.options ? 'mcq' : 'short',
-                difficulty: q.difficulty || 'medium',
-                topic: 'Database',
+                id: index + 1,
+                question: question.endsWith('?') ? question : question + '?',
+                answer: answer,
+                options: options.length > 0 ? options : null,
+                type: options.length > 0 ? 'mcq' : 'short',
+                difficulty: getRandomDifficulty(),
+                topic: 'Pasted',
                 saved: false,
-                explanation: q.explanation || generateExplanation(q.question, q.answer)
+                explanation: explanation || generateExplanation(question, answer)
             });
-        });
-    }
+        }
+    });
     
-    return questions.slice(0, count);
+    return questions;
 }
 
 // Generate from template
