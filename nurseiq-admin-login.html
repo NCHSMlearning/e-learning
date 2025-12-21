@@ -864,140 +864,78 @@ document.addEventListener('DOMContentLoaded', async function() {
             }
         }
         
-        // ==================== QUESTION MANAGEMENT ====================
-        async function saveQuestion() {
-            const courseId = document.getElementById('question-course').value;
-            const questionText = document.getElementById('question-text').value.trim();
-            const correctAnswer = document.getElementById('correct-answer').value.trim();
-            const topic = document.getElementById('question-topic').value.trim();
-            const difficulty = document.getElementById('question-difficulty').value;
-            const explanation = document.getElementById('question-explanation').value.trim();
-            const optionA = document.getElementById('option-a').value.trim();
-            const optionB = document.getElementById('option-b').value.trim();
-            const optionC = document.getElementById('option-c').value.trim();
-            const optionD = document.getElementById('option-d').value.trim();
-            
-            if (!courseId) {
-                alert('Please select a course');
-                return;
-            }
-            
-            if (!questionText || !correctAnswer) {
-                alert('Please fill in question and correct answer');
-                return;
-            }
-            
-            try {
-                const questionData = {
-                    question_text: questionText,
-                    correct_answer: correctAnswer,
-                    course_id: courseId,
-                    topic: topic || null,
-                    difficulty: difficulty,
-                    explanation: explanation || null,
-                    option_a: optionA || 'Option A',
-                    option_b: optionB || 'Option B',
-                    option_c: optionC || 'Option C',
-                    option_d: optionD || 'Option D',
-                    curriculum: 'KRCHN',
-                    is_published: true,
-                    is_active: true,
-                    created_at: new Date().toISOString(),
-                    question_type: optionA ? 'multiple_choice' : 'short_answer',
-                    marks: 1,
-                    estimated_time: 2
-                };
-                
-                const { error } = await supabase
-                    .from('medical_assessments')
-                    .insert([questionData]);
-                
-                if (error) throw error;
-                
-                alert('✅ Question saved successfully!');
-                resetQuestionForm();
-                loadDashboardStats();
-                
-            } catch (error) {
-                console.error('Error saving question:', error);
-                alert('Error saving question: ' + error.message);
-            }
-        }
-        
-        function resetQuestionForm() {
-            document.getElementById('question-form').reset();
-        }
-        // ==================== SIMPLE COPY-PASTE QUESTION EXTRACTION ====================
-
-let savedQuestionsCount = 0;
-
-function clearTextArea() {
-    document.getElementById('questions-text').value = '';
-}
-
-function showExample() {
-    const exampleText = `1. What is the normal range for adult blood pressure?
-A) 90/60 mmHg
-B) 120/80 mmHg ✓
-C) 140/90 mmHg
-D) 160/100 mmHg
-
-2. Which vitamin is produced by the skin when exposed to sunlight?
-A) Vitamin A
-B) Vitamin B12
-C) Vitamin C
-D) Vitamin D ✓
-Answer: Vitamin D
-
-3. What is the primary function of red blood cells?
-A) Transport oxygen ✓
-B) Fight infection
-C) Clot blood
-D) Regulate temperature`;
-
-    document.getElementById('questions-text').value = exampleText;
-}
-
-function processTextQuestions() {
-    const text = document.getElementById('questions-text').value.trim();
-    const courseId = document.getElementById('document-course').value;
-    
-    if (!text) {
-        alert('Please paste some questions first');
-        return;
-    }
+       async function saveQuestion() {
+    const courseId = document.getElementById('question-course').value;
+    const questionText = document.getElementById('question-text').value.trim();
+    const correctAnswer = document.getElementById('correct-answer').value.trim();
+    const topic = document.getElementById('question-topic').value.trim();
+    const difficulty = document.getElementById('question-difficulty').value;
+    const explanation = document.getElementById('question-explanation').value.trim();
+    const optionA = document.getElementById('option-a').value.trim();
+    const optionB = document.getElementById('option-b').value.trim();
+    const optionC = document.getElementById('option-c').value.trim();
+    const optionD = document.getElementById('option-d').value.trim();
     
     if (!courseId) {
-        alert('Please select a course for these questions');
+        alert('Please select a course');
         return;
     }
     
-    const processBtn = document.getElementById('process-btn');
-    processBtn.disabled = true;
-    processBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+    if (!questionText || !correctAnswer) {
+        alert('Please fill in question and correct answer');
+        return;
+    }
     
     try {
-        // Clear previous results
-        extractedQuestions = [];
+        // Determine if this is MCQ or short answer
+        const hasOptions = optionA || optionB || optionC || optionD;
+        const questionType = hasOptions ? 'multiple_choice' : 'short_answer';
         
-        // Always use the new simple extractor
-        extractedQuestions = extractSimpleMCQs(text);
+        const questionData = {
+            question_text: questionText,
+            correct_answer: correctAnswer,
+            course_id: courseId,
+            topic: topic || null,
+            difficulty: difficulty,
+            explanation: explanation || null,
+            option_a: optionA || null,
+            option_b: optionB || null,
+            option_c: optionC || null,
+            option_d: optionD || null,
+            curriculum: 'KRCHN',
+            is_published: true,
+            is_active: true,
+            created_at: new Date().toISOString(),
+            question_type: questionType,  // FIXED: Properly set type
+            marks: 1,
+            estimated_time: 2
+        };
         
-        console.log(`Extracted ${extractedQuestions.length} questions:`, extractedQuestions);
+        // DEBUG: Log what's being saved
+        console.log('Saving question:', {
+            type: questionType,
+            hasOptions: hasOptions,
+            options: {
+                a: optionA,
+                b: optionB,
+                c: optionC,
+                d: optionD
+            }
+        });
         
-        if (extractedQuestions.length === 0) {
-            throw new Error('No questions found. Try this format:\n1. Question text?\nA) Option A\nB) Option B ✓\nC) Option C\nD) Option D');
-        }
+        const { error } = await supabase
+            .from('medical_assessments')
+            .insert([questionData]);
         
-        // Display results
-        displayQuestionsList();
+        if (error) throw error;
+        
+        alert(`✅ Question saved as ${questionType.toUpperCase().replace('_', ' ')}!`);
+        resetQuestionForm();
+        loadDashboardStats();
         
     } catch (error) {
-        console.error('Error processing text:', error);
-        alert('Error: ' + error.message);
-    } finally {
-        processBtn.disabled = false;
-        processBtn.innerHTML = '<i class="fas fa-cogs"></i> Extract Questions';
+        console.error('Error saving question:', error);
+        alert('Error saving question: ' + error.message);
     }
 }
 // ADD THIS FUNCTION BEFORE extractSimpleMCQs()
@@ -1332,7 +1270,7 @@ function displayQuestionsList() {
         extractionResults.scrollIntoView({ behavior: 'smooth' });
     }
 }
-        // ==================== MINIMAL SAVE FUNCTIONS ====================
+       // ==================== MINIMAL SAVE FUNCTIONS ====================
 
 async function saveSingleQuestion(index) {
     const courseId = document.getElementById('document-course').value;
@@ -1341,6 +1279,11 @@ async function saveSingleQuestion(index) {
     if (!question || question.saved) return;
     
     try {
+        // FIX: Properly check if there are actual options (not just truthy empty array)
+        const hasOptions = question.options && 
+                          Array.isArray(question.options) && 
+                          question.options.length > 0;
+        
         const questionData = {
             question_text: question.question,
             correct_answer: question.answer,
@@ -1351,7 +1294,10 @@ async function saveSingleQuestion(index) {
             is_published: true,
             is_active: true,
             created_at: new Date().toISOString(),
-            question_type: question.options ? 'multiple_choice' : 'short_answer',
+            // FIX: Use proper logic to determine question type
+            question_type: hasOptions ? 'multiple_choice' : 'short_answer',
+            // FIX: Save options to database as JSON string
+            options: hasOptions ? JSON.stringify(question.options) : null,
             marks: 1,
             estimated_time: 2
         };
@@ -1411,20 +1357,30 @@ async function saveAllExtractedQuestions() {
     }
     
     try {
-        const questionsToSave = unsavedQuestions.map(q => ({
-            question_text: q.question,
-            correct_answer: q.answer,
-            course_id: courseId,
-            difficulty: 'medium',
-            explanation: q.explanation || '',
-            curriculum: 'KRCHN',
-            is_published: true,
-            is_active: true,
-            created_at: new Date().toISOString(),
-            question_type: q.options ? 'multiple_choice' : 'short_answer',
-            marks: 1,
-            estimated_time: 2
-        }));
+        const questionsToSave = unsavedQuestions.map(q => {
+            // FIX: Apply same logic for checking options
+            const hasOptions = q.options && 
+                              Array.isArray(q.options) && 
+                              q.options.length > 0;
+            
+            return {
+                question_text: q.question,
+                correct_answer: q.answer,
+                course_id: courseId,
+                difficulty: 'medium',
+                explanation: q.explanation || '',
+                curriculum: 'KRCHN',
+                is_published: true,
+                is_active: true,
+                created_at: new Date().toISOString(),
+                // FIX: Use proper logic to determine question type
+                question_type: hasOptions ? 'multiple_choice' : 'short_answer',
+                // FIX: Save options to database as JSON string
+                options: hasOptions ? JSON.stringify(q.options) : null,
+                marks: 1,
+                estimated_time: 2
+            };
+        });
         
         const { error } = await supabase
             .from('medical_assessments')
