@@ -2157,7 +2157,7 @@ document.querySelectorAll('[onclick*="showTab"]').forEach(element => {
                     if (uploadButton) uploadButton.disabled = false;
                 });
             }
-// ==================== ENHANCED NURSEIQ QUESTION BANK SYSTEM ====================
+// ==================== NURSEIQ QUESTION BANK SYSTEM ====================
 
 // Global variables
 let currentTestQuestions = [];
@@ -2165,134 +2165,52 @@ let currentQuestionIndex = 0;
 let userTestAnswers = {};
 let currentCourseForTest = null;
 let currentCourseQuestions = [];
-let currentStudyMode = 'practice'; // practice, test, review, flashcards
-let timerInterval = null;
-let timeRemaining = 0;
-let testStatistics = {
-    totalAttempted: 0,
-    totalCorrect: 0,
-    totalIncorrect: 0,
-    averageTime: 0,
-    weakAreas: []
-};
-
-// Study modes configuration
-const STUDY_MODES = {
-    PRACTICE: {
-        id: 'practice',
-        name: 'Practice Mode',
-        icon: 'fas fa-graduation-cap',
-        description: 'Learn at your own pace with instant feedback',
-        features: ['Instant feedback', 'Unlimited time', 'Detailed explanations']
-    },
-    TEST: {
-        id: 'test',
-        name: 'Test Mode',
-        icon: 'fas fa-clock',
-        description: 'Simulate real exam conditions',
-        features: ['Timed questions', 'Exam simulation', 'Score tracking']
-    },
-    REVIEW: {
-        id: 'review',
-        name: 'Review Mode',
-        icon: 'fas fa-redo',
-        description: 'Focus on weak areas and mistakes',
-        features: ['Focus on mistakes', 'Weak area targeting', 'Progress tracking']
-    },
-    FLASHCARDS: {
-        id: 'flashcards',
-        name: 'Flashcards',
-        icon: 'fas fa-layer-group',
-        description: 'Quick memorization and recall',
-        features: ['Quick review', 'Active recall', 'Spaced repetition']
-    }
-};
+let showAnswersMode = true; // Always show answers immediately for Q&A mode
 
 // ==================== INITIALIZATION ====================
 
+// Initialize the system
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('🚀 Enhanced NurseIQ Question Bank Initializing...');
+    console.log('Initializing NurseIQ Question Bank...');
     
-    // Initialize with saved preferences
-    loadUserPreferences();
-    
-    // Load question bank
+    // Load question bank on page load
     loadQuestionBankCards();
     
     // Initialize search
     initQuestionBankSearch();
     
-    // Initialize keyboard shortcuts
-    initKeyboardShortcuts();
-    
-    // Initialize service worker for offline support
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/sw-nursequestions.js')
-            .then(() => console.log('✅ Service Worker Registered'))
-            .catch(err => console.log('❌ Service Worker Registration Failed:', err));
-    }
-    
-    console.log('✅ Enhanced NurseIQ Question Bank Ready');
+    console.log('NurseIQ Question Bank initialized');
 });
 
-// Load user preferences from localStorage
-function loadUserPreferences() {
-    const savedMode = localStorage.getItem('nursequestions_studyMode');
-    if (savedMode && STUDY_MODES[savedMode.toUpperCase()]) {
-        currentStudyMode = savedMode;
-    }
-    
-    const savedStats = localStorage.getItem('nursequestions_statistics');
-    if (savedStats) {
-        testStatistics = JSON.parse(savedStats);
+// Initialize search for question bank
+function initQuestionBankSearch() {
+    const searchInput = document.getElementById('studentQuestionBankSearch');
+    if (searchInput) {
+        let searchTimeout;
+        searchInput.addEventListener('input', function() {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                loadQuestionBankCards();
+            }, 300);
+        });
     }
 }
 
-// Initialize keyboard shortcuts
-function initKeyboardShortcuts() {
-    document.addEventListener('keydown', (e) => {
-        // Only activate in question view
-        if (!document.getElementById('questionText')) return;
-        
-        switch(e.key) {
-            case '1':
-            case '2':
-            case '3':
-            case '4':
-                selectOptionByNumber(parseInt(e.key) - 1);
-                break;
-            case ' ':
-                e.preventDefault();
-                if (currentStudyMode === 'flashcards') flipFlashcard();
-                break;
-            case 'ArrowRight':
-                e.preventDefault();
-                nextQuestion();
-                break;
-            case 'ArrowLeft':
-                e.preventDefault();
-                prevQuestion();
-                break;
-            case 'Enter':
-                checkAnswer();
-                break;
-            case 'r':
-                resetQuestion();
-                break;
-            case 'm':
-                markForReview();
-                break;
-        }
-    });
-}
+// ==================== QUESTION BANK CARD VIEW ====================
 
-// ==================== ENHANCED QUESTION BANK CARD VIEW ====================
-
+// Load question bank in card format
 async function loadQuestionBankCards() {
     try {
-        showLoading('Loading question bank...');
+        console.log('Loading question bank cards...');
         
-        // Fetch ALL questions with enhanced data
+        const loadingEl = document.getElementById('studentQuestionBankLoading');
+        const contentEl = document.getElementById('studentQuestionBankContent');
+        
+        // Show loading
+        if (loadingEl) loadingEl.style.display = 'block';
+        if (contentEl) contentEl.innerHTML = '<div class="loading">Loading question bank...</div>';
+        
+        // Fetch ALL questions with course info - NO LIMIT
         const { data: questions, error } = await sb
             .from('medical_assessments')
             .select(`
@@ -2302,857 +2220,839 @@ async function loadQuestionBankCards() {
                     course_name,
                     unit_code,
                     color,
-                    description,
-                    category
+                    description
                 )
             `)
+            .eq('is_active', true)
+            .eq('is_published', true);
+        
+        if (error) throw error;
+        
+        console.log(`Fetched ${questions?.length || 0} questions from database`);
+        
+        // Group by course
+        const coursesMap = {};
+        questions.forEach(question => {
+            const courseId = question.course_id || 'general';
+            const courseName = question.courses?.course_name || 'General Nursing';
+            const unitCode = question.courses?.unit_code || 'KRCHN';
+            
+            if (!coursesMap[courseId]) {
+                coursesMap[courseId] = {
+                    id: courseId,
+                    name: courseName,
+                    unit_code: unitCode,
+                    color: question.courses?.color || '#4f46e5',
+                    description: question.courses?.description || '',
+                    questions: [],
+                    stats: {
+                        total: 0,
+                        active: 0,
+                        hard: 0,
+                        medium: 0,
+                        easy: 0,
+                        lastUpdated: null
+                    }
+                };
+            }
+            
+            coursesMap[courseId].questions.push(question);
+            coursesMap[courseId].stats.total++;
+            coursesMap[courseId].stats.active++;
+            
+            // Count by difficulty
+            if (question.difficulty === 'hard') coursesMap[courseId].stats.hard++;
+            else if (question.difficulty === 'medium') coursesMap[courseId].stats.medium++;
+            else if (question.difficulty === 'easy') coursesMap[courseId].stats.easy++;
+            
+            // Track last updated
+            if (question.updated_at) {
+                const updatedDate = new Date(question.updated_at);
+                if (!coursesMap[courseId].stats.lastUpdated || updatedDate > coursesMap[courseId].stats.lastUpdated) {
+                    coursesMap[courseId].stats.lastUpdated = updatedDate;
+                }
+            }
+        });
+        
+        // Convert to array
+        const coursesArray = Object.values(coursesMap);
+        
+        // Calculate overall stats
+        const overallStats = {
+            totalCourses: coursesArray.length,
+            totalQuestions: questions.length,
+            activeQuestions: questions.length,
+            activeRate: '100%'
+        };
+        
+        // Display the card view
+        displayQuestionBankCards(coursesArray, overallStats);
+        
+    } catch (error) {
+        console.error('Error loading question bank:', error);
+        const contentEl = document.getElementById('studentQuestionBankContent');
+        if (contentEl) {
+            contentEl.innerHTML = `
+                <div class="error-state">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <h3>Failed to Load Question Bank</h3>
+                    <p>${error.message || 'Please try again'}</p>
+                    <button onclick="loadQuestionBankCards()" class="btn-primary">
+                        <i class="fas fa-redo"></i> Try Again
+                    </button>
+                </div>
+            `;
+        }
+    } finally {
+        const loadingEl = document.getElementById('studentQuestionBankLoading');
+        if (loadingEl) loadingEl.style.display = 'none';
+    }
+}
+
+// Display question bank cards
+function displayQuestionBankCards(courses, overallStats) {
+    const contentEl = document.getElementById('studentQuestionBankContent');
+    if (!contentEl) return;
+    
+    const searchTerm = document.getElementById('studentQuestionBankSearch')?.value?.toLowerCase() || '';
+    
+    // Filter courses if search term exists
+    let filteredCourses = courses;
+    if (searchTerm) {
+        filteredCourses = courses.filter(course => 
+            course.name.toLowerCase().includes(searchTerm) ||
+            course.unit_code.toLowerCase().includes(searchTerm) ||
+            course.description.toLowerCase().includes(searchTerm)
+        );
+    }
+    
+    // Format date
+    function formatDate(date) {
+        if (!date) return 'Never';
+        const now = new Date();
+        const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
+        
+        if (diffDays === 0) return 'Today';
+        if (diffDays === 1) return 'Yesterday';
+        if (diffDays < 7) return `${diffDays} days ago`;
+        if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+    
+    let html = `
+        <div class="question-bank-container">
+            <!-- Header Stats -->
+            <div class="stats-header">
+                <div class="stats-title">
+                    <h2><i class="fas fa-database"></i> Question Bank</h2>
+                    <p>Organized by courses with detailed statistics</p>
+                </div>
+                <div class="stats-filter">
+                    <i class="fas fa-filter"></i> Showing ${filteredCourses.length} of ${courses.length} courses
+                </div>
+            </div>
+            
+            <!-- Overall Stats Cards -->
+            <div class="overall-stats">
+                <div class="stat-card">
+                    <div class="stat-number" style="color: #4f46e5;">${overallStats.totalCourses}</div>
+                    <div class="stat-label">Total Courses</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" style="color: #10b981;">${overallStats.totalQuestions}</div>
+                    <div class="stat-label">Total Questions</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" style="color: #0ea5e9;">${overallStats.activeQuestions}</div>
+                    <div class="stat-label">Active Questions</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" style="color: #f59e0b;">${overallStats.activeRate}</div>
+                    <div class="stat-label">Active Rate</div>
+                </div>
+            </div>
+            
+            <!-- Course Cards -->
+            <div class="courses-grid">
+    `;
+    
+    filteredCourses.forEach(course => {
+        const courseColor = course.color || '#4f46e5';
+        const lastUpdated = formatDate(course.stats.lastUpdated);
+        
+        html += `
+            <div class="course-card">
+                <!-- Course Header -->
+                <div class="course-header" style="background: linear-gradient(135deg, ${courseColor}20, ${courseColor}10); border-bottom: 1px solid ${courseColor}20;">
+                    <div class="course-title">
+                        <div>
+                            <h3>${course.name}</h3>
+                            <div class="course-subtitle">
+                                <span class="unit-code" style="background: ${courseColor}30; color: ${courseColor};">
+                                    ${course.unit_code}
+                                </span>
+                                <span class="question-count">
+                                    <i class="fas fa-question-circle"></i> ${course.stats.total} questions
+                                </span>
+                            </div>
+                        </div>
+                        <div class="course-icon" style="background: ${courseColor};">
+                            <i class="fas fa-book-medical"></i>
+                        </div>
+                    </div>
+                    
+                    <!-- Active Questions Badge -->
+                    <div class="active-badge">
+                        <i class="fas fa-check-circle"></i> Active Questions
+                    </div>
+                </div>
+                
+                <!-- Course Stats -->
+                <div class="course-stats">
+                    <!-- Stats Grid -->
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <div class="stat-value" style="color: #4f46e5;">${course.stats.active}</div>
+                            <div class="stat-label">ACTIVE</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" style="color: #ef4444;">${course.stats.hard}</div>
+                            <div class="stat-label">HARD</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" style="color: #f59e0b;">${course.stats.medium}</div>
+                            <div class="stat-label">MEDIUM</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-date-label">UPDATED</div>
+                            <div class="stat-date" style="color: #4f46e5;">${lastUpdated}</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Start Test Button -->
+                    <button class="start-test-btn" 
+                            onclick="startCourseTest('${course.id}', '${course.name.replace(/'/g, "\\'")}')" 
+                            style="background: ${courseColor}; margin-top: 15px; width: 100%; padding: 12px;">
+                        <i class="fas fa-play-circle"></i> START PRACTICE TEST
+                    </button>
+                    
+                    <!-- Quick Stats -->
+                    <div class="quick-stats">
+                        <div class="quick-stat">
+                            <div class="quick-value" style="color: #10b981;">${course.stats.easy}</div>
+                            <div class="quick-label">Easy</div>
+                        </div>
+                        <div class="quick-stat">
+                            <div class="quick-value" style="color: #f59e0b;">${course.stats.medium}</div>
+                            <div class="quick-label">Medium</div>
+                        </div>
+                        <div class="quick-stat">
+                            <div class="quick-value" style="color: #ef4444;">${course.stats.hard}</div>
+                            <div class="quick-label">Hard</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    // Empty state
+    if (filteredCourses.length === 0) {
+        html += `
+            <div class="empty-state">
+                <i class="fas fa-search"></i>
+                <h3>No Courses Found</h3>
+                <p>No courses match your search. Try a different search term.</p>
+                <button onclick="clearQuestionBankSearch()" class="btn-primary">
+                    <i class="fas fa-times"></i> Clear Search
+                </button>
+            </div>
+        `;
+    }
+    
+    html += `
+            </div>
+            
+            <!-- Footer Info -->
+            <div class="question-bank-footer">
+                <div class="info-message">
+                    <i class="fas fa-info-circle"></i>
+                    <span>Click START PRACTICE TEST to begin interactive Q&A with immediate feedback</span>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    contentEl.innerHTML = html;
+    
+    // Add hover effects
+    setTimeout(() => {
+        document.querySelectorAll('.course-card').forEach(card => {
+            card.addEventListener('mouseenter', function() {
+                this.style.transform = 'translateY(-5px)';
+                this.style.boxShadow = '0 8px 25px rgba(0,0,0,0.12)';
+            });
+            
+            card.addEventListener('mouseleave', function() {
+                this.style.transform = 'translateY(0)';
+                this.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
+            });
+        });
+        
+        document.querySelectorAll('.start-test-btn').forEach(btn => {
+            btn.addEventListener('mouseenter', function() {
+                this.style.transform = 'scale(1.02)';
+                this.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+            });
+            
+            btn.addEventListener('mouseleave', function() {
+                this.style.transform = 'scale(1)';
+                this.style.boxShadow = 'none';
+            });
+        });
+    }, 100);
+}
+
+// Clear search
+function clearQuestionBankSearch() {
+    const searchInput = document.getElementById('studentQuestionBankSearch');
+    if (searchInput) {
+        searchInput.value = '';
+        loadQuestionBankCards();
+    }
+}
+
+// ==================== INTERACTIVE QUESTIONS SYSTEM ====================
+
+// Start test from course card - FETCH ALL QUESTIONS, NO LIMIT
+async function startCourseTest(courseId, courseName) {
+    try {
+        console.log(`Starting test for course: ${courseName} (${courseId})`);
+        
+        // Show loading
+        const contentEl = document.getElementById('studentQuestionBankContent');
+        if (contentEl) {
+            contentEl.innerHTML = '<div class="loading">Loading questions...</div>';
+        }
+        
+        // Fetch ALL questions for this course - NO LIMIT
+        const { data: questions, error } = await sb
+            .from('medical_assessments')
+            .select(`
+                *,
+                courses (
+                    id,
+                    course_name,
+                    unit_code,
+                    color
+                )
+            `)
+            .eq('course_id', courseId)
             .eq('is_active', true)
             .eq('is_published', true)
             .order('created_at', { ascending: false });
         
         if (error) throw error;
         
-        // Process and enhance questions
-        const enhancedQuestions = await enhanceQuestionsData(questions);
-        
-        // Group by course with advanced analytics
-        const coursesMap = createCoursesMap(enhancedQuestions);
-        
-        // Calculate adaptive learning metrics
-        calculateAdaptiveMetrics(coursesMap);
-        
-        // Display enhanced card view
-        displayEnhancedQuestionBankCards(coursesMap);
-        
-    } catch (error) {
-        console.error('❌ Error loading question bank:', error);
-        showError('Failed to load question bank', error.message);
-    } finally {
-        hideLoading();
-    }
-}
-
-// Enhance questions with additional metadata
-async function enhanceQuestionsData(questions) {
-    return questions.map(q => {
-        // Calculate estimated reading time
-        const wordCount = q.question_text?.split(/\s+/).length || 0;
-        const readingTime = Math.ceil(wordCount / 200); // 200 words per minute
-        
-        // Add tags based on content
-        const tags = extractTagsFromQuestion(q);
-        
-        return {
-            ...q,
-            metadata: {
-                readingTime,
-                tags,
-                wordCount,
-                estimatedTime: readingTime * 60, // in seconds
-                complexity: calculateQuestionComplexity(q)
-            }
-        };
-    });
-}
-
-// Create enhanced courses map
-function createCoursesMap(questions) {
-    const coursesMap = {};
-    
-    questions.forEach(question => {
-        const courseId = question.course_id || 'general';
-        const course = question.courses || {
-            id: 'general',
-            course_name: 'General Nursing',
-            unit_code: 'KRCHN',
-            color: '#4f46e5',
-            description: 'General nursing questions',
-            category: 'General'
-        };
-        
-        if (!coursesMap[courseId]) {
-            coursesMap[courseId] = {
-                id: courseId,
-                name: course.course_name,
-                unit_code: course.unit_code,
-                color: course.color,
-                description: course.description,
-                category: course.category,
-                questions: [],
-                stats: {
-                    total: 0,
-                    active: 0,
-                    byDifficulty: { hard: 0, medium: 0, easy: 0 },
-                    byType: {},
-                    avgComplexity: 0,
-                    totalReadingTime: 0,
-                    lastUpdated: null,
-                    userPerformance: {
-                        attempted: 0,
-                        correct: 0,
-                        accuracy: 0,
-                        avgTime: 0
-                    }
-                }
-            };
-        }
-        
-        coursesMap[courseId].questions.push(question);
-        coursesMap[courseId].stats.total++;
-        coursesMap[courseId].stats.active++;
-        
-        // Update difficulty stats
-        const difficulty = question.difficulty || 'medium';
-        coursesMap[courseId].stats.byDifficulty[difficulty]++;
-        
-        // Update question type stats
-        const qType = question.question_type || 'multiple_choice';
-        coursesMap[courseId].stats.byType[qType] = 
-            (coursesMap[courseId].stats.byType[qType] || 0) + 1;
-        
-        // Update reading time
-        coursesMap[courseId].stats.totalReadingTime += question.metadata?.readingTime || 1;
-        
-        // Track last updated
-        if (question.updated_at) {
-            const updatedDate = new Date(question.updated_at);
-            if (!coursesMap[courseId].stats.lastUpdated || updatedDate > coursesMap[courseId].stats.lastUpdated) {
-                coursesMap[courseId].stats.lastUpdated = updatedDate;
-            }
-        }
-        
-        // Update complexity
-        coursesMap[courseId].stats.avgComplexity = 
-            ((coursesMap[courseId].stats.avgComplexity * (coursesMap[courseId].stats.total - 1)) + 
-            (question.metadata?.complexity || 3)) / coursesMap[courseId].stats.total;
-    });
-    
-    return coursesMap;
-}
-
-// Calculate adaptive learning metrics
-function calculateAdaptiveMetrics(coursesMap) {
-    // Load user performance data
-    const userPerformance = JSON.parse(localStorage.getItem('nursequestions_userPerformance') || '{}');
-    
-    Object.values(coursesMap).forEach(course => {
-        const coursePerformance = userPerformance[course.id] || {};
-        course.stats.userPerformance = {
-            attempted: coursePerformance.attempted || 0,
-            correct: coursePerformance.correct || 0,
-            accuracy: coursePerformance.attempted ? 
-                Math.round((coursePerformance.correct / coursePerformance.attempted) * 100) : 0,
-            avgTime: coursePerformance.avgTime || 0,
-            weakAreas: coursePerformance.weakAreas || []
-        };
-    });
-}
-
-// Display enhanced question bank cards
-function displayEnhancedQuestionBankCards(coursesMap) {
-    const contentEl = document.getElementById('studentQuestionBankContent');
-    if (!contentEl) return;
-    
-    const coursesArray = Object.values(coursesMap);
-    const searchTerm = getSearchTerm();
-    const filteredCourses = filterCourses(coursesArray, searchTerm);
-    
-    // Calculate overall statistics
-    const overallStats = calculateOverallStats(coursesArray);
-    
-    // Generate HTML
-    contentEl.innerHTML = generateQuestionBankHTML(filteredCourses, overallStats, searchTerm);
-    
-    // Add interactivity
-    initializeCourseCardsInteractivity();
-    initializeStudyModeSelector();
-}
-
-// ==================== ENHANCED INTERACTIVE QUESTIONS ====================
-
-async function startEnhancedCourseTest(courseId, courseName, mode = 'practice') {
-    try {
-        showLoading('Preparing questions...');
-        
-        currentStudyMode = mode;
-        currentCourseForTest = { id: courseId, name: courseName };
-        
-        // Fetch questions with caching
-        const questions = await fetchQuestionsWithCache(courseId);
+        console.log(`Fetched ${questions?.length || 0} questions for course ${courseName}`);
         
         if (!questions || questions.length === 0) {
-            showNotification('No questions available for this course yet.', 'info');
+            alert('No questions available for this course yet.');
             loadQuestionBankCards();
             return;
         }
         
-        // Initialize test session
-        initializeTestSession(questions, mode);
+        currentCourseForTest = { id: courseId, name: courseName };
+        currentCourseQuestions = questions;
+        currentQuestionIndex = 0;
+        userTestAnswers = {};
         
-        // Display based on study mode
-        if (mode === 'flashcards') {
-            displayFlashcardsMode(questions, courseName, courseId);
-        } else {
-            displayEnhancedQuestions(questions, courseName, courseId);
-        }
-        
-        // Start timer if in test mode
-        if (mode === 'test') {
-            startTestTimer(questions.length * 60); // 1 minute per question
-        }
-        
-        // Track analytics
-        trackEvent('test_started', {
-            courseId,
-            courseName,
-            mode,
-            questionCount: questions.length
-        });
+        // Start the interactive Q&A mode
+        displayInteractiveQuestions(courseName, questions, courseId);
         
     } catch (error) {
-        console.error('❌ Error starting test:', error);
-        showError('Failed to start test', error.message);
-    } finally {
-        hideLoading();
+        console.error('Error starting course test:', error);
+        alert('Failed to start test. Please try again.');
+        loadQuestionBankCards();
     }
 }
 
-// Fetch questions with caching
-async function fetchQuestionsWithCache(courseId) {
-    const cacheKey = `questions_cache_${courseId}`;
-    const cached = localStorage.getItem(cacheKey);
-    const cacheTime = localStorage.getItem(`${cacheKey}_time`);
-    
-    // Use cache if less than 1 hour old
-    if (cached && cacheTime && (Date.now() - cacheTime < 3600000)) {
-        return JSON.parse(cached);
-    }
-    
-    // Fetch fresh data
-    const { data: questions, error } = await sb
-        .from('medical_assessments')
-        .select(`
-            *,
-            courses (
-                id,
-                course_name,
-                unit_code,
-                color
-            )
-        `)
-        .eq('course_id', courseId)
-        .eq('is_active', true)
-        .eq('is_published', true)
-        .order('created_at', { ascending: false });
-    
-    if (error) throw error;
-    
-    // Enhance and cache
-    const enhancedQuestions = await enhanceQuestionsData(questions);
-    localStorage.setItem(cacheKey, JSON.stringify(enhancedQuestions));
-    localStorage.setItem(`${cacheKey}_time`, Date.now());
-    
-    return enhancedQuestions;
-}
-
-// Initialize test session
-function initializeTestSession(questions, mode) {
-    currentCourseQuestions = questions;
-    currentQuestionIndex = 0;
-    userTestAnswers = {};
-    
-    // Initialize tracking for each question
-    questions.forEach((q, index) => {
-        userTestAnswers[index] = {
-            selected: false,
-            answered: false,
-            correct: false,
-            marked: false,
-            timeSpent: 0,
-            attempts: 0,
-            firstInteraction: null,
-            lastInteraction: null
-        };
-    });
-    
-    // Start time tracking
-    window.testStartTime = Date.now();
-}
-
-// Display enhanced questions interface
-function displayEnhancedQuestions(questions, courseName, courseId) {
+function displayInteractiveQuestions(courseName, questions, courseId) {
     const contentEl = document.getElementById('studentQuestionBankContent');
     if (!contentEl) return;
     
     const courseColor = questions[0]?.courses?.color || '#4f46e5';
     
-    contentEl.innerHTML = generateEnhancedQuestionsHTML(questions, courseName, courseId, courseColor);
-    
-    // Initialize components
-    initializeQuestionNavigation();
-    initializeQuestionTimer();
-    initializeAnswerTracking();
-    initializeExplanationToggle();
-    initializeProgressBar();
-    
-    // Load first question
-    loadEnhancedQuestion();
-}
-
-// Generate enhanced questions HTML
-function generateEnhancedQuestionsHTML(questions, courseName, courseId, courseColor) {
-    return `
-        <div class="enhanced-questions-container">
-            <!-- Enhanced Header -->
-            ${generateQuestionsHeader(courseName, questions, courseColor)}
-            
-            <!-- Progress & Stats Bar -->
-            ${generateProgressStatsBar(questions, courseColor)}
-            
-            <!-- Main Content - VERTICAL LAYOUT -->
-            <div class="questions-main-content">
-                <!-- Question Section -->
-                <div class="question-section">
-                    ${generateQuestionCard(questions[0], 0, courseColor)}
-                    ${generateOptionsContainer()}
-                    ${generateActionButtons(courseColor)}
-                </div>
-                
-                <!-- Explanation Section (BELOW) -->
-                <div class="explanation-section" id="explanationSection">
-                    ${generateExplanationPlaceholder()}
-                </div>
-                
-                <!-- Additional Resources (Optional) -->
-                <div class="resources-section" id="resourcesSection" style="display: none;">
-                    ${generateResourcesSection()}
-                </div>
-            </div>
-            
-            <!-- Enhanced Navigation -->
-            ${generateEnhancedNavigation(questions, courseColor)}
-            
-            <!-- Analytics Panel -->
-            ${generateAnalyticsPanel()}
-        </div>
-    `;
-}
-
-// Generate questions header
-function generateQuestionsHeader(courseName, questions, courseColor) {
-    return `
-        <div class="questions-header" style="background: ${courseColor}">
-            <div class="header-content">
-                <button onclick="loadQuestionBankCards()" class="btn-back">
-                    <i class="fas fa-arrow-left"></i> Back
-                </button>
-                <div class="header-info">
-                    <h3>${courseName} - ${STUDY_MODES[currentStudyMode.toUpperCase()]?.name || 'Practice'}</h3>
-                    <div class="header-stats">
-                        <span><i class="fas fa-question-circle"></i> ${questions.length} questions</span>
-                        <span><i class="fas fa-clock"></i> ${calculateTotalTime(questions)} min</span>
-                        <span><i class="fas fa-chart-line"></i> ${currentStudyMode === 'test' ? 'Timed' : 'Untimed'}</span>
+    let html = `
+        <div class="interactive-questions-container">
+            <!-- Header -->
+            <div class="questions-header" style="background: ${courseColor}; color: white; padding: 15px; border-radius: 8px 8px 0 0;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <button onclick="loadQuestionBankCards()" class="btn-back">
+                            <i class="fas fa-arrow-left"></i> Back to Courses
+                        </button>
+                        <h3 style="margin: 10px 0 5px 0;">${courseName} - Q&A Practice</h3>
+                        <p style="margin: 0; opacity: 0.9;">${questions.length} Questions | Click options to answer</p>
+                    </div>
+                    <div class="question-counter">
+                        <div style="font-size: 1.5rem; font-weight: bold;">Q: <span id="currentQuestionCount">1</span>/<span id="totalQuestions">${questions.length}</span></div>
+                        <div style="font-size: 0.9rem;">Score: <span id="accuracyRate">0%</span></div>
                     </div>
                 </div>
-                <div class="header-controls">
-                    <button onclick="toggleStudyMode()" class="btn-mode">
-                        <i class="${STUDY_MODES[currentStudyMode.toUpperCase()]?.icon || 'fas fa-graduation-cap'}"></i>
-                        ${STUDY_MODES[currentStudyMode.toUpperCase()]?.name || 'Practice'}
-                    </button>
-                    <button onclick="showTestSettings()" class="btn-settings">
-                        <i class="fas fa-cog"></i>
-                    </button>
-                </div>
-            </div>
-        </div>
-    `;
-}
-
-// Generate progress stats bar
-function generateProgressStatsBar(questions, courseColor) {
-    return `
-        <div class="progress-stats-bar">
-            <div class="progress-container">
-                <div class="progress-bar">
-                    <div class="progress-fill" id="progressFill" style="width: 0%; background: ${courseColor}"></div>
-                </div>
-                <div class="progress-text">
-                    <span id="progressText">0/${questions.length} questions</span>
-                    <span id="progressPercent">0% complete</span>
-                </div>
-            </div>
-            <div class="live-stats">
-                <div class="stat" id="timerStat">
-                    <i class="fas fa-clock"></i>
-                    <span id="timerDisplay">--:--</span>
-                </div>
-                <div class="stat" id="accuracyStat">
-                    <i class="fas fa-bullseye"></i>
-                    <span id="accuracyDisplay">0%</span>
-                </div>
-                <div class="stat" id="streakStat">
-                    <i class="fas fa-fire"></i>
-                    <span id="streakDisplay">0</span>
-                </div>
-            </div>
-        </div>
-    `;
-}
-
-// Generate question card
-function generateQuestionCard(question, index, courseColor) {
-    const difficulty = question.difficulty || 'medium';
-    const difficultyColors = {
-        easy: '#10b981',
-        medium: '#f59e0b',
-        hard: '#ef4444'
-    };
-    
-    return `
-        <div class="question-card" style="border-color: ${courseColor}">
-            <div class="question-header">
-                <div class="question-meta">
-                    <span class="question-number" style="background: ${courseColor}">
-                        ${index + 1}
-                    </span>
-                    <div class="question-tags">
-                        <span class="difficulty-tag" style="background: ${difficultyColors[difficulty]}">
-                            ${difficulty.toUpperCase()}
-                        </span>
-                        <span class="type-tag">${question.question_type?.replace('_', ' ') || 'MCQ'}</span>
-                        <span class="time-tag">
-                            <i class="fas fa-clock"></i> ${question.metadata?.readingTime || 1} min read
-                        </span>
-                    </div>
-                </div>
-                <div class="question-actions">
-                    <button onclick="markForReview()" class="btn-mark" id="markBtn">
-                        <i class="fas fa-flag"></i>
-                        <span id="markBtnText">Mark</span>
-                    </button>
-                    <button onclick="showHint()" class="btn-hint">
-                        <i class="fas fa-lightbulb"></i> Hint
-                    </button>
-                </div>
             </div>
             
-            <div class="question-body">
-                <div id="questionText" class="question-text">
-                    ${question.question_text || 'No question text available'}
-                </div>
-                
-                ${question.image_url ? `
-                    <div class="question-image">
-                        <img src="${question.image_url}" alt="Question image" onerror="this.style.display='none'">
-                    </div>
-                ` : ''}
-            </div>
-        </div>
+            <!-- Question Navigation Dots - FIXED VERSION -->
+            <div class="question-nav-dots">
+                <div class="question-dots-inner">
     `;
-}
-
-// Generate options container
-function generateOptionsContainer() {
-    return `
-        <div class="options-container" id="optionsContainer">
-            <div class="options-loading">
-                <div class="spinner"></div>
-                <p>Loading options...</p>
-            </div>
-        </div>
-    `;
-}
-
-// Generate action buttons
-function generateActionButtons(courseColor) {
-    return `
-        <div class="action-buttons">
-            <button onclick="checkAnswer()" id="checkAnswerBtn" class="btn-action btn-primary" style="background: ${courseColor}">
-                <i class="fas fa-check-circle"></i> Check Answer
-            </button>
-            <button onclick="showAnswer()" id="showAnswerBtn" class="btn-action btn-secondary">
-                <i class="fas fa-eye"></i> Reveal Answer
-            </button>
-            <button onclick="resetQuestion()" id="resetBtn" class="btn-action btn-outline">
-                <i class="fas fa-redo"></i> Reset
-            </button>
-            <button onclick="skipQuestion()" id="skipBtn" class="btn-action btn-outline">
-                <i class="fas fa-forward"></i> Skip
-            </button>
-        </div>
-    `;
-}
-
-// Generate explanation placeholder
-function generateExplanationPlaceholder() {
-    return `
-        <div class="explanation-placeholder" id="explanationPlaceholder">
-            <div class="placeholder-icon">
-                <i class="fas fa-info-circle"></i>
-            </div>
-            <h4>Explanation</h4>
-            <p>Answer the question to see detailed explanation here</p>
-            <div class="placeholder-hint">
-                <i class="fas fa-lightbulb"></i>
-                <span>Select an option and click "Check Answer"</span>
-            </div>
-        </div>
-        
-        <div class="explanation-content" id="explanationContent" style="display: none;">
-            <div class="explanation-header">
-                <h4><i class="fas fa-info-circle"></i> Detailed Explanation</h4>
-                <button onclick="toggleExplanation()" class="btn-toggle">
-                    <i class="fas fa-chevron-up"></i> Collapse
-                </button>
-            </div>
-            <div class="explanation-body" id="explanationText">
-                <!-- Explanation will be loaded here -->
-            </div>
-            <div class="explanation-footer">
-                <button onclick="showMoreResources()" class="btn-resources">
-                    <i class="fas fa-book"></i> Show Related Resources
-                </button>
-                <button onclick="saveExplanation()" class="btn-save">
-                    <i class="fas fa-bookmark"></i> Save Note
-                </button>
-            </div>
-        </div>
-    `;
-}
-
-// Generate enhanced navigation
-function generateEnhancedNavigation(questions, courseColor) {
-    return `
-        <div class="enhanced-navigation">
-            <!-- Question Dots -->
-            <div class="question-dots-container">
-                <div class="dots-header">
-                    <span>Quick Navigation</span>
-                    <div class="dots-legend">
-                        <span class="legend-item"><i class="fas fa-circle" style="color: ${courseColor}"></i> Current</span>
-                        <span class="legend-item"><i class="fas fa-circle" style="color: #10b981"></i> Correct</span>
-                        <span class="legend-item"><i class="fas fa-circle" style="color: #ef4444"></i> Incorrect</span>
-                        <span class="legend-item"><i class="fas fa-circle" style="color: #f59e0b"></i> Marked</span>
-                    </div>
-                </div>
-                <div class="question-dots" id="questionDots">
-                    ${generateQuestionDots(questions, courseColor)}
-                </div>
-            </div>
-            
-            <!-- Navigation Buttons -->
-            <div class="nav-buttons">
-                <button onclick="prevQuestion()" id="prevBtn" class="btn-nav">
-                    <i class="fas fa-arrow-left"></i> Previous
-                </button>
-                
-                <div class="nav-center">
-                    <button onclick="showQuestionList()" class="btn-nav-outline">
-                        <i class="fas fa-list"></i> Question List
-                    </button>
-                    <button onclick="pauseTest()" class="btn-nav-outline">
-                        <i class="fas fa-pause"></i> Pause
-                    </button>
-                </div>
-                
-                <button onclick="nextQuestion()" id="nextBtn" class="btn-nav" style="background: ${courseColor}">
-                    Next <i class="fas fa-arrow-right"></i>
-                </button>
-            </div>
-        </div>
-    `;
-}
-
-// Generate question dots
-function generateQuestionDots(questions, courseColor) {
-    let dotsHTML = '';
-    const maxDots = Math.min(questions.length, 50); // Limit for performance
     
+    // Add question dots (limit to 100 for performance)
+    const maxDots = Math.min(questions.length, 100);
     for (let i = 0; i < maxDots; i++) {
-        const status = getUserAnswerStatus(i);
-        dotsHTML += `
+        html += `
             <button onclick="goToQuestion(${i})" 
-                    class="question-dot ${status}" 
-                    id="questionDot${i}"
-                    title="Question ${i + 1}">
+                    class="question-dot" 
+                    id="questionDot${i}">
                 ${i + 1}
             </button>
         `;
     }
     
-    if (questions.length > maxDots) {
-        dotsHTML += `
-            <div class="more-dots">
-                +${questions.length - maxDots} more
-                <div class="dots-dropdown">
-                    ${Array.from({length: questions.length - maxDots}, (_, i) => i + maxDots)
-                        .map(i => `<button onclick="goToQuestion(${i})">Q${i + 1}</button>`)
-                        .join('')}
-                </div>
+    if (questions.length > 100) {
+        html += `
+            <div class="more-questions-indicator">
+                +${questions.length - 100} more
             </div>
         `;
     }
     
-    return dotsHTML;
-}
-
-// Generate analytics panel
-function generateAnalyticsPanel() {
-    return `
-        <div class="analytics-panel">
-            <div class="analytics-header">
-                <h5><i class="fas fa-chart-bar"></i> Live Analytics</h5>
-                <button onclick="toggleAnalytics()" class="btn-toggle">
-                    <i class="fas fa-chevron-up"></i>
-                </button>
+    html += `
+                </div>
             </div>
-            <div class="analytics-content">
-                <div class="analytics-grid">
-                    <div class="analytic-item">
-                        <div class="analytic-value" id="analyticCorrect">0</div>
-                        <div class="analytic-label">Correct</div>
-                    </div>
-                    <div class="analytic-item">
-                        <div class="analytic-value" id="analyticIncorrect">0</div>
-                        <div class="analytic-label">Incorrect</div>
-                    </div>
-                    <div class="analytic-item">
-                        <div class="analytic-value" id="analyticSkipped">0</div>
-                        <div class="analytic-label">Skipped</div>
-                    </div>
-                    <div class="analytic-item">
-                        <div class="analytic-value" id="analyticTime">0s</div>
-                        <div class="analytic-label">Avg Time</div>
-                    </div>
-                </div>
-                
-                <div class="progress-chart">
-                    <canvas id="progressChart"></canvas>
-                </div>
-                
-                <div class="weak-areas">
-                    <h6>Weak Areas</h6>
-                    <div id="weakAreasList">
-                        <div class="weak-area-item">
-                            <span class="area-name">Loading...</span>
-                            <div class="area-progress">
-                                <div class="progress-bar-small">
-                                    <div class="progress-fill-small" style="width: 50%"></div>
-                                </div>
-                                <span class="area-percent">50%</span>
-                            </div>
+            
+            <!-- Main Content Area -->
+            <div class="questions-content">
+                <!-- Left Column: Question and Options -->
+                <div class="question-column">
+                    <div class="question-box" style="border: 2px solid ${courseColor};">
+                        <div class="question-header">
+                            <span class="question-number" style="background: ${courseColor};">${currentQuestionIndex + 1}</span>
+                            <span>Question ${currentQuestionIndex + 1} of ${questions.length}</span>
+                        </div>
+                        <div id="questionText" class="question-text">
+                            Loading question...
                         </div>
                     </div>
+                    
+                    <div id="optionsContainer" class="options-container">
+                        <!-- Options will be loaded here -->
+                    </div>
+                    
+                    <!-- Action Buttons -->
+                    <div class="action-buttons">
+                        <button onclick="checkAnswer()" id="checkAnswerBtn" class="action-btn primary-btn">
+                            <i class="fas fa-check-circle"></i> Check Answer
+                        </button>
+                        <button onclick="resetQuestion()" id="resetBtn" class="action-btn secondary-btn">
+                            <i class="fas fa-redo"></i> Reset
+                        </button>
+                        <button onclick="showAnswer()" id="showAnswerBtn" class="action-btn info-btn">
+                            <i class="fas fa-lightbulb"></i> Show Answer
+                        </button>
+                    </div>
+                    
+                    <!-- Answer Box -->
+                    <div id="answerBox" class="answer-box">
+                        <p class="correct-answer">
+                            <i class="fas fa-check"></i> Correct Answer: <span id="correctAnswerText"></span>
+                        </p>
+                    </div>
+                </div>
+                
+                <!-- Right Column: Explanation -->
+                <div class="explanation-column">
+                    <div id="explanationContainer" class="explanation-container">
+                        <h4 class="explanation-title">
+                            <i class="fas fa-info-circle"></i> Explanation
+                        </h4>
+                        <div id="explanationText" class="explanation-text">
+                            Loading explanation...
+                        </div>
+                    </div>
+                    
+                    <!-- Placeholder when no explanation shown -->
+                    <div id="explanationPlaceholder" class="explanation-placeholder">
+                        <i class="fas fa-info-circle"></i>
+                        <p>Answer a question to see explanation here</p>
+                        <p>Select an option and click "Check Answer"</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Navigation Buttons -->
+            <div class="navigation-buttons">
+                <div>
+                    <button onclick="prevQuestion()" id="prevBtn" class="nav-btn">
+                        <i class="fas fa-arrow-left"></i> Previous
+                    </button>
+                </div>
+                <div>
+                    <button onclick="markForReview()" id="markBtn" class="nav-btn warning-btn">
+                        <i class="fas fa-flag"></i> <span id="markBtnText">Mark for Review</span>
+                    </button>
+                </div>
+                <div>
+                    <button onclick="nextQuestion()" id="nextBtn" class="nav-btn primary-btn">
+                        Next <i class="fas fa-arrow-right"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Progress Summary -->
+            <div class="progress-summary">
+                <div class="progress-item">
+                    <div class="progress-number answered-count" id="answeredCount">0</div>
+                    <div class="progress-label">Answered</div>
+                </div>
+                <div class="progress-item">
+                    <div class="progress-number correct-count" id="correctCount">0</div>
+                    <div class="progress-label">Correct</div>
+                </div>
+                <div class="progress-item">
+                    <div class="progress-number incorrect-count" id="incorrectCount">0</div>
+                    <div class="progress-label">Incorrect</div>
+                </div>
+                <div class="progress-item">
+                    <div class="progress-number marked-count" id="markedCount">0</div>
+                    <div class="progress-label">Marked</div>
                 </div>
             </div>
         </div>
     `;
+    
+    contentEl.innerHTML = html;
+    
+    // Load first question
+    setTimeout(() => {
+        loadCurrentInteractiveQuestion();
+    }, 100);
 }
 
-// ==================== ENHANCED QUESTION LOADING ====================
-
-function loadEnhancedQuestion() {
+// Load current interactive question
+function loadCurrentInteractiveQuestion() {
     if (!currentCourseQuestions || currentCourseQuestions.length === 0) return;
+    if (currentQuestionIndex >= currentCourseQuestions.length) {
+        currentQuestionIndex = currentCourseQuestions.length - 1;
+    }
     
     const question = currentCourseQuestions[currentQuestionIndex];
+    const questionText = document.getElementById('questionText');
+    const optionsContainer = document.getElementById('optionsContainer');
+    const answerBox = document.getElementById('answerBox');
+    const explanationContainer = document.getElementById('explanationContainer');
+    const explanationPlaceholder = document.getElementById('explanationPlaceholder');
+    const checkAnswerBtn = document.getElementById('checkAnswerBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const showAnswerBtn = document.getElementById('showAnswerBtn');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const currentQuestionCount = document.getElementById('currentQuestionCount');
+    const totalQuestions = document.getElementById('totalQuestions');
+    const accuracyRate = document.getElementById('accuracyRate');
+    const answeredCount = document.getElementById('answeredCount');
+    const correctCount = document.getElementById('correctCount');
+    const incorrectCount = document.getElementById('incorrectCount');
+    const markedCount = document.getElementById('markedCount');
+    const markBtnText = document.getElementById('markBtnText');
+    
     if (!question) return;
     
-    // Update UI
-    updateQuestionUI(question);
-    updateOptionsUI(question);
-    updateNavigationUI();
-    updateProgressUI();
-    updateAnalyticsUI();
+    // Update counters
+    currentQuestionCount.textContent = currentQuestionIndex + 1;
+    totalQuestions.textContent = currentCourseQuestions.length;
     
-    // Start question timer
-    startQuestionTimer();
+    // Calculate stats
+    const totalAnswered = Object.keys(userTestAnswers).filter(key => userTestAnswers[key]?.answered).length;
+    const totalCorrect = Object.keys(userTestAnswers).filter(key => userTestAnswers[key]?.correct).length;
+    const totalIncorrect = totalAnswered - totalCorrect;
+    const totalMarked = Object.keys(userTestAnswers).filter(key => userTestAnswers[key]?.marked).length;
+    const accuracy = totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0;
     
-    // Scroll to top
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
-function updateQuestionUI(question) {
+    // Update all counters
+    if (accuracyRate) accuracyRate.textContent = `${accuracy}%`;
+    if (answeredCount) answeredCount.textContent = totalAnswered;
+    if (correctCount) correctCount.textContent = totalCorrect;
+    if (incorrectCount) incorrectCount.textContent = totalIncorrect;
+    if (markedCount) markedCount.textContent = totalMarked;
+    
     // Update question text
-    const questionTextEl = document.getElementById('questionText');
-    if (questionTextEl) {
-        questionTextEl.innerHTML = formatQuestionText(question.question_text);
+    if (questionText) {
+        questionText.innerHTML = question.question_text || 'No question text available';
     }
     
-    // Update question number
-    const questionNumberEl = document.querySelector('.question-number');
-    if (questionNumberEl) {
-        questionNumberEl.textContent = currentQuestionIndex + 1;
-    }
+    // Reset display
+    if (answerBox) answerBox.style.display = 'none';
+    if (explanationContainer) explanationContainer.style.display = 'none';
+    if (explanationPlaceholder) explanationPlaceholder.style.display = 'block';
     
-    // Update difficulty tag
-    const difficultyTag = document.querySelector('.difficulty-tag');
-    if (difficultyTag) {
-        const difficultyColors = {
-            easy: '#10b981',
-            medium: '#f59e0b',
-            hard: '#ef4444'
-        };
-        difficultyTag.textContent = (question.difficulty || 'medium').toUpperCase();
-        difficultyTag.style.background = difficultyColors[question.difficulty] || '#f59e0b';
-    }
+    // Check if user has answered this question
+    const userAnswer = userTestAnswers[currentQuestionIndex]?.answer;
+    const isAnswered = !!userTestAnswers[currentQuestionIndex]?.answered;
+    const isCorrect = userTestAnswers[currentQuestionIndex]?.correct;
     
-    // Update question image
-    const imageContainer = document.querySelector('.question-image');
-    if (imageContainer) {
-        if (question.image_url) {
-            imageContainer.innerHTML = `<img src="${question.image_url}" alt="Question image" onerror="this.style.display='none'">`;
-            imageContainer.style.display = 'block';
-        } else {
-            imageContainer.style.display = 'none';
-        }
-    }
-}
-
-function updateOptionsUI(question) {
-    const optionsContainer = document.getElementById('optionsContainer');
-    if (!optionsContainer) return;
+    // Clear options
+    if (optionsContainer) optionsContainer.innerHTML = '';
     
-    const userAnswer = userTestAnswers[currentQuestionIndex];
-    const isAnswered = userAnswer?.answered;
-    const isCorrect = userAnswer?.correct;
-    const selectedAnswer = userAnswer?.answer;
-    
-    let optionsHTML = '';
-    
+    // Add options based on question type
     if (question.question_type === 'multiple_choice') {
-        const options = getQuestionOptions(question);
+        // Try different field names for options
+        const possibleOptionFields = [
+            'option_a', 'option_b', 'option_c', 'option_d',
+            'options', 'mcq_options', 'choices'
+        ];
         
-        optionsHTML = '<div class="options-grid">';
+        let optionsArray = [];
         
-        options.forEach((option, index) => {
-            const optionLetter = String.fromCharCode(65 + index); // A, B, C, D
-            const isSelected = selectedAnswer === option.text;
-            const isCorrectAnswer = question.correct_answer?.trim().toLowerCase() === option.text.trim().toLowerCase();
-            
-            let optionClass = 'option-item';
-            if (isAnswered) {
-                if (isSelected && isCorrect) optionClass += ' option-correct';
-                else if (isSelected && !isCorrect) optionClass += ' option-incorrect';
-                else if (!isSelected && isCorrectAnswer) optionClass += ' option-correct';
-            } else if (isSelected) {
-                optionClass += ' option-selected';
+        // First try standard option_a, option_b, etc.
+        for (let i = 0; i < 4; i++) {
+            const field = `option_${String.fromCharCode(97 + i)}`; // a, b, c, d
+            if (question[field] && question[field].trim()) {
+                optionsArray.push({
+                    letter: String.fromCharCode(65 + i), // A, B, C, D
+                    text: question[field].trim()
+                });
             }
-            
-            optionsHTML += `
-                <div class="${optionClass}" 
-                     onclick="${!isAnswered ? `selectOption(${index})` : ''}"
-                     data-option="${index}">
-                    <div class="option-letter">${optionLetter}</div>
-                    <div class="option-text">${option.text}</div>
-                    ${isAnswered ? `
-                        <div class="option-status">
-                            ${isSelected && isCorrect ? '<i class="fas fa-check-circle success"></i>' : ''}
-                            ${isSelected && !isCorrect ? '<i class="fas fa-times-circle error"></i>' : ''}
-                            ${!isSelected && isCorrectAnswer ? '<i class="fas fa-check-circle success"></i>' : ''}
+        }
+        
+        // If no standard options found, try other formats
+        if (optionsArray.length === 0) {
+            possibleOptionFields.forEach(field => {
+                if (question[field] && typeof question[field] === 'string') {
+                    try {
+                        const parsed = JSON.parse(question[field]);
+                        if (Array.isArray(parsed)) {
+                            parsed.forEach((opt, idx) => {
+                                if (opt && opt.trim()) {
+                                    optionsArray.push({
+                                        letter: String.fromCharCode(65 + idx),
+                                        text: opt.trim()
+                                    });
+                                }
+                            });
+                        }
+                    } catch (e) {
+                        // If not JSON, try splitting by commas or newlines
+                        const splitOptions = question[field].split(/[,\n]/);
+                        splitOptions.forEach((opt, idx) => {
+                            if (opt && opt.trim()) {
+                                optionsArray.push({
+                                    letter: String.fromCharCode(65 + idx),
+                                    text: opt.trim()
+                                });
+                            }
+                        });
+                    }
+                }
+            });
+        }
+        
+        // Create option elements
+        if (optionsArray.length > 0) {
+            optionsArray.forEach(opt => {
+                const optionElement = document.createElement('div');
+                optionElement.className = 'option-item';
+                
+                const isSelected = userAnswer === opt.text;
+                const isCorrectAnswer = question.correct_answer?.trim().toLowerCase() === opt.text.trim().toLowerCase();
+                
+                // Determine styling
+                let bgColor = '#ffffff';
+                let textColor = '#333333';
+                let borderColor = '#dee2e6';
+                
+                if (isAnswered) {
+                    if (isSelected) {
+                        bgColor = isCorrect ? '#d4edda' : '#f8d7da';
+                        textColor = isCorrect ? '#155724' : '#721c24';
+                        borderColor = isCorrect ? '#c3e6cb' : '#f5c6cb';
+                    } else if (isCorrectAnswer) {
+                        bgColor = '#d4edda';
+                        textColor = '#155724';
+                        borderColor = '#c3e6cb';
+                    }
+                } else if (isSelected) {
+                    bgColor = '#e7f3ff';
+                    borderColor = '#4f46e5';
+                }
+                
+                optionElement.style.cssText = `
+                    padding: 15px;
+                    margin-bottom: 10px;
+                    border: 2px solid ${borderColor};
+                    border-radius: 8px;
+                    background: ${bgColor};
+                    color: ${textColor};
+                    cursor: ${isAnswered ? 'default' : 'pointer'};
+                    transition: all 0.3s;
+                    display: flex;
+                    align-items: center;
+                `;
+                
+                if (!isAnswered) {
+                    optionElement.onclick = () => selectInteractiveAnswer(opt.text);
+                    optionElement.onmouseenter = () => {
+                        optionElement.style.backgroundColor = '#f8f9fa';
+                        optionElement.style.transform = 'translateY(-2px)';
+                        optionElement.style.boxShadow = '0 4px 8px rgba(0,0,0,0.1)';
+                    };
+                    optionElement.onmouseleave = () => {
+                        optionElement.style.backgroundColor = bgColor;
+                        optionElement.style.transform = 'translateY(0)';
+                        optionElement.style.boxShadow = 'none';
+                    };
+                }
+                
+                optionElement.innerHTML = `
+                    <div style="width: 30px; height: 30px; border-radius: 50%; background: ${isSelected ? '#4f46e5' : '#f8f9fa'}; color: ${isSelected ? 'white' : '#6c757d'}; display: flex; align-items: center; justify-content: center; margin-right: 15px; font-weight: bold;">
+                        ${opt.letter}
+                    </div>
+                    <div style="flex: 1; font-size: 1rem;">${opt.text}</div>
+                    ${isSelected ? `
+                        <div style="color: ${isCorrect ? '#28a745' : '#dc3545'}; font-size: 1.2rem;">
+                            <i class="fas ${isCorrect ? 'fa-check-circle' : 'fa-times-circle'}"></i>
                         </div>
                     ` : ''}
-                </div>
-            `;
-        });
-        
-        optionsHTML += '</div>';
+                `;
+                
+                if (optionsContainer) optionsContainer.appendChild(optionElement);
+            });
+        } else {
+            // No MCQ options found - treat as short answer
+            if (optionsContainer) {
+                optionsContainer.innerHTML = `
+                    <div style="padding: 20px; background: #fff3cd; border-radius: 8px; border: 1px solid #ffeaa7; color: #856404;">
+                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <strong>Short Answer Question</strong>
+                        </div>
+                        <p style="margin: 0;">This question requires a typed answer. Check your answer against the correct answer below.</p>
+                    </div>
+                `;
+            }
+        }
     } else {
         // Short answer question
-        optionsHTML = `
-            <div class="short-answer-container">
-                <div class="answer-input-group">
-                    <label for="shortAnswerInput">Your Answer:</label>
-                    <textarea id="shortAnswerInput" 
-                              placeholder="Type your answer here..." 
-                              rows="3"
-                              ${isAnswered ? 'disabled' : ''}
-                              oninput="updateShortAnswer(this.value)">${selectedAnswer || ''}</textarea>
-                </div>
-                ${isAnswered ? `
-                    <div class="correct-answer-box">
-                        <h5><i class="fas fa-check"></i> Correct Answer:</h5>
-                        <p>${question.correct_answer || 'No answer provided'}</p>
+        if (optionsContainer) {
+            optionsContainer.innerHTML = `
+                <div style="padding: 20px; background: #e7f3ff; border-radius: 8px; border: 1px solid #cfe2ff; color: #084298;">
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                        <i class="fas fa-keyboard"></i>
+                        <strong>Short Answer Question</strong>
                     </div>
-                ` : ''}
-            </div>
-        `;
-    }
-    
-    optionsContainer.innerHTML = optionsHTML;
-    
-    // Update action buttons
-    updateActionButtons(isAnswered, isCorrect);
-    
-    // Update explanation if answered
-    if (isAnswered) {
-        showExplanation(question);
-    }
-}
-
-function updateActionButtons(isAnswered, isCorrect) {
-    const checkBtn = document.getElementById('checkAnswerBtn');
-    const showBtn = document.getElementById('showAnswerBtn');
-    const resetBtn = document.getElementById('resetBtn');
-    const skipBtn = document.getElementById('skipBtn');
-    
-    if (checkBtn) {
-        if (isAnswered) {
-            checkBtn.innerHTML = '<i class="fas fa-check-circle"></i> Already Answered';
-            checkBtn.disabled = true;
-            checkBtn.style.opacity = '0.6';
-        } else {
-            checkBtn.innerHTML = '<i class="fas fa-check-circle"></i> Check Answer';
-            checkBtn.disabled = false;
-            checkBtn.style.opacity = '1';
+                    <p style="margin: 0;">Think about your answer, then click "Check Answer" to compare with the correct answer.</p>
+                </div>
+            `;
         }
     }
     
-    if (showBtn) {
-        showBtn.disabled = isAnswered;
+    // 🔧 FIXED: Update question dots with proper CSS classes
+    const maxDots = Math.min(currentCourseQuestions.length, 100);
+    for (let i = 0; i < maxDots; i++) {
+        const dot = document.getElementById(`questionDot${i}`);
+        if (dot) {
+            // Reset all classes
+            dot.className = 'question-dot';
+            
+            // Add status classes based on answer state
+            if (userTestAnswers[i]?.answered) {
+                if (userTestAnswers[i]?.correct) {
+                    dot.classList.add('answered-correct');
+                } else {
+                    dot.classList.add('answered-incorrect');
+                }
+            } else if (userTestAnswers[i]?.marked) {
+                dot.classList.add('marked');
+            }
+            
+            // Add active class for current question
+            if (i === currentQuestionIndex) {
+                dot.classList.add('active');
+            }
+        }
     }
     
-    if (resetBtn) {
-        resetBtn.disabled = !isAnswered;
+    // Update button states
+    if (checkAnswerBtn) {
+        checkAnswerBtn.disabled = isAnswered;
+        if (isAnswered) {
+            checkAnswerBtn.innerHTML = '<i class="fas fa-check-circle"></i> Already Answered';
+            checkAnswerBtn.style.backgroundColor = '#6c757d';
+        } else {
+            checkAnswerBtn.innerHTML = '<i class="fas fa-check-circle"></i> Check Answer';
+            checkAnswerBtn.style.backgroundColor = '#4f46e5';
+        }
     }
     
-    if (skipBtn) {
-        skipBtn.style.display = currentStudyMode === 'practice' ? 'flex' : 'none';
+    if (resetBtn) resetBtn.disabled = !isAnswered;
+    if (showAnswerBtn) showAnswerBtn.disabled = isAnswered;
+    
+    if (isAnswered) {
+        // Show answer and explanation
+        if (answerBox) {
+            answerBox.style.display = 'block';
+            const correctAnswerText = document.getElementById('correctAnswerText');
+            if (correctAnswerText) {
+                correctAnswerText.textContent = question.correct_answer || 'No answer provided';
+            }
+        }
+        
+        if (explanationContainer) {
+            explanationContainer.style.display = 'block';
+            if (explanationPlaceholder) explanationPlaceholder.style.display = 'none';
+            const explanationText = document.getElementById('explanationText');
+            if (explanationText) {
+                explanationText.innerHTML = question.explanation || 
+                    'No explanation available. This answer is correct based on nursing standards and guidelines.';
+            }
+        }
+    }
+    
+    // Update navigation buttons
+    if (prevBtn) prevBtn.style.display = currentQuestionIndex > 0 ? 'flex' : 'none';
+    if (nextBtn) nextBtn.style.display = currentQuestionIndex < currentCourseQuestions.length - 1 ? 'flex' : 'none';
+    
+    // Update mark button
+    const markBtn = document.getElementById('markBtn');
+    if (markBtn && markBtnText) {
+        if (userTestAnswers[currentQuestionIndex]?.marked) {
+            markBtnText.textContent = 'Unmark Review';
+            markBtn.style.backgroundColor = '#dc3545';
+            markBtn.style.color = 'white';
+        } else {
+            markBtnText.textContent = 'Mark for Review';
+            markBtn.style.backgroundColor = '#ffc107';
+            markBtn.style.color = '#333';
+        }
     }
 }
 
-// ==================== ENHANCED FEATURES ====================
-
-// Select option
-function selectOption(optionIndex) {
+// Select answer in interactive mode
+function selectInteractiveAnswer(answer) {
     if (!currentCourseQuestions || !currentCourseQuestions[currentQuestionIndex]) return;
-    
-    const question = currentCourseQuestions[currentQuestionIndex];
-    const options = getQuestionOptions(question);
-    
-    if (optionIndex >= options.length) return;
-    
-    const selectedAnswer = options[optionIndex].text;
     
     userTestAnswers[currentQuestionIndex] = {
         ...userTestAnswers[currentQuestionIndex],
-        answer: selectedAnswer,
+        answer: answer,
         selected: true,
-        firstInteraction: userTestAnswers[currentQuestionIndex]?.firstInteraction || new Date(),
-        lastInteraction: new Date(),
-        attempts: (userTestAnswers[currentQuestionIndex]?.attempts || 0) + 1
+        timestamp: new Date()
     };
     
-    // Update UI
-    updateOptionsUI(question);
-    
-    // Auto-check if enabled in settings
-    const autoCheck = localStorage.getItem('nursequestions_autoCheck') === 'true';
-    if (autoCheck && currentStudyMode === 'practice') {
-        setTimeout(() => checkAnswer(), 500);
-    }
+    // Update the display
+    loadCurrentInteractiveQuestion();
 }
 
-// Check answer with enhanced feedback
+// Check answer
 function checkAnswer() {
     if (!currentCourseQuestions || !currentCourseQuestions[currentQuestionIndex]) return;
     
@@ -3160,394 +3060,220 @@ function checkAnswer() {
     const userAnswer = userTestAnswers[currentQuestionIndex]?.answer;
     
     if (!userAnswer && question.question_type === 'multiple_choice') {
-        showNotification('Please select an answer first.', 'warning');
+        alert('Please select an answer first.');
         return;
     }
     
-    const isCorrect = isAnswerCorrect(question, userAnswer);
+    const isCorrect = userAnswer?.trim().toLowerCase() === question.correct_answer?.trim().toLowerCase();
     
-    // Update user answer data
     userTestAnswers[currentQuestionIndex] = {
         ...userTestAnswers[currentQuestionIndex],
         answered: true,
         correct: isCorrect,
-        checked: true,
-        timeSpent: (userTestAnswers[currentQuestionIndex]?.timeSpent || 0) + (Date.now() - window.questionStartTime) / 1000
+        checked: true
     };
     
-    // Update performance data
-    updateUserPerformance(isCorrect);
+    // Update the display
+    loadCurrentInteractiveQuestion();
     
-    // Update UI
-    updateOptionsUI(question);
-    showExplanation(question);
-    
-    // Show enhanced feedback
-    showEnhancedFeedback(isCorrect, question);
-    
-    // Auto-advance if enabled
-    const autoAdvance = localStorage.getItem('nursequestions_autoAdvance') === 'true';
-    if (autoAdvance && currentStudyMode === 'practice') {
-        setTimeout(() => {
-            if (currentQuestionIndex < currentCourseQuestions.length - 1) {
-                nextQuestion();
-            }
-        }, 2000);
-    }
-    
-    // Track analytics
-    trackEvent('answer_checked', {
-        questionId: question.id,
-        isCorrect,
-        timeSpent: userTestAnswers[currentQuestionIndex].timeSpent,
-        attempts: userTestAnswers[currentQuestionIndex].attempts
-    });
-}
-
-// Show enhanced feedback
-function showEnhancedFeedback(isCorrect, question) {
-    const feedbackMessages = {
-        correct: [
-            "Excellent! 🎉 You nailed it!",
-            "Perfect! That's absolutely right!",
-            "Great job! You're really getting this!",
-            "Brilliant! Keep up the good work!",
-            "Spot on! Your understanding is solid!"
-        ],
-        incorrect: [
-            "Almost there! The correct answer was:",
-            "Good attempt! Remember this for next time:",
-            "Don't worry! Learning from mistakes is key:",
-            "Let's review this concept. Correct answer:",
-            "Good effort! Here's the right answer:"
-        ]
-    };
-    
-    const messages = isCorrect ? feedbackMessages.correct : feedbackMessages.incorrect;
-    const randomMessage = messages[Math.floor(Math.random() * messages.length)];
-    
-    const feedbackHTML = `
-        <div class="feedback-toast ${isCorrect ? 'success' : 'error'}">
-            <div class="feedback-icon">
-                <i class="fas fa-${isCorrect ? 'check-circle' : 'exclamation-circle'}"></i>
-            </div>
-            <div class="feedback-content">
-                <h5>${randomMessage}</h5>
-                ${!isCorrect ? `
-                    <p><strong>${question.correct_answer}</strong></p>
-                ` : ''}
-            </div>
-            <button onclick="this.parentElement.remove()" class="btn-close">
-                <i class="fas fa-times"></i>
-            </button>
-        </div>
-    `;
-    
-    // Insert feedback
-    const questionSection = document.querySelector('.question-section');
-    if (questionSection) {
-        const existingFeedback = questionSection.querySelector('.feedback-toast');
-        if (existingFeedback) existingFeedback.remove();
-        
-        questionSection.insertAdjacentHTML('beforeend', feedbackHTML);
-        
-        // Auto-remove after 5 seconds
-        setTimeout(() => {
-            const toast = questionSection.querySelector('.feedback-toast');
-            if (toast) toast.remove();
-        }, 5000);
-    }
-}
-
-// Show explanation with enhanced features
-function showExplanation(question) {
-    const explanationContent = document.getElementById('explanationContent');
-    const explanationPlaceholder = document.getElementById('explanationPlaceholder');
-    const explanationText = document.getElementById('explanationText');
-    
-    if (!explanationContent || !explanationPlaceholder || !explanationText) return;
-    
-    // Show explanation section
-    explanationPlaceholder.style.display = 'none';
-    explanationContent.style.display = 'block';
-    
-    // Format explanation text
-    let explanationHTML = question.explanation || 
-        'No detailed explanation available. This answer is correct based on nursing standards and guidelines.';
-    
-    // Enhance explanation with formatting
-    explanationHTML = formatExplanationText(explanationHTML);
-    
-    // Add references if available
-    if (question.references) {
-        explanationHTML += `
-            <div class="explanation-references">
-                <h6><i class="fas fa-book"></i> References:</h6>
-                <ul>
-                    ${question.references.split(',').map(ref => `<li>${ref.trim()}</li>`).join('')}
-                </ul>
-            </div>
-        `;
-    }
-    
-    explanationText.innerHTML = explanationHTML;
-    
-    // Show resources section if available
-    if (question.resources || question.links) {
-        showResources(question);
-    }
-    
-    // Scroll to explanation
+    // Auto-scroll to explanation
     setTimeout(() => {
-        explanationContent.scrollIntoView({ 
-            behavior: 'smooth', 
-            block: 'start' 
-        });
+        const explanationColumn = document.querySelector('.explanation-column');
+        if (explanationColumn) {
+            explanationColumn.scrollIntoView({ 
+                behavior: 'smooth', 
+                block: 'start' 
+            });
+        }
     }, 300);
-}
-
-// Format explanation text with enhanced features
-function formatExplanationText(text) {
-    // Convert markdown-like syntax
-    let formatted = text
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Bold
-        .replace(/\*(.*?)\*/g, '<em>$1</em>') // Italic
-        .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>') // Code blocks
-        .replace(/`(.*?)`/g, '<code>$1</code>') // Inline code
-        .replace(/# (.*?)(\n|$)/g, '<h6>$1</h6>') // Headers
-        .replace(/\n/g, '<br>') // Line breaks
-        .replace(/- (.*?)(\n|$)/g, '<li>$1</li>'); // Lists
     
-    // Wrap lists
-    formatted = formatted.replace(/(<li>.*?<\/li>)+/g, '<ul>$&</ul>');
-    
-    return formatted;
-}
-
-// ==================== ANALYTICS & TRACKING ====================
-
-function updateUserPerformance(isCorrect) {
-    const courseId = currentCourseForTest?.id;
-    if (!courseId) return;
-    
-    // Load existing performance
-    const userPerformance = JSON.parse(localStorage.getItem('nursequestions_userPerformance') || '{}');
-    
-    if (!userPerformance[courseId]) {
-        userPerformance[courseId] = {
-            attempted: 0,
-            correct: 0,
-            totalTime: 0,
-            weakAreas: {}
-        };
+    // Show feedback
+    if (isCorrect) {
+        showToast('Correct! 🎉', 'success');
+    } else {
+        showToast('Incorrect. Check the explanation.', 'error');
     }
-    
-    // Update stats
-    userPerformance[courseId].attempted++;
-    if (isCorrect) userPerformance[courseId].correct++;
-    
-    // Update weak areas
-    const question = currentCourseQuestions[currentQuestionIndex];
-    const category = question.category || question.difficulty || 'general';
-    if (!userPerformance[courseId].weakAreas[category]) {
-        userPerformance[courseId].weakAreas[category] = { attempted: 0, correct: 0 };
-    }
-    userPerformance[courseId].weakAreas[category].attempted++;
-    if (isCorrect) userPerformance[courseId].weakAreas[category].correct++;
-    
-    // Calculate average time
-    const timeSpent = userTestAnswers[currentQuestionIndex]?.timeSpent || 0;
-    userPerformance[courseId].totalTime += timeSpent;
-    
-    // Save back to localStorage
-    localStorage.setItem('nursequestions_userPerformance', JSON.stringify(userPerformance));
-    
-    // Update global statistics
-    updateTestStatistics(isCorrect, timeSpent);
 }
 
-function updateTestStatistics(isCorrect, timeSpent) {
-    testStatistics.totalAttempted++;
-    if (isCorrect) testStatistics.totalCorrect++;
-    else testStatistics.totalIncorrect++;
-    
-    // Update average time
-    testStatistics.averageTime = 
-        ((testStatistics.averageTime * (testStatistics.totalAttempted - 1)) + timeSpent) / 
-        testStatistics.totalAttempted;
-    
-    // Save statistics
-    localStorage.setItem('nursequestions_statistics', JSON.stringify(testStatistics));
-    
-    // Update UI
-    updateAnalyticsUI();
-}
-
-// ==================== HELPER FUNCTIONS ====================
-
-function getQuestionOptions(question) {
-    const options = [];
-    const optionLetters = ['A', 'B', 'C', 'D', 'E', 'F'];
-    
-    // Try different field patterns
-    for (let i = 0; i < 6; i++) {
-        const field = `option_${String.fromCharCode(97 + i)}`; // option_a, option_b, etc.
-        if (question[field] && question[field].trim()) {
-            options.push({
-                letter: optionLetters[i],
-                text: question[field].trim()
-            });
-        }
-    }
-    
-    // If no standard options, try JSON or comma-separated
-    if (options.length === 0 && question.options) {
-        try {
-            const parsedOptions = JSON.parse(question.options);
-            if (Array.isArray(parsedOptions)) {
-                parsedOptions.forEach((opt, idx) => {
-                    if (opt && opt.trim()) {
-                        options.push({
-                            letter: optionLetters[idx],
-                            text: opt.trim()
-                        });
-                    }
-                });
-            }
-        } catch (e) {
-            // Treat as comma-separated
-            const splitOptions = question.options.split(',');
-            splitOptions.forEach((opt, idx) => {
-                if (opt && opt.trim()) {
-                    options.push({
-                        letter: optionLetters[idx],
-                        text: opt.trim()
-                    });
-                }
-            });
-        }
-    }
-    
-    return options;
-}
-
-function isAnswerCorrect(question, userAnswer) {
-    if (!question.correct_answer || !userAnswer) return false;
-    
-    // Case-insensitive comparison with trimming
-    return question.correct_answer.trim().toLowerCase() === userAnswer.trim().toLowerCase();
-}
-
-function getUserAnswerStatus(questionIndex) {
-    const answer = userTestAnswers[questionIndex];
-    if (!answer) return '';
-    
-    if (answer.answered) {
-        return answer.correct ? 'correct' : 'incorrect';
-    } else if (answer.marked) {
-        return 'marked';
-    } else if (answer.selected) {
-        return 'selected';
-    }
-    
-    return '';
-}
-
-function calculateTotalTime(questions) {
-    return questions.reduce((total, q) => total + (q.metadata?.readingTime || 1), 0);
-}
-
-// ==================== UTILITY FUNCTIONS ====================
-
-function showLoading(message = 'Loading...') {
-    const loadingEl = document.createElement('div');
-    loadingEl.className = 'enhanced-loading';
-    loadingEl.innerHTML = `
-        <div class="loading-container">
-            <div class="loading-spinner">
-                <div class="spinner-ring"></div>
-                <div class="spinner-ring"></div>
-                <div class="spinner-ring"></div>
-                <div class="spinner-ring"></div>
-            </div>
-            <p>${message}</p>
-            <div class="loading-progress">
-                <div class="progress-bar"></div>
-            </div>
-        </div>
+// Show toast notification
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 15px 20px;
+        background: ${type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#3b82f6'};
+        color: white;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        z-index: 9999;
+        animation: slideIn 0.3s ease;
     `;
     
-    document.body.appendChild(loadingEl);
-}
-
-function hideLoading() {
-    const loadingEl = document.querySelector('.enhanced-loading');
-    if (loadingEl) loadingEl.remove();
-}
-
-function showNotification(message, type = 'info') {
-    const toast = document.createElement('div');
-    toast.className = `enhanced-toast ${type}`;
     toast.innerHTML = `
-        <div class="toast-icon">
-            <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : type === 'warning' ? 'exclamation-triangle' : 'info-circle'}"></i>
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <i class="fas ${type === 'success' ? 'fa-check-circle' : type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle'}"></i>
+            <span>${message}</span>
         </div>
-        <div class="toast-content">${message}</div>
-        <button class="toast-close" onclick="this.parentElement.remove()">
-            <i class="fas fa-times"></i>
-        </button>
     `;
     
     document.body.appendChild(toast);
     
-    // Auto-remove
     setTimeout(() => {
-        if (toast.parentElement) {
-            toast.style.animation = 'slideOut 0.3s ease';
-            setTimeout(() => toast.remove(), 300);
-        }
-    }, 5000);
+        toast.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => document.body.removeChild(toast), 300);
+    }, 3000);
 }
 
-function trackEvent(eventName, data = {}) {
-    // Implementation for analytics tracking
-    console.log(`📊 Event: ${eventName}`, data);
-    
-    // Could integrate with Google Analytics, Mixpanel, etc.
-    if (typeof gtag !== 'undefined') {
-        gtag('event', eventName, data);
+// Reset question
+function resetQuestion() {
+    if (currentQuestionIndex in userTestAnswers) {
+        delete userTestAnswers[currentQuestionIndex];
+        loadCurrentInteractiveQuestion();
+        showToast('Question reset. Try again!', 'info');
     }
 }
+
+// Show answer (without checking)
+function showAnswer() {
+    if (!currentCourseQuestions || !currentCourseQuestions[currentQuestionIndex]) return;
+    
+    const question = currentCourseQuestions[currentQuestionIndex];
+    
+    userTestAnswers[currentQuestionIndex] = {
+        ...userTestAnswers[currentQuestionIndex],
+        answered: true,
+        checked: false,
+        shown: true
+    };
+    
+    // Update the display
+    loadCurrentInteractiveQuestion();
+    showToast('Answer revealed. Study the explanation.', 'info');
+}
+
+// Mark for review
+function markForReview() {
+    if (!currentCourseQuestions || !currentCourseQuestions[currentQuestionIndex]) return;
+    
+    const isMarked = !userTestAnswers[currentQuestionIndex]?.marked;
+    userTestAnswers[currentQuestionIndex] = {
+        ...userTestAnswers[currentQuestionIndex],
+        marked: isMarked
+    };
+    
+    // Update the display
+    loadCurrentInteractiveQuestion();
+    
+    showToast(isMarked ? 'Question marked for review 📌' : 'Question unmarked', 'info');
+}
+
+// Navigation functions
+function goToQuestion(index) {
+    currentQuestionIndex = index;
+    loadCurrentInteractiveQuestion();
+    
+    // Scroll to top
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function prevQuestion() {
+    if (currentQuestionIndex > 0) {
+        currentQuestionIndex--;
+        loadCurrentInteractiveQuestion();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+}
+
+function nextQuestion() {
+    if (currentQuestionIndex < currentCourseQuestions.length - 1) {
+        currentQuestionIndex++;
+        loadCurrentInteractiveQuestion();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+        // Last question - show completion message
+        const totalAnswered = Object.keys(userTestAnswers).filter(key => userTestAnswers[key]?.answered).length;
+        const totalCorrect = Object.keys(userTestAnswers).filter(key => userTestAnswers[key]?.correct).length;
+        const accuracy = totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0;
+        
+        showToast(`Test completed! Score: ${accuracy}%`, 'success');
+    }
+}
+
+// ==================== CSS STYLES ====================
+
+// Add CSS for toast animations
+const toastStyles = `
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slideOut {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+}
+`;
+
+// Add styles to document
+document.addEventListener('DOMContentLoaded', function() {
+    if (!document.getElementById('student-portal-styles')) {
+        const styleEl = document.createElement('style');
+        styleEl.id = 'student-portal-styles';
+        styleEl.textContent = toastStyles;
+        document.head.appendChild(styleEl);
+    }
+});
 
 // ==================== GLOBAL EXPORTS ====================
 
 // Make all functions available globally
 window.loadQuestionBankCards = loadQuestionBankCards;
-window.startEnhancedCourseTest = startEnhancedCourseTest;
-window.selectOption = selectOption;
-window.checkAnswer = checkAnswer;
-window.showAnswer = showAnswer;
-window.resetQuestion = resetQuestion;
-window.skipQuestion = function() {
-    if (currentQuestionIndex < currentCourseQuestions.length - 1) {
-        nextQuestion();
-    }
-};
-window.markForReview = markForReview;
+window.clearQuestionBankSearch = clearQuestionBankSearch;
+window.startCourseTest = startCourseTest;
 window.goToQuestion = goToQuestion;
 window.prevQuestion = prevQuestion;
 window.nextQuestion = nextQuestion;
-window.toggleStudyMode = function() {
-    // Cycle through study modes
-    const modes = Object.keys(STUDY_MODES);
-    const currentIndex = modes.findIndex(m => STUDY_MODES[m].id === currentStudyMode);
-    const nextIndex = (currentIndex + 1) % modes.length;
-    currentStudyMode = STUDY_MODES[modes[nextIndex]].id;
-    
-    showNotification(`Switched to ${STUDY_MODES[modes[nextIndex]].name}`, 'info');
-    // Reload current question with new mode
-    loadEnhancedQuestion();
-};
+window.selectInteractiveAnswer = selectInteractiveAnswer;
+window.checkAnswer = checkAnswer;
+window.resetQuestion = resetQuestion;
+window.showAnswer = showAnswer;
+window.markForReview = markForReview;
+
+            // Save progress
+function saveProgress() {
+    const progress = {
+        userAnswers,
+        questionStats,
+        currentQuestionIndex,
+        timestamp: new Date().toISOString()
+    };
+    localStorage.setItem(`courseProgress_${courseId}`, JSON.stringify(progress));
+}
+
+// Load progress
+function loadProgress() {
+    const saved = localStorage.getItem(`courseProgress_${courseId}`);
+    if (saved) {
+        const progress = JSON.parse(saved);
+        userAnswers = progress.userAnswers || [];
+        questionStats = progress.questionStats || {answered:0, correct:0, incorrect:0, marked:0};
+        currentQuestionIndex = progress.currentQuestionIndex || 0;
+    }
+}
        // *************************************************************************
             // *** ATTENDANCE SYSTEM ***
             // *************************************************************************
