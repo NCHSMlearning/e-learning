@@ -2577,7 +2577,6 @@ async function startCourseTest(courseId, courseName) {
     }
 }
 
-// Display interactive questions (like your MCK system)
 function displayInteractiveQuestions(courseName, questions, courseId) {
     const contentEl = document.getElementById('studentQuestionBankContent');
     if (!contentEl) return;
@@ -2590,7 +2589,7 @@ function displayInteractiveQuestions(courseName, questions, courseId) {
             <div class="questions-header" style="background: ${courseColor}; color: white; padding: 15px; border-radius: 8px 8px 0 0;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <div>
-                        <button onclick="loadQuestionBankCards()" class="btn-back" style="background: rgba(255,255,255,0.2); color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer;">
+                        <button onclick="loadQuestionBankCards()" class="btn-back">
                             <i class="fas fa-arrow-left"></i> Back to Courses
                         </button>
                         <h3 style="margin: 10px 0 5px 0;">${courseName} - Q&A Practice</h3>
@@ -2603,9 +2602,9 @@ function displayInteractiveQuestions(courseName, questions, courseId) {
                 </div>
             </div>
             
-            <!-- Question Navigation Dots -->
-            <div class="question-nav-dots" style="background: #f8f9fa; padding: 10px; border-bottom: 1px solid #e9ecef; overflow-x: auto; white-space: nowrap;">
-                <div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;">
+            <!-- Question Navigation Dots - FIXED VERSION -->
+            <div class="question-nav-dots">
+                <div class="question-dots-inner">
     `;
     
     // Add question dots (limit to 100 for performance)
@@ -2613,9 +2612,8 @@ function displayInteractiveQuestions(courseName, questions, courseId) {
     for (let i = 0; i < maxDots; i++) {
         html += `
             <button onclick="goToQuestion(${i})" 
-                    class="question-dot ${i === 0 ? 'active' : ''}" 
-                    id="questionDot${i}"
-                    style="width: 40px; height: 40px; border-radius: 50%; border: 2px solid ${courseColor}; background: ${i === 0 ? courseColor : 'white'}; color: ${i === 0 ? 'white' : courseColor}; cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0;">
+                    class="question-dot" 
+                    id="questionDot${i}">
                 ${i + 1}
             </button>
         `;
@@ -2623,7 +2621,7 @@ function displayInteractiveQuestions(courseName, questions, courseId) {
     
     if (questions.length > 100) {
         html += `
-            <div style="display: flex; align-items: center; padding: 0 10px; color: #666; font-size: 14px;">
+            <div class="more-questions-indicator">
                 +${questions.length - 100} more
             </div>
         `;
@@ -2634,100 +2632,100 @@ function displayInteractiveQuestions(courseName, questions, courseId) {
             </div>
             
             <!-- Main Content Area -->
-            <div class="questions-content" style="display: flex; min-height: 500px;">
+            <div class="questions-content">
                 <!-- Left Column: Question and Options -->
-                <div class="question-column" style="flex: 1; padding: 20px; border-right: 1px solid #e9ecef;">
-                    <div class="question-box" style="background: white; border-radius: 8px; padding: 25px; margin-bottom: 20px; border: 2px solid ${courseColor}; box-shadow: 0 4px 8px rgba(0,0,0,0.05);">
-                        <div style="margin-bottom: 10px; font-weight: bold; color: #4f46e5; display: flex; align-items: center; gap: 10px;">
-                            <span style="background: ${courseColor}; color: white; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center;">${currentQuestionIndex + 1}</span>
+                <div class="question-column">
+                    <div class="question-box" style="border: 2px solid ${courseColor};">
+                        <div class="question-header">
+                            <span class="question-number" style="background: ${courseColor};">${currentQuestionIndex + 1}</span>
                             <span>Question ${currentQuestionIndex + 1} of ${questions.length}</span>
                         </div>
-                        <div id="questionText" style="font-size: 1.1rem; line-height: 1.6; color: #333; margin-top: 10px;">
+                        <div id="questionText" class="question-text">
                             Loading question...
                         </div>
                     </div>
                     
-                    <div id="optionsContainer" style="margin-bottom: 20px;">
+                    <div id="optionsContainer" class="options-container">
                         <!-- Options will be loaded here -->
                     </div>
                     
                     <!-- Action Buttons -->
-                    <div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px; flex-wrap: wrap;">
-                        <button onclick="checkAnswer()" id="checkAnswerBtn" style="background: ${courseColor}; color: white; border: none; padding: 12px 25px; border-radius: 6px; cursor: pointer; font-weight: bold; display: flex; align-items: center; gap: 8px;">
+                    <div class="action-buttons">
+                        <button onclick="checkAnswer()" id="checkAnswerBtn" class="action-btn primary-btn">
                             <i class="fas fa-check-circle"></i> Check Answer
                         </button>
-                        <button onclick="resetQuestion()" id="resetBtn" style="background: #6c757d; color: white; border: none; padding: 12px 25px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                        <button onclick="resetQuestion()" id="resetBtn" class="action-btn secondary-btn">
                             <i class="fas fa-redo"></i> Reset
                         </button>
-                        <button onclick="showAnswer()" id="showAnswerBtn" style="background: #17a2b8; color: white; border: none; padding: 12px 25px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                        <button onclick="showAnswer()" id="showAnswerBtn" class="action-btn info-btn">
                             <i class="fas fa-lightbulb"></i> Show Answer
                         </button>
                     </div>
                     
                     <!-- Answer Box -->
-                    <div id="answerBox" style="display: none; margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #28a745; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-                        <p style="margin: 0; font-weight: bold; color: #28a745;">
+                    <div id="answerBox" class="answer-box">
+                        <p class="correct-answer">
                             <i class="fas fa-check"></i> Correct Answer: <span id="correctAnswerText"></span>
                         </p>
                     </div>
                 </div>
                 
                 <!-- Right Column: Explanation -->
-                <div class="explanation-column" style="flex: 1; padding: 20px; background: #f8f9fa; border-radius: 0 0 8px 0;">
-                    <div id="explanationContainer" style="display: none;">
-                        <h4 style="color: ${courseColor}; margin-bottom: 15px; display: flex; align-items: center; gap: 10px;">
+                <div class="explanation-column">
+                    <div id="explanationContainer" class="explanation-container">
+                        <h4 class="explanation-title">
                             <i class="fas fa-info-circle"></i> Explanation
                         </h4>
-                        <div id="explanationText" style="background: white; padding: 20px; border-radius: 8px; border: 1px solid #dee2e6; line-height: 1.6; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                        <div id="explanationText" class="explanation-text">
                             Loading explanation...
                         </div>
                     </div>
                     
                     <!-- Placeholder when no explanation shown -->
-                    <div id="explanationPlaceholder" style="text-align: center; padding: 60px 20px; color: #6c757d;">
-                        <i class="fas fa-info-circle" style="font-size: 3rem; color: #dee2e6; margin-bottom: 15px;"></i>
-                        <p style="font-size: 1.1rem; margin-bottom: 10px;">Answer a question to see explanation here</p>
-                        <p style="font-size: 0.9rem; opacity: 0.7;">Select an option and click "Check Answer"</p>
+                    <div id="explanationPlaceholder" class="explanation-placeholder">
+                        <i class="fas fa-info-circle"></i>
+                        <p>Answer a question to see explanation here</p>
+                        <p>Select an option and click "Check Answer"</p>
                     </div>
                 </div>
             </div>
             
             <!-- Navigation Buttons -->
-            <div style="display: flex; justify-content: space-between; padding: 20px; background: white; border-top: 1px solid #e9ecef;">
+            <div class="navigation-buttons">
                 <div>
-                    <button onclick="prevQuestion()" id="prevBtn" style="background: #6c757d; color: white; border: none; padding: 12px 25px; border-radius: 6px; cursor: pointer; display: none; display: flex; align-items: center; gap: 8px;">
+                    <button onclick="prevQuestion()" id="prevBtn" class="nav-btn">
                         <i class="fas fa-arrow-left"></i> Previous
                     </button>
                 </div>
                 <div>
-                    <button onclick="markForReview()" id="markBtn" style="background: #ffc107; color: #333; border: none; padding: 12px 25px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                    <button onclick="markForReview()" id="markBtn" class="nav-btn warning-btn">
                         <i class="fas fa-flag"></i> <span id="markBtnText">Mark for Review</span>
                     </button>
                 </div>
                 <div>
-                    <button onclick="nextQuestion()" id="nextBtn" style="background: ${courseColor}; color: white; border: none; padding: 12px 25px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                    <button onclick="nextQuestion()" id="nextBtn" class="nav-btn primary-btn">
                         Next <i class="fas fa-arrow-right"></i>
                     </button>
                 </div>
             </div>
             
             <!-- Progress Summary -->
-            <div style="background: #f8f9fa; padding: 15px; border-top: 1px solid #e9ecef; display: flex; justify-content: space-around; text-align: center;">
-                <div>
-                    <div style="font-size: 1.5rem; font-weight: bold; color: #4f46e5;" id="answeredCount">0</div>
-                    <div style="font-size: 0.9rem; color: #666;">Answered</div>
+            <div class="progress-summary">
+                <div class="progress-item">
+                    <div class="progress-number answered-count" id="answeredCount">0</div>
+                    <div class="progress-label">Answered</div>
                 </div>
-                <div>
-                    <div style="font-size: 1.5rem; font-weight: bold; color: #10b981;" id="correctCount">0</div>
-                    <div style="font-size: 0.9rem; color: #666;">Correct</div>
+                <div class="progress-item">
+                    <div class="progress-number correct-count" id="correctCount">0</div>
+                    <div class="progress-label">Correct</div>
                 </div>
-                <div>
-                    <div style="font-size: 1.5rem; font-weight: bold; color: #ef4444;" id="incorrectCount">0</div>
-                    <div style="font-size: 0.9rem; color: #666;">Incorrect</div>
+                <div class="progress-item">
+                    <div class="progress-number incorrect-count" id="incorrectCount">0</div>
+                    <div class="progress-label">Incorrect</div>
                 </div>
-                <div>
-                    <div style="font-size: 1.5rem; font-weight: bold; color: #f59e0b;" id="markedCount">0</div>
-                    <div style="font-size: 0.9rem; color: #666;">Marked</div>
+                <div class="progress-item">
+                    <div class="progress-number marked-count" id="markedCount">0</div>
+                    <div class="progress-label">Marked</div>
                 </div>
             </div>
         </div>
