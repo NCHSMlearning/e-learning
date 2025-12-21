@@ -1423,6 +1423,271 @@ function clearExtractionResults() {
     }
     document.getElementById('questions-text').value = '';
 }
+        // ==================== QUESTION EXTRACTION FUNCTIONS ====================
+
+function processTextQuestions() {
+    const textarea = document.getElementById('questions-text');
+    const courseSelect = document.getElementById('document-course');
+    const text = textarea.value.trim();
+    
+    // Validation
+    if (!text) {
+        alert('Please paste questions text first!');
+        return;
+    }
+    
+    if (!courseSelect.value) {
+        alert('Please select a course first!');
+        return;
+    }
+    
+    try {
+        // Reset extraction results
+        extractedQuestions = [];
+        savedQuestionsCount = 0;
+        
+        // Show loading
+        const processBtn = document.querySelector('button[onclick="processTextQuestions()"]');
+        if (processBtn) {
+            const originalText = processBtn.innerHTML;
+            processBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+            processBtn.disabled = true;
+            
+            // Process after a small delay to show loading state
+            setTimeout(() => {
+                extractQuestionsFromText(text);
+                processBtn.innerHTML = originalText;
+                processBtn.disabled = false;
+            }, 100);
+        } else {
+            extractQuestionsFromText(text);
+        }
+        
+    } catch (error) {
+        console.error('Error processing questions:', error);
+        alert('Error processing questions: ' + error.message);
+    }
+}
+
+function extractQuestionsFromText(text) {
+    try {
+        console.log('Starting extraction...');
+        
+        // Clear previous results
+        extractedQuestions = [];
+        
+        // Use your existing extraction function
+        extractedQuestions = extractSimpleMCQs(text);
+        
+        console.log(`Extracted ${extractedQuestions.length} questions`);
+        
+        if (extractedQuestions.length === 0) {
+            alert('No questions found in the text. Please check the format.');
+            return;
+        }
+        
+        // Display the extracted questions
+        displayQuestionsList();
+        
+        // Show success message
+        alert(`✅ Successfully extracted ${extractedQuestions.length} questions!`);
+        
+    } catch (error) {
+        console.error('Error in extractQuestionsFromText:', error);
+        alert('Error extracting questions: ' + error.message);
+    }
+}
+
+// ==================== HELPER FUNCTIONS ====================
+
+function clearTextArea() {
+    if (confirm('Clear all text?')) {
+        document.getElementById('questions-text').value = '';
+    }
+}
+
+function showExample() {
+    const exampleText = `Example Questions:
+
+1. What is the normal blood pressure range for adults?
+A) 90/60 mmHg
+B) 120/80 mmHg ✓
+C) 140/90 mmHg
+D) 160/100 mmHg
+Answer: 120/80 mmHg
+Explanation: Normal adult blood pressure is typically around 120/80 mmHg.
+
+2. Which vitamin is produced by the body when exposed to sunlight?
+A) Vitamin A
+B) Vitamin B12
+C) Vitamin C
+D) Vitamin D ✓
+Answer: Vitamin D
+Explanation: Vitamin D is synthesized when skin is exposed to UVB sunlight.
+
+3. How many chambers does the human heart have?
+A) Two
+B) Three
+C) Four ✓
+D) Five
+Answer: Four
+Explanation: The heart has four chambers: two atria and two ventricles.`;
+    
+    document.getElementById('questions-text').value = exampleText;
+}
+
+function testFormatDetection() {
+    const text = document.getElementById('questions-text').value;
+    if (!text.trim()) {
+        alert('Please paste some text first to test detection.');
+        return;
+    }
+    
+    const questions = extractSimpleMCQs(text);
+    alert(`Format Detection Test:\n\nFound ${questions.length} questions\n\nFirst question preview:\n${questions[0] ? questions[0].question : 'No questions found'}`);
+}
+
+function editInBulk() {
+    alert('Bulk edit feature would open here. You can edit multiple questions at once.');
+}
+
+function convertAllToMCQ() {
+    if (extractedQuestions.length === 0) {
+        alert('No questions to convert');
+        return;
+    }
+    
+    let converted = 0;
+    extractedQuestions.forEach((question, index) => {
+        if (!question.options || question.options.length === 0) {
+            // Convert short answer to MCQ with simple options
+            question.options = [
+                'True',
+                'False',
+                'Partially correct',
+                'Not applicable'
+            ];
+            question.answer = 'True'; // Default answer for converted questions
+            question.type = 'multiple_choice';
+            converted++;
+        }
+    });
+    
+    if (converted > 0) {
+        displayQuestionsList();
+        alert(`✅ Converted ${converted} short answer questions to MCQs!`);
+    } else {
+        alert('All questions are already MCQs!');
+    }
+}
+
+// ==================== GENERATE QUESTIONS PAGE FUNCTIONS ====================
+
+function loadGenerateQuestionsPage() {
+    // Ensure courses are loaded for the generator
+    loadCourses();
+}
+
+function generateQuestions() {
+    const topics = document.getElementById('generate-topics').value.trim();
+    const count = parseInt(document.getElementById('question-count').value) || 10;
+    const difficulty = document.getElementById('difficulty-level').value;
+    const courseId = document.getElementById('generate-course').value;
+    const mode = document.querySelector('input[name="gen-mode"]:checked').value;
+    
+    if (!topics) {
+        alert('Please enter topics or paste existing questions');
+        return;
+    }
+    
+    if (!courseId) {
+        alert('Please select a course');
+        return;
+    }
+    
+    if (count < 1 || count > 100) {
+        alert('Please enter a number between 1 and 100');
+        return;
+    }
+    
+    // Show loading
+    const generateBtn = document.getElementById('generate-btn');
+    const originalText = generateBtn.innerHTML;
+    generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
+    generateBtn.disabled = true;
+    
+    setTimeout(() => {
+        try {
+            let generated = [];
+            
+            if (mode === 'paste') {
+                // Generate from pasted questions
+                generated = generateFromPastedQuestions(topics, count);
+            } else if (mode === 'template') {
+                // Generate from templates
+                generated = generateFromTemplate(topics, count, difficulty);
+            } else {
+                // AI generation
+                generated = generateAIQuestions(topics, count, difficulty);
+            }
+            
+            // Store generated questions
+            generatedQuestions = generated;
+            currentPage = 1;
+            
+            // Display them
+            displayGeneratedQuestions();
+            
+            // Show success
+            alert(`✅ Successfully generated ${generated.length} questions!`);
+            
+        } catch (error) {
+            console.error('Error generating questions:', error);
+            alert('Error generating questions: ' + error.message);
+        } finally {
+            generateBtn.innerHTML = originalText;
+            generateBtn.disabled = false;
+        }
+    }, 500);
+}
+
+// ==================== ADDITIONAL UTILITY FUNCTIONS ====================
+
+function resetQuestionForm() {
+    if (confirm('Clear all fields?')) {
+        document.getElementById('question-form').reset();
+        document.getElementById('question-difficulty').value = 'medium';
+    }
+}
+
+function addQuestionToCourse(courseId) {
+    // Set the course and switch to create question page
+    document.getElementById('question-course').value = courseId;
+    showPage('create-question');
+    
+    // Scroll to the form
+    document.getElementById('page-create-question').scrollIntoView({ behavior: 'smooth' });
+}
+
+function editQuestion(questionId) {
+    alert('Edit question feature would open here for question ID: ' + questionId);
+}
+
+function editCourse(courseId) {
+    alert('Edit course feature would open here for course ID: ' + courseId);
+}
+
+function addNewCourse() {
+    alert('Add new course feature would open here');
+}
+
+function toggleCourseStatus(courseId) {
+    alert('Toggle course status for ID: ' + courseId);
+}
+
+function exportCourseQuestions(courseId) {
+    alert('Export questions for course ID: ' + courseId);
+}
        // ==================== ENHANCED AI QUESTION GENERATOR ====================
 
 let generatedQuestions = [];
