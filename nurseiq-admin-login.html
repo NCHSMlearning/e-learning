@@ -1997,76 +1997,149 @@ function quickGenerate100() {
     generateQuestions();
 }
 
-// Main generation function - ENHANCED
-async function generateQuestions() {
-    if (generationInProgress) return;
+function generateFromPastedQuestions(text, count) {
+    const questions = [];
+    const blocks = text.split(/\n\s*\n/); // Split by blank lines
+    let questionCount = 0;
     
-    const courseId = document.getElementById('generate-course').value;
-    const topics = document.getElementById('generate-topics').value.trim();
-    const count = parseInt(document.getElementById('question-count').value) || 10;
-    const difficulty = document.getElementById('difficulty-level').value;
-    const genMode = document.querySelector('input[name="gen-mode"]:checked').value;
-    
-    if (!courseId) {
-        alert('Please select a course');
-        return;
-    }
-    
-    if (!topics) {
-        alert('Please enter topics or paste questions');
-        return;
-    }
-    
-    if (count < 1 || count > 100) {
-        alert('Please enter between 1-100 questions');
-        return;
-    }
-    
-    const generateBtn = document.getElementById('generate-btn');
-    generateBtn.disabled = true;
-    generationInProgress = true;
-    generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
-    
-    try {
-        console.log(`Generating ${count} questions in ${genMode} mode`);
+    blocks.forEach((block, index) => {
+        if (questionCount >= count) return;
         
-        // Generate questions based on mode
-        switch(genMode) {
-            case 'paste':
-                generatedQuestions = generateFromPastedQuestions(topics, count);
-                break;
-            case 'template':
-                generatedQuestions = generateFromTemplate(topics, count, difficulty);
-                break;
-            case 'ai':
-            default:
-                generatedQuestions = generateAIQuestions(topics, count, difficulty);
-                break;
+        const lines = block.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        if (lines.length === 0) return;
+        
+        let question = '';
+        let options = [];
+        let answer = '';
+        let explanation = '';
+        
+        // First non-empty line is usually the question
+        let currentIndex = 0;
+        while (currentIndex < lines.length && !question) {
+            const line = lines[currentIndex];
+            
+            // Skip pure numbering lines
+            if (line.match(/^\d+[\.\)]$/)) {
+                currentIndex++;
+                continue;
+            }
+            
+            // Extract question (remove number if present)
+            question = line.replace(/^(\d+[\.\)]\s*|\s*)/, '');
+            currentIndex++;
         }
         
-        console.log(`Generated ${generatedQuestions.length} questions`);
-        
-        if (generatedQuestions.length === 0) {
-            throw new Error('No questions generated. Try different keywords or paste existing questions.');
+        // Look for options and answers
+        for (let i = currentIndex; i < lines.length && i < currentIndex + 10; i++) {
+            const line = lines[i];
+            
+            // Check for MCQ options (A., B., C., D.)
+            const optionMatch = line.match(/^([A-D])[\.\)]\s+(.+)$/i);
+            if (optionMatch) {
+                const optionText = optionMatch[2].trim();
+                options.push(optionText);
+                
+                // Check if this option has a checkmark (✓)
+                if (line.includes('✓') || line.includes('(correct)') || line.toLowerCase().includes('correct')) {
+                    answer = optionText;
+                }
+                continue;
+            }
+            
+            // Check for answer indicator
+            if (line.toLowerCase().includes('answer:') || line.toLowerCase().includes('ans:')) {
+                const answerMatch = line.match(/(?:answer|ans):?\s*(.+)/i);
+                if (answerMatch && answerMatch[1]) {
+                    answer = answerMatch[1].trim();
+                    
+                    // If answer is just A, B, C, D, map it to option text
+                    if (answer.match(/^[A-D]$/i) && options.length > 0) {
+                        const optionIndex = answer.toUpperCase().charCodeAt(0) - 65;
+                        if (optionIndex >= 0 && optionIndex < options.length) {
+                            answer = options[optionIndex];
+                        }
+                    }
+                }
+                continue;
+            }
+            
+            // Check for explanation
+            if (line.toLowerCase().includes('explanation:') || line.toLowerCase().includes('explain:')) {
+                const explanationMatch = line.match(/(?:explanation|explain):?\s*(.+)/i);
+                if (explanationMatch && explanationMatch[1]) {
+                    explanation = explanationMatch[1].trim();
+                }
+                continue;
+            }
+            
+            // If line is short and not empty, it might be a standalone answer
+            if (!answer && line.length < 100 && !line.match(/^[A-D][\.\)]/i)) {
+                answer = line;
+            }
         }
         
-        // Display results
-        displayGeneratedQuestions();
-        
-        // Show success message
-        const mcqCount = generatedQuestions.filter(q => q.type === 'mcq').length;
-        alert(`✅ Successfully generated ${generatedQuestions.length} questions (${mcqCount} MCQs)`);
-        
-    } catch (error) {
-        console.error('Error generating questions:', error);
-        alert('Error: ' + error.message);
-    } finally {
-        generateBtn.disabled = false;
-        generationInProgress = false;
-        generateBtn.innerHTML = '<i class="fas fa-magic"></i> Generate Questions';
+        // If we found a question
+        if (question && question.length > 5) {
+            // Ensure question ends with ?
+            if (!question.endsWith('?')) {
+                question += '?';
+            }
+            
+            // If no answer found but we have options, use first option
+            if (!answer && options.length > 0) {
+                answer = options[0];
+            }
+            
+            // If answer not found, create a generic answer
+            if (!answer) {
+                answer = 'The correct answer based on nursing standards';
+            }
+            
+            const questionObj = {
+                id: questions.length + 1,
+                question: question,
+                answer: answer,
+                options: options.length > 0 ? options : null,
+                type: options.length > 0 ? 'mcq' : 'short',
+                difficulty: getRandomDifficulty(),
+                topic: 'Pasted',
+                saved: false,
+                explanation: explanation || `This is a ${options.length > 0 ? 'multiple choice' : 'short answer'} question about ${extractKeywords(question)}`
+            };
+            
+            questions.push(questionObj);
+            questionCount++;
+        }
+    });
+    
+    // If not enough questions found, create some from templates
+    if (questions.length < count) {
+        const needed = count - questions.length;
+        const aiQuestions = generateAIQuestions(text, needed, 'medium');
+        questions.push(...aiQuestions.slice(0, needed));
     }
+    
+    return questions.slice(0, count);
 }
 
+// Helper functions
+function getRandomDifficulty() {
+    const difficulties = ['easy', 'medium', 'hard'];
+    return difficulties[Math.floor(Math.random() * difficulties.length)];
+}
+
+function extractKeywords(text) {
+    const keywords = ['anatomy', 'pharmacology', 'physiology', 'nursing', 'care', 'patient', 'medical'];
+    const lowerText = text.toLowerCase();
+    
+    for (const keyword of keywords) {
+        if (lowerText.includes(keyword)) {
+            return keyword;
+        }
+    }
+    
+    return 'nursing concepts';
+}
 // Generate from pasted questions - EXACT COPY VERSION
 function generateFromPastedQuestions(text, count) {
     const questions = [];
