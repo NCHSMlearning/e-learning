@@ -1270,7 +1270,7 @@ function displayQuestionsList() {
         extractionResults.scrollIntoView({ behavior: 'smooth' });
     }
 }
-       // ==================== MINIMAL SAVE FUNCTIONS ====================
+      // ==================== MINIMAL SAVE FUNCTIONS ====================
 
 async function saveSingleQuestion(index) {
     const courseId = document.getElementById('document-course').value;
@@ -1279,10 +1279,9 @@ async function saveSingleQuestion(index) {
     if (!question || question.saved) return;
     
     try {
-        // FIX: Properly check if there are actual options (not just truthy empty array)
-        const hasOptions = question.options && 
-                          Array.isArray(question.options) && 
-                          question.options.length > 0;
+        // Since we only have MCQs, question_type is always 'multiple_choice'
+        // But we should still validate that options exist
+        const options = question.options || [];
         
         const questionData = {
             question_text: question.question,
@@ -1294,10 +1293,13 @@ async function saveSingleQuestion(index) {
             is_published: true,
             is_active: true,
             created_at: new Date().toISOString(),
-            // FIX: Use proper logic to determine question type
-            question_type: hasOptions ? 'multiple_choice' : 'short_answer',
-            // FIX: Save options to database as JSON string
-            options: hasOptions ? JSON.stringify(question.options) : null,
+            // FIXED: Always multiple_choice for MCQs
+            question_type: 'multiple_choice',
+            // FIXED: Map options to individual columns
+            option_a: options[0] || null,
+            option_b: options[1] || null,
+            option_c: options[2] || null,
+            option_d: options[3] || null,
             marks: 1,
             estimated_time: 2
         };
@@ -1358,10 +1360,7 @@ async function saveAllExtractedQuestions() {
     
     try {
         const questionsToSave = unsavedQuestions.map(q => {
-            // FIX: Apply same logic for checking options
-            const hasOptions = q.options && 
-                              Array.isArray(q.options) && 
-                              q.options.length > 0;
+            const options = q.options || [];
             
             return {
                 question_text: q.question,
@@ -1373,10 +1372,13 @@ async function saveAllExtractedQuestions() {
                 is_published: true,
                 is_active: true,
                 created_at: new Date().toISOString(),
-                // FIX: Use proper logic to determine question type
-                question_type: hasOptions ? 'multiple_choice' : 'short_answer',
-                // FIX: Save options to database as JSON string
-                options: hasOptions ? JSON.stringify(q.options) : null,
+                // FIXED: Always multiple_choice for MCQs
+                question_type: 'multiple_choice',
+                // FIXED: Map options to individual columns
+                option_a: options[0] || null,
+                option_b: options[1] || null,
+                option_c: options[2] || null,
+                option_d: options[3] || null,
                 marks: 1,
                 estimated_time: 2
             };
