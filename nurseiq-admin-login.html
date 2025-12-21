@@ -937,26 +937,23 @@ function clearTextArea() {
 
 function showExample() {
     const exampleText = `1. What is the normal range for adult blood pressure?
-Answer: 120/80 mmHg
-Explanation: Normal adult blood pressure is typically around 120/80 mmHg.
+A) 90/60 mmHg
+B) 120/80 mmHg ✓
+C) 140/90 mmHg
+D) 160/100 mmHg
 
 2. Which vitamin is produced by the skin when exposed to sunlight?
+A) Vitamin A
+B) Vitamin B12
+C) Vitamin C
+D) Vitamin D ✓
 Answer: Vitamin D
-Explanation: Vitamin D is synthesized in the skin upon exposure to UVB radiation.
 
 3. What is the primary function of red blood cells?
-Answer: Transport oxygen
-Explanation: Red blood cells contain hemoglobin which carries oxygen.
-
-Q4. Name the chambers of the human heart.
-Ans: Right atrium, right ventricle, left atrium, left ventricle
-Explain: The heart has four chambers that work together.
-
-5) What does "ABC" stand for in basic life support?
-- Airway
-- Breathing  
-- Circulation
-Correct answer: All of the above`;
+A) Transport oxygen ✓
+B) Fight infection
+C) Clot blood
+D) Regulate temperature`;
 
     document.getElementById('questions-text').value = exampleText;
 }
@@ -983,25 +980,13 @@ function processTextQuestions() {
         // Clear previous results
         extractedQuestions = [];
         
-        // Process the text based on format type
-        const formatType = document.querySelector('input[name="format-type"]:checked').value;
+        // Always use the new simple extractor
+        extractedQuestions = extractSimpleMCQs(text);
         
-        switch(formatType) {
-            case 'auto':
-                extractedQuestions = extractExamPaperQuestions(text);
-                break;
-            case 'numbered':
-                extractedQuestions = extractNumberedQuestions(text);
-                break;
-            case 'qprefix':
-                extractedQuestions = extractQPrefixQuestions(text);
-                break;
-        }
-        
-        console.log(`Extracted ${extractedQuestions.length} questions`);
+        console.log(`Extracted ${extractedQuestions.length} questions:`, extractedQuestions);
         
         if (extractedQuestions.length === 0) {
-            throw new Error('No questions found. Try selecting a different format.');
+            throw new Error('No questions found. Try this format:\n1. Question text?\nA) Option A\nB) Option B ✓\nC) Option C\nD) Option D');
         }
         
         // Display results
@@ -1016,281 +1001,170 @@ function processTextQuestions() {
     }
 }
 
-function extractExamPaperQuestions(text) {
+// SIMPLE MCQ EXTRACTOR - WORKING VERSION
+function extractSimpleMCQs(text) {
     const questions = [];
     const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
     
-    let section = '';
     let currentQuestion = null;
-    let options = [];
-    let correctAnswer = '';
-    let inMcqSection = false;
-    let inShortAnswerSection = false;
+    let currentOptions = [];
+    let currentAnswer = '';
+    let questionNumber = 1;
     
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         
-        // Detect sections
-        if (line.includes('SECTION A:') || line.includes('MULTIPLE CHOICE')) {
-            section = 'MCQ';
-            inMcqSection = true;
-            inShortAnswerSection = false;
-            continue;
-        }
+        // Look for question lines (contains ? OR starts with number)
+        const isQuestionLine = line.includes('?') || line.match(/^\d+[\.\)]/);
         
-        if (line.includes('SECTION B:') || line.includes('SHORT ANSWER')) {
-            section = 'Short Answer';
-            inMcqSection = false;
-            inShortAnswerSection = true;
-            continue;
-        }
-        
-        // Extract numbered questions (both MCQ and Short Answer)
-        const questionMatch = line.match(/^(\d+\.|\d+\))\s+(.+)$/);
-        
-        if (questionMatch) {
+        if (isQuestionLine && !line.match(/^[A-Da-d][\.\)]/)) {
             // Save previous question if exists
-            if (currentQuestion) {
+            if (currentQuestion && currentOptions.length > 0) {
                 const questionObj = {
-                    id: questions.length + 1,
-                    question: currentQuestion,
-                    answer: correctAnswer || '',
-                    explanation: '',
-                    type: section === 'MCQ' ? 'multiple_choice' : 'short_answer',
-                    options: options.length > 0 ? options : null,
-                    saved: false
+                    id: questionNumber++,
+                    question: formatQuestionText(currentQuestion),
+                    answer: currentAnswer || (currentOptions[0] || 'No answer'),
+                    options: [...currentOptions],
+                    type: 'multiple_choice',
+                    saved: false,
+                    explanation: ''
                 };
                 questions.push(questionObj);
             }
             
             // Start new question
-            currentQuestion = questionMatch[2].trim();
-            options = [];
-            correctAnswer = '';
+            currentQuestion = line.replace(/^\d+[\.\)]\s*/, '').trim();
+            currentOptions = [];
+            currentAnswer = '';
             
-            // For MCQs, collect options from following lines
-            if (inMcqSection) {
-                let j = i + 1;
-                while (j < lines.length && !lines[j].match(/^\d+[\.\)]/)) {
-                    const optionMatch = lines[j].match(/^([A-D])\.\s+(.+)$/);
-                    if (optionMatch) {
-                        options.push(optionMatch[2].trim());
+            // Look for options in next lines
+            let j = i + 1;
+            while (j < lines.length && currentOptions.length < 4) {
+                const nextLine = lines[j];
+                
+                // Check for MCQ options (A., B., C., D.)
+                const optionMatch = nextLine.match(/^([A-Da-d])[\.\)]\s+(.+)$/);
+                if (optionMatch) {
+                    let optionText = optionMatch[2].trim();
+                    
+                    // Remove checkmark from option text but remember it
+                    const hasCheckmark = optionText.includes('✓');
+                    optionText = optionText.replace(/[✓✔]/g, '').trim();
+                    
+                    currentOptions.push(optionText);
+                    
+                    // If this option has checkmark, it's the answer
+                    if (hasCheckmark) {
+                        currentAnswer = optionText;
                     }
                     j++;
-                }
-                
-                // Try to find correct answer in question text
-                const answerMatch = currentQuestion.match(/correct.*answer.*is.*([A-D])/i);
-                if (answerMatch && answerMatch[1] && options.length > 0) {
-                    const answerIndex = answerMatch[1].charCodeAt(0) - 65; // A=0, B=1, etc.
-                    correctAnswer = options[answerIndex] || options[0];
-                } else if (options.length > 0) {
-                    // If no answer specified, use first option
-                    correctAnswer = options[0];
+                } else {
+                    break;
                 }
             }
             
-        } 
-        // Detect standalone questions ending with ?
-        else if (line.endsWith('?') && line.length > 10 && !currentQuestion) {
-            currentQuestion = line;
-            section = inShortAnswerSection ? 'Short Answer' : 'General';
-        }
-        // Collect options for current MCQ
-        else if (currentQuestion && inMcqSection && line.match(/^[A-D]\.\s+.+$/)) {
-            const optionMatch = line.match(/^[A-D]\.\s+(.+)$/);
-            if (optionMatch) {
-                options.push(optionMatch[1].trim());
+            // Look for answer line after options
+            for (let k = j; k < Math.min(j + 3, lines.length); k++) {
+                const answerLine = lines[k];
+                
+                if (answerLine.toLowerCase().includes('answer:') || 
+                    answerLine.toLowerCase().includes('correct:')) {
+                    
+                    const answerMatch = answerLine.match(/(?:answer|correct):?\s*(.+)/i);
+                    if (answerMatch && answerMatch[1]) {
+                        const answerText = answerMatch[1].trim();
+                        
+                        // If answer is just A, B, C, D, convert to option text
+                        if (answerText.match(/^[A-D]$/i) && currentOptions.length > 0) {
+                            const optionIndex = answerText.toUpperCase().charCodeAt(0) - 65;
+                            if (optionIndex >= 0 && optionIndex < currentOptions.length) {
+                                currentAnswer = currentOptions[optionIndex];
+                            }
+                        } else {
+                            currentAnswer = answerText;
+                        }
+                    }
+                    break;
+                }
             }
-        }
-        // Detect answer indicators
-        else if (currentQuestion && (line.toLowerCase().includes('answer:') || 
-                 line.toLowerCase().includes('correct:'))) {
-            const answerText = line.replace(/.*(answer|correct):?\s*/i, '').trim();
-            if (answerText) {
-                correctAnswer = answerText;
-            }
-        }
-        // Continue question text
-        else if (currentQuestion && !inMcqSection && line.length < 200 && 
-                 !line.match(/^\d+[\.\)]/) && !line.includes('SECTION')) {
-            currentQuestion += ' ' + line;
+            
+            // Skip to end of this question block
+            i = j - 1;
         }
     }
     
     // Add the last question
-    if (currentQuestion) {
+    if (currentQuestion && currentOptions.length > 0) {
         const questionObj = {
-            id: questions.length + 1,
-            question: currentQuestion,
-            answer: correctAnswer || '',
-            explanation: '',
-            type: (section === 'MCQ' || options.length > 0) ? 'multiple_choice' : 'short_answer',
-            options: options.length > 0 ? options : null,
-            saved: false
+            id: questionNumber,
+            question: formatQuestionText(currentQuestion),
+            answer: currentAnswer || (currentOptions[0] || 'No answer'),
+            options: [...currentOptions],
+            type: 'multiple_choice',
+            saved: false,
+            explanation: ''
         };
         questions.push(questionObj);
     }
     
-    // Post-process: Clean up questions
-    return questions.map(q => {
-        // Remove question numbers from beginning
-        q.question = q.question.replace(/^\d+[\.\)]\s*/, '');
-        
-        // Ensure question ends with ?
-        if (!q.question.endsWith('?')) {
-            q.question = q.question + '?';
-        }
-        
-        return q;
-    });
+    return questions;
 }
 
+function formatQuestionText(text) {
+    // Remove extra whitespace
+    let formatted = text.trim();
+    
+    // Ensure it ends with ?
+    if (!formatted.endsWith('?')) {
+        formatted += '?';
+    }
+    
+    return formatted;
+}
+
+// Remove the old complex functions and replace with these
 function extractNumberedQuestions(text) {
-    const questions = [];
-    const lines = text.split('\n').map(l => l.trim());
-    
-    let currentQuestion = null;
-    let currentAnswer = '';
-    let currentExplanation = '';
-    
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        
-        // Find numbered questions
-        const questionMatch = line.match(/^(\d+[\.\)])\s+(.+)$/);
-        
-        if (questionMatch) {
-            // Save previous question
-            if (currentQuestion) {
-                questions.push({
-                    id: questions.length + 1,
-                    question: currentQuestion.endsWith('?') ? currentQuestion : currentQuestion + '?',
-                    answer: currentAnswer,
-                    explanation: currentExplanation,
-                    saved: false
-                });
-            }
-            
-            // Start new question
-            currentQuestion = questionMatch[2];
-            currentAnswer = '';
-            currentExplanation = '';
-            
-            // Look for answer in next lines
-            for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
-                if (lines[j].match(/^[A-D]\.\s+.+$/)) {
-                    // Option line
-                    if (!currentAnswer) {
-                        currentAnswer = lines[j].replace(/^[A-D]\.\s+/, '');
-                    }
-                } else if (lines[j].toLowerCase().includes('answer:')) {
-                    currentAnswer = lines[j].replace(/.*answer:?\s*/i, '').trim();
-                    break;
-                } else if (lines[j].length < 100 && lines[j] && !lines[j].match(/^\d+[\.\)]/)) {
-                    // Short line might be answer
-                    currentAnswer = lines[j];
-                    break;
-                }
-            }
-            
-        }
-        // Find answer lines
-        else if (currentQuestion && line.toLowerCase().includes('answer:')) {
-            currentAnswer = line.replace(/.*answer:?\s*/i, '').trim();
-        }
-        // Find explanation lines
-        else if (currentQuestion && line.toLowerCase().includes('explanation:')) {
-            currentExplanation = line.replace(/.*explanation:?\s*/i, '').trim();
-        }
-    }
-    
-    // Add last question
-    if (currentQuestion) {
-        questions.push({
-            id: questions.length + 1,
-            question: currentQuestion.endsWith('?') ? currentQuestion : currentQuestion + '?',
-            answer: currentAnswer,
-            explanation: currentExplanation,
-            saved: false
-        });
-    }
-    
-    return questions;
+    // Use the simple extractor for all formats
+    return extractSimpleMCQs(text);
 }
 
 function extractQPrefixQuestions(text) {
-    const questions = [];
-    const lines = text.split('\n').map(l => l.trim());
-    
-    let currentQuestion = null;
-    let currentAnswer = '';
-    
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        
-        // Find Q-prefixed questions
-        const questionMatch = line.match(/^(Q\d+\.?\s*|Question\s*\d+:?\s*)(.+)$/i);
-        
-        if (questionMatch) {
-            // Save previous
-            if (currentQuestion) {
-                questions.push({
-                    id: questions.length + 1,
-                    question: currentQuestion.endsWith('?') ? currentQuestion : currentQuestion + '?',
-                    answer: currentAnswer,
-                    explanation: '',
-                    saved: false
-                });
-            }
-            
-            // Start new
-            currentQuestion = questionMatch[2];
-            currentAnswer = '';
-            
-            // Look for answer
-            for (let j = i + 1; j < Math.min(i + 3, lines.length); j++) {
-                if (lines[j].toLowerCase().includes('answer:') || 
-                    lines[j].toLowerCase().includes('ans:')) {
-                    currentAnswer = lines[j].replace(/.*(answer|ans):?\s*/i, '').trim();
-                    break;
-                } else if (lines[j].length < 150 && lines[j]) {
-                    currentAnswer = lines[j];
-                    break;
-                }
-            }
-        }
-    }
-    
-    // Add last
-    if (currentQuestion) {
-        questions.push({
-            id: questions.length + 1,
-            question: currentQuestion.endsWith('?') ? currentQuestion : currentQuestion + '?',
-            answer: currentAnswer,
-            explanation: '',
-            saved: false
-        });
-    }
-    
-    return questions;
+    // Use the simple extractor for all formats
+    return extractSimpleMCQs(text);
 }
+
+function extractExamPaperQuestions(text) {
+    // Use the simple extractor for all formats
+    return extractSimpleMCQs(text);
+}
+
+// ==================== DISPLAY FUNCTIONS ====================
 
 function displayQuestionsList() {
     const questionsList = document.getElementById('questions-list');
     const questionsCount = document.getElementById('questions-count');
     
+    if (!questionsList || !questionsCount) return;
+    
     questionsCount.textContent = extractedQuestions.length;
     savedQuestionsCount = extractedQuestions.filter(q => q.saved).length;
-    document.getElementById('saved-count').textContent = savedQuestionsCount + ' saved';
+    const savedCountElement = document.getElementById('saved-count');
+    if (savedCountElement) {
+        savedCountElement.textContent = savedQuestionsCount + ' saved';
+    }
+    
+    if (extractedQuestions.length === 0) {
+        questionsList.innerHTML = '<div style="text-align: center; padding: 40px; color: #6b7280;">No questions extracted</div>';
+        return;
+    }
     
     let html = '<div style="display: grid; gap: 15px;">';
     
     extractedQuestions.forEach((q, index) => {
         const statusColor = q.saved ? '#10b981' : '#6b7280';
         const statusIcon = q.saved ? 'fa-check-circle' : 'fa-clock';
-        const questionType = q.options ? 'MCQ' : 'Short Answer';
-        const typeColor = q.options ? '#8b5cf6' : '#f59e0b';
+        const questionType = q.options && q.options.length > 0 ? 'MCQ' : 'Short Answer';
+        const typeColor = q.options && q.options.length > 0 ? '#8b5cf6' : '#f59e0b';
         
         html += `
             <div style="background: white; padding: 20px; border-radius: 8px; border-left: 4px solid ${statusColor}; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
@@ -1301,7 +1175,7 @@ function displayQuestionsList() {
                                 Q${index + 1}
                             </span>
                             <span style="background: ${typeColor}20; color: ${typeColor}; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 500;">
-                                <i class="fas ${q.options ? 'fa-list-check' : 'fa-pen'}"></i> ${questionType}
+                                <i class="fas ${q.options && q.options.length > 0 ? 'fa-list-check' : 'fa-pen'}"></i> ${questionType}
                             </span>
                             <span style="color: ${statusColor}; font-size: 14px;">
                                 <i class="fas ${statusIcon}"></i> ${q.saved ? 'Saved' : 'Pending'}
@@ -1309,26 +1183,28 @@ function displayQuestionsList() {
                         </div>
                         <div style="font-weight: 600; margin-bottom: 12px; font-size: 16px; color: #1f2937;">${q.question}</div>
                         
-                        ${q.options ? `
+                        ${q.options && q.options.length > 0 ? `
                             <div style="margin-bottom: 12px;">
                                 <div style="color: #6b7280; font-size: 14px; margin-bottom: 8px;"><strong>Options:</strong></div>
                                 <div style="display: grid; gap: 8px;">
-                                    ${q.options.map((opt, optIndex) => `
-                                        <div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: ${opt === q.answer ? '#d1fae5' : '#f9fafb'}; border-radius: 6px; border: 1px solid ${opt === q.answer ? '#10b981' : '#e5e7eb'};">
-                                            <span style="width: 24px; height: 24px; border-radius: 50%; background: ${opt === q.answer ? '#10b981' : '#e5e7eb'}; color: ${opt === q.answer ? 'white' : '#6b7280'}; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold;">
+                                    ${q.options.map((opt, optIndex) => {
+                                        const isCorrect = opt === q.answer;
+                                        return `
+                                        <div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: ${isCorrect ? '#d1fae5' : '#f9fafb'}; border-radius: 6px; border: 1px solid ${isCorrect ? '#10b981' : '#e5e7eb'};">
+                                            <span style="width: 24px; height: 24px; border-radius: 50%; background: ${isCorrect ? '#10b981' : '#e5e7eb'}; color: ${isCorrect ? 'white' : '#6b7280'}; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold;">
                                                 ${String.fromCharCode(65 + optIndex)}
                                             </span>
-                                            <span style="${opt === q.answer ? 'color: #065f46; font-weight: 500;' : 'color: #4b5563;'}">
-                                                ${opt}
+                                            <span style="${isCorrect ? 'color: #065f46; font-weight: 500;' : 'color: #4b5563;'}">
+                                                ${opt} ${isCorrect ? '✓' : ''}
                                             </span>
                                         </div>
-                                    `).join('')}
+                                    `}).join('')}
                                 </div>
                             </div>
                         ` : ''}
                         
-                        <div style="background: ${q.options ? '#f0f9ff' : '#f9fafb'}; padding: 12px; border-radius: 6px; margin-bottom: ${q.explanation ? '12px' : '0'};">
-                            <strong style="color: ${q.options ? '#3b82f6' : '#10b981'};">Correct Answer:</strong> 
+                        <div style="background: ${q.options && q.options.length > 0 ? '#f0f9ff' : '#f9fafb'}; padding: 12px; border-radius: 6px; margin-bottom: ${q.explanation ? '12px' : '0'};">
+                            <strong style="color: ${q.options && q.options.length > 0 ? '#3b82f6' : '#10b981'};">Correct Answer:</strong> 
                             <span style="color: #1f2937; font-weight: 500; margin-left: 8px;">${q.answer}</span>
                         </div>
                         
@@ -1356,461 +1232,12 @@ function displayQuestionsList() {
     questionsList.innerHTML = html;
     
     // Show results section
-    document.getElementById('extraction-results').style.display = 'block';
-    document.getElementById('extraction-results').scrollIntoView({ behavior: 'smooth' });
-}
-
-function editQuestion(index) {
-    const question = extractedQuestions[index];
-    
-    // Create edit form
-    const editHtml = `
-        <div style="background: white; padding: 20px; border-radius: 8px; margin-top: 20px;">
-            <h4>Edit Question ${index + 1}</h4>
-            <div style="margin-bottom: 15px;">
-                <label>Question:</label>
-                <textarea id="edit-question-${index}" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; min-height: 80px;">${question.question}</textarea>
-            </div>
-            <div style="margin-bottom: 15px;">
-                <label>Answer:</label>
-                <input type="text" id="edit-answer-${index}" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;" value="${question.answer}">
-            </div>
-            ${question.options ? `
-                <div style="margin-bottom: 15px;">
-                    <label>Options (one per line):</label>
-                    <textarea id="edit-options-${index}" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; min-height: 100px;">${question.options.join('\n')}</textarea>
-                </div>
-            ` : ''}
-            <div style="display: flex; gap: 10px;">
-                <button onclick="saveEditedQuestion(${index})" style="background: #10b981; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer;">
-                    <i class="fas fa-check"></i> Save Changes
-                </button>
-                <button onclick="cancelEdit(${index})" style="background: #6b7280; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer;">
-                    <i class="fas fa-times"></i> Cancel
-                </button>
-            </div>
-        </div>
-    `;
-    
-    // Replace question with edit form
-    const questionElement = document.querySelectorAll('#questions-list > div > div')[index];
-    if (questionElement) {
-        questionElement.parentElement.innerHTML = editHtml;
+    const extractionResults = document.getElementById('extraction-results');
+    if (extractionResults) {
+        extractionResults.style.display = 'block';
+        extractionResults.scrollIntoView({ behavior: 'smooth' });
     }
 }
-
-function saveEditedQuestion(index) {
-    const questionText = document.getElementById(`edit-question-${index}`).value.trim();
-    const answerText = document.getElementById(`edit-answer-${index}`).value.trim();
-    const optionsText = document.getElementById(`edit-options-${index}`)?.value.trim();
-    
-    if (!questionText || !answerText) {
-        alert('Question and answer are required');
-        return;
-    }
-    
-    extractedQuestions[index].question = questionText;
-    extractedQuestions[index].answer = answerText;
-    
-    if (optionsText) {
-        extractedQuestions[index].options = optionsText.split('\n').map(o => o.trim()).filter(o => o);
-    }
-    
-    // Redisplay
-    displayQuestionsList();
-    alert('Question updated!');
-}
-
-function cancelEdit(index) {
-    displayQuestionsList();
-}
-async function saveSingleQuestion(index) {
-    const courseId = document.getElementById('document-course').value;
-    const question = extractedQuestions[index];
-    
-    if (!question || question.saved) return;
-    
-    try {
-        const questionData = {
-            question_text: question.question,
-            correct_answer: question.answer,
-            course_id: courseId,
-            difficulty: 'medium',
-            explanation: question.explanation || null,
-            curriculum: 'KRCHN',
-            is_published: true,
-            is_active: true,
-            created_at: new Date().toISOString(),
-            question_type: 'short_answer',
-            marks: 1,
-            estimated_time: 2
-        };
-        
-        const { error } = await supabase
-            .from('medical_assessments')
-            .insert([questionData]);
-        
-        if (error) throw error;
-        
-        // Mark as saved
-        extractedQuestions[index].saved = true;
-        savedQuestionsCount++;
-        
-        // Update display
-        document.getElementById('saved-count').textContent = savedQuestionsCount + ' saved';
-        
-        // Update the button
-        const buttons = document.querySelectorAll(`button[onclick="saveSingleQuestion(${index})"]`);
-        buttons.forEach(btn => {
-            btn.innerHTML = '<i class="fas fa-check"></i> Saved';
-            btn.style.background = '#6b7280';
-            btn.disabled = true;
-        });
-        
-        // Update dashboard stats
-        loadDashboardStats();
-        
-    } catch (error) {
-        console.error('Error saving question:', error);
-        alert('Error saving question: ' + error.message);
-    }
-}
-
-async function saveAllExtractedQuestions() {
-    const courseId = document.getElementById('document-course').value;
-    
-    if (!courseId) {
-        alert('Please select a course');
-        return;
-    }
-    
-    const unsavedQuestions = extractedQuestions.filter(q => !q.saved);
-    
-    if (unsavedQuestions.length === 0) {
-        alert('All questions are already saved!');
-        return;
-    }
-    
-    if (!confirm(`Save ${unsavedQuestions.length} unsaved questions?`)) {
-        return;
-    }
-    
-    try {
-        const questionsToSave = unsavedQuestions.map(q => ({
-            question_text: q.question,
-            correct_answer: q.answer,
-            course_id: courseId,
-            difficulty: 'medium',
-            explanation: q.explanation || null,
-            curriculum: 'KRCHN',
-            is_published: true,
-            is_active: true,
-            created_at: new Date().toISOString(),
-            question_type: 'short_answer',
-            marks: 1,
-            estimated_time: 2
-        }));
-        
-        const { error } = await supabase
-            .from('medical_assessments')
-            .insert(questionsToSave);
-        
-        if (error) throw error;
-        
-        // Mark all as saved
-        extractedQuestions.forEach(q => q.saved = true);
-        savedQuestionsCount = extractedQuestions.length;
-        
-        // Update display
-        displayQuestionsList();
-        
-        alert(`✅ Successfully saved ${questionsToSave.length} questions!`);
-        
-        // Update dashboard stats
-        loadDashboardStats();
-        
-    } catch (error) {
-        console.error('Error saving questions:', error);
-        alert('Error saving questions: ' + error.message);
-    }
-}
-
-function clearExtractionResults() {
-    if (extractedQuestions.filter(q => !q.saved).length > 0) {
-        if (!confirm('You have unsaved questions. Clear anyway?')) {
-            return;
-        }
-    }
-    
-    extractedQuestions = [];
-    savedQuestionsCount = 0;
-    document.getElementById('extraction-results').style.display = 'none';
-    document.getElementById('questions-text').value = '';
-}
-
-function editInBulk() {
-    // Simple bulk edit - just reload the text with current questions
-    let text = '';
-    extractedQuestions.forEach((q, i) => {
-        text += `${i + 1}. ${q.question}\n`;
-        text += `Answer: ${q.answer}\n`;
-        if (q.explanation) {
-            text += `Explanation: ${q.explanation}\n`;
-        }
-        text += '\n';
-    });
-    
-    document.getElementById('questions-text').value = text;
-    document.getElementById('extraction-results').style.display = 'none';
-    alert('Questions loaded back into editor. Edit and re-extract.');
-}
-        // ==================== DOCUMENT UPLOAD & PROCESSING ====================
-        document.getElementById('document-file').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            const fileName = document.getElementById('selected-file');
-            
-            if (file) {
-                fileName.textContent = `Selected: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`;
-                fileName.style.color = '#10b981';
-            } else {
-                fileName.textContent = '';
-            }
-        });
-        
-        async function processDocument() {
-            const fileInput = document.getElementById('document-file');
-            const file = fileInput.files[0];
-            const courseId = document.getElementById('document-course').value;
-            
-            if (!file) {
-                alert('Please select a document file');
-                return;
-            }
-            
-            if (!courseId) {
-                alert('Please select a course for these questions');
-                return;
-            }
-            
-            const processBtn = document.getElementById('process-btn');
-            processBtn.disabled = true;
-            processBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
-            
-            try {
-                // For now, we'll simulate document processing
-                // In real implementation, you would:
-                // 1. Upload file to server
-                // 2. Use OCR/text extraction
-                // 3. Parse questions
-                
-                await new Promise(resolve => setTimeout(resolve, 2000));
-                
-                // Simulate extracted questions
-                extractedQuestions = [
-                    {
-                        id: 1,
-                        question: "What is the normal range for adult blood pressure?",
-                        answer: "120/80 mmHg",
-                        explanation: "Normal adult blood pressure is typically around 120/80 mmHg."
-                    },
-                    {
-                        id: 2,
-                        question: "Which vitamin is produced by the skin when exposed to sunlight?",
-                        answer: "Vitamin D",
-                        explanation: "Vitamin D is synthesized in the skin upon exposure to UVB radiation."
-                    },
-                    {
-                        id: 3,
-                        question: "What is the primary function of red blood cells?",
-                        answer: "Transport oxygen",
-                        explanation: "Red blood cells contain hemoglobin which carries oxygen throughout the body."
-                    }
-                ];
-                
-                // Display results
-                displayExtractedQuestions();
-                
-            } catch (error) {
-                console.error('Error processing document:', error);
-                alert('Error processing document: ' + error.message);
-            } finally {
-                processBtn.disabled = false;
-                processBtn.innerHTML = '<i class="fas fa-cogs"></i> Process Document';
-            }
-        }
-        
-        function displayExtractedQuestions() {
-            if (extractedQuestions.length === 0) {
-                alert('No questions found in document');
-                return;
-            }
-            
-            document.getElementById('questions-count').textContent = extractedQuestions.length;
-            document.getElementById('total-questions-num').textContent = extractedQuestions.length;
-            document.getElementById('extraction-results').style.display = 'block';
-            
-            // Scroll to results
-            document.getElementById('extraction-results').scrollIntoView({ behavior: 'smooth' });
-            
-            // Show first question
-            currentQuestionIndex = 0;
-            showCurrentQuestion();
-        }
-        
-        function showCurrentQuestion() {
-            if (currentQuestionIndex < 0 || currentQuestionIndex >= extractedQuestions.length) return;
-            
-            const question = extractedQuestions[currentQuestionIndex];
-            document.getElementById('current-question-num').textContent = currentQuestionIndex + 1;
-            document.getElementById('extracted-question').value = question.question || '';
-            document.getElementById('extracted-answer').value = question.answer || '';
-            document.getElementById('extracted-explanation').value = question.explanation || '';
-            
-            // Update button states
-            document.getElementById('prev-btn').disabled = currentQuestionIndex === 0;
-            document.getElementById('next-btn').disabled = currentQuestionIndex === extractedQuestions.length - 1;
-        }
-        
-        function prevQuestion() {
-            if (currentQuestionIndex > 0) {
-                currentQuestionIndex--;
-                showCurrentQuestion();
-            }
-        }
-        
-        function nextQuestion() {
-            if (currentQuestionIndex < extractedQuestions.length - 1) {
-                currentQuestionIndex++;
-                showCurrentQuestion();
-            }
-        }
-        
-        async function saveCurrentQuestion() {
-            const courseId = document.getElementById('document-course').value;
-            const questionText = document.getElementById('extracted-question').value.trim();
-            const answer = document.getElementById('extracted-answer').value.trim();
-            const difficulty = document.getElementById('extracted-difficulty').value;
-            const explanation = document.getElementById('extracted-explanation').value.trim();
-            
-            if (!questionText || !answer) {
-                alert('Please fill in question and answer');
-                return;
-            }
-            
-            try {
-                const questionData = {
-                    question_text: questionText,
-                    correct_answer: answer,
-                    course_id: courseId,
-                    difficulty: difficulty,
-                    explanation: explanation || null,
-                    curriculum: 'KRCHN',
-                    is_published: true,
-                    is_active: true,
-                    created_at: new Date().toISOString(),
-                    question_type: 'short_answer',
-                    marks: 1,
-                    estimated_time: 2
-                };
-                
-                const { error } = await supabase
-                    .from('medical_assessments')
-                    .insert([questionData]);
-                
-                if (error) throw error;
-                
-                // Remove saved question from array
-                extractedQuestions.splice(currentQuestionIndex, 1);
-                
-                if (extractedQuestions.length === 0) {
-                    alert('✅ All questions saved successfully!');
-                    clearExtractionResults();
-                } else {
-                    // Adjust index if needed
-                    if (currentQuestionIndex >= extractedQuestions.length) {
-                        currentQuestionIndex = extractedQuestions.length - 1;
-                    }
-                    
-                    showCurrentQuestion();
-                    document.getElementById('questions-count').textContent = extractedQuestions.length;
-                    document.getElementById('total-questions-num').textContent = extractedQuestions.length;
-                    
-                    alert('✅ Question saved! ' + extractedQuestions.length + ' remaining');
-                }
-                
-                loadDashboardStats();
-                
-            } catch (error) {
-                console.error('Error saving question:', error);
-                alert('Error saving question: ' + error.message);
-            }
-        }
-        
-        function skipCurrentQuestion() {
-            if (currentQuestionIndex < extractedQuestions.length - 1) {
-                currentQuestionIndex++;
-                showCurrentQuestion();
-            } else {
-                alert('No more questions to skip');
-            }
-        }
-        
-        async function saveAllExtractedQuestions() {
-            const courseId = document.getElementById('document-course').value;
-            
-            if (!courseId) {
-                alert('Please select a course');
-                return;
-            }
-            
-            if (extractedQuestions.length === 0) {
-                alert('No questions to save');
-                return;
-            }
-            
-            if (!confirm(`Save all ${extractedQuestions.length} questions?`)) {
-                return;
-            }
-            
-            try {
-                const questionsToSave = extractedQuestions.map(q => ({
-                    question_text: q.question || '',
-                    correct_answer: q.answer || '',
-                    course_id: courseId,
-                    difficulty: 'medium',
-                    explanation: q.explanation || null,
-                    curriculum: 'KRCHN',
-                    is_published: true,
-                    is_active: true,
-                    created_at: new Date().toISOString(),
-                    question_type: 'short_answer',
-                    marks: 1,
-                    estimated_time: 2
-                }));
-                
-                const { error } = await supabase
-                    .from('medical_assessments')
-                    .insert(questionsToSave);
-                
-                if (error) throw error;
-                
-                alert(`✅ Successfully saved ${questionsToSave.length} questions!`);
-                clearExtractionResults();
-                loadDashboardStats();
-                
-            } catch (error) {
-                console.error('Error saving questions:', error);
-                alert('Error saving questions: ' + error.message);
-            }
-        }
-        
-        function clearExtractionResults() {
-            extractedQuestions = [];
-            currentQuestionIndex = 0;
-            document.getElementById('extraction-results').style.display = 'none';
-            document.getElementById('document-file').value = '';
-            document.getElementById('selected-file').textContent = '';
-        }
        // ==================== ENHANCED AI QUESTION GENERATOR ====================
 
 let generatedQuestions = [];
