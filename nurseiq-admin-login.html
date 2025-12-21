@@ -2339,7 +2339,7 @@ function showPage(pageName) {
     }
 }
         
-  async function loadManageQuestionsPage() {
+async function loadManageQuestionsPage() {
     const contentDiv = document.getElementById('questions-management-content');
     contentDiv.innerHTML = '<div style="text-align: center; padding: 40px;"><i class="fas fa-spinner fa-spin"></i> Loading questions...</div>';
     
@@ -2426,9 +2426,14 @@ function showPage(pageName) {
                             </h2>
                             <p style="margin: 8px 0 0 0; opacity: 0.9;">Organized by courses with detailed statistics</p>
                         </div>
-                        <button onclick="loadManageQuestionsPage()" style="background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); color: white; padding: 10px 20px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 8px;">
-                            <i class="fas fa-sync-alt"></i> Refresh
-                        </button>
+                        <div style="display: flex; gap: 10px;">
+                            <button onclick="loadManageQuestionsPage()" style="background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); color: white; padding: 10px 20px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                                <i class="fas fa-sync-alt"></i> Refresh
+                            </button>
+                            <button onclick="showBulkDeleteInterface()" style="background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.3); color: #fee2e2; padding: 10px 20px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                                <i class="fas fa-trash-alt"></i> Bulk Delete
+                            </button>
+                        </div>
                     </div>
                     
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
@@ -2558,12 +2563,19 @@ function showPage(pageName) {
                                         </span>
                                         <div style="display: flex; gap: 8px;">
                                             <button onclick="event.stopPropagation(); addQuestionToCourse('${course.id}')" 
-                                                    style="background: ${courseColor}; color: white; border: none; width: 32px; height: 32px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                                                    style="background: ${courseColor}; color: white; border: none; width: 32px; height: 32px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center;"
+                                                    title="Add question">
                                                 <i class="fas fa-plus" style="font-size: 12px;"></i>
                                             </button>
                                             <button onclick="event.stopPropagation(); viewCourseQuestions('${course.id}')" 
-                                                    style="background: #4f46e5; color: white; border: none; width: 32px; height: 32px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                                                    style="background: #4f46e5; color: white; border: none; width: 32px; height: 32px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center;"
+                                                    title="View questions">
                                                 <i class="fas fa-eye" style="font-size: 12px;"></i>
+                                            </button>
+                                            <button onclick="event.stopPropagation(); confirmDeleteQuestionBank('${course.id}', '${course.course_name.replace(/'/g, "\\'")}')" 
+                                                    style="background: #ef4444; color: white; border: none; width: 32px; height: 32px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center;"
+                                                    title="Delete question bank">
+                                                <i class="fas fa-trash" style="font-size: 12px;"></i>
                                             </button>
                                         </div>
                                     </div>
@@ -2581,6 +2593,58 @@ function showPage(pageName) {
                     <h3 style="color: #374151; margin-bottom: 10px;">No courses match your search</h3>
                     <p style="color: #9ca3af;">Try adjusting your filters or search terms</p>
                 </div>
+                
+                <!-- Bulk Delete Section (Initially Hidden) -->
+                <div id="bulk-delete-section" style="display: none; margin-top: 30px;">
+                    <div style="background: white; border-radius: 15px; padding: 30px; box-shadow: 0 5px 20px rgba(0,0,0,0.08); border: 2px solid #fee2e2;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                            <h3 style="margin: 0; color: #dc2626;">
+                                <i class="fas fa-exclamation-triangle"></i> Bulk Question Deletion
+                            </h3>
+                            <button onclick="hideBulkDeleteInterface()" style="background: #6b7280; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer;">
+                                <i class="fas fa-times"></i> Close
+                            </button>
+                        </div>
+                        
+                        <div style="background: #fef2f2; border-radius: 10px; padding: 20px; margin-bottom: 20px;">
+                            <p style="color: #7f1d1d; margin-bottom: 15px;">
+                                <i class="fas fa-info-circle"></i> Select courses below to delete ALL questions from them. This action cannot be undone!
+                            </p>
+                            
+                            <div style="display: flex; gap: 15px; margin-top: 20px;">
+                                <button onclick="selectAllCourses()" style="background: #4f46e5; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer;">
+                                    <i class="fas fa-check-square"></i> Select All
+                                </button>
+                                <button onclick="deselectAllCourses()" style="background: #6b7280; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer;">
+                                    <i class="fas fa-square"></i> Deselect All
+                                </button>
+                                <button onclick="exportSelectedCourses()" style="background: #10b981; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer;">
+                                    <i class="fas fa-download"></i> Export Selected
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div id="bulk-delete-courses-list" style="max-height: 300px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px;">
+                            <!-- Course checkboxes will be populated here -->
+                        </div>
+                        
+                        <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <h4 style="margin: 0; color: #dc2626;">Selected: <span id="selected-count">0</span> courses</h4>
+                                    <p style="margin: 5px 0 0 0; color: #6b7280; font-size: 14px;">
+                                        Total questions to delete: <span id="total-questions-selected">0</span>
+                                    </p>
+                                </div>
+                                <div style="display: flex; gap: 10px;">
+                                    <button onclick="confirmBulkDelete()" id="bulk-delete-btn" style="background: #ef4444; color: white; border: none; padding: 10px 24px; border-radius: 8px; cursor: pointer; font-weight: 500; opacity: 0.5;" disabled>
+                                        <i class="fas fa-trash"></i> Delete Selected
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         `;
         
@@ -2588,6 +2652,9 @@ function showPage(pageName) {
         
         // Store courses data for filtering
         window.allCourses = coursesWithStats;
+        
+        // Initialize bulk delete interface
+        initializeBulkDeleteInterface();
         
     } catch (error) {
         console.error('Error loading questions:', error);
@@ -2599,6 +2666,599 @@ function showPage(pageName) {
             </div>
         `;
     }
+}
+
+// ==================== QUESTION BANK DELETION FUNCTIONS ====================
+
+// Confirm and delete entire question bank for a course
+async function confirmDeleteQuestionBank(courseId, courseName) {
+    if (!courseId || !courseName) return;
+    
+    // First, get the count of questions to delete
+    try {
+        const { count, error: countError } = await supabase
+            .from('medical_assessments')
+            .select('*', { count: 'exact', head: true })
+            .eq('course_id', courseId);
+        
+        if (countError) throw countError;
+        
+        const questionCount = count || 0;
+        
+        if (questionCount === 0) {
+            alert(`No questions found in the "${courseName}" question bank.`);
+            return;
+        }
+        
+        // Show confirmation modal with details
+        const confirmation = `
+            <div style="max-width: 500px;">
+                <div style="background: #fef2f2; border-left: 4px solid #ef4444; padding: 15px; border-radius: 6px; margin-bottom: 20px;">
+                    <h3 style="color: #dc2626; margin-top: 0; display: flex; align-items: center; gap: 10px;">
+                        <i class="fas fa-exclamation-triangle"></i> Warning: Delete Question Bank
+                    </h3>
+                    <p style="color: #7f1d1d; margin-bottom: 10px;">
+                        You are about to delete <strong>ALL ${questionCount} questions</strong> from the course:
+                    </p>
+                    <div style="background: white; padding: 15px; border-radius: 6px; margin: 15px 0; border: 1px solid #fecaca;">
+                        <strong style="color: #dc2626;">${courseName}</strong>
+                        <p style="color: #6b7280; margin: 10px 0 0 0; font-size: 14px;">Course ID: ${courseId}</p>
+                    </div>
+                    <p style="color: #7f1d1d; font-size: 14px;">
+                        <i class="fas fa-info-circle"></i> This action <strong>cannot be undone</strong>. All questions will be permanently deleted.
+                    </p>
+                </div>
+                
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 10px; font-weight: 500; color: #374151;">
+                        <input type="checkbox" id="confirm-delete-checkbox" style="margin-right: 8px;">
+                        I understand this action is permanent and cannot be reversed
+                    </label>
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
+                        <i class="fas fa-keyboard" style="color: #6b7280;"></i>
+                        <input type="text" id="confirm-delete-text" placeholder="Type 'DELETE ${courseName.replace(/"/g, '&quot;')}' to confirm" 
+                               style="flex: 1; padding: 10px; border: 1px solid #e5e7eb; border-radius: 6px;"
+                               oninput="updateDeleteButton()">
+                    </div>
+                </div>
+                
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button onclick="closeModal()" style="background: #6b7280; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer;">
+                        Cancel
+                    </button>
+                    <button id="execute-delete-btn" onclick="deleteQuestionBank('${courseId}', '${courseName.replace(/'/g, "\\'")}')" 
+                            style="background: #ef4444; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; opacity: 0.5;" disabled>
+                        <i class="fas fa-trash"></i> Delete Question Bank
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        document.getElementById('modal-content').innerHTML = confirmation;
+        document.getElementById('question-modal').style.display = 'flex';
+        
+    } catch (error) {
+        console.error('Error counting questions:', error);
+        alert('Error checking question count: ' + error.message);
+    }
+}
+
+// Update delete button state based on confirmation
+function updateDeleteButton() {
+    const checkbox = document.getElementById('confirm-delete-checkbox');
+    const confirmText = document.getElementById('confirm-delete-text');
+    const deleteBtn = document.getElementById('execute-delete-btn');
+    
+    if (!checkbox || !confirmText || !deleteBtn) return;
+    
+    // Extract course name from placeholder
+    const placeholder = confirmText.placeholder;
+    const match = placeholder.match(/Type 'DELETE (.+)' to confirm/);
+    const courseName = match ? match[1] : '';
+    
+    const isConfirmed = checkbox.checked && confirmText.value === `DELETE ${courseName}`;
+    
+    deleteBtn.disabled = !isConfirmed;
+    deleteBtn.style.opacity = isConfirmed ? '1' : '0.5';
+    deleteBtn.style.cursor = isConfirmed ? 'pointer' : 'not-allowed';
+}
+
+// Execute the deletion of all questions in a course
+async function deleteQuestionBank(courseId, courseName) {
+    const deleteBtn = document.getElementById('execute-delete-btn');
+    if (!deleteBtn || deleteBtn.disabled) return;
+    
+    // Disable button and show loading
+    deleteBtn.disabled = true;
+    deleteBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting...';
+    
+    try {
+        // First, get count for confirmation
+        const { count, error: countError } = await supabase
+            .from('medical_assessments')
+            .select('*', { count: 'exact', head: true })
+            .eq('course_id', courseId);
+        
+        if (countError) throw countError;
+        
+        const questionCount = count || 0;
+        
+        // Show progress modal for deletion
+        document.getElementById('modal-content').innerHTML = `
+            <div style="max-width: 500px;">
+                <h3 style="color: #374151; margin-bottom: 15px;">Deleting Questions...</h3>
+                <div style="background: #f3f4f6; height: 10px; border-radius: 5px; margin-bottom: 15px; overflow: hidden;">
+                    <div id="delete-progress-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #ef4444, #dc2626); transition: width 0.3s;"></div>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
+                    <span id="delete-progress-text" style="color: #6b7280;">0 of ${questionCount} questions deleted</span>
+                    <span id="delete-percentage" style="color: #4f46e5; font-weight: 500;">0%</span>
+                </div>
+                <div id="delete-status" style="color: #6b7280; font-size: 14px; text-align: center;">Starting deletion process...</div>
+            </div>
+        `;
+        
+        // Delete using batch method for better performance
+        const result = await deleteQuestionBankBatch(courseId, questionCount);
+        
+        if (result.success) {
+            // Show success message
+            const successMessage = `
+                <div style="text-align: center; padding: 30px;">
+                    <div style="width: 80px; height: 80px; background: #d1fae5; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 20px;">
+                        <i class="fas fa-check" style="font-size: 36px; color: #10b981;"></i>
+                    </div>
+                    <h3 style="color: #065f46; margin-bottom: 10px;">Question Bank Deleted Successfully!</h3>
+                    <p style="color: #6b7280; margin-bottom: 20px;">
+                        Successfully deleted <strong>${result.deleted} questions</strong> from 
+                        <strong>${courseName}</strong>.
+                    </p>
+                    <button onclick="closeModalAndRefresh()" style="background: #10b981; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: 500;">
+                        <i class="fas fa-check-circle"></i> OK
+                    </button>
+                </div>
+            `;
+            
+            document.getElementById('modal-content').innerHTML = successMessage;
+            
+            // Update dashboard stats
+            loadDashboardStats();
+            
+        } else {
+            throw new Error(result.error);
+        }
+        
+    } catch (error) {
+        console.error('Error deleting question bank:', error);
+        
+        const errorMessage = `
+            <div style="text-align: center; padding: 30px;">
+                <div style="width: 80px; height: 80px; background: #fee2e2; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 20px;">
+                    <i class="fas fa-exclamation-circle" style="font-size: 36px; color: #dc2626;"></i>
+                </div>
+                <h3 style="color: #dc2626; margin-bottom: 10px;">Deletion Failed</h3>
+                <p style="color: #6b7280; margin-bottom: 20px;">Error: ${error.message}</p>
+                <button onclick="closeModal()" style="background: #dc2626; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: 500;">
+                    <i class="fas fa-times-circle"></i> Close
+                </button>
+            </div>
+        `;
+        
+        document.getElementById('modal-content').innerHTML = errorMessage;
+    }
+}
+
+// Batch delete questions with progress tracking
+async function deleteQuestionBankBatch(courseId, totalQuestions) {
+    const BATCH_SIZE = 100;
+    let deletedCount = 0;
+    let hasMore = true;
+    
+    try {
+        // Delete in batches
+        while (hasMore) {
+            // Get a batch of question IDs
+            const { data: batch } = await supabase
+                .from('medical_assessments')
+                .select('id')
+                .eq('course_id', courseId)
+                .limit(BATCH_SIZE);
+            
+            if (!batch || batch.length === 0) {
+                hasMore = false;
+                break;
+            }
+            
+            // Delete the batch
+            const questionIds = batch.map(q => q.id);
+            const { error } = await supabase
+                .from('medical_assessments')
+                .delete()
+                .in('id', questionIds);
+            
+            if (error) throw error;
+            
+            deletedCount += batch.length;
+            
+            // Update progress
+            const progress = Math.min(100, Math.round((deletedCount / totalQuestions) * 100));
+            document.getElementById('delete-progress-bar').style.width = `${progress}%`;
+            document.getElementById('delete-percentage').textContent = `${progress}%`;
+            document.getElementById('delete-progress-text').textContent = `${deletedCount} of ${totalQuestions} questions deleted`;
+            document.getElementById('delete-status').textContent = `Deleted ${deletedCount} questions...`;
+            
+            // Small delay to show progress
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            // If we got less than batch size, we're done
+            if (batch.length < BATCH_SIZE) {
+                hasMore = false;
+            }
+        }
+        
+        return { success: true, deleted: deletedCount };
+        
+    } catch (error) {
+        console.error('Batch deletion error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+// Close modal and refresh the page
+function closeModalAndRefresh() {
+    closeModal();
+    
+    // Refresh the current page based on which one is active
+    if (document.getElementById('page-manage-questions').style.display === 'block') {
+        loadManageQuestionsPage();
+    } else if (document.getElementById('page-manage-courses').style.display === 'block') {
+        loadManageCoursesPage();
+    }
+}
+
+// Bulk Delete Interface Functions
+function showBulkDeleteInterface() {
+    document.getElementById('bulk-delete-section').style.display = 'block';
+    document.getElementById('bulk-delete-section').scrollIntoView({ behavior: 'smooth' });
+}
+
+function hideBulkDeleteInterface() {
+    document.getElementById('bulk-delete-section').style.display = 'none';
+}
+
+function initializeBulkDeleteInterface() {
+    const coursesList = document.getElementById('bulk-delete-courses-list');
+    if (!coursesList || !window.allCourses) return;
+    
+    let html = '';
+    window.allCourses.forEach(course => {
+        html += `
+            <div style="display: flex; align-items: center; padding: 12px; border-bottom: 1px solid #e5e7eb;">
+                <input type="checkbox" class="course-checkbox" value="${course.id}" 
+                       data-name="${course.course_name}" 
+                       data-count="${course.stats.totalQuestions}"
+                       onchange="updateBulkDeleteSelection()"
+                       style="margin-right: 12px;">
+                <div style="flex: 1;">
+                    <div style="font-weight: 500; color: #374151;">${course.course_name}</div>
+                    <div style="display: flex; gap: 10px; margin-top: 4px;">
+                        <span style="font-size: 12px; color: #6b7280;">${course.unit_code || 'No Code'}</span>
+                        <span style="font-size: 12px; color: #6b7280;">•</span>
+                        <span style="font-size: 12px; color: #ef4444; font-weight: 500;">
+                            ${course.stats.totalQuestions} questions
+                        </span>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    coursesList.innerHTML = html;
+}
+
+function updateBulkDeleteSelection() {
+    const checkboxes = document.querySelectorAll('.course-checkbox:checked');
+    const selectedCount = checkboxes.length;
+    
+    // Calculate total questions
+    let totalQuestions = 0;
+    checkboxes.forEach(checkbox => {
+        totalQuestions += parseInt(checkbox.dataset.count) || 0;
+    });
+    
+    // Update display
+    document.getElementById('selected-count').textContent = selectedCount;
+    document.getElementById('total-questions-selected').textContent = totalQuestions;
+    
+    // Update delete button
+    const deleteBtn = document.getElementById('bulk-delete-btn');
+    deleteBtn.disabled = selectedCount === 0;
+    deleteBtn.style.opacity = selectedCount > 0 ? '1' : '0.5';
+}
+
+function selectAllCourses() {
+    document.querySelectorAll('.course-checkbox').forEach(checkbox => {
+        checkbox.checked = true;
+    });
+    updateBulkDeleteSelection();
+}
+
+function deselectAllCourses() {
+    document.querySelectorAll('.course-checkbox').forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    updateBulkDeleteSelection();
+}
+
+async function exportSelectedCourses() {
+    const checkboxes = document.querySelectorAll('.course-checkbox:checked');
+    if (checkboxes.length === 0) {
+        alert('Please select at least one course to export');
+        return;
+    }
+    
+    const courseIds = Array.from(checkboxes).map(cb => cb.value);
+    
+    try {
+        const { data: questions, error } = await supabase
+            .from('medical_assessments')
+            .select('*, courses(course_name, unit_code)')
+            .in('course_id', courseIds);
+        
+        if (error) throw error;
+        
+        if (!questions || questions.length === 0) {
+            alert('No questions found in selected courses');
+            return;
+        }
+        
+        // Format for export
+        const exportData = questions.map((q, index) => ({
+            '#': index + 1,
+            'Course': q.courses?.course_name || 'Unknown',
+            'Unit Code': q.courses?.unit_code || 'N/A',
+            'Question': q.question_text,
+            'Correct Answer': q.correct_answer,
+            'Options': q.option_a && q.option_b ? 
+                `A: ${q.option_a}\nB: ${q.option_b}\nC: ${q.option_c || ''}\nD: ${q.option_d || ''}` : 
+                'N/A',
+            'Type': q.question_type,
+            'Difficulty': q.difficulty,
+            'Explanation': q.explanation || '',
+            'Created': new Date(q.created_at).toLocaleDateString()
+        }));
+        
+        // Create CSV
+        const headers = ['#', 'Course', 'Unit Code', 'Question', 'Correct Answer', 'Options', 'Type', 'Difficulty', 'Explanation', 'Created'];
+        const csvContent = [
+            headers.join(','),
+            ...exportData.map(row => 
+                headers.map(header => {
+                    const cell = row[header] || '';
+                    const escaped = String(cell).replace(/"/g, '""');
+                    return escaped.includes(',') ? `"${escaped}"` : escaped;
+                }).join(',')
+            )
+        ].join('\n');
+        
+        // Download
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        const fileName = `selected_courses_export_${new Date().toISOString().split('T')[0]}.csv`;
+        
+        link.setAttribute('href', url);
+        link.setAttribute('download', fileName);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        alert(`✅ Exported ${questions.length} questions from ${checkboxes.length} course(s)`);
+        
+    } catch (error) {
+        console.error('Error exporting questions:', error);
+        alert('Error exporting questions: ' + error.message);
+    }
+}
+
+async function confirmBulkDelete() {
+    const checkboxes = document.querySelectorAll('.course-checkbox:checked');
+    if (checkboxes.length === 0) return;
+    
+    const courseIds = Array.from(checkboxes).map(cb => cb.value);
+    const courseNames = Array.from(checkboxes).map(cb => cb.dataset.name);
+    const totalQuestions = Array.from(checkboxes).reduce((sum, cb) => sum + parseInt(cb.dataset.count), 0);
+    
+    // Show confirmation modal
+    const confirmation = `
+        <div style="max-width: 600px;">
+            <div style="background: #fef2f2; border-left: 4px solid #ef4444; padding: 20px; border-radius: 8px; margin-bottom: 25px;">
+                <h3 style="color: #dc2626; margin-top: 0; display: flex; align-items: center; gap: 10px;">
+                    <i class="fas fa-exclamation-triangle"></i> Bulk Delete Confirmation
+                </h3>
+                <p style="color: #7f1d1d; margin-bottom: 15px;">
+                    You are about to delete <strong>${totalQuestions} questions</strong> from <strong>${courseIds.length} courses</strong>.
+                </p>
+                
+                <div style="max-height: 200px; overflow-y: auto; margin: 15px 0; padding: 10px; background: white; border-radius: 6px; border: 1px solid #fecaca;">
+                    <ul style="margin: 0; padding-left: 20px;">
+                        ${courseNames.map(name => `<li style="color: #374151; margin-bottom: 5px;">${name}</li>`).join('')}
+                    </ul>
+                </div>
+                
+                <p style="color: #7f1d1d; font-size: 14px;">
+                    <i class="fas fa-info-circle"></i> This action <strong>cannot be undone</strong>. All questions will be permanently deleted.
+                </p>
+            </div>
+            
+            <div style="margin-bottom: 25px;">
+                <label style="display: block; margin-bottom: 10px; font-weight: 500; color: #374151;">
+                    <input type="checkbox" id="confirm-bulk-delete-checkbox" style="margin-right: 8px;">
+                    I understand this action is permanent and cannot be reversed
+                </label>
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
+                    <i class="fas fa-keyboard" style="color: #6b7280;"></i>
+                    <input type="text" id="confirm-bulk-delete-text" placeholder="Type 'DELETE ALL' to confirm" 
+                           style="flex: 1; padding: 10px; border: 1px solid #e5e7eb; border-radius: 6px;"
+                           oninput="updateBulkDeleteButton()">
+                </div>
+            </div>
+            
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button onclick="closeModal()" style="background: #6b7280; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer;">
+                    Cancel
+                </button>
+                <button id="execute-bulk-delete-btn" onclick="executeBulkDelete(['${courseIds.join("','")}'], ['${courseNames.join("','")}'], ${totalQuestions})" 
+                        style="background: #ef4444; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; opacity: 0.5;" disabled>
+                    <i class="fas fa-trash"></i> Delete All Selected
+                </button>
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('modal-content').innerHTML = confirmation;
+    document.getElementById('question-modal').style.display = 'flex';
+}
+
+function updateBulkDeleteButton() {
+    const checkbox = document.getElementById('confirm-bulk-delete-checkbox');
+    const confirmText = document.getElementById('confirm-bulk-delete-text');
+    const deleteBtn = document.getElementById('execute-bulk-delete-btn');
+    
+    if (!checkbox || !confirmText || !deleteBtn) return;
+    
+    const isConfirmed = checkbox.checked && confirmText.value === 'DELETE ALL';
+    
+    deleteBtn.disabled = !isConfirmed;
+    deleteBtn.style.opacity = isConfirmed ? '1' : '0.5';
+    deleteBtn.style.cursor = isConfirmed ? 'pointer' : 'not-allowed';
+}
+
+async function executeBulkDelete(courseIds, courseNames, totalQuestions) {
+    const deleteBtn = document.getElementById('execute-bulk-delete-btn');
+    if (!deleteBtn || deleteBtn.disabled) return;
+    
+    // Disable button and show loading
+    deleteBtn.disabled = true;
+    deleteBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting...';
+    
+    try {
+        // Show progress modal
+        document.getElementById('modal-content').innerHTML = `
+            <div style="max-width: 600px;">
+                <h3 style="color: #374151; margin-bottom: 15px;">Bulk Deleting Questions...</h3>
+                <div style="margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                        <span style="color: #6b7280;">Progress</span>
+                        <span id="bulk-delete-percentage" style="color: #4f46e5; font-weight: 500;">0%</span>
+                    </div>
+                    <div style="background: #f3f4f6; height: 10px; border-radius: 5px; margin-bottom: 15px; overflow: hidden;">
+                        <div id="bulk-delete-progress-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #ef4444, #dc2626); transition: width 0.3s;"></div>
+                    </div>
+                </div>
+                
+                <div style="background: #f9fafb; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                        <span id="bulk-delete-progress-text" style="color: #6b7280;">Processing course 1 of ${courseIds.length}</span>
+                        <span id="bulk-delete-stats" style="color: #ef4444; font-weight: 500;">0/${totalQuestions} questions</span>
+                    </div>
+                    <div id="bulk-delete-current-course" style="color: #374151; font-weight: 500;"></div>
+                </div>
+                
+                <div id="bulk-delete-status" style="color: #6b7280; font-size: 14px; text-align: center;">Starting bulk deletion...</div>
+            </div>
+        `;
+        
+        let totalDeleted = 0;
+        
+        // Process each course
+        for (let i = 0; i < courseIds.length; i++) {
+            const courseId = courseIds[i];
+            const courseName = courseNames[i];
+            
+            // Update current course display
+            document.getElementById('bulk-delete-current-course').textContent = `Current: ${courseName}`;
+            document.getElementById('bulk-delete-progress-text').textContent = `Processing course ${i + 1} of ${courseIds.length}`;
+            
+            // Get count for this course
+            const { count } = await supabase
+                .from('medical_assessments')
+                .select('*', { count: 'exact', head: true })
+                .eq('course_id', courseId);
+            
+            const courseQuestionCount = count || 0;
+            
+            if (courseQuestionCount > 0) {
+                // Delete questions for this course
+                const { error } = await supabase
+                    .from('medical_assessments')
+                    .delete()
+                    .eq('course_id', courseId);
+                
+                if (error) throw error;
+                
+                totalDeleted += courseQuestionCount;
+            }
+            
+            // Update overall progress
+            const overallProgress = Math.min(100, Math.round(((i + 1) / courseIds.length) * 100));
+            const questionProgress = Math.min(100, Math.round((totalDeleted / totalQuestions) * 100));
+            
+            document.getElementById('bulk-delete-progress-bar').style.width = `${overallProgress}%`;
+            document.getElementById('bulk-delete-percentage').textContent = `${overallProgress}%`;
+            document.getElementById('bulk-delete-stats').textContent = `${totalDeleted}/${totalQuestions} questions`;
+            document.getElementById('bulk-delete-status').textContent = `Deleted ${courseName} (${courseQuestionCount} questions)...`;
+            
+            // Small delay
+            await new Promise(resolve => setTimeout(resolve, 300));
+        }
+        
+        // Show success message
+        const successMessage = `
+            <div style="text-align: center; padding: 30px;">
+                <div style="width: 80px; height: 80px; background: #d1fae5; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 20px;">
+                    <i class="fas fa-check" style="font-size: 36px; color: #10b981;"></i>
+                </div>
+                <h3 style="color: #065f46; margin-bottom: 10px;">Bulk Deletion Complete!</h3>
+                <p style="color: #6b7280; margin-bottom: 20px;">
+                    Successfully deleted <strong>${totalDeleted} questions</strong> from 
+                    <strong>${courseIds.length} courses</strong>.
+                </p>
+                <button onclick="closeModalAndRefreshBulk()" style="background: #10b981; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: 500;">
+                    <i class="fas fa-check-circle"></i> OK
+                </button>
+            </div>
+        `;
+        
+        document.getElementById('modal-content').innerHTML = successMessage;
+        
+        // Update dashboard stats
+        loadDashboardStats();
+        
+    } catch (error) {
+        console.error('Error in bulk delete:', error);
+        
+        const errorMessage = `
+            <div style="text-align: center; padding: 30px;">
+                <div style="width: 80px; height: 80px; background: #fee2e2; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 20px;">
+                    <i class="fas fa-exclamation-circle" style="font-size: 36px; color: #dc2626;"></i>
+                </div>
+                <h3 style="color: #dc2626; margin-bottom: 10px;">Bulk Deletion Failed</h3>
+                <p style="color: #6b7280; margin-bottom: 20px;">Error: ${error.message}</p>
+                <button onclick="closeModal()" style="background: #dc2626; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: 500;">
+                    <i class="fas fa-times-circle"></i> Close
+                </button>
+            </div>
+        `;
+        
+        document.getElementById('modal-content').innerHTML = errorMessage;
+    }
+}
+
+function closeModalAndRefreshBulk() {
+    closeModal();
+    loadManageQuestionsPage();
 }
 
 // Filter courses based on search and filters
