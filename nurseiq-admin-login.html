@@ -190,7 +190,7 @@
     <div style="background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
         <div style="margin-bottom: 25px;">
             <h3 style="margin-top: 0; color: #4f46e5;">Copy-Paste Questions</h3>
-            <p style="color: #666; margin-bottom: 15px;">Simply copy-paste questions from any document. Each question should be on a new line with answers.</p>
+            <p style="color: #666; margin-bottom: 15px;">Simply copy-paste questions from any document. The system will auto-detect if they are MCQs, True/False, or Short Answer.</p>
             
             <div style="margin-bottom: 20px;">
                 <label style="display: block; margin-bottom: 5px; font-weight: bold;">Select Course *</label>
@@ -202,55 +202,119 @@
             <div style="margin-bottom: 20px;">
                 <label style="display: block; margin-bottom: 5px; font-weight: bold;">Paste Questions Here *</label>
                 <textarea id="questions-text" style="width: 100%; padding: 15px; border: 2px solid #e5e7eb; border-radius: 8px; min-height: 300px; font-family: monospace; line-height: 1.5;" 
-                          placeholder="Paste your questions here. Use any format!
+                          placeholder="Paste your questions here. The system will auto-detect format:
 
-Examples:
+✅ FOR MCQs (A., B., C., D.):
 1. What is normal BP?
+A) 90/60 mmHg
+B) 120/80 mmHg ✓
+C) 140/90 mmHg
+D) 160/100 mmHg
 Answer: 120/80 mmHg
 Explanation: Normal adult reading.
 
-Q2. Vitamin from sunlight?
-Ans: Vitamin D
-Explanation: Skin produces it.
+✅ FOR TRUE/FALSE:
+2. Vitamin D is produced by sunlight?
+True ✓
+False
+Answer: True
 
-3) Heart chambers?
-- Right atrium
-- Right ventricle  
-- Left atrium
-- Left ventricle
-Answer: All of the above
-
-Or simple format:
-Question: What is CPR?
+✅ FOR SHORT ANSWER:
+3. What is CPR?
 Answer: Cardiopulmonary resuscitation
-"></textarea>
+Explanation: Emergency procedure
+
+✅ WITH CHECKMARKS:
+Q4. Normal pulse rate?
+☑ 60-100 bpm
+☐ 40-60 bpm  
+☐ 100-120 bpm
+☐ 120-140 bpm
+
+✅ SIMPLE FORMAT:
+5. Heart has 4 chambers? Yes/No
+Answer: Yes"></textarea>
             </div>
             
             <div style="margin-bottom: 20px;">
-                <label style="display: block; margin-bottom: 10px; font-weight: bold;">Question Format</label>
-                <div style="display: flex; gap: 20px; flex-wrap: wrap;">
-                    <label style="display: flex; align-items: center; gap: 8px;">
-                        <input type="radio" name="format-type" value="auto" checked> Auto-detect
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 8px;">
-                        <input type="radio" name="format-type" value="numbered"> Numbered (1., 2., etc.)
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 8px;">
-                        <input type="radio" name="format-type" value="qprefix"> Q-prefix (Q1, Q2, etc.)
-                    </label>
+                <label style="display: block; margin-bottom: 10px; font-weight: bold;">Question Type Detection</label>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px;">
+                    <div style="background: #f0f9ff; padding: 12px; border-radius: 8px; border-left: 4px solid #3b82f6;">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="radio" name="format-type" value="auto" checked> 
+                            <div>
+                                <div style="font-weight: 500;">Auto-detect</div>
+                                <div style="font-size: 12px; color: #6b7280;">Smart detection</div>
+                            </div>
+                        </label>
+                    </div>
+                    <div style="background: #fef3c7; padding: 12px; border-radius: 8px; border-left: 4px solid #f59e0b;">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="radio" name="format-type" value="mcq"> 
+                            <div>
+                                <div style="font-weight: 500;">MCQ Only</div>
+                                <div style="font-size: 12px; color: #6b7280;">A., B., C., D.</div>
+                            </div>
+                        </label>
+                    </div>
+                    <div style="background: #ecfdf5; padding: 12px; border-radius: 8px; border-left: 4px solid #10b981;">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="radio" name="format-type" value="tf"> 
+                            <div>
+                                <div style="font-weight: 500;">True/False</div>
+                                <div style="font-size: 12px; color: #6b7280;">True or False</div>
+                            </div>
+                        </label>
+                    </div>
+                    <div style="background: #f5f3ff; padding: 12px; border-radius: 8px; border-left: 4px solid #8b5cf6;">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="radio" name="format-type" value="short"> 
+                            <div>
+                                <div style="font-weight: 500;">Short Answer</div>
+                                <div style="font-size: 12px; color: #6b7280;">Text answers</div>
+                            </div>
+                        </label>
+                    </div>
                 </div>
             </div>
             
-            <div style="display: flex; gap: 10px;">
-                <button onclick="processTextQuestions()" id="process-btn" style="background: #4f46e5; color: white; border: none; padding: 12px 25px; border-radius: 5px; cursor: pointer;">
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <button onclick="processTextQuestions()" id="process-btn" style="background: #4f46e5; color: white; border: none; padding: 12px 25px; border-radius: 5px; cursor: pointer; display: flex; align-items: center; gap: 8px;">
                     <i class="fas fa-cogs"></i> Extract Questions
                 </button>
-                <button onclick="clearTextArea()" style="background: #6b7280; color: white; border: none; padding: 12px 25px; border-radius: 5px; cursor: pointer;">
+                <button onclick="clearTextArea()" style="background: #6b7280; color: white; border: none; padding: 12px 25px; border-radius: 5px; cursor: pointer; display: flex; align-items: center; gap: 8px;">
                     <i class="fas fa-times"></i> Clear
                 </button>
-                <button onclick="showExample()" style="background: #f59e0b; color: white; border: none; padding: 12px 25px; border-radius: 5px; cursor: pointer;">
+                <button onclick="showExample()" style="background: #f59e0b; color: white; border: none; padding: 12px 25px; border-radius: 5px; cursor: pointer; display: flex; align-items: center; gap: 8px;">
                     <i class="fas fa-question-circle"></i> Show Example
                 </button>
+                <button onclick="testFormatDetection()" style="background: #10b981; color: white; border: none; padding: 12px 25px; border-radius: 5px; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                    <i class="fas fa-vial"></i> Test Detection
+                </button>
+            </div>
+            
+            <!-- Format Detection Preview -->
+            <div id="format-preview" style="margin-top: 20px; display: none;">
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 4px solid #3b82f6;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <h4 style="margin: 0; color: #1f2937;">Format Detection Preview</h4>
+                        <span id="detected-format" style="background: #4f46e5; color: white; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 500;">Auto</span>
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; font-size: 12px;">
+                        <div style="background: white; padding: 8px; border-radius: 6px; text-align: center;">
+                            <div id="mcq-count" style="font-weight: bold; color: #f59e0b;">0</div>
+                            <div>MCQ</div>
+                        </div>
+                        <div style="background: white; padding: 8px; border-radius: 6px; text-align: center;">
+                            <div id="tf-count" style="font-weight: bold; color: #10b981;">0</div>
+                            <div>True/False</div>
+                        </div>
+                        <div style="background: white; padding: 8px; border-radius: 6px; text-align: center;">
+                            <div id="short-count" style="font-weight: bold; color: #8b5cf6;">0</div>
+                            <div>Short Answer</div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
         
@@ -263,13 +327,14 @@ Answer: Cardiopulmonary resuscitation
                         <p style="margin: 5px 0 0 0; color: #666; font-size: 14px;">
                             Found <span id="questions-count" style="font-weight: bold; color: #4f46e5;">0</span> questions
                             <span id="saved-count" style="margin-left: 15px; color: #10b981; font-weight: bold;">0 saved</span>
+                            <span id="type-summary" style="margin-left: 15px; color: #6b7280;"></span>
                         </p>
                     </div>
                     <div>
-                        <button onclick="saveAllExtractedQuestions()" style="background: #10b981; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-right: 10px;">
+                        <button onclick="saveAllExtractedQuestions()" style="background: #10b981; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-right: 10px; display: flex; align-items: center; gap: 8px;">
                             <i class="fas fa-save"></i> Save All Questions
                         </button>
-                        <button onclick="clearExtractionResults()" style="background: #6b7280; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer;">
+                        <button onclick="clearExtractionResults()" style="background: #6b7280; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; display: flex; align-items: center; gap: 8px;">
                             <i class="fas fa-times"></i> Clear
                         </button>
                     </div>
@@ -281,136 +346,21 @@ Answer: Cardiopulmonary resuscitation
                 </div>
                 
                 <!-- Quick Actions -->
-                <div style="display: flex; gap: 10px; justify-content: center;">
-                    <button onclick="saveAllExtractedQuestions()" style="background: #4f46e5; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer;">
+                <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                    <button onclick="saveAllExtractedQuestions()" style="background: #4f46e5; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; display: flex; align-items: center; gap: 8px;">
                         <i class="fas fa-save"></i> Save All Now
                     </button>
-                    <button onclick="editInBulk()" style="background: #f59e0b; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer;">
+                    <button onclick="editInBulk()" style="background: #f59e0b; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; display: flex; align-items: center; gap: 8px;">
                         <i class="fas fa-edit"></i> Edit All
+                    </button>
+                    <button onclick="convertAllToMCQ()" style="background: #8b5cf6; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                        <i class="fas fa-exchange-alt"></i> Convert to MCQ
                     </button>
                 </div>
             </div>
         </div>
     </div>
 </div>
-                    <!-- Page: Document Upload (PDF/Word) -->
-                    <div id="page-document-upload" class="page" style="display: none;">
-                        <h2><i class="fas fa-file-upload"></i> Upload Document & Extract Questions</h2>
-                        
-                        <div style="background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-                            <div style="margin-bottom: 25px;">
-                                <h3 style="margin-top: 0; color: #4f46e5;">Upload Document</h3>
-                                <p style="color: #666; margin-bottom: 15px;">Upload PDF or Word documents to extract questions. Each page will be treated as a separate question.</p>
-                                
-                                <div style="border: 2px dashed #d1d5db; padding: 30px; text-align: center; border-radius: 10px; margin-bottom: 20px;">
-                                    <i class="fas fa-file-pdf" style="font-size: 48px; color: #ef4444; margin-bottom: 15px;"></i>
-                                    <i class="fas fa-file-word" style="font-size: 48px; color: #2563eb; margin-bottom: 15px; margin-left: 20px;"></i>
-                                    <p style="color: #6b7280; margin-bottom: 15px;">Drag & drop PDF or Word files here, or click to browse</p>
-                                    <input type="file" id="document-file" accept=".pdf,.doc,.docx,.txt" style="display: none;">
-                                    <button onclick="document.getElementById('document-file').click()" style="background: #4f46e5; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer;">
-                                        <i class="fas fa-folder-open"></i> Browse Files
-                                    </button>
-                                    <p id="selected-file" style="margin-top: 10px; color: #6b7280;"></p>
-                                </div>
-                                
-                                <div style="margin-bottom: 20px;">
-                                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">Select Course for these questions</label>
-                                    <select id="document-course" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
-                                        <option value="">Loading courses...</option>
-                                    </select>
-                                </div>
-                                
-                                <div style="margin-bottom: 20px;">
-                                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">Document Type</label>
-                                    <div style="display: flex; gap: 20px;">
-                                        <label style="display: flex; align-items: center; gap: 8px;">
-                                            <input type="radio" name="doc-type" value="single" checked> Single question per page
-                                        </label>
-                                        <label style="display: flex; align-items: center; gap: 8px;">
-                                            <input type="radio" name="doc-type" value="multiple"> Multiple questions per page
-                                        </label>
-                                    </div>
-                                </div>
-                                
-                                <button onclick="processDocument()" id="process-btn" style="background: #10b981; color: white; border: none; padding: 12px 25px; border-radius: 5px; cursor: pointer;">
-                                    <i class="fas fa-cogs"></i> Process Document
-                                </button>
-                            </div>
-                            
-                            <!-- Extracted Questions Preview -->
-                            <div id="extraction-results" style="display: none;">
-                                <h3>Extracted Questions Preview</h3>
-                                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                                        <div>
-                                            <strong>Found <span id="questions-count">0</span> questions</strong>
-                                            <p style="margin: 5px 0 0 0; color: #666; font-size: 14px;">Review and edit before saving</p>
-                                        </div>
-                                        <div>
-                                            <button onclick="saveAllExtractedQuestions()" style="background: #4f46e5; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer; margin-right: 10px;">
-                                                <i class="fas fa-save"></i> Save All Questions
-                                            </button>
-                                            <button onclick="clearExtractionResults()" style="background: #6b7280; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer;">
-                                                <i class="fas fa-times"></i> Clear
-                                            </button>
-                                        </div>
-                                    </div>
-                                    
-                                    <!-- Questions Navigation -->
-                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                                        <div style="color: #666;">
-                                            Question <span id="current-question-num">1</span> of <span id="total-questions-num">0</span>
-                                        </div>
-                                        <div style="display: flex; gap: 10px;">
-                                            <button onclick="prevQuestion()" id="prev-btn" style="background: #e5e7eb; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer;">
-                                                <i class="fas fa-chevron-left"></i> Previous
-                                            </button>
-                                            <button onclick="nextQuestion()" id="next-btn" style="background: #e5e7eb; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer;">
-                                                Next <i class="fas fa-chevron-right"></i>
-                                            </button>
-                                        </div>
-                                    </div>
-                                    
-                                    <!-- Current Question Editor -->
-                                    <div id="question-editor" style="background: white; padding: 20px; border-radius: 8px; border: 1px solid #e5e7eb;">
-                                        <div style="margin-bottom: 15px;">
-                                            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Question Text</label>
-                                            <textarea id="extracted-question" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; min-height: 80px;"></textarea>
-                                        </div>
-                                        
-                                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
-                                            <div>
-                                                <label style="display: block; margin-bottom: 5px; font-weight: bold;">Correct Answer</label>
-                                                <input type="text" id="extracted-answer" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
-                                            </div>
-                                            <div>
-                                                <label style="display: block; margin-bottom: 5px; font-weight: bold;">Difficulty</label>
-                                                <select id="extracted-difficulty" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
-                                                    <option value="medium">Medium</option>
-                                                    <option value="easy">Easy</option>
-                                                    <option value="hard">Hard</option>
-                                                </select>
-                                            </div>
-                                        </div>
-                                        
-                                        <div style="margin-bottom: 10px;">
-                                            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Explanation (Optional)</label>
-                                            <textarea id="extracted-explanation" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; min-height: 60px;"></textarea>
-                                        </div>
-                                        
-                                        <div style="display: flex; gap: 10px; margin-top: 15px;">
-                                            <button onclick="saveCurrentQuestion()" style="background: #10b981; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer;">
-                                                <i class="fas fa-check"></i> Save This Question
-                                            </button>
-                                            <button onclick="skipCurrentQuestion()" style="background: #6b7280; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer;">
-                                                <i class="fas fa-forward"></i> Skip
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
 <!-- Page: Generate Questions -->
 <div id="page-generate-questions" class="page" style="display: none;">
     <h2><i class="fas fa-robot"></i> AI Question Generator</h2>
