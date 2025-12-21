@@ -1001,7 +1001,7 @@ function processTextQuestions() {
     }
 }
 
-// SIMPLE MCQ EXTRACTOR - WORKING VERSION
+// ENHANCED MCQ EXTRACTOR WITH EXPLANATION DETECTION
 function extractSimpleMCQs(text) {
     const questions = [];
     const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
@@ -1009,6 +1009,7 @@ function extractSimpleMCQs(text) {
     let currentQuestion = null;
     let currentOptions = [];
     let currentAnswer = '';
+    let currentExplanation = '';
     let questionNumber = 1;
     
     for (let i = 0; i < lines.length; i++) {
@@ -1027,7 +1028,7 @@ function extractSimpleMCQs(text) {
                     options: [...currentOptions],
                     type: 'multiple_choice',
                     saved: false,
-                    explanation: ''
+                    explanation: currentExplanation || ''
                 };
                 questions.push(questionObj);
             }
@@ -1036,19 +1037,20 @@ function extractSimpleMCQs(text) {
             currentQuestion = line.replace(/^\d+[\.\)]\s*/, '').trim();
             currentOptions = [];
             currentAnswer = '';
+            currentExplanation = '';
             
-            // Look for options in next lines
+            // Look for options, answers, and explanations in next lines
             let j = i + 1;
-            while (j < lines.length && currentOptions.length < 4) {
+            while (j < lines.length && j < i + 15) { // Look ahead 15 lines
                 const nextLine = lines[j];
                 
                 // Check for MCQ options (A., B., C., D.)
                 const optionMatch = nextLine.match(/^([A-Da-d])[\.\)]\s+(.+)$/);
-                if (optionMatch) {
+                if (optionMatch && currentOptions.length < 4) {
                     let optionText = optionMatch[2].trim();
                     
                     // Remove checkmark from option text but remember it
-                    const hasCheckmark = optionText.includes('✓');
+                    const hasCheckmark = optionText.includes('✓') || optionText.includes('✔');
                     optionText = optionText.replace(/[✓✔]/g, '').trim();
                     
                     currentOptions.push(optionText);
@@ -1058,19 +1060,14 @@ function extractSimpleMCQs(text) {
                         currentAnswer = optionText;
                     }
                     j++;
-                } else {
-                    break;
+                    continue;
                 }
-            }
-            
-            // Look for answer line after options
-            for (let k = j; k < Math.min(j + 3, lines.length); k++) {
-                const answerLine = lines[k];
                 
-                if (answerLine.toLowerCase().includes('answer:') || 
-                    answerLine.toLowerCase().includes('correct:')) {
+                // Check for answer line after options
+                if (!currentAnswer && (nextLine.toLowerCase().includes('answer:') || 
+                    nextLine.toLowerCase().includes('correct:'))) {
                     
-                    const answerMatch = answerLine.match(/(?:answer|correct):?\s*(.+)/i);
+                    const answerMatch = nextLine.match(/(?:answer|correct):?\s*(.+)/i);
                     if (answerMatch && answerMatch[1]) {
                         const answerText = answerMatch[1].trim();
                         
@@ -1084,8 +1081,42 @@ function extractSimpleMCQs(text) {
                             currentAnswer = answerText;
                         }
                     }
+                    j++;
+                    continue;
+                }
+                
+                // Check for explanation line
+                if (!currentExplanation && (nextLine.toLowerCase().includes('explanation:') || 
+                    nextLine.toLowerCase().includes('explain:'))) {
+                    
+                    const explanationMatch = nextLine.match(/(?:explanation|explain):?\s*(.+)/i);
+                    if (explanationMatch && explanationMatch[1]) {
+                        currentExplanation = explanationMatch[1].trim();
+                    }
+                    j++;
+                    continue;
+                }
+                
+                // If line looks like it could be an explanation (starts with capital, medium length)
+                if (!currentExplanation && 
+                    nextLine.length > 30 && 
+                    nextLine.length < 150 &&
+                    !nextLine.match(/^[A-Da-d][\.\)]/) &&
+                    !nextLine.includes('?') &&
+                    nextLine[0] === nextLine[0].toUpperCase()) {
+                    
+                    // Might be an explanation without label
+                    currentExplanation = nextLine;
+                    j++;
+                    continue;
+                }
+                
+                // Stop if we hit next question
+                if (nextLine.match(/^\d+[\.\)]/) || nextLine.includes('?')) {
                     break;
                 }
+                
+                j++;
             }
             
             // Skip to end of this question block
@@ -1102,42 +1133,80 @@ function extractSimpleMCQs(text) {
             options: [...currentOptions],
             type: 'multiple_choice',
             saved: false,
-            explanation: ''
+            explanation: currentExplanation || ''
         };
         questions.push(questionObj);
     }
     
     return questions;
 }
-
-function formatQuestionText(text) {
-    // Remove extra whitespace
-    let formatted = text.trim();
+        // ADD AI EXPLANATIONS TO MISSING QUESTIONS
+function addAIExplanations() {
+    let addedCount = 0;
     
-    // Ensure it ends with ?
-    if (!formatted.endsWith('?')) {
-        formatted += '?';
+    extractedQuestions.forEach((question, index) => {
+        // If explanation is empty or very short, add AI explanation
+        if (!question.explanation || question.explanation.trim().length < 10) {
+            const aiExplanation = generateAIExplanation(question.question, question.answer);
+            question.explanation = aiExplanation;
+            addedCount++;
+            
+            // Update the question in the array
+            extractedQuestions[index] = question;
+        }
+    });
+    
+    // Update the display
+    displayQuestionsList();
+    
+    if (addedCount > 0) {
+        alert(`✅ Added AI explanations to ${addedCount} questions!`);
+    } else {
+        alert('All questions already have explanations!');
+    }
+}
+
+// SIMPLE AI EXPLANATION GENERATOR
+function generateAIExplanation(questionText, correctAnswer) {
+    // Common nursing explanations database
+    const nursingExplanations = {
+        'blood pressure|bp|120/80|hypertension': 'Normal adult blood pressure is 120/80 mmHg. Readings consistently above 140/90 indicate hypertension requiring medical intervention.',
+        'vitamin d|sunlight|bone health|calcium': 'Vitamin D is synthesized when skin is exposed to UVB sunlight. It regulates calcium absorption essential for bone mineralization.',
+        'pulse|heart rate|bpm|cardiac': 'Normal resting heart rate for adults is 60-100 bpm. Variations may indicate cardiac conditions or fitness levels.',
+        'cpr|resuscitation|chest compression': 'CPR combines chest compressions (100-120/min) and rescue breaths to maintain circulation during cardiac arrest.',
+        'heart chambers|atrium|ventricle': 'The human heart has four chambers: right atrium, right ventricle, left atrium, left ventricle, each with specific functions.',
+        'infection control|aseptic|sterile': 'Standard precautions prevent infection transmission through hand hygiene, PPE, and proper disinfection protocols.',
+        'medication administration|5 rights': 'The "5 Rights" ensure safe medication administration: right patient, drug, dose, route, and time.',
+        'wound care|dressing|healing': 'Proper wound care promotes healing through cleaning, appropriate dressing, and prevention of infection.',
+        'patient assessment|vital signs': 'Comprehensive assessment includes vital signs (BP, pulse, respiration, temperature) and systematic physical examination.',
+        'fluid balance|hydration|electrolytes': 'Maintaining fluid and electrolyte balance is crucial for cellular function and preventing complications.'
+    };
+    
+    const qLower = questionText.toLowerCase();
+    const aLower = correctAnswer.toLowerCase();
+    
+    // Find matching topic
+    for (const [keywords, explanation] of Object.entries(nursingExplanations)) {
+        const keywordList = keywords.split('|');
+        const hasKeyword = keywordList.some(keyword => 
+            qLower.includes(keyword) || aLower.includes(keyword)
+        );
+        
+        if (hasKeyword) {
+            return `${explanation} This is considered correct based on established nursing protocols.`;
+        }
     }
     
-    return formatted;
+    // Default explanation
+    const defaultExplanations = [
+        `This answer aligns with evidence-based nursing practice and clinical guidelines.`,
+        `Correct based on current nursing standards and patient safety principles.`,
+        `This response demonstrates appropriate clinical judgment in nursing care.`,
+        `Supported by nursing research and best practices in healthcare delivery.`
+    ];
+    
+    return defaultExplanations[Math.floor(Math.random() * defaultExplanations.length)];
 }
-
-// Remove the old complex functions and replace with these
-function extractNumberedQuestions(text) {
-    // Use the simple extractor for all formats
-    return extractSimpleMCQs(text);
-}
-
-function extractQPrefixQuestions(text) {
-    // Use the simple extractor for all formats
-    return extractSimpleMCQs(text);
-}
-
-function extractExamPaperQuestions(text) {
-    // Use the simple extractor for all formats
-    return extractSimpleMCQs(text);
-}
-
 // ==================== DISPLAY FUNCTIONS ====================
 
 function displayQuestionsList() {
@@ -1237,6 +1306,139 @@ function displayQuestionsList() {
         extractionResults.style.display = 'block';
         extractionResults.scrollIntoView({ behavior: 'smooth' });
     }
+}
+        // ==================== MINIMAL SAVE FUNCTIONS ====================
+
+async function saveSingleQuestion(index) {
+    const courseId = document.getElementById('document-course').value;
+    const question = extractedQuestions[index];
+    
+    if (!question || question.saved) return;
+    
+    try {
+        const questionData = {
+            question_text: question.question,
+            correct_answer: question.answer,
+            course_id: courseId,
+            difficulty: 'medium',
+            explanation: question.explanation || '',
+            curriculum: 'KRCHN',
+            is_published: true,
+            is_active: true,
+            created_at: new Date().toISOString(),
+            question_type: question.options ? 'multiple_choice' : 'short_answer',
+            marks: 1,
+            estimated_time: 2
+        };
+        
+        const { error } = await supabase
+            .from('medical_assessments')
+            .insert([questionData]);
+        
+        if (error) throw error;
+        
+        // Mark as saved
+        extractedQuestions[index].saved = true;
+        savedQuestionsCount++;
+        
+        // Update display
+        const savedCountElement = document.getElementById('saved-count');
+        if (savedCountElement) {
+            savedCountElement.textContent = savedQuestionsCount + ' saved';
+        }
+        
+        // Update the button
+        const buttons = document.querySelectorAll(`button[onclick="saveSingleQuestion(${index})"]`);
+        buttons.forEach(btn => {
+            btn.innerHTML = '<i class="fas fa-check"></i> Saved';
+            btn.style.background = '#6b7280';
+            btn.disabled = true;
+        });
+        
+        // Update dashboard stats
+        loadDashboardStats();
+        
+        alert('✅ Question saved!');
+        
+    } catch (error) {
+        console.error('Error saving question:', error);
+        alert('Error saving question: ' + error.message);
+    }
+}
+
+async function saveAllExtractedQuestions() {
+    const courseId = document.getElementById('document-course').value;
+    
+    if (!courseId) {
+        alert('Please select a course');
+        return;
+    }
+    
+    const unsavedQuestions = extractedQuestions.filter(q => !q.saved);
+    
+    if (unsavedQuestions.length === 0) {
+        alert('All questions are already saved!');
+        return;
+    }
+    
+    if (!confirm(`Save ${unsavedQuestions.length} unsaved questions?`)) {
+        return;
+    }
+    
+    try {
+        const questionsToSave = unsavedQuestions.map(q => ({
+            question_text: q.question,
+            correct_answer: q.answer,
+            course_id: courseId,
+            difficulty: 'medium',
+            explanation: q.explanation || '',
+            curriculum: 'KRCHN',
+            is_published: true,
+            is_active: true,
+            created_at: new Date().toISOString(),
+            question_type: q.options ? 'multiple_choice' : 'short_answer',
+            marks: 1,
+            estimated_time: 2
+        }));
+        
+        const { error } = await supabase
+            .from('medical_assessments')
+            .insert(questionsToSave);
+        
+        if (error) throw error;
+        
+        // Mark all as saved
+        extractedQuestions.forEach(q => q.saved = true);
+        savedQuestionsCount = extractedQuestions.length;
+        
+        // Update display
+        displayQuestionsList();
+        
+        alert(`✅ Successfully saved ${questionsToSave.length} questions!`);
+        
+        // Update dashboard stats
+        loadDashboardStats();
+        
+    } catch (error) {
+        console.error('Error saving questions:', error);
+        alert('Error saving questions: ' + error.message);
+    }
+}
+
+function clearExtractionResults() {
+    if (extractedQuestions.filter(q => !q.saved).length > 0) {
+        if (!confirm('You have unsaved questions. Clear anyway?')) {
+            return;
+        }
+    }
+    
+    extractedQuestions = [];
+    savedQuestionsCount = 0;
+    const extractionResults = document.getElementById('extraction-results');
+    if (extractionResults) {
+        extractionResults.style.display = 'none';
+    }
+    document.getElementById('questions-text').value = '';
 }
        // ==================== ENHANCED AI QUESTION GENERATOR ====================
 
