@@ -2577,6 +2577,8 @@ async function startCourseTest(courseId, courseName) {
     }
 }
 
+// ==================== COMPLETE INTERACTIVE QUESTIONS DISPLAY ====================
+
 function displayInteractiveQuestions(courseName, questions, courseId) {
     const contentEl = document.getElementById('studentQuestionBankContent');
     if (!contentEl) return;
@@ -2585,147 +2587,240 @@ function displayInteractiveQuestions(courseName, questions, courseId) {
     
     let html = `
         <div class="interactive-questions-container">
-            <!-- Header -->
-            <div class="questions-header" style="background: ${courseColor}; color: white; padding: 15px; border-radius: 8px 8px 0 0;">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        <button onclick="loadQuestionBankCards()" class="btn-back">
-                            <i class="fas fa-arrow-left"></i> Back to Courses
-                        </button>
-                        <h3 style="margin: 10px 0 5px 0;">${courseName} - Q&A Practice</h3>
-                        <p style="margin: 0; opacity: 0.9;">${questions.length} Questions | Click options to answer</p>
+            <!-- Top Header Bar -->
+            <div class="questions-header-bar" style="background: ${courseColor};">
+                <div class="header-content">
+                    <button onclick="loadQuestionBankCards()" class="header-back-btn">
+                        <i class="fas fa-arrow-left"></i> Back to Courses
+                    </button>
+                    
+                    <div class="header-course-info">
+                        <h2 class="course-name">${courseName}</h2>
+                        <p class="practice-mode">Interactive Q&A Practice Mode</p>
                     </div>
-                    <div class="question-counter">
-                        <div style="font-size: 1.5rem; font-weight: bold;">Q: <span id="currentQuestionCount">1</span>/<span id="totalQuestions">${questions.length}</span></div>
-                        <div style="font-size: 0.9rem;">Score: <span id="accuracyRate">0%</span></div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Question Navigation Dots - FIXED VERSION -->
-            <div class="question-nav-dots">
-                <div class="question-dots-inner">
-    `;
-    
-    // Add question dots (limit to 100 for performance)
-    const maxDots = Math.min(questions.length, 100);
-    for (let i = 0; i < maxDots; i++) {
-        html += `
-            <button onclick="goToQuestion(${i})" 
-                    class="question-dot" 
-                    id="questionDot${i}">
-                ${i + 1}
-            </button>
-        `;
-    }
-    
-    if (questions.length > 100) {
-        html += `
-            <div class="more-questions-indicator">
-                +${questions.length - 100} more
-            </div>
-        `;
-    }
-    
-    html += `
-                </div>
-            </div>
-            
-            <!-- Main Content Area -->
-            <div class="questions-content">
-                <!-- Left Column: Question and Options -->
-                <div class="question-column">
-                    <div class="question-box" style="border: 2px solid ${courseColor};">
-                        <div class="question-header">
-                            <span class="question-number" style="background: ${courseColor};">${currentQuestionIndex + 1}</span>
-                            <span>Question ${currentQuestionIndex + 1} of ${questions.length}</span>
+                    
+                    <div class="header-stats">
+                        <div class="question-counter">
+                            <div class="counter-label">Question</div>
+                            <div class="counter-numbers">
+                                <span id="currentQuestionCount" class="current-number">1</span>
+                                <span class="total-divider">/</span>
+                                <span id="totalQuestions" class="total-number">${questions.length}</span>
+                            </div>
                         </div>
-                        <div id="questionText" class="question-text">
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Main Content Container -->
+            <div class="questions-main-container">
+                <!-- Left Panel: Question -->
+                <div class="question-panel">
+                    <!-- Question Number & Status -->
+                    <div class="question-header">
+                        <div class="question-meta">
+                            <span class="question-number-badge" style="background: ${courseColor};">
+                                Q${currentQuestionIndex + 1}
+                            </span>
+                            <span class="question-type">Multiple Choice</span>
+                            <span class="difficulty-badge" id="difficultyBadge">Medium</span>
+                        </div>
+                        
+                        <!-- Mini Navigation -->
+                        <div class="mini-navigation">
+                            <button onclick="prevQuestion()" class="mini-nav-btn" id="miniPrevBtn" ${currentQuestionIndex === 0 ? 'disabled' : ''}>
+                                <i class="fas fa-chevron-left"></i>
+                            </button>
+                            <div class="mini-dots" id="miniDotsContainer">
+                                ${generateMiniDots(questions.length)}
+                            </div>
+                            <button onclick="nextQuestion()" class="mini-nav-btn" id="miniNextBtn" ${currentQuestionIndex === questions.length - 1 ? 'disabled' : ''}>
+                                <i class="fas fa-chevron-right"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Question Text -->
+                    <div class="question-card">
+                        <div class="question-text" id="questionText">
                             Loading question...
                         </div>
                     </div>
                     
-                    <div id="optionsContainer" class="options-container">
-                        <!-- Options will be loaded here -->
-                    </div>
-                    
-                    <!-- Action Buttons -->
-                    <div class="action-buttons">
-                        <button onclick="checkAnswer()" id="checkAnswerBtn" class="action-btn primary-btn">
-                            <i class="fas fa-check-circle"></i> Check Answer
-                        </button>
-                        <button onclick="resetQuestion()" id="resetBtn" class="action-btn secondary-btn">
-                            <i class="fas fa-redo"></i> Reset
-                        </button>
-                        <button onclick="showAnswer()" id="showAnswerBtn" class="action-btn info-btn">
-                            <i class="fas fa-lightbulb"></i> Show Answer
-                        </button>
-                    </div>
-                    
-                    <!-- Answer Box -->
-                    <div id="answerBox" class="answer-box">
-                        <p class="correct-answer">
-                            <i class="fas fa-check"></i> Correct Answer: <span id="correctAnswerText"></span>
-                        </p>
-                    </div>
-                </div>
-                
-                <!-- Right Column: Explanation -->
-                <div class="explanation-column">
-                    <div id="explanationContainer" class="explanation-container">
-                        <h4 class="explanation-title">
-                            <i class="fas fa-info-circle"></i> Explanation
-                        </h4>
-                        <div id="explanationText" class="explanation-text">
-                            Loading explanation...
+                    <!-- Answer Options -->
+                    <div class="options-panel">
+                        <h3 class="options-title">Select Your Answer:</h3>
+                        <div id="optionsContainer" class="options-grid">
+                            <!-- Options will be loaded here -->
                         </div>
                     </div>
                     
-                    <!-- Placeholder when no explanation shown -->
-                    <div id="explanationPlaceholder" class="explanation-placeholder">
-                        <i class="fas fa-info-circle"></i>
-                        <p>Answer a question to see explanation here</p>
-                        <p>Select an option and click "Check Answer"</p>
+                    <!-- Action Buttons -->
+                    <div class="action-buttons-panel">
+                        <div class="button-group-left">
+                            <button onclick="checkAnswer()" id="checkAnswerBtn" class="action-btn primary-action-btn">
+                                <i class="fas fa-check-circle"></i> Check Answer
+                            </button>
+                            <button onclick="resetQuestion()" id="resetBtn" class="action-btn secondary-action-btn">
+                                <i class="fas fa-redo"></i> Reset
+                            </button>
+                        </div>
+                        
+                        <div class="button-group-right">
+                            <button onclick="showAnswer()" id="showAnswerBtn" class="action-btn info-action-btn">
+                                <i class="fas fa-lightbulb"></i> Show Answer
+                            </button>
+                            <button onclick="markForReview()" id="markBtn" class="action-btn warning-action-btn">
+                                <i class="fas fa-flag"></i> <span id="markBtnText">Mark for Review</span>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Answer & Explanation Section (BELOW Action Buttons) -->
+                    <div id="answerRevealSection" class="answer-reveal-section" style="display: none;">
+                        <div class="answer-header">
+                            <h3><i class="fas fa-check-double"></i> Answer & Explanation</h3>
+                        </div>
+                        
+                        <!-- Correct Answer Display -->
+                        <div class="correct-answer-box">
+                            <div class="correct-answer-label">
+                                <i class="fas fa-check-circle"></i> Correct Answer:
+                            </div>
+                            <div class="correct-answer-text" id="correctAnswerText">
+                                Loading...
+                            </div>
+                        </div>
+                        
+                        <!-- Detailed Explanation -->
+                        <div class="explanation-box">
+                            <div class="explanation-label">
+                                <i class="fas fa-info-circle"></i> Explanation:
+                            </div>
+                            <div class="explanation-content">
+                                <div class="explanation-text" id="explanationText">
+                                    Select an option and click "Check Answer" to see the explanation.
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Learning Tips -->
+                        <div class="learning-tips">
+                            <div class="tip-item">
+                                <i class="fas fa-lightbulb"></i>
+                                <span>Study this explanation carefully to understand the concept</span>
+                            </div>
+                            <div class="tip-item">
+                                <i class="fas fa-book"></i>
+                                <span>Take notes on important points for revision</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Right Panel: Progress & Stats -->
+                <div class="stats-panel">
+                    <!-- Progress Summary -->
+                    <div class="progress-summary-card">
+                        <h3 class="stats-title">
+                            <i class="fas fa-chart-line"></i> Your Progress
+                        </h3>
+                        
+                        <div class="progress-stats-grid">
+                            <div class="progress-stat">
+                                <div class="progress-circle answered-circle">
+                                    <span class="progress-number" id="answeredCount">0</span>
+                                </div>
+                                <div class="progress-label">Answered</div>
+                            </div>
+                            
+                            <div class="progress-stat">
+                                <div class="progress-circle correct-circle">
+                                    <span class="progress-number" id="correctCount">0</span>
+                                </div>
+                                <div class="progress-label">Correct</div>
+                            </div>
+                            
+                            <div class="progress-stat">
+                                <div class="progress-circle incorrect-circle">
+                                    <span class="progress-number" id="incorrectCount">0</span>
+                                </div>
+                                <div class="progress-label">Incorrect</div>
+                            </div>
+                            
+                            <div class="progress-stat">
+                                <div class="progress-circle marked-circle">
+                                    <span class="progress-number" id="markedCount">0</span>
+                                </div>
+                                <div class="progress-label">Marked</div>
+                            </div>
+                        </div>
+                        
+                        <div class="accuracy-display">
+                            <div class="accuracy-label">Overall Accuracy</div>
+                            <div class="accuracy-percent" id="overallAccuracy">0%</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Quick Navigation -->
+                    <div class="quick-nav-card">
+                        <h3 class="nav-title">
+                            <i class="fas fa-compass"></i> Quick Navigation
+                        </h3>
+                        
+                        <div class="question-dots-grid" id="questionDotsGrid">
+                            <!-- Question dots will be loaded here -->
+                        </div>
+                        
+                        <div class="jump-to-section">
+                            <label for="jumpToQuestion">Jump to Question:</label>
+                            <div class="jump-input-group">
+                                <input type="number" id="jumpToQuestion" min="1" max="${questions.length}" value="1">
+                                <button onclick="jumpToQuestion()" class="jump-btn">
+                                    <i class="fas fa-arrow-right"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Study Tips -->
+                    <div class="tips-card">
+                        <h3 class="tips-title">
+                            <i class="fas fa-graduation-cap"></i> Study Tips
+                        </h3>
+                        <ul class="tips-list">
+                            <li><i class="fas fa-check"></i> Read each question carefully</li>
+                            <li><i class="fas fa-check"></i> Review explanations thoroughly</li>
+                            <li><i class="fas fa-check"></i> Mark difficult questions</li>
+                            <li><i class="fas fa-check"></i> Aim for 80%+ accuracy</li>
+                        </ul>
                     </div>
                 </div>
             </div>
             
-            <!-- Navigation Buttons -->
-            <div class="navigation-buttons">
-                <div>
-                    <button onclick="prevQuestion()" id="prevBtn" class="nav-btn">
-                        <i class="fas fa-arrow-left"></i> Previous
+            <!-- Bottom Navigation Bar -->
+            <div class="bottom-navigation-bar">
+                <div class="nav-left">
+                    <button onclick="prevQuestion()" id="prevBtn" class="nav-btn prev-nav-btn">
+                        <i class="fas fa-arrow-left"></i> Previous Question
                     </button>
                 </div>
-                <div>
-                    <button onclick="markForReview()" id="markBtn" class="nav-btn warning-btn">
-                        <i class="fas fa-flag"></i> <span id="markBtnText">Mark for Review</span>
+                
+                <div class="nav-center">
+                    <div class="progress-indicator">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progressFill" style="width: 0%;"></div>
+                        </div>
+                        <div class="progress-text">
+                            Progress: <span id="progressPercent">0%</span> (<span id="currentProgress">1</span>/<span id="totalProgress">${questions.length}</span>)
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="nav-right">
+                    <button onclick="nextQuestion()" id="nextBtn" class="nav-btn next-nav-btn">
+                        Next Question <i class="fas fa-arrow-right"></i>
                     </button>
-                </div>
-                <div>
-                    <button onclick="nextQuestion()" id="nextBtn" class="nav-btn primary-btn">
-                        Next <i class="fas fa-arrow-right"></i>
-                    </button>
-                </div>
-            </div>
-            
-            <!-- Progress Summary -->
-            <div class="progress-summary">
-                <div class="progress-item">
-                    <div class="progress-number answered-count" id="answeredCount">0</div>
-                    <div class="progress-label">Answered</div>
-                </div>
-                <div class="progress-item">
-                    <div class="progress-number correct-count" id="correctCount">0</div>
-                    <div class="progress-label">Correct</div>
-                </div>
-                <div class="progress-item">
-                    <div class="progress-number incorrect-count" id="incorrectCount">0</div>
-                    <div class="progress-label">Incorrect</div>
-                </div>
-                <div class="progress-item">
-                    <div class="progress-number marked-count" id="markedCount">0</div>
-                    <div class="progress-label">Marked</div>
                 </div>
             </div>
         </div>
@@ -2733,13 +2828,206 @@ function displayInteractiveQuestions(courseName, questions, courseId) {
     
     contentEl.innerHTML = html;
     
-    // Load first question
+    // Load first question and initialize
     setTimeout(() => {
         loadCurrentInteractiveQuestion();
+        updateQuestionDotsGrid();
+        updateProgressBar();
+        updateMiniDots();
     }, 100);
 }
 
-// Load current interactive question
+// ==================== HELPER FUNCTIONS ====================
+
+// Generate mini dots for header navigation
+function generateMiniDots(totalQuestions) {
+    let dotsHtml = '';
+    const maxDots = 5; // Show limited dots in header
+    
+    // Calculate start and end positions
+    let start = Math.max(0, currentQuestionIndex - 2);
+    let end = Math.min(totalQuestions - 1, start + maxDots - 1);
+    
+    // Adjust if near the end
+    if (end - start < maxDots - 1) {
+        start = Math.max(0, end - maxDots + 1);
+    }
+    
+    // Add "..." at start if needed
+    if (start > 0) {
+        dotsHtml += '<span class="mini-dot-ellipsis">...</span>';
+    }
+    
+    // Add dots
+    for (let i = start; i <= end; i++) {
+        let dotClass = 'mini-dot';
+        if (i === currentQuestionIndex) {
+            dotClass += ' mini-dot-active';
+        }
+        if (userTestAnswers[i]?.answered) {
+            dotClass += userTestAnswers[i]?.correct ? ' mini-dot-correct' : ' mini-dot-incorrect';
+        } else if (userTestAnswers[i]?.marked) {
+            dotClass += ' mini-dot-marked';
+        }
+        
+        dotsHtml += `<span class="${dotClass}" onclick="goToQuestion(${i})">${i + 1}</span>`;
+    }
+    
+    // Add "..." at end if needed
+    if (end < totalQuestions - 1) {
+        dotsHtml += '<span class="mini-dot-ellipsis">...</span>';
+    }
+    
+    return dotsHtml;
+}
+
+// Update mini dots
+function updateMiniDots() {
+    const miniDotsContainer = document.getElementById('miniDotsContainer');
+    if (!miniDotsContainer || !currentCourseQuestions) return;
+    
+    miniDotsContainer.innerHTML = generateMiniDots(currentCourseQuestions.length);
+    
+    // Update mini navigation buttons
+    const miniPrevBtn = document.getElementById('miniPrevBtn');
+    const miniNextBtn = document.getElementById('miniNextBtn');
+    
+    if (miniPrevBtn) {
+        miniPrevBtn.disabled = currentQuestionIndex === 0;
+    }
+    if (miniNextBtn) {
+        miniNextBtn.disabled = currentQuestionIndex === currentCourseQuestions.length - 1;
+    }
+}
+
+// Update the question dots grid
+function updateQuestionDotsGrid() {
+    const dotsGrid = document.getElementById('questionDotsGrid');
+    if (!dotsGrid || !currentCourseQuestions) return;
+    
+    let html = '';
+    const totalQuestions = currentCourseQuestions.length;
+    const maxDisplay = 50; // Limit for performance
+    
+    // Calculate range to display
+    const startIndex = Math.max(0, Math.floor(currentQuestionIndex / maxDisplay) * maxDisplay);
+    const endIndex = Math.min(startIndex + maxDisplay, totalQuestions);
+    
+    for (let i = startIndex; i < endIndex; i++) {
+        let dotClass = 'question-dot';
+        let statusIcon = '';
+        
+        if (userTestAnswers[i]?.answered) {
+            if (userTestAnswers[i]?.correct) {
+                dotClass += ' dot-correct';
+                statusIcon = '✓';
+            } else {
+                dotClass += ' dot-incorrect';
+                statusIcon = '✗';
+            }
+        } else if (userTestAnswers[i]?.marked) {
+            dotClass += ' dot-marked';
+            statusIcon = '📍';
+        }
+        
+        if (i === currentQuestionIndex) {
+            dotClass += ' dot-active';
+        }
+        
+        html += `
+            <button onclick="goToQuestion(${i})" 
+                    class="${dotClass}"
+                    title="Question ${i + 1}${userTestAnswers[i]?.answered ? ' - Answered' : ''}">
+                ${i + 1}
+                ${statusIcon ? `<span class="dot-status">${statusIcon}</span>` : ''}
+            </button>
+        `;
+    }
+    
+    // Add navigation controls if we have more questions
+    if (totalQuestions > maxDisplay) {
+        if (startIndex > 0) {
+            html = `
+                <button onclick="scrollQuestionDots(-${maxDisplay})" class="dots-nav-btn dots-nav-prev">
+                    <i class="fas fa-chevron-left"></i> Prev ${maxDisplay}
+                </button>
+                ${html}
+            `;
+        }
+        
+        if (endIndex < totalQuestions) {
+            html += `
+                <button onclick="scrollQuestionDots(${maxDisplay})" class="dots-nav-btn dots-nav-next">
+                    Next ${maxDisplay} <i class="fas fa-chevron-right"></i>
+                </button>
+            `;
+        }
+        
+        html += `<div class="dots-range-info">Showing ${startIndex + 1}-${endIndex} of ${totalQuestions}</div>`;
+    }
+    
+    dotsGrid.innerHTML = html;
+}
+
+// Scroll question dots
+function scrollQuestionDots(amount) {
+    // This would be implemented if we add pagination to dots
+    console.log('Scroll dots by:', amount);
+}
+
+// Update progress bar
+function updateProgressBar() {
+    const progressFill = document.getElementById('progressFill');
+    const progressPercent = document.getElementById('progressPercent');
+    const currentProgress = document.getElementById('currentProgress');
+    const totalProgress = document.getElementById('totalProgress');
+    
+    if (!currentCourseQuestions || !currentCourseQuestions.length) return;
+    
+    const progress = ((currentQuestionIndex + 1) / currentCourseQuestions.length) * 100;
+    
+    if (progressFill) {
+        progressFill.style.width = `${progress}%`;
+    }
+    
+    if (progressPercent) {
+        progressPercent.textContent = `${Math.round(progress)}%`;
+    }
+    
+    if (currentProgress) {
+        currentProgress.textContent = currentQuestionIndex + 1;
+    }
+    
+    if (totalProgress) {
+        totalProgress.textContent = currentCourseQuestions.length;
+    }
+}
+
+// Jump to specific question
+function jumpToQuestion() {
+    const input = document.getElementById('jumpToQuestion');
+    if (!input || !currentCourseQuestions) return;
+    
+    let questionNum = parseInt(input.value);
+    
+    // Validate input
+    if (isNaN(questionNum) || questionNum < 1) {
+        questionNum = 1;
+    } else if (questionNum > currentCourseQuestions.length) {
+        questionNum = currentCourseQuestions.length;
+    }
+    
+    // Adjust for zero-based index
+    const targetIndex = questionNum - 1;
+    
+    if (targetIndex >= 0 && targetIndex < currentCourseQuestions.length) {
+        goToQuestion(targetIndex);
+        input.value = questionNum;
+    }
+}
+
+// ==================== UPDATED loadCurrentInteractiveQuestion ====================
+
 function loadCurrentInteractiveQuestion() {
     if (!currentCourseQuestions || currentCourseQuestions.length === 0) return;
     if (currentQuestionIndex >= currentCourseQuestions.length) {
@@ -2747,503 +3035,399 @@ function loadCurrentInteractiveQuestion() {
     }
     
     const question = currentCourseQuestions[currentQuestionIndex];
+    if (!question) return;
+    
+    // Update all UI sections
+    updateQuestionDisplay(question);
+    updateOptionsDisplay(question);
+    updateAnswerReveal(question);
+    updateNavigationControls();
+    updateStatsDisplay();
+    
+    // Update navigation elements
+    updateMiniDots();
+    updateQuestionDotsGrid();
+    updateProgressBar();
+    
+    // Scroll to top of question
+    setTimeout(() => {
+        const questionPanel = document.querySelector('.question-panel');
+        if (questionPanel) {
+            questionPanel.scrollTop = 0;
+        }
+    }, 100);
+}
+
+// Update question display
+function updateQuestionDisplay(question) {
+    // Update counters
+    const currentQuestionCount = document.getElementById('currentQuestionCount');
+    const totalQuestions = document.getElementById('totalQuestions');
+    const difficultyBadge = document.getElementById('difficultyBadge');
     const questionText = document.getElementById('questionText');
+    
+    if (currentQuestionCount) currentQuestionCount.textContent = currentQuestionIndex + 1;
+    if (totalQuestions) totalQuestions.textContent = currentCourseQuestions.length;
+    
+    if (difficultyBadge) {
+        const difficulty = question.difficulty?.toLowerCase() || 'medium';
+        difficultyBadge.textContent = difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
+        
+        // Set color based on difficulty
+        const colors = {
+            easy: '#10b981',
+            medium: '#f59e0b',
+            hard: '#ef4444'
+        };
+        difficultyBadge.style.backgroundColor = colors[difficulty] || '#f59e0b';
+    }
+    
+    if (questionText) {
+        questionText.innerHTML = question.question_text || 
+            '<div class="no-question-text"><i class="fas fa-exclamation-triangle"></i> No question text available</div>';
+    }
+}
+
+// Update options display
+function updateOptionsDisplay(question) {
     const optionsContainer = document.getElementById('optionsContainer');
-    const answerBox = document.getElementById('answerBox');
-    const explanationContainer = document.getElementById('explanationContainer');
-    const explanationPlaceholder = document.getElementById('explanationPlaceholder');
+    if (!optionsContainer) return;
+    
+    optionsContainer.innerHTML = '';
+    
+    if (question.question_type === 'multiple_choice') {
+        const options = getQuestionOptions(question);
+        
+        if (options.length > 0) {
+            options.forEach((opt, index) => {
+                const optionElement = createOptionElement(opt, index, question);
+                optionsContainer.appendChild(optionElement);
+            });
+        } else {
+            optionsContainer.innerHTML = `
+                <div class="no-options-message">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <p>No multiple choice options available for this question.</p>
+                </div>
+            `;
+        }
+    } else {
+        // Short answer or other question types
+        optionsContainer.innerHTML = `
+            <div class="short-answer-prompt">
+                <div class="prompt-icon">
+                    <i class="fas fa-keyboard"></i>
+                </div>
+                <div class="prompt-content">
+                    <h4>Written Response Required</h4>
+                    <p>This question requires a written answer. Consider your response, then check the correct answer below.</p>
+                </div>
+            </div>
+        `;
+    }
+}
+
+// Create option element
+function createOptionElement(option, index, question) {
+    const isAnswered = userTestAnswers[currentQuestionIndex]?.answered;
+    const isSelected = userTestAnswers[currentQuestionIndex]?.answer === option.text;
+    const isCorrectAnswer = question.correct_answer?.trim().toLowerCase() === option.text.trim().toLowerCase();
+    const wasCorrect = userTestAnswers[currentQuestionIndex]?.correct;
+    
+    const optionDiv = document.createElement('div');
+    optionDiv.className = 'option-item';
+    optionDiv.setAttribute('role', 'radio');
+    optionDiv.setAttribute('aria-checked', isSelected ? 'true' : 'false');
+    
+    // Add appropriate classes based on state
+    if (isAnswered) {
+        if (isSelected) {
+            optionDiv.classList.add(wasCorrect ? 'option-correct-selected' : 'option-incorrect-selected');
+        } else if (isCorrectAnswer) {
+            optionDiv.classList.add('option-correct-not-selected');
+        }
+    } else if (isSelected) {
+        optionDiv.classList.add('option-selected');
+    }
+    
+    // Add feedback icon if answered
+    let feedbackIcon = '';
+    if (isAnswered && isSelected) {
+        feedbackIcon = wasCorrect ? 
+            '<div class="option-feedback correct"><i class="fas fa-check"></i></div>' :
+            '<div class="option-feedback incorrect"><i class="fas fa-times"></i></div>';
+    } else if (isAnswered && isCorrectAnswer) {
+        feedbackIcon = '<div class="option-feedback correct"><i class="fas fa-check"></i></div>';
+    }
+    
+    optionDiv.innerHTML = `
+        <div class="option-letter">${option.letter}</div>
+        <div class="option-text">${option.text}</div>
+        ${feedbackIcon}
+    `;
+    
+    // Add click handler if not answered
+    if (!isAnswered) {
+        optionDiv.style.cursor = 'pointer';
+        optionDiv.onclick = () => selectInteractiveAnswer(option.text);
+        
+        // Add hover effects
+        optionDiv.onmouseenter = () => {
+            if (!optionDiv.classList.contains('option-selected')) {
+                optionDiv.style.transform = 'translateY(-2px)';
+                optionDiv.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+            }
+        };
+        optionDiv.onmouseleave = () => {
+            if (!optionDiv.classList.contains('option-selected')) {
+                optionDiv.style.transform = 'translateY(0)';
+                optionDiv.style.boxShadow = 'none';
+            }
+        };
+    } else {
+        optionDiv.style.cursor = 'default';
+    }
+    
+    return optionDiv;
+}
+
+// Update answer reveal section
+function updateAnswerReveal(question) {
+    const answerRevealSection = document.getElementById('answerRevealSection');
+    const correctAnswerText = document.getElementById('correctAnswerText');
+    const explanationText = document.getElementById('explanationText');
+    
+    const isAnswered = userTestAnswers[currentQuestionIndex]?.answered;
+    
+    if (answerRevealSection) {
+        if (isAnswered) {
+            // Show the section
+            answerRevealSection.style.display = 'block';
+            
+            // Update correct answer
+            if (correctAnswerText) {
+                correctAnswerText.textContent = question.correct_answer || 
+                    'No correct answer specified in the database.';
+            }
+            
+            // Update explanation
+            if (explanationText) {
+                const explanation = question.explanation || 
+                    'No detailed explanation available. This answer is considered correct based on current nursing standards and clinical guidelines.';
+                explanationText.innerHTML = explanation;
+            }
+            
+            // Add animation
+            answerRevealSection.style.animation = 'fadeIn 0.5s ease';
+            
+        } else {
+            // Hide the section
+            answerRevealSection.style.display = 'none';
+            
+            // Reset content for next question
+            if (correctAnswerText) {
+                correctAnswerText.textContent = 'Answer will appear here after checking...';
+            }
+            if (explanationText) {
+                explanationText.innerHTML = 'Select an option and click "Check Answer" to see the detailed explanation.';
+            }
+        }
+    }
+}
+
+// Update navigation controls
+function updateNavigationControls() {
     const checkAnswerBtn = document.getElementById('checkAnswerBtn');
     const resetBtn = document.getElementById('resetBtn');
     const showAnswerBtn = document.getElementById('showAnswerBtn');
+    const markBtn = document.getElementById('markBtn');
+    const markBtnText = document.getElementById('markBtnText');
     const prevBtn = document.getElementById('prevBtn');
     const nextBtn = document.getElementById('nextBtn');
-    const currentQuestionCount = document.getElementById('currentQuestionCount');
-    const totalQuestions = document.getElementById('totalQuestions');
-    const accuracyRate = document.getElementById('accuracyRate');
+    
+    const isAnswered = userTestAnswers[currentQuestionIndex]?.answered;
+    const isMarked = userTestAnswers[currentQuestionIndex]?.marked;
+    
+    // Update check answer button
+    if (checkAnswerBtn) {
+        const hasSelection = userTestAnswers[currentQuestionIndex]?.answer;
+        checkAnswerBtn.disabled = isAnswered || !hasSelection;
+        
+        if (isAnswered) {
+            checkAnswerBtn.innerHTML = '<i class="fas fa-check-double"></i> Already Answered';
+            checkAnswerBtn.classList.remove('primary-action-btn');
+            checkAnswerBtn.classList.add('disabled-action-btn');
+        } else if (!hasSelection) {
+            checkAnswerBtn.innerHTML = '<i class="fas fa-check-circle"></i> Select Answer First';
+            checkAnswerBtn.classList.remove('primary-action-btn');
+            checkAnswerBtn.classList.add('disabled-action-btn');
+        } else {
+            checkAnswerBtn.innerHTML = '<i class="fas fa-check-circle"></i> Check Answer';
+            checkAnswerBtn.classList.remove('disabled-action-btn');
+            checkAnswerBtn.classList.add('primary-action-btn');
+        }
+    }
+    
+    // Update reset button
+    if (resetBtn) {
+        resetBtn.disabled = !isAnswered;
+    }
+    
+    // Update show answer button
+    if (showAnswerBtn) {
+        showAnswerBtn.disabled = isAnswered;
+    }
+    
+    // Update mark button
+    if (markBtn && markBtnText) {
+        if (isMarked) {
+            markBtnText.textContent = 'Unmark Review';
+            markBtn.classList.remove('warning-action-btn');
+            markBtn.classList.add('danger-action-btn');
+            markBtn.innerHTML = '<i class="fas fa-flag"></i> Unmark Review';
+        } else {
+            markBtnText.textContent = 'Mark for Review';
+            markBtn.classList.remove('danger-action-btn');
+            markBtn.classList.add('warning-action-btn');
+            markBtn.innerHTML = '<i class="fas fa-flag"></i> Mark for Review';
+        }
+    }
+    
+    // Update navigation buttons
+    if (prevBtn) {
+        prevBtn.disabled = currentQuestionIndex === 0;
+    }
+    
+    if (nextBtn) {
+        nextBtn.disabled = currentQuestionIndex === currentCourseQuestions.length - 1;
+    }
+}
+
+// Update statistics display
+function updateStatsDisplay() {
     const answeredCount = document.getElementById('answeredCount');
     const correctCount = document.getElementById('correctCount');
     const incorrectCount = document.getElementById('incorrectCount');
     const markedCount = document.getElementById('markedCount');
-    const markBtnText = document.getElementById('markBtnText');
+    const accuracyRate = document.getElementById('accuracyRate');
+    const overallAccuracy = document.getElementById('overallAccuracy');
     
-    if (!question) return;
-    
-    // Update counters
-    currentQuestionCount.textContent = currentQuestionIndex + 1;
-    totalQuestions.textContent = currentCourseQuestions.length;
-    
-    // Calculate stats
+    // Calculate statistics
     const totalAnswered = Object.keys(userTestAnswers).filter(key => userTestAnswers[key]?.answered).length;
     const totalCorrect = Object.keys(userTestAnswers).filter(key => userTestAnswers[key]?.correct).length;
     const totalIncorrect = totalAnswered - totalCorrect;
     const totalMarked = Object.keys(userTestAnswers).filter(key => userTestAnswers[key]?.marked).length;
     const accuracy = totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0;
     
-    // Update all counters
-    if (accuracyRate) accuracyRate.textContent = `${accuracy}%`;
+    // Update display
     if (answeredCount) answeredCount.textContent = totalAnswered;
     if (correctCount) correctCount.textContent = totalCorrect;
     if (incorrectCount) incorrectCount.textContent = totalIncorrect;
     if (markedCount) markedCount.textContent = totalMarked;
+    if (accuracyRate) accuracyRate.textContent = `${accuracy}%`;
+    if (overallAccuracy) overallAccuracy.textContent = `${accuracy}%`;
+}
+
+// Helper function to get question options
+function getQuestionOptions(question) {
+    const options = [];
     
-    // Update question text
-    if (questionText) {
-        questionText.innerHTML = question.question_text || 'No question text available';
+    // Try standard option fields first (option_a, option_b, etc.)
+    for (let i = 0; i < 8; i++) { // Allow up to H
+        const letter = String.fromCharCode(97 + i); // a, b, c, d, e, f, g, h
+        const field = `option_${letter}`;
+        if (question[field] && question[field].trim()) {
+            options.push({
+                letter: letter.toUpperCase(),
+                text: question[field].trim()
+            });
+        }
     }
     
-    // Reset display
-    if (answerBox) answerBox.style.display = 'none';
-    if (explanationContainer) explanationContainer.style.display = 'none';
-    if (explanationPlaceholder) explanationPlaceholder.style.display = 'block';
-    
-    // Check if user has answered this question
-    const userAnswer = userTestAnswers[currentQuestionIndex]?.answer;
-    const isAnswered = !!userTestAnswers[currentQuestionIndex]?.answered;
-    const isCorrect = userTestAnswers[currentQuestionIndex]?.correct;
-    
-    // Clear options
-    if (optionsContainer) optionsContainer.innerHTML = '';
-    
-    // Add options based on question type
-    if (question.question_type === 'multiple_choice') {
-        // Try different field names for options
-        const possibleOptionFields = [
-            'option_a', 'option_b', 'option_c', 'option_d',
-            'options', 'mcq_options', 'choices'
-        ];
-        
-        let optionsArray = [];
-        
-        // First try standard option_a, option_b, etc.
-        for (let i = 0; i < 4; i++) {
-            const field = `option_${String.fromCharCode(97 + i)}`; // a, b, c, d
-            if (question[field] && question[field].trim()) {
-                optionsArray.push({
-                    letter: String.fromCharCode(65 + i), // A, B, C, D
-                    text: question[field].trim()
-                });
-            }
-        }
-        
-        // If no standard options found, try other formats
-        if (optionsArray.length === 0) {
-            possibleOptionFields.forEach(field => {
-                if (question[field] && typeof question[field] === 'string') {
-                    try {
-                        const parsed = JSON.parse(question[field]);
-                        if (Array.isArray(parsed)) {
-                            parsed.forEach((opt, idx) => {
-                                if (opt && opt.trim()) {
-                                    optionsArray.push({
-                                        letter: String.fromCharCode(65 + idx),
-                                        text: opt.trim()
-                                    });
-                                }
-                            });
-                        }
-                    } catch (e) {
-                        // If not JSON, try splitting by commas or newlines
-                        const splitOptions = question[field].split(/[,\n]/);
-                        splitOptions.forEach((opt, idx) => {
-                            if (opt && opt.trim()) {
-                                optionsArray.push({
+    // If no standard options, try other formats
+    if (options.length === 0) {
+        const possibleFields = ['options', 'mcq_options', 'choices', 'answer_options'];
+        possibleFields.forEach(field => {
+            if (question[field] && typeof question[field] === 'string') {
+                try {
+                    const parsed = JSON.parse(question[field]);
+                    if (Array.isArray(parsed)) {
+                        parsed.forEach((opt, idx) => {
+                            if (opt && typeof opt === 'string' && opt.trim()) {
+                                options.push({
                                     letter: String.fromCharCode(65 + idx),
                                     text: opt.trim()
                                 });
                             }
                         });
                     }
+                } catch (e) {
+                    // Not JSON, try splitting by common delimiters
+                    const splitOptions = question[field].split(/[,\n;]/);
+                    splitOptions.forEach((opt, idx) => {
+                        if (opt && opt.trim()) {
+                            options.push({
+                                letter: String.fromCharCode(65 + idx),
+                                text: opt.trim()
+                            });
+                        }
+                    });
                 }
-            });
-        }
-        
-        // Create option elements
-        if (optionsArray.length > 0) {
-            optionsArray.forEach(opt => {
-                const optionElement = document.createElement('div');
-                optionElement.className = 'option-item';
-                
-                const isSelected = userAnswer === opt.text;
-                const isCorrectAnswer = question.correct_answer?.trim().toLowerCase() === opt.text.trim().toLowerCase();
-                
-                // Determine styling
-                let bgColor = '#ffffff';
-                let textColor = '#333333';
-                let borderColor = '#dee2e6';
-                
-                if (isAnswered) {
-                    if (isSelected) {
-                        bgColor = isCorrect ? '#d4edda' : '#f8d7da';
-                        textColor = isCorrect ? '#155724' : '#721c24';
-                        borderColor = isCorrect ? '#c3e6cb' : '#f5c6cb';
-                    } else if (isCorrectAnswer) {
-                        bgColor = '#d4edda';
-                        textColor = '#155724';
-                        borderColor = '#c3e6cb';
-                    }
-                } else if (isSelected) {
-                    bgColor = '#e7f3ff';
-                    borderColor = '#4f46e5';
-                }
-                
-                optionElement.style.cssText = `
-                    padding: 15px;
-                    margin-bottom: 10px;
-                    border: 2px solid ${borderColor};
-                    border-radius: 8px;
-                    background: ${bgColor};
-                    color: ${textColor};
-                    cursor: ${isAnswered ? 'default' : 'pointer'};
-                    transition: all 0.3s;
-                    display: flex;
-                    align-items: center;
-                `;
-                
-                if (!isAnswered) {
-                    optionElement.onclick = () => selectInteractiveAnswer(opt.text);
-                    optionElement.onmouseenter = () => {
-                        optionElement.style.backgroundColor = '#f8f9fa';
-                        optionElement.style.transform = 'translateY(-2px)';
-                        optionElement.style.boxShadow = '0 4px 8px rgba(0,0,0,0.1)';
-                    };
-                    optionElement.onmouseleave = () => {
-                        optionElement.style.backgroundColor = bgColor;
-                        optionElement.style.transform = 'translateY(0)';
-                        optionElement.style.boxShadow = 'none';
-                    };
-                }
-                
-                optionElement.innerHTML = `
-                    <div style="width: 30px; height: 30px; border-radius: 50%; background: ${isSelected ? '#4f46e5' : '#f8f9fa'}; color: ${isSelected ? 'white' : '#6c757d'}; display: flex; align-items: center; justify-content: center; margin-right: 15px; font-weight: bold;">
-                        ${opt.letter}
-                    </div>
-                    <div style="flex: 1; font-size: 1rem;">${opt.text}</div>
-                    ${isSelected ? `
-                        <div style="color: ${isCorrect ? '#28a745' : '#dc3545'}; font-size: 1.2rem;">
-                            <i class="fas ${isCorrect ? 'fa-check-circle' : 'fa-times-circle'}"></i>
-                        </div>
-                    ` : ''}
-                `;
-                
-                if (optionsContainer) optionsContainer.appendChild(optionElement);
-            });
-        } else {
-            // No MCQ options found - treat as short answer
-            if (optionsContainer) {
-                optionsContainer.innerHTML = `
-                    <div style="padding: 20px; background: #fff3cd; border-radius: 8px; border: 1px solid #ffeaa7; color: #856404;">
-                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
-                            <i class="fas fa-exclamation-triangle"></i>
-                            <strong>Short Answer Question</strong>
-                        </div>
-                        <p style="margin: 0;">This question requires a typed answer. Check your answer against the correct answer below.</p>
-                    </div>
-                `;
             }
-        }
-    } else {
-        // Short answer question
-        if (optionsContainer) {
-            optionsContainer.innerHTML = `
-                <div style="padding: 20px; background: #e7f3ff; border-radius: 8px; border: 1px solid #cfe2ff; color: #084298;">
-                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
-                        <i class="fas fa-keyboard"></i>
-                        <strong>Short Answer Question</strong>
-                    </div>
-                    <p style="margin: 0;">Think about your answer, then click "Check Answer" to compare with the correct answer.</p>
-                </div>
-            `;
-        }
+        });
     }
     
-    // 🔧 FIXED: Update question dots with proper CSS classes
-    const maxDots = Math.min(currentCourseQuestions.length, 100);
-    for (let i = 0; i < maxDots; i++) {
-        const dot = document.getElementById(`questionDot${i}`);
-        if (dot) {
-            // Reset all classes
-            dot.className = 'question-dot';
-            
-            // Add status classes based on answer state
-            if (userTestAnswers[i]?.answered) {
-                if (userTestAnswers[i]?.correct) {
-                    dot.classList.add('answered-correct');
-                } else {
-                    dot.classList.add('answered-incorrect');
-                }
-            } else if (userTestAnswers[i]?.marked) {
-                dot.classList.add('marked');
-            }
-            
-            // Add active class for current question
-            if (i === currentQuestionIndex) {
-                dot.classList.add('active');
-            }
-        }
-    }
-    
-    // Update button states
-    if (checkAnswerBtn) {
-        checkAnswerBtn.disabled = isAnswered;
-        if (isAnswered) {
-            checkAnswerBtn.innerHTML = '<i class="fas fa-check-circle"></i> Already Answered';
-            checkAnswerBtn.style.backgroundColor = '#6c757d';
-        } else {
-            checkAnswerBtn.innerHTML = '<i class="fas fa-check-circle"></i> Check Answer';
-            checkAnswerBtn.style.backgroundColor = '#4f46e5';
-        }
-    }
-    
-    if (resetBtn) resetBtn.disabled = !isAnswered;
-    if (showAnswerBtn) showAnswerBtn.disabled = isAnswered;
-    
-    if (isAnswered) {
-        // Show answer and explanation
-        if (answerBox) {
-            answerBox.style.display = 'block';
-            const correctAnswerText = document.getElementById('correctAnswerText');
-            if (correctAnswerText) {
-                correctAnswerText.textContent = question.correct_answer || 'No answer provided';
-            }
-        }
-        
-        if (explanationContainer) {
-            explanationContainer.style.display = 'block';
-            if (explanationPlaceholder) explanationPlaceholder.style.display = 'none';
-            const explanationText = document.getElementById('explanationText');
-            if (explanationText) {
-                explanationText.innerHTML = question.explanation || 
-                    'No explanation available. This answer is correct based on nursing standards and guidelines.';
-            }
-        }
-    }
-    
-    // Update navigation buttons
-    if (prevBtn) prevBtn.style.display = currentQuestionIndex > 0 ? 'flex' : 'none';
-    if (nextBtn) nextBtn.style.display = currentQuestionIndex < currentCourseQuestions.length - 1 ? 'flex' : 'none';
-    
-    // Update mark button
-    const markBtn = document.getElementById('markBtn');
-    if (markBtn && markBtnText) {
-        if (userTestAnswers[currentQuestionIndex]?.marked) {
-            markBtnText.textContent = 'Unmark Review';
-            markBtn.style.backgroundColor = '#dc3545';
-            markBtn.style.color = 'white';
-        } else {
-            markBtnText.textContent = 'Mark for Review';
-            markBtn.style.backgroundColor = '#ffc107';
-            markBtn.style.color = '#333';
-        }
-    }
+    return options;
 }
 
-// Select answer in interactive mode
-function selectInteractiveAnswer(answer) {
-    if (!currentCourseQuestions || !currentCourseQuestions[currentQuestionIndex]) return;
-    
-    userTestAnswers[currentQuestionIndex] = {
-        ...userTestAnswers[currentQuestionIndex],
-        answer: answer,
-        selected: true,
-        timestamp: new Date()
-    };
-    
-    // Update the display
-    loadCurrentInteractiveQuestion();
-}
+// ==================== ADDITIONAL NAVIGATION FUNCTIONS ====================
 
-// Check answer
-function checkAnswer() {
-    if (!currentCourseQuestions || !currentCourseQuestions[currentQuestionIndex]) return;
-    
-    const question = currentCourseQuestions[currentQuestionIndex];
-    const userAnswer = userTestAnswers[currentQuestionIndex]?.answer;
-    
-    if (!userAnswer && question.question_type === 'multiple_choice') {
-        alert('Please select an answer first.');
-        return;
-    }
-    
-    const isCorrect = userAnswer?.trim().toLowerCase() === question.correct_answer?.trim().toLowerCase();
-    
-    userTestAnswers[currentQuestionIndex] = {
-        ...userTestAnswers[currentQuestionIndex],
-        answered: true,
-        correct: isCorrect,
-        checked: true
-    };
-    
-    // Update the display
-    loadCurrentInteractiveQuestion();
-    
-    // Auto-scroll to explanation
-    setTimeout(() => {
-        const explanationColumn = document.querySelector('.explanation-column');
-        if (explanationColumn) {
-            explanationColumn.scrollIntoView({ 
-                behavior: 'smooth', 
-                block: 'start' 
-            });
-        }
-    }, 300);
-    
-    // Show feedback
-    if (isCorrect) {
-        showToast('Correct! 🎉', 'success');
-    } else {
-        showToast('Incorrect. Check the explanation.', 'error');
-    }
-}
-
-// Show toast notification
-function showToast(message, type = 'info') {
-    const toast = document.createElement('div');
-    toast.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        padding: 15px 20px;
-        background: ${type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#3b82f6'};
-        color: white;
-        border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        z-index: 9999;
-        animation: slideIn 0.3s ease;
-    `;
-    
-    toast.innerHTML = `
-        <div style="display: flex; align-items: center; gap: 10px;">
-            <i class="fas ${type === 'success' ? 'fa-check-circle' : type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle'}"></i>
-            <span>${message}</span>
-        </div>
-    `;
-    
-    document.body.appendChild(toast);
-    
-    setTimeout(() => {
-        toast.style.animation = 'slideOut 0.3s ease';
-        setTimeout(() => document.body.removeChild(toast), 300);
-    }, 3000);
-}
-
-// Reset question
-function resetQuestion() {
-    if (currentQuestionIndex in userTestAnswers) {
-        delete userTestAnswers[currentQuestionIndex];
-        loadCurrentInteractiveQuestion();
-        showToast('Question reset. Try again!', 'info');
-    }
-}
-
-// Show answer (without checking)
-function showAnswer() {
-    if (!currentCourseQuestions || !currentCourseQuestions[currentQuestionIndex]) return;
-    
-    const question = currentCourseQuestions[currentQuestionIndex];
-    
-    userTestAnswers[currentQuestionIndex] = {
-        ...userTestAnswers[currentQuestionIndex],
-        answered: true,
-        checked: false,
-        shown: true
-    };
-    
-    // Update the display
-    loadCurrentInteractiveQuestion();
-    showToast('Answer revealed. Study the explanation.', 'info');
-}
-
-// Mark for review
-function markForReview() {
-    if (!currentCourseQuestions || !currentCourseQuestions[currentQuestionIndex]) return;
-    
-    const isMarked = !userTestAnswers[currentQuestionIndex]?.marked;
-    userTestAnswers[currentQuestionIndex] = {
-        ...userTestAnswers[currentQuestionIndex],
-        marked: isMarked
-    };
-    
-    // Update the display
-    loadCurrentInteractiveQuestion();
-    
-    showToast(isMarked ? 'Question marked for review 📌' : 'Question unmarked', 'info');
-}
-
-// Navigation functions
+// Go to specific question
 function goToQuestion(index) {
+    if (!currentCourseQuestions || index < 0 || index >= currentCourseQuestions.length) return;
+    
     currentQuestionIndex = index;
     loadCurrentInteractiveQuestion();
     
-    // Scroll to top
+    // Update jump to question input
+    const jumpInput = document.getElementById('jumpToQuestion');
+    if (jumpInput) {
+        jumpInput.value = index + 1;
+    }
+    
+    // Scroll to top of container
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
+// Previous question
 function prevQuestion() {
     if (currentQuestionIndex > 0) {
         currentQuestionIndex--;
         loadCurrentInteractiveQuestion();
-        window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 }
 
+// Next question
 function nextQuestion() {
     if (currentQuestionIndex < currentCourseQuestions.length - 1) {
         currentQuestionIndex++;
         loadCurrentInteractiveQuestion();
-        window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
-        // Last question - show completion message
-        const totalAnswered = Object.keys(userTestAnswers).filter(key => userTestAnswers[key]?.answered).length;
-        const totalCorrect = Object.keys(userTestAnswers).filter(key => userTestAnswers[key]?.correct).length;
-        const accuracy = totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0;
-        
-        showToast(`Test completed! Score: ${accuracy}%`, 'success');
+        // Last question reached
+        showToast('🎉 You have completed all questions! Review your answers and marked questions.', 'success');
     }
 }
-
-// ==================== CSS STYLES ====================
-
-// Add CSS for toast animations
-const toastStyles = `
-@keyframes slideIn {
-    from {
-        transform: translateX(100%);
-        opacity: 0;
-    }
-    to {
-        transform: translateX(0);
-        opacity: 1;
-    }
-}
-
-@keyframes slideOut {
-    from {
-        transform: translateX(0);
-        opacity: 1;
-    }
-    to {
-        transform: translateX(100%);
-        opacity: 0;
-    }
-}
-`;
-
-// Add styles to document
-document.addEventListener('DOMContentLoaded', function() {
-    if (!document.getElementById('student-portal-styles')) {
-        const styleEl = document.createElement('style');
-        styleEl.id = 'student-portal-styles';
-        styleEl.textContent = toastStyles;
-        document.head.appendChild(styleEl);
-    }
-});
 
 // ==================== GLOBAL EXPORTS ====================
 
-// Make all functions available globally
-window.loadQuestionBankCards = loadQuestionBankCards;
-window.clearQuestionBankSearch = clearQuestionBankSearch;
-window.startCourseTest = startCourseTest;
+// Make all new functions available globally
+window.jumpToQuestion = jumpToQuestion;
+window.updateQuestionDotsGrid = updateQuestionDotsGrid;
+window.updateProgressBar = updateProgressBar;
+window.updateMiniDots = updateMiniDots;
+window.scrollQuestionDots = scrollQuestionDots;
+
+// Keep existing global functions
 window.goToQuestion = goToQuestion;
 window.prevQuestion = prevQuestion;
 window.nextQuestion = nextQuestion;
@@ -3253,27 +3437,7 @@ window.resetQuestion = resetQuestion;
 window.showAnswer = showAnswer;
 window.markForReview = markForReview;
 
-            // Save progress
-function saveProgress() {
-    const progress = {
-        userAnswers,
-        questionStats,
-        currentQuestionIndex,
-        timestamp: new Date().toISOString()
-    };
-    localStorage.setItem(`courseProgress_${courseId}`, JSON.stringify(progress));
-}
 
-// Load progress
-function loadProgress() {
-    const saved = localStorage.getItem(`courseProgress_${courseId}`);
-    if (saved) {
-        const progress = JSON.parse(saved);
-        userAnswers = progress.userAnswers || [];
-        questionStats = progress.questionStats || {answered:0, correct:0, incorrect:0, marked:0};
-        currentQuestionIndex = progress.currentQuestionIndex || 0;
-    }
-}
        // *************************************************************************
             // *** ATTENDANCE SYSTEM ***
             // *************************************************************************
