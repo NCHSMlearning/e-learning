@@ -6,6 +6,7 @@
     <title>NurseIQ Admin - Real Database</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="nurseiq-admin-style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
     <!-- Simple Container -->
@@ -577,7 +578,7 @@ D) Vitamin D ✓"></textarea>
         </div>
     </div>
 
-    <script>
+  <script>
         // ==================== CONFIGURATION ====================
         const SUPABASE_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
@@ -592,19 +593,93 @@ D) Vitamin D ✓"></textarea>
         document.addEventListener('DOMContentLoaded', async function() {
             console.log('🚀 Starting NurseIQ Admin (Real Database)...');
             
-            try {
-                supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-                    auth: { persistSession: false }
-                });
-                console.log('✅ Supabase connected');
-            } catch (error) {
-                console.error('❌ Supabase error:', error);
-                showError('Database Connection Error', 'Cannot connect to database');
-                return;
-            }
+            // Load Supabase dynamically
+            await loadSupabaseLibrary();
+            
+            // Initialize Supabase client
+            initializeSupabaseClient();
             
             checkLoginStatus();
         });
+        
+        async function loadSupabaseLibrary() {
+            return new Promise((resolve, reject) => {
+                // Check if Supabase is already loaded
+                if (window.supabase && window.supabase.createClient) {
+                    console.log('✅ Supabase library already loaded');
+                    resolve();
+                    return;
+                }
+                
+                console.log('📦 Loading Supabase library from CDN...');
+                
+                // Create and load the script
+                const script = document.createElement('script');
+                script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js';
+                script.id = 'supabase-script';
+                
+                script.onload = function() {
+                    console.log('✅ Supabase library loaded successfully');
+                    resolve();
+                };
+                
+                script.onerror = function() {
+                    console.error('❌ Failed to load Supabase library');
+                    showError('Library Error', 'Failed to load database library. Please refresh the page.');
+                    reject(new Error('Failed to load Supabase'));
+                };
+                
+                document.head.appendChild(script);
+                
+                // Set a timeout in case the script fails silently
+                setTimeout(() => {
+                    if (!window.supabase || !window.supabase.createClient) {
+                        console.error('❌ Supabase library loading timeout');
+                        showError('Timeout Error', 'Database library is taking too long to load. Please refresh.');
+                        reject(new Error('Loading timeout'));
+                    }
+                }, 10000);
+            });
+        }
+        
+        function initializeSupabaseClient() {
+            try {
+                if (!window.supabase || !window.supabase.createClient) {
+                    throw new Error('Supabase library not available');
+                }
+                
+                // Create Supabase client
+                supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+                    auth: { persistSession: false }
+                });
+                
+                console.log('✅ Supabase client initialized');
+                
+                // Test the connection
+                testConnection();
+                
+            } catch (error) {
+                console.error('❌ Supabase initialization error:', error);
+                showError('Database Error', 'Cannot initialize database: ' + error.message);
+            }
+        }
+        
+        async function testConnection() {
+            try {
+                const { data, error } = await supabase
+                    .from('consolidated_user_profiles_table')
+                    .select('count')
+                    .limit(1);
+                
+                if (error) {
+                    console.warn('⚠️ Database test query failed:', error.message);
+                } else {
+                    console.log('✅ Database connection test successful');
+                }
+            } catch (error) {
+                console.warn('⚠️ Connection test error:', error.message);
+            }
+        }
         
         function showError(title, message) {
             const errorDiv = document.getElementById('login-error');
@@ -616,65 +691,7 @@ D) Vitamin D ✓"></textarea>
                 alert(`${title}: ${message}`);
             }
         }
-        // ==================== DEBUG FUNCTION ====================
-async function debugSupabase() {
-    console.log('🔍 Debugging Supabase connection...');
-    
-    try {
-        // Test 1: Check if we can query the table
-        console.log('Test 1: Querying table...');
-        const { data: allUsers, error: allError } = await supabase
-            .from('consolidated_user_profiles_table')
-            .select('*')
-            .limit(3);
         
-        console.log('All users (first 3):', allUsers);
-        console.log('All users error:', allError);
-        
-        // Test 2: Try to find the specific email
-        console.log('Test 2: Searching for specific email...');
-        const testEmail = 'tiongikevin99@gmail.com';
-        const { data: specificUser, error: specificError } = await supabase
-            .from('consolidated_user_profiles_table')
-            .select('*')
-            .eq('email', testEmail)
-            .limit(1);
-        
-        console.log('Specific user query result:', specificUser);
-        console.log('Specific user error:', specificError);
-        console.log('User found?', specificUser && specificUser.length > 0 ? 'YES' : 'NO');
-        
-        if (specificUser && specificUser.length > 0) {
-            console.log('User details:', specificUser[0]);
-            console.log('User role:', specificUser[0].role);
-        }
-        
-    } catch (err) {
-        console.error('Debug error:', err);
-    }
-}
-
-// Call this function after initializing Supabase
-document.addEventListener('DOMContentLoaded', async function() {
-    console.log('🚀 Starting NurseIQ Admin (Real Database)...');
-    
-    try {
-        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-            auth: { persistSession: false }
-        });
-        console.log('✅ Supabase connected');
-        
-        // Run debug
-        await debugSupabase();
-        
-    } catch (error) {
-        console.error('❌ Supabase error:', error);
-        showError('Database Connection Error', 'Cannot connect to database');
-        return;
-    }
-    
-    checkLoginStatus();
-});
         // ==================== AUTHENTICATION ====================
         function checkLoginStatus() {
             const userData = localStorage.getItem('nurseiq_admin_session');
