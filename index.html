@@ -2159,13 +2159,13 @@ document.querySelectorAll('[onclick*="showTab"]').forEach(element => {
             }
 // ==================== NURSEIQ QUESTION BANK SYSTEM ====================
 
-// Global variables
+// Global variables - define at the top
 let currentTestQuestions = [];
 let currentQuestionIndex = 0;
 let userTestAnswers = {};
 let currentCourseForTest = null;
 let currentCourseQuestions = [];
-let showAnswersMode = true; // Always show answers immediately for Q&A mode
+let showAnswersMode = true;
 
 // ==================== INITIALIZATION ====================
 
@@ -2173,7 +2173,13 @@ let showAnswersMode = true; // Always show answers immediately for Q&A mode
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Initializing NurseIQ Question Bank...');
     
-    // Load question bank on page load
+    // Make sure Supabase is available
+    if (typeof sb === 'undefined') {
+        console.error('Supabase client (sb) is not defined');
+        return;
+    }
+    
+    // Initialize question bank
     loadQuestionBankCards();
     
     // Initialize search
@@ -2210,7 +2216,7 @@ async function loadQuestionBankCards() {
         if (loadingEl) loadingEl.style.display = 'block';
         if (contentEl) contentEl.innerHTML = '<div class="loading">Loading question bank...</div>';
         
-        // Fetch ALL questions with course info - NO LIMIT
+        // Fetch ALL questions with course info
         const { data: questions, error } = await sb
             .from('medical_assessments')
             .select(`
@@ -2297,7 +2303,7 @@ async function loadQuestionBankCards() {
                     <i class="fas fa-exclamation-triangle"></i>
                     <h3>Failed to Load Question Bank</h3>
                     <p>${error.message || 'Please try again'}</p>
-                    <button onclick="loadQuestionBankCards()" class="btn-primary">
+                    <button onclick="window.loadQuestionBankCards()" class="btn-primary">
                         <i class="fas fa-redo"></i> Try Again
                     </button>
                 </div>
@@ -2431,7 +2437,7 @@ function displayQuestionBankCards(courses, overallStats) {
                     
                     <!-- Start Test Button -->
                     <button class="start-test-btn" 
-                            onclick="startCourseTest('${course.id}', '${course.name.replace(/'/g, "\\'")}')" 
+                            onclick="window.startCourseTest('${course.id}', '${course.name.replace(/'/g, "\\'")}')" 
                             style="background: ${courseColor}; margin-top: 15px; width: 100%; padding: 12px;">
                         <i class="fas fa-play-circle"></i> START PRACTICE TEST
                     </button>
@@ -2463,7 +2469,7 @@ function displayQuestionBankCards(courses, overallStats) {
                 <i class="fas fa-search"></i>
                 <h3>No Courses Found</h3>
                 <p>No courses match your search. Try a different search term.</p>
-                <button onclick="clearQuestionBankSearch()" class="btn-primary">
+                <button onclick="window.clearQuestionBankSearch()" class="btn-primary">
                     <i class="fas fa-times"></i> Clear Search
                 </button>
             </div>
@@ -2524,7 +2530,7 @@ function clearQuestionBankSearch() {
 
 // ==================== INTERACTIVE QUESTIONS SYSTEM ====================
 
-// Start test from course card - FETCH ALL QUESTIONS, NO LIMIT
+// Start test from course card
 async function startCourseTest(courseId, courseName) {
     try {
         console.log(`Starting test for course: ${courseName} (${courseId})`);
@@ -2535,7 +2541,7 @@ async function startCourseTest(courseId, courseName) {
             contentEl.innerHTML = '<div class="loading">Loading questions...</div>';
         }
         
-        // Fetch ALL questions for this course - NO LIMIT
+        // Fetch ALL questions for this course
         const { data: questions, error } = await sb
             .from('medical_assessments')
             .select(`
@@ -2558,7 +2564,7 @@ async function startCourseTest(courseId, courseName) {
         
         if (!questions || questions.length === 0) {
             alert('No questions available for this course yet.');
-            loadQuestionBankCards();
+            window.loadQuestionBankCards();
             return;
         }
         
@@ -2573,12 +2579,11 @@ async function startCourseTest(courseId, courseName) {
     } catch (error) {
         console.error('Error starting course test:', error);
         alert('Failed to start test. Please try again.');
-        loadQuestionBankCards();
+        window.loadQuestionBankCards();
     }
 }
 
-// ==================== COMPLETE INTERACTIVE QUESTIONS DISPLAY ====================
-
+// Main interactive questions display function
 function displayInteractiveQuestions(courseName, questions, courseId) {
     const contentEl = document.getElementById('studentQuestionBankContent');
     if (!contentEl) return;
@@ -2590,7 +2595,7 @@ function displayInteractiveQuestions(courseName, questions, courseId) {
             <!-- Top Header Bar -->
             <div class="questions-header-bar" style="background: ${courseColor};">
                 <div class="header-content">
-                    <button onclick="loadQuestionBankCards()" class="header-back-btn">
+                    <button onclick="window.loadQuestionBankCards()" class="header-back-btn">
                         <i class="fas fa-arrow-left"></i> Back to Courses
                     </button>
                     
@@ -2628,13 +2633,13 @@ function displayInteractiveQuestions(courseName, questions, courseId) {
                         
                         <!-- Mini Navigation -->
                         <div class="mini-navigation">
-                            <button onclick="prevQuestion()" class="mini-nav-btn" id="miniPrevBtn" ${currentQuestionIndex === 0 ? 'disabled' : ''}>
+                            <button onclick="window.prevQuestion()" class="mini-nav-btn" id="miniPrevBtn" ${currentQuestionIndex === 0 ? 'disabled' : ''}>
                                 <i class="fas fa-chevron-left"></i>
                             </button>
                             <div class="mini-dots" id="miniDotsContainer">
                                 ${generateMiniDots(questions.length)}
                             </div>
-                            <button onclick="nextQuestion()" class="mini-nav-btn" id="miniNextBtn" ${currentQuestionIndex === questions.length - 1 ? 'disabled' : ''}>
+                            <button onclick="window.nextQuestion()" class="mini-nav-btn" id="miniNextBtn" ${currentQuestionIndex === questions.length - 1 ? 'disabled' : ''}>
                                 <i class="fas fa-chevron-right"></i>
                             </button>
                         </div>
@@ -2658,25 +2663,25 @@ function displayInteractiveQuestions(courseName, questions, courseId) {
                     <!-- Action Buttons -->
                     <div class="action-buttons-panel">
                         <div class="button-group-left">
-                            <button onclick="checkAnswer()" id="checkAnswerBtn" class="action-btn primary-action-btn">
+                            <button onclick="window.checkAnswer()" id="checkAnswerBtn" class="action-btn primary-action-btn">
                                 <i class="fas fa-check-circle"></i> Check Answer
                             </button>
-                            <button onclick="resetQuestion()" id="resetBtn" class="action-btn secondary-action-btn">
+                            <button onclick="window.resetQuestion()" id="resetBtn" class="action-btn secondary-action-btn">
                                 <i class="fas fa-redo"></i> Reset
                             </button>
                         </div>
                         
                         <div class="button-group-right">
-                            <button onclick="showAnswer()" id="showAnswerBtn" class="action-btn info-action-btn">
+                            <button onclick="window.showAnswer()" id="showAnswerBtn" class="action-btn info-action-btn">
                                 <i class="fas fa-lightbulb"></i> Show Answer
                             </button>
-                            <button onclick="markForReview()" id="markBtn" class="action-btn warning-action-btn">
+                            <button onclick="window.markForReview()" id="markBtn" class="action-btn warning-action-btn">
                                 <i class="fas fa-flag"></i> <span id="markBtnText">Mark for Review</span>
                             </button>
                         </div>
                     </div>
                     
-                    <!-- Answer & Explanation Section (BELOW Action Buttons) -->
+                    <!-- Answer & Explanation Section -->
                     <div id="answerRevealSection" class="answer-reveal-section" style="display: none;">
                         <div class="answer-header">
                             <h3><i class="fas fa-check-double"></i> Answer & Explanation</h3>
@@ -2776,7 +2781,7 @@ function displayInteractiveQuestions(courseName, questions, courseId) {
                             <label for="jumpToQuestion">Jump to Question:</label>
                             <div class="jump-input-group">
                                 <input type="number" id="jumpToQuestion" min="1" max="${questions.length}" value="1">
-                                <button onclick="jumpToQuestion()" class="jump-btn">
+                                <button onclick="window.jumpToQuestion()" class="jump-btn">
                                     <i class="fas fa-arrow-right"></i>
                                 </button>
                             </div>
@@ -2801,7 +2806,7 @@ function displayInteractiveQuestions(courseName, questions, courseId) {
             <!-- Bottom Navigation Bar -->
             <div class="bottom-navigation-bar">
                 <div class="nav-left">
-                    <button onclick="prevQuestion()" id="prevBtn" class="nav-btn prev-nav-btn">
+                    <button onclick="window.prevQuestion()" id="prevBtn" class="nav-btn prev-nav-btn">
                         <i class="fas fa-arrow-left"></i> Previous Question
                     </button>
                 </div>
@@ -2818,7 +2823,7 @@ function displayInteractiveQuestions(courseName, questions, courseId) {
                 </div>
                 
                 <div class="nav-right">
-                    <button onclick="nextQuestion()" id="nextBtn" class="nav-btn next-nav-btn">
+                    <button onclick="window.nextQuestion()" id="nextBtn" class="nav-btn next-nav-btn">
                         Next Question <i class="fas fa-arrow-right"></i>
                     </button>
                 </div>
@@ -2842,23 +2847,19 @@ function displayInteractiveQuestions(courseName, questions, courseId) {
 // Generate mini dots for header navigation
 function generateMiniDots(totalQuestions) {
     let dotsHtml = '';
-    const maxDots = 5; // Show limited dots in header
+    const maxDots = 5;
     
-    // Calculate start and end positions
     let start = Math.max(0, currentQuestionIndex - 2);
     let end = Math.min(totalQuestions - 1, start + maxDots - 1);
     
-    // Adjust if near the end
     if (end - start < maxDots - 1) {
         start = Math.max(0, end - maxDots + 1);
     }
     
-    // Add "..." at start if needed
     if (start > 0) {
         dotsHtml += '<span class="mini-dot-ellipsis">...</span>';
     }
     
-    // Add dots
     for (let i = start; i <= end; i++) {
         let dotClass = 'mini-dot';
         if (i === currentQuestionIndex) {
@@ -2870,10 +2871,9 @@ function generateMiniDots(totalQuestions) {
             dotClass += ' mini-dot-marked';
         }
         
-        dotsHtml += `<span class="${dotClass}" onclick="goToQuestion(${i})">${i + 1}</span>`;
+        dotsHtml += `<span class="${dotClass}" onclick="window.goToQuestion(${i})">${i + 1}</span>`;
     }
     
-    // Add "..." at end if needed
     if (end < totalQuestions - 1) {
         dotsHtml += '<span class="mini-dot-ellipsis">...</span>';
     }
@@ -2888,7 +2888,6 @@ function updateMiniDots() {
     
     miniDotsContainer.innerHTML = generateMiniDots(currentCourseQuestions.length);
     
-    // Update mini navigation buttons
     const miniPrevBtn = document.getElementById('miniPrevBtn');
     const miniNextBtn = document.getElementById('miniNextBtn');
     
@@ -2907,9 +2906,8 @@ function updateQuestionDotsGrid() {
     
     let html = '';
     const totalQuestions = currentCourseQuestions.length;
-    const maxDisplay = 50; // Limit for performance
+    const maxDisplay = 50;
     
-    // Calculate range to display
     const startIndex = Math.max(0, Math.floor(currentQuestionIndex / maxDisplay) * maxDisplay);
     const endIndex = Math.min(startIndex + maxDisplay, totalQuestions);
     
@@ -2935,7 +2933,7 @@ function updateQuestionDotsGrid() {
         }
         
         html += `
-            <button onclick="goToQuestion(${i})" 
+            <button onclick="window.goToQuestion(${i})" 
                     class="${dotClass}"
                     title="Question ${i + 1}${userTestAnswers[i]?.answered ? ' - Answered' : ''}">
                 ${i + 1}
@@ -2944,11 +2942,10 @@ function updateQuestionDotsGrid() {
         `;
     }
     
-    // Add navigation controls if we have more questions
     if (totalQuestions > maxDisplay) {
         if (startIndex > 0) {
             html = `
-                <button onclick="scrollQuestionDots(-${maxDisplay})" class="dots-nav-btn dots-nav-prev">
+                <button onclick="window.scrollQuestionDots(-${maxDisplay})" class="dots-nav-btn dots-nav-prev">
                     <i class="fas fa-chevron-left"></i> Prev ${maxDisplay}
                 </button>
                 ${html}
@@ -2957,7 +2954,7 @@ function updateQuestionDotsGrid() {
         
         if (endIndex < totalQuestions) {
             html += `
-                <button onclick="scrollQuestionDots(${maxDisplay})" class="dots-nav-btn dots-nav-next">
+                <button onclick="window.scrollQuestionDots(${maxDisplay})" class="dots-nav-btn dots-nav-next">
                     Next ${maxDisplay} <i class="fas fa-chevron-right"></i>
                 </button>
             `;
@@ -2971,7 +2968,6 @@ function updateQuestionDotsGrid() {
 
 // Scroll question dots
 function scrollQuestionDots(amount) {
-    // This would be implemented if we add pagination to dots
     console.log('Scroll dots by:', amount);
 }
 
@@ -3010,14 +3006,12 @@ function jumpToQuestion() {
     
     let questionNum = parseInt(input.value);
     
-    // Validate input
     if (isNaN(questionNum) || questionNum < 1) {
         questionNum = 1;
     } else if (questionNum > currentCourseQuestions.length) {
         questionNum = currentCourseQuestions.length;
     }
     
-    // Adjust for zero-based index
     const targetIndex = questionNum - 1;
     
     if (targetIndex >= 0 && targetIndex < currentCourseQuestions.length) {
@@ -3026,8 +3020,7 @@ function jumpToQuestion() {
     }
 }
 
-// ==================== UPDATED loadCurrentInteractiveQuestion ====================
-
+// Load current interactive question
 function loadCurrentInteractiveQuestion() {
     if (!currentCourseQuestions || currentCourseQuestions.length === 0) return;
     if (currentQuestionIndex >= currentCourseQuestions.length) {
@@ -3037,19 +3030,16 @@ function loadCurrentInteractiveQuestion() {
     const question = currentCourseQuestions[currentQuestionIndex];
     if (!question) return;
     
-    // Update all UI sections
     updateQuestionDisplay(question);
     updateOptionsDisplay(question);
     updateAnswerReveal(question);
     updateNavigationControls();
     updateStatsDisplay();
     
-    // Update navigation elements
     updateMiniDots();
     updateQuestionDotsGrid();
     updateProgressBar();
     
-    // Scroll to top of question
     setTimeout(() => {
         const questionPanel = document.querySelector('.question-panel');
         if (questionPanel) {
@@ -3060,7 +3050,6 @@ function loadCurrentInteractiveQuestion() {
 
 // Update question display
 function updateQuestionDisplay(question) {
-    // Update counters
     const currentQuestionCount = document.getElementById('currentQuestionCount');
     const totalQuestions = document.getElementById('totalQuestions');
     const difficultyBadge = document.getElementById('difficultyBadge');
@@ -3073,7 +3062,6 @@ function updateQuestionDisplay(question) {
         const difficulty = question.difficulty?.toLowerCase() || 'medium';
         difficultyBadge.textContent = difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
         
-        // Set color based on difficulty
         const colors = {
             easy: '#10b981',
             medium: '#f59e0b',
@@ -3112,7 +3100,6 @@ function updateOptionsDisplay(question) {
             `;
         }
     } else {
-        // Short answer or other question types
         optionsContainer.innerHTML = `
             <div class="short-answer-prompt">
                 <div class="prompt-icon">
@@ -3139,7 +3126,6 @@ function createOptionElement(option, index, question) {
     optionDiv.setAttribute('role', 'radio');
     optionDiv.setAttribute('aria-checked', isSelected ? 'true' : 'false');
     
-    // Add appropriate classes based on state
     if (isAnswered) {
         if (isSelected) {
             optionDiv.classList.add(wasCorrect ? 'option-correct-selected' : 'option-incorrect-selected');
@@ -3150,7 +3136,6 @@ function createOptionElement(option, index, question) {
         optionDiv.classList.add('option-selected');
     }
     
-    // Add feedback icon if answered
     let feedbackIcon = '';
     if (isAnswered && isSelected) {
         feedbackIcon = wasCorrect ? 
@@ -3166,12 +3151,10 @@ function createOptionElement(option, index, question) {
         ${feedbackIcon}
     `;
     
-    // Add click handler if not answered
     if (!isAnswered) {
         optionDiv.style.cursor = 'pointer';
         optionDiv.onclick = () => selectInteractiveAnswer(option.text);
         
-        // Add hover effects
         optionDiv.onmouseenter = () => {
             if (!optionDiv.classList.contains('option-selected')) {
                 optionDiv.style.transform = 'translateY(-2px)';
@@ -3191,6 +3174,20 @@ function createOptionElement(option, index, question) {
     return optionDiv;
 }
 
+// Select answer in interactive mode
+function selectInteractiveAnswer(answer) {
+    if (!currentCourseQuestions || !currentCourseQuestions[currentQuestionIndex]) return;
+    
+    userTestAnswers[currentQuestionIndex] = {
+        ...userTestAnswers[currentQuestionIndex],
+        answer: answer,
+        selected: true,
+        timestamp: new Date()
+    };
+    
+    loadCurrentInteractiveQuestion();
+}
+
 // Update answer reveal section
 function updateAnswerReveal(question) {
     const answerRevealSection = document.getElementById('answerRevealSection');
@@ -3201,30 +3198,24 @@ function updateAnswerReveal(question) {
     
     if (answerRevealSection) {
         if (isAnswered) {
-            // Show the section
             answerRevealSection.style.display = 'block';
             
-            // Update correct answer
             if (correctAnswerText) {
                 correctAnswerText.textContent = question.correct_answer || 
                     'No correct answer specified in the database.';
             }
             
-            // Update explanation
             if (explanationText) {
                 const explanation = question.explanation || 
                     'No detailed explanation available. This answer is considered correct based on current nursing standards and clinical guidelines.';
                 explanationText.innerHTML = explanation;
             }
             
-            // Add animation
             answerRevealSection.style.animation = 'fadeIn 0.5s ease';
             
         } else {
-            // Hide the section
             answerRevealSection.style.display = 'none';
             
-            // Reset content for next question
             if (correctAnswerText) {
                 correctAnswerText.textContent = 'Answer will appear here after checking...';
             }
@@ -3233,6 +3224,87 @@ function updateAnswerReveal(question) {
             }
         }
     }
+}
+
+// Check answer
+function checkAnswer() {
+    if (!currentCourseQuestions || !currentCourseQuestions[currentQuestionIndex]) return;
+    
+    const question = currentCourseQuestions[currentQuestionIndex];
+    const userAnswer = userTestAnswers[currentQuestionIndex]?.answer;
+    
+    if (!userAnswer && question.question_type === 'multiple_choice') {
+        alert('Please select an answer first.');
+        return;
+    }
+    
+    const isCorrect = userAnswer?.trim().toLowerCase() === question.correct_answer?.trim().toLowerCase();
+    
+    userTestAnswers[currentQuestionIndex] = {
+        ...userTestAnswers[currentQuestionIndex],
+        answered: true,
+        correct: isCorrect,
+        checked: true
+    };
+    
+    loadCurrentInteractiveQuestion();
+    
+    setTimeout(() => {
+        const explanationColumn = document.querySelector('.explanation-column');
+        if (explanationColumn) {
+            explanationColumn.scrollIntoView({ 
+                behavior: 'smooth', 
+                block: 'start' 
+            });
+        }
+    }, 300);
+    
+    if (isCorrect) {
+        showToast('Correct! 🎉', 'success');
+    } else {
+        showToast('Incorrect. Check the explanation.', 'error');
+    }
+}
+
+// Reset question
+function resetQuestion() {
+    if (currentQuestionIndex in userTestAnswers) {
+        delete userTestAnswers[currentQuestionIndex];
+        loadCurrentInteractiveQuestion();
+        showToast('Question reset. Try again!', 'info');
+    }
+}
+
+// Show answer (without checking)
+function showAnswer() {
+    if (!currentCourseQuestions || !currentCourseQuestions[currentQuestionIndex]) return;
+    
+    const question = currentCourseQuestions[currentQuestionIndex];
+    
+    userTestAnswers[currentQuestionIndex] = {
+        ...userTestAnswers[currentQuestionIndex],
+        answered: true,
+        checked: false,
+        shown: true
+    };
+    
+    loadCurrentInteractiveQuestion();
+    showToast('Answer revealed. Study the explanation.', 'info');
+}
+
+// Mark for review
+function markForReview() {
+    if (!currentCourseQuestions || !currentCourseQuestions[currentQuestionIndex]) return;
+    
+    const isMarked = !userTestAnswers[currentQuestionIndex]?.marked;
+    userTestAnswers[currentQuestionIndex] = {
+        ...userTestAnswers[currentQuestionIndex],
+        marked: isMarked
+    };
+    
+    loadCurrentInteractiveQuestion();
+    
+    showToast(isMarked ? 'Question marked for review 📌' : 'Question unmarked', 'info');
 }
 
 // Update navigation controls
@@ -3247,10 +3319,9 @@ function updateNavigationControls() {
     
     const isAnswered = userTestAnswers[currentQuestionIndex]?.answered;
     const isMarked = userTestAnswers[currentQuestionIndex]?.marked;
+    const hasSelection = userTestAnswers[currentQuestionIndex]?.answer;
     
-    // Update check answer button
     if (checkAnswerBtn) {
-        const hasSelection = userTestAnswers[currentQuestionIndex]?.answer;
         checkAnswerBtn.disabled = isAnswered || !hasSelection;
         
         if (isAnswered) {
@@ -3268,17 +3339,14 @@ function updateNavigationControls() {
         }
     }
     
-    // Update reset button
     if (resetBtn) {
         resetBtn.disabled = !isAnswered;
     }
     
-    // Update show answer button
     if (showAnswerBtn) {
         showAnswerBtn.disabled = isAnswered;
     }
     
-    // Update mark button
     if (markBtn && markBtnText) {
         if (isMarked) {
             markBtnText.textContent = 'Unmark Review';
@@ -3293,7 +3361,6 @@ function updateNavigationControls() {
         }
     }
     
-    // Update navigation buttons
     if (prevBtn) {
         prevBtn.disabled = currentQuestionIndex === 0;
     }
@@ -3312,14 +3379,12 @@ function updateStatsDisplay() {
     const accuracyRate = document.getElementById('accuracyRate');
     const overallAccuracy = document.getElementById('overallAccuracy');
     
-    // Calculate statistics
     const totalAnswered = Object.keys(userTestAnswers).filter(key => userTestAnswers[key]?.answered).length;
     const totalCorrect = Object.keys(userTestAnswers).filter(key => userTestAnswers[key]?.correct).length;
     const totalIncorrect = totalAnswered - totalCorrect;
     const totalMarked = Object.keys(userTestAnswers).filter(key => userTestAnswers[key]?.marked).length;
     const accuracy = totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0;
     
-    // Update display
     if (answeredCount) answeredCount.textContent = totalAnswered;
     if (correctCount) correctCount.textContent = totalCorrect;
     if (incorrectCount) incorrectCount.textContent = totalIncorrect;
@@ -3332,9 +3397,8 @@ function updateStatsDisplay() {
 function getQuestionOptions(question) {
     const options = [];
     
-    // Try standard option fields first (option_a, option_b, etc.)
-    for (let i = 0; i < 8; i++) { // Allow up to H
-        const letter = String.fromCharCode(97 + i); // a, b, c, d, e, f, g, h
+    for (let i = 0; i < 8; i++) {
+        const letter = String.fromCharCode(97 + i);
         const field = `option_${letter}`;
         if (question[field] && question[field].trim()) {
             options.push({
@@ -3344,7 +3408,6 @@ function getQuestionOptions(question) {
         }
     }
     
-    // If no standard options, try other formats
     if (options.length === 0) {
         const possibleFields = ['options', 'mcq_options', 'choices', 'answer_options'];
         possibleFields.forEach(field => {
@@ -3362,7 +3425,6 @@ function getQuestionOptions(question) {
                         });
                     }
                 } catch (e) {
-                    // Not JSON, try splitting by common delimiters
                     const splitOptions = question[field].split(/[,\n;]/);
                     splitOptions.forEach((opt, idx) => {
                         if (opt && opt.trim()) {
@@ -3380,26 +3442,21 @@ function getQuestionOptions(question) {
     return options;
 }
 
-// ==================== ADDITIONAL NAVIGATION FUNCTIONS ====================
-
-// Go to specific question
+// Navigation functions
 function goToQuestion(index) {
     if (!currentCourseQuestions || index < 0 || index >= currentCourseQuestions.length) return;
     
     currentQuestionIndex = index;
     loadCurrentInteractiveQuestion();
     
-    // Update jump to question input
     const jumpInput = document.getElementById('jumpToQuestion');
     if (jumpInput) {
         jumpInput.value = index + 1;
     }
     
-    // Scroll to top of container
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-// Previous question
 function prevQuestion() {
     if (currentQuestionIndex > 0) {
         currentQuestionIndex--;
@@ -3407,27 +3464,65 @@ function prevQuestion() {
     }
 }
 
-// Next question
 function nextQuestion() {
     if (currentQuestionIndex < currentCourseQuestions.length - 1) {
         currentQuestionIndex++;
         loadCurrentInteractiveQuestion();
     } else {
-        // Last question reached
         showToast('🎉 You have completed all questions! Review your answers and marked questions.', 'success');
     }
 }
 
+// Show toast notification
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 16px 24px;
+        border-radius: 8px;
+        color: white;
+        font-weight: 500;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        z-index: 1000;
+        animation: slideInRight 0.3s ease, slideOutRight 0.3s ease 2.7s;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        max-width: 400px;
+    `;
+    
+    const bgColor = type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : type === 'warning' ? '#f59e0b' : '#0ea5e9';
+    toast.style.background = bgColor;
+    toast.style.borderLeft = `4px solid ${type === 'success' ? '#059669' : type === 'error' ? '#dc2626' : type === 'warning' ? '#d97706' : '#0284c7'}`;
+    
+    toast.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <i class="fas ${type === 'success' ? 'fa-check-circle' : type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle'}"></i>
+            <span>${message}</span>
+        </div>
+    `;
+    
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.style.animation = 'slideOutRight 0.3s ease';
+        setTimeout(() => {
+            if (toast.parentNode) {
+                document.body.removeChild(toast);
+            }
+        }, 300);
+    }, 3000);
+}
+
 // ==================== GLOBAL EXPORTS ====================
 
-// Make all new functions available globally
-window.jumpToQuestion = jumpToQuestion;
-window.updateQuestionDotsGrid = updateQuestionDotsGrid;
-window.updateProgressBar = updateProgressBar;
-window.updateMiniDots = updateMiniDots;
-window.scrollQuestionDots = scrollQuestionDots;
-
-// Keep existing global functions
+// Attach all functions to window object to make them globally available
+window.loadQuestionBankCards = loadQuestionBankCards;
+window.clearQuestionBankSearch = clearQuestionBankSearch;
+window.startCourseTest = startCourseTest;
 window.goToQuestion = goToQuestion;
 window.prevQuestion = prevQuestion;
 window.nextQuestion = nextQuestion;
@@ -3436,6 +3531,13 @@ window.checkAnswer = checkAnswer;
 window.resetQuestion = resetQuestion;
 window.showAnswer = showAnswer;
 window.markForReview = markForReview;
+window.jumpToQuestion = jumpToQuestion;
+window.updateQuestionDotsGrid = updateQuestionDotsGrid;
+window.updateProgressBar = updateProgressBar;
+window.updateMiniDots = updateMiniDots;
+window.scrollQuestionDots = scrollQuestionDots;
+
+console.log('NurseIQ Question Bank System loaded successfully');
 
 
        // *************************************************************************
