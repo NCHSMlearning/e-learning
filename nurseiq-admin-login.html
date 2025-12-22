@@ -589,63 +589,14 @@ D) Vitamin D ✓"></textarea>
         let extractedQuestions = [];
         let currentQuestionIndex = 0;
         
-        // ==================== INITIALIZATION ====================
+              // ==================== INITIALIZATION ====================
         document.addEventListener('DOMContentLoaded', async function() {
             console.log('🚀 Starting NurseIQ Admin (Real Database)...');
             
-            // Load Supabase dynamically
-            await loadSupabaseLibrary();
-            
-            // Initialize Supabase client
-            initializeSupabaseClient();
-            
-            checkLoginStatus();
-        });
-        
-        async function loadSupabaseLibrary() {
-            return new Promise((resolve, reject) => {
-                // Check if Supabase is already loaded
-                if (window.supabase && window.supabase.createClient) {
-                    console.log('✅ Supabase library already loaded');
-                    resolve();
-                    return;
-                }
-                
-                console.log('📦 Loading Supabase library from CDN...');
-                
-                // Create and load the script
-                const script = document.createElement('script');
-                script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js';
-                script.id = 'supabase-script';
-                
-                script.onload = function() {
-                    console.log('✅ Supabase library loaded successfully');
-                    resolve();
-                };
-                
-                script.onerror = function() {
-                    console.error('❌ Failed to load Supabase library');
-                    showError('Library Error', 'Failed to load database library. Please refresh the page.');
-                    reject(new Error('Failed to load Supabase'));
-                };
-                
-                document.head.appendChild(script);
-                
-                // Set a timeout in case the script fails silently
-                setTimeout(() => {
-                    if (!window.supabase || !window.supabase.createClient) {
-                        console.error('❌ Supabase library loading timeout');
-                        showError('Timeout Error', 'Database library is taking too long to load. Please refresh.');
-                        reject(new Error('Loading timeout'));
-                    }
-                }, 10000);
-            });
-        }
-        
-        function initializeSupabaseClient() {
             try {
-                if (!window.supabase || !window.supabase.createClient) {
-                    throw new Error('Supabase library not available');
+                // Check if Supabase is loaded (it should be from the CDN in head)
+                if (typeof supabase === 'undefined' || !window.supabase || !window.supabase.createClient) {
+                    throw new Error('Supabase library not loaded. Please ensure the CDN is working.');
                 }
                 
                 // Create Supabase client
@@ -655,17 +606,21 @@ D) Vitamin D ✓"></textarea>
                 
                 console.log('✅ Supabase client initialized');
                 
-                // Test the connection
-                testConnection();
+                // Test connection
+                await testConnection();
                 
             } catch (error) {
                 console.error('❌ Supabase initialization error:', error);
                 showError('Database Error', 'Cannot initialize database: ' + error.message);
+                return;
             }
-        }
+            
+            checkLoginStatus();
+        });
         
         async function testConnection() {
             try {
+                // Simple test query
                 const { data, error } = await supabase
                     .from('consolidated_user_profiles_table')
                     .select('count')
@@ -678,17 +633,6 @@ D) Vitamin D ✓"></textarea>
                 }
             } catch (error) {
                 console.warn('⚠️ Connection test error:', error.message);
-            }
-        }
-        
-        function showError(title, message) {
-            const errorDiv = document.getElementById('login-error');
-            const errorMsg = document.getElementById('error-message');
-            if (errorDiv && errorMsg) {
-                errorMsg.textContent = message;
-                errorDiv.style.display = 'block';
-            } else {
-                alert(`${title}: ${message}`);
             }
         }
         
