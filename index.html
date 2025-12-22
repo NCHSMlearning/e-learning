@@ -3020,26 +3020,43 @@ function jumpToQuestion() {
     }
 }
 
-// Load current interactive question
+// ==================== FIXED DISPLAY FUNCTIONS ====================
+
+// Load current interactive question - FIXED VERSION
 function loadCurrentInteractiveQuestion() {
-    if (!currentCourseQuestions || currentCourseQuestions.length === 0) return;
+    if (!currentCourseQuestions || currentCourseQuestions.length === 0) {
+        console.error('No questions available');
+        return;
+    }
+    
+    // Ensure index is valid
     if (currentQuestionIndex >= currentCourseQuestions.length) {
         currentQuestionIndex = currentCourseQuestions.length - 1;
     }
+    if (currentQuestionIndex < 0) {
+        currentQuestionIndex = 0;
+    }
     
     const question = currentCourseQuestions[currentQuestionIndex];
-    if (!question) return;
+    if (!question) {
+        console.error('Question not found at index:', currentQuestionIndex);
+        return;
+    }
     
+    console.log('Loading question:', currentQuestionIndex, question.id);
+    
+    // Update all display components
     updateQuestionDisplay(question);
     updateOptionsDisplay(question);
     updateAnswerReveal(question);
     updateNavigationControls();
     updateStatsDisplay();
-    
-    updateMiniDots();
-    updateQuestionDotsGrid();
+    updateQuestionCounter();
     updateProgressBar();
+    updateQuestionDotsGrid();
+    updateMiniDots();
     
+    // Scroll to top
     setTimeout(() => {
         const questionPanel = document.querySelector('.question-panel');
         if (questionPanel) {
@@ -3048,16 +3065,20 @@ function loadCurrentInteractiveQuestion() {
     }, 100);
 }
 
-// Update question display
+// Update question display - FIXED VERSION
 function updateQuestionDisplay(question) {
+    // Update question counter
     const currentQuestionCount = document.getElementById('currentQuestionCount');
     const totalQuestions = document.getElementById('totalQuestions');
+    if (currentQuestionCount) {
+        currentQuestionCount.textContent = currentQuestionIndex + 1;
+    }
+    if (totalQuestions) {
+        totalQuestions.textContent = currentCourseQuestions.length;
+    }
+    
+    // Update difficulty badge
     const difficultyBadge = document.getElementById('difficultyBadge');
-    const questionText = document.getElementById('questionText');
-    
-    if (currentQuestionCount) currentQuestionCount.textContent = currentQuestionIndex + 1;
-    if (totalQuestions) totalQuestions.textContent = currentCourseQuestions.length;
-    
     if (difficultyBadge) {
         const difficulty = question.difficulty?.toLowerCase() || 'medium';
         difficultyBadge.textContent = difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
@@ -3068,22 +3089,58 @@ function updateQuestionDisplay(question) {
             hard: '#ef4444'
         };
         difficultyBadge.style.backgroundColor = colors[difficulty] || '#f59e0b';
+        difficultyBadge.style.color = 'white';
+        difficultyBadge.style.padding = '4px 12px';
+        difficultyBadge.style.borderRadius = '12px';
+        difficultyBadge.style.fontSize = '0.8rem';
+        difficultyBadge.style.fontWeight = '500';
     }
     
+    // Update question text - FIXED
+    const questionText = document.getElementById('questionText');
     if (questionText) {
-        questionText.innerHTML = question.question_text || 
-            '<div class="no-question-text"><i class="fas fa-exclamation-triangle"></i> No question text available</div>';
+        // Clean and format the question text
+        let text = question.question_text || 'No question text available';
+        
+        // Remove any extra quotes or formatting issues
+        text = text.trim()
+            .replace(/^["']|["']$/g, '') // Remove surrounding quotes
+            .replace(/\\n/g, '<br>') // Replace newlines
+            .replace(/\n/g, '<br>'); // Replace actual newlines
+        
+        // If text is JSON-like, try to parse it
+        if (text.startsWith('{') || text.startsWith('[')) {
+            try {
+                const parsed = JSON.parse(text);
+                if (parsed.question || parsed.text) {
+                    text = parsed.question || parsed.text || text;
+                }
+            } catch (e) {
+                // Not valid JSON, keep as is
+            }
+        }
+        
+        questionText.innerHTML = `
+            <div class="question-content">
+                <p>${text}</p>
+            </div>
+        `;
     }
 }
 
-// Update options display
+// Update options display - FIXED VERSION
 function updateOptionsDisplay(question) {
     const optionsContainer = document.getElementById('optionsContainer');
-    if (!optionsContainer) return;
+    if (!optionsContainer) {
+        console.error('Options container not found');
+        return;
+    }
     
+    // Clear container
     optionsContainer.innerHTML = '';
     
-    if (question.question_type === 'multiple_choice') {
+    // Check question type
+    if (question.question_type === 'multiple_choice' || !question.question_type) {
         const options = getQuestionOptions(question);
         
         if (options.length > 0) {
@@ -3092,102 +3149,380 @@ function updateOptionsDisplay(question) {
                 optionsContainer.appendChild(optionElement);
             });
         } else {
+            // If no structured options, use correct answer as reference
             optionsContainer.innerHTML = `
-                <div class="no-options-message">
-                    <i class="fas fa-exclamation-circle"></i>
-                    <p>No multiple choice options available for this question.</p>
+                <div class="no-options-message" style="text-align: center; padding: 20px; color: #6b7280;">
+                    <i class="fas fa-exclamation-circle" style="font-size: 2rem; margin-bottom: 10px;"></i>
+                    <p>This question requires written response or short answer.</p>
+                    <p style="margin-top: 10px; font-size: 0.9em;">
+                        <strong>Correct Answer:</strong> ${question.correct_answer || 'Not specified'}
+                    </p>
                 </div>
             `;
         }
     } else {
+        // For other question types
         optionsContainer.innerHTML = `
-            <div class="short-answer-prompt">
-                <div class="prompt-icon">
+            <div class="short-answer-prompt" style="background: #f8fafc; padding: 20px; border-radius: 8px; text-align: center;">
+                <div class="prompt-icon" style="font-size: 2rem; color: #4f46e5; margin-bottom: 10px;">
                     <i class="fas fa-keyboard"></i>
                 </div>
                 <div class="prompt-content">
-                    <h4>Written Response Required</h4>
-                    <p>This question requires a written answer. Consider your response, then check the correct answer below.</p>
+                    <h4 style="margin: 0 0 10px 0; color: #1f2937;">Written Response Required</h4>
+                    <p style="color: #6b7280; margin: 0;">
+                        This question requires a written answer. Consider your response, then check the correct answer below.
+                    </p>
                 </div>
             </div>
         `;
     }
 }
 
-// Create option element
+// Create option element - ENHANCED VERSION
 function createOptionElement(option, index, question) {
     const isAnswered = userTestAnswers[currentQuestionIndex]?.answered;
-    const isSelected = userTestAnswers[currentQuestionIndex]?.answer === option.text;
-    const isCorrectAnswer = question.correct_answer?.trim().toLowerCase() === option.text.trim().toLowerCase();
-    const wasCorrect = userTestAnswers[currentQuestionIndex]?.correct;
+    const userAnswer = userTestAnswers[currentQuestionIndex]?.answer;
+    const isSelected = userAnswer === option.text;
+    
+    // Check if this option is the correct answer
+    const correctAnswer = question.correct_answer?.trim().toLowerCase();
+    const optionText = option.text?.trim().toLowerCase();
+    const isCorrectAnswer = correctAnswer && optionText === correctAnswer;
+    
+    // Determine if user's answer was correct
+    const wasCorrect = isAnswered && userAnswer?.trim().toLowerCase() === correctAnswer;
     
     const optionDiv = document.createElement('div');
     optionDiv.className = 'option-item';
-    optionDiv.setAttribute('role', 'radio');
-    optionDiv.setAttribute('aria-checked', isSelected ? 'true' : 'false');
+    optionDiv.setAttribute('data-option', option.letter);
+    
+    // Determine styling based on answer state
+    let styleClasses = '';
+    let styles = '';
     
     if (isAnswered) {
         if (isSelected) {
-            optionDiv.classList.add(wasCorrect ? 'option-correct-selected' : 'option-incorrect-selected');
+            if (wasCorrect) {
+                styleClasses = 'option-correct-selected';
+                styles = 'background: #d1fae5; border-color: #10b981; color: #065f46;';
+            } else {
+                styleClasses = 'option-incorrect-selected';
+                styles = 'background: #fee2e2; border-color: #ef4444; color: #7f1d1d;';
+            }
         } else if (isCorrectAnswer) {
-            optionDiv.classList.add('option-correct-not-selected');
+            styleClasses = 'option-correct-not-selected';
+            styles = 'background: #f0fdf4; border-color: #10b981; border-style: dashed; color: #065f46;';
         }
     } else if (isSelected) {
-        optionDiv.classList.add('option-selected');
+        styleClasses = 'option-selected';
+        styles = 'background: #eef2ff; border-color: #4f46e5; color: #3730a3;';
     }
     
-    let feedbackIcon = '';
-    if (isAnswered && isSelected) {
-        feedbackIcon = wasCorrect ? 
-            '<div class="option-feedback correct"><i class="fas fa-check"></i></div>' :
-            '<div class="option-feedback incorrect"><i class="fas fa-times"></i></div>';
-    } else if (isAnswered && isCorrectAnswer) {
-        feedbackIcon = '<div class="option-feedback correct"><i class="fas fa-check"></i></div>';
+    optionDiv.className = `option-item ${styleClasses}`;
+    if (styles) {
+        optionDiv.style.cssText = styles;
     }
     
-    optionDiv.innerHTML = `
-        <div class="option-letter">${option.letter}</div>
-        <div class="option-text">${option.text}</div>
-        ${feedbackIcon}
+    // Add base styles
+    optionDiv.style.cssText += `
+        display: flex;
+        align-items: center;
+        padding: 16px 20px;
+        border: 2px solid #e5e7eb;
+        border-radius: 10px;
+        transition: all 0.2s ease;
+        margin-bottom: 8px;
+        position: relative;
     `;
     
+    // Add hover effect if not answered
     if (!isAnswered) {
         optionDiv.style.cursor = 'pointer';
-        optionDiv.onclick = () => selectInteractiveAnswer(option.text);
-        
         optionDiv.onmouseenter = () => {
-            if (!optionDiv.classList.contains('option-selected')) {
+            if (!isSelected) {
                 optionDiv.style.transform = 'translateY(-2px)';
                 optionDiv.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
             }
         };
         optionDiv.onmouseleave = () => {
-            if (!optionDiv.classList.contains('option-selected')) {
+            if (!isSelected) {
                 optionDiv.style.transform = 'translateY(0)';
                 optionDiv.style.boxShadow = 'none';
             }
         };
+        
+        // Add click handler
+        optionDiv.onclick = () => selectInteractiveAnswer(option.text);
     } else {
         optionDiv.style.cursor = 'default';
     }
     
+    // Create content
+    let feedbackIcon = '';
+    if (isAnswered) {
+        if (isSelected && wasCorrect) {
+            feedbackIcon = '<div style="margin-left: 10px; color: #10b981; font-size: 1.2rem;"><i class="fas fa-check"></i></div>';
+        } else if (isSelected && !wasCorrect) {
+            feedbackIcon = '<div style="margin-left: 10px; color: #ef4444; font-size: 1.2rem;"><i class="fas fa-times"></i></div>';
+        } else if (isCorrectAnswer) {
+            feedbackIcon = '<div style="margin-left: 10px; color: #10b981; font-size: 1.2rem;"><i class="fas fa-check"></i></div>';
+        }
+    }
+    
+    optionDiv.innerHTML = `
+        <div style="
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: ${isSelected ? (isAnswered ? (wasCorrect ? '#10b981' : '#ef4444') : '#4f46e5') : '#f3f4f6'};
+            color: ${isSelected ? 'white' : '#6b7280'};
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            margin-right: 15px;
+            flex-shrink: 0;
+        ">
+            ${option.letter}
+        </div>
+        <div style="
+            flex: 1;
+            font-size: 1rem;
+            line-height: 1.5;
+            color: ${isSelected ? (isAnswered ? (wasCorrect ? '#065f46' : '#7f1d1d') : '#3730a3') : '#1f2937'};
+        ">
+            ${option.text}
+        </div>
+        ${feedbackIcon}
+    `;
+    
     return optionDiv;
 }
 
-// Select answer in interactive mode
-function selectInteractiveAnswer(answer) {
-    if (!currentCourseQuestions || !currentCourseQuestions[currentQuestionIndex]) return;
+// Helper function to get question options - IMPROVED VERSION
+function getQuestionOptions(question) {
+    const options = [];
     
-    userTestAnswers[currentQuestionIndex] = {
-        ...userTestAnswers[currentQuestionIndex],
-        answer: answer,
-        selected: true,
-        timestamp: new Date()
-    };
+    // First, try to get options from option_a through option_h
+    const optionLetters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
     
-    loadCurrentInteractiveQuestion();
+    for (let i = 0; i < optionLetters.length; i++) {
+        const letter = optionLetters[i];
+        const fieldName = `option_${letter}`;
+        
+        if (question[fieldName] && question[fieldName].trim()) {
+            options.push({
+                letter: letter.toUpperCase(),
+                text: question[fieldName].trim()
+            });
+        }
+    }
+    
+    // If no options found in standard fields, try alternatives
+    if (options.length === 0) {
+        // Check for options field (might be JSON or comma-separated)
+        if (question.options && typeof question.options === 'string') {
+            let optionTexts = [];
+            
+            try {
+                // Try to parse as JSON
+                const parsed = JSON.parse(question.options);
+                if (Array.isArray(parsed)) {
+                    optionTexts = parsed;
+                } else if (typeof parsed === 'object') {
+                    optionTexts = Object.values(parsed);
+                }
+            } catch (e) {
+                // If not JSON, try comma or newline separation
+                optionTexts = question.options.split(/[,\n;]/).filter(opt => opt.trim());
+            }
+            
+            optionTexts.forEach((text, index) => {
+                if (text && text.trim()) {
+                    options.push({
+                        letter: String.fromCharCode(65 + index),
+                        text: text.trim()
+                    });
+                }
+            });
+        }
+        
+        // Check for mcq_options field
+        if (options.length === 0 && question.mcq_options) {
+            try {
+                const mcqOptions = typeof question.mcq_options === 'string' 
+                    ? JSON.parse(question.mcq_options) 
+                    : question.mcq_options;
+                
+                if (Array.isArray(mcqOptions)) {
+                    mcqOptions.forEach((opt, index) => {
+                        if (opt && (opt.text || opt.option)) {
+                            options.push({
+                                letter: String.fromCharCode(65 + index),
+                                text: (opt.text || opt.option).trim()
+                            });
+                        }
+                    });
+                }
+            } catch (e) {
+                console.log('Could not parse mcq_options:', e);
+            }
+        }
+        
+        // Check question_text for embedded options
+        if (options.length === 0 && question.question_text) {
+            const text = question.question_text;
+            const optionPatterns = [
+                /[A-D]\)\s*(.+?)(?=\n[A-D]\)|$)/g,
+                /[A-D]\.\s*(.+?)(?=\n[A-D]\.|$)/g,
+                /Option\s*[A-D]:\s*(.+?)(?=\nOption\s*[A-D]:|$)/gi
+            ];
+            
+            for (const pattern of optionPatterns) {
+                const matches = text.matchAll(pattern);
+                for (const match of matches) {
+                    const letter = match[0].charAt(0).toUpperCase();
+                    const optionText = match[1].trim();
+                    options.push({ letter, text: optionText });
+                }
+                if (options.length > 0) break;
+            }
+        }
+    }
+    
+    // If still no options, create placeholder
+    if (options.length === 0 && question.correct_answer) {
+        options.push({
+            letter: 'A',
+            text: question.correct_answer
+        });
+        
+        for (let i = 1; i < 4; i++) {
+            options.push({
+                letter: String.fromCharCode(65 + i),
+                text: `Option ${String.fromCharCode(65 + i)}`
+            });
+        }
+    }
+    
+    return options;
 }
 
+// Update answer reveal section - ENHANCED
+function updateAnswerReveal(question) {
+    const answerRevealSection = document.getElementById('answerRevealSection');
+    const correctAnswerText = document.getElementById('correctAnswerText');
+    const explanationText = document.getElementById('explanationText');
+    
+    const isAnswered = userTestAnswers[currentQuestionIndex]?.answered;
+    
+    if (answerRevealSection) {
+        if (isAnswered) {
+            answerRevealSection.style.display = 'block';
+            
+            // Format correct answer
+            let correctAnswer = question.correct_answer || 'Not specified';
+            if (correctAnswerText) {
+                correctAnswerText.innerHTML = `
+                    <div style="
+                        background: white;
+                        padding: 12px;
+                        border-radius: 6px;
+                        border-left: 4px solid #10b981;
+                        font-weight: 500;
+                        color: #065f46;
+                    ">
+                        ${correctAnswer}
+                    </div>
+                `;
+            }
+            
+            // Format explanation
+            let explanation = question.explanation || 
+                'No detailed explanation available. This answer is considered correct based on current nursing standards and clinical guidelines.';
+            
+            if (explanationText) {
+                explanationText.innerHTML = `
+                    <div style="
+                        background: white;
+                        padding: 16px;
+                        border-radius: 8px;
+                        line-height: 1.6;
+                        color: #374151;
+                    ">
+                        ${explanation.replace(/\n/g, '<br>')}
+                    </div>
+                `;
+            }
+        } else {
+            answerRevealSection.style.display = 'none';
+        }
+    }
+}
+
+// Add this new function to update question counter
+function updateQuestionCounter() {
+    const currentNumber = document.getElementById('currentQuestionCount');
+    const totalNumber = document.getElementById('totalQuestions');
+    
+    if (currentNumber) {
+        currentNumber.textContent = currentQuestionIndex + 1;
+    }
+    if (totalNumber && currentCourseQuestions) {
+        totalNumber.textContent = currentCourseQuestions.length;
+    }
+}
+
+// Also fix the goToQuestion function to ensure proper navigation
+function goToQuestion(index) {
+    if (!currentCourseQuestions || currentCourseQuestions.length === 0) {
+        console.error('No questions available');
+        return;
+    }
+    
+    // Validate index
+    if (index < 0) index = 0;
+    if (index >= currentCourseQuestions.length) index = currentCourseQuestions.length - 1;
+    
+    currentQuestionIndex = index;
+    console.log('Going to question:', index);
+    
+    // Update the jump input
+    const jumpInput = document.getElementById('jumpToQuestion');
+    if (jumpInput) {
+        jumpInput.value = index + 1;
+    }
+    
+    // Load the question
+    loadCurrentInteractiveQuestion();
+    
+    // Smooth scroll to top
+    window.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+    });
+}
+
+// Fix the prevQuestion and nextQuestion functions
+function prevQuestion() {
+    if (currentQuestionIndex > 0) {
+        currentQuestionIndex--;
+        console.log('Moving to previous question:', currentQuestionIndex);
+        loadCurrentInteractiveQuestion();
+    } else {
+        showToast('You are at the first question', 'info');
+    }
+}
+
+function nextQuestion() {
+    if (currentCourseQuestions && currentQuestionIndex < currentCourseQuestions.length - 1) {
+        currentQuestionIndex++;
+        console.log('Moving to next question:', currentQuestionIndex);
+        loadCurrentInteractiveQuestion();
+    } else {
+        showToast('🎉 You have completed all questions! Review your answers.', 'success');
+    }
+}
 // Update answer reveal section
 function updateAnswerReveal(question) {
     const answerRevealSection = document.getElementById('answerRevealSection');
