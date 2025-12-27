@@ -3127,7 +3127,74 @@ function updateQuestionDisplay(question) {
         `;
     }
 }
+// ==================== ANSWER SELECTION FUNCTION ====================
 
+// Function to select an answer - THIS WAS MISSING!
+function selectInteractiveAnswer(answerText) {
+    console.log('selectInteractiveAnswer called with:', answerText);
+    
+    // Store the user's answer
+    userTestAnswers[currentQuestionIndex] = {
+        ...userTestAnswers[currentQuestionIndex],
+        answer: answerText,
+        timestamp: new Date().toISOString()
+    };
+    
+    // Update the UI to show the selection
+    updateOptionsSelection(answerText);
+    updateNavigationControls();
+    updateStatsDisplay();
+}
+
+// Helper to update option selection UI
+function updateOptionsSelection(selectedText) {
+    const optionsContainer = document.getElementById('optionsContainer');
+    if (!optionsContainer) return;
+    
+    const optionItems = optionsContainer.querySelectorAll('.option-item');
+    
+    optionItems.forEach(item => {
+        // Reset all options first
+        item.classList.remove('option-selected');
+        item.style.background = '';
+        item.style.borderColor = '';
+        item.style.color = '';
+        
+        // Find if this item contains the selected text
+        const optionText = item.textContent.trim().toLowerCase();
+        const searchText = selectedText.trim().toLowerCase();
+        
+        if (optionText.includes(searchText) || item.getAttribute('data-option')) {
+            // Check if this is the selected option
+            const optionContent = item.querySelector('div:nth-child(2)');
+            if (optionContent && optionContent.textContent.trim() === selectedText) {
+                item.classList.add('option-selected');
+                item.style.background = '#eef2ff';
+                item.style.borderColor = '#4f46e5';
+                item.style.color = '#3730a3';
+                
+                // Update the option letter background
+                const optionLetter = item.querySelector('div:first-child');
+                if (optionLetter) {
+                    optionLetter.style.background = '#4f46e5';
+                    optionLetter.style.color = 'white';
+                }
+            }
+        }
+    });
+    
+    // Enable the check answer button
+    const checkAnswerBtn = document.getElementById('checkAnswerBtn');
+    if (checkAnswerBtn) {
+        checkAnswerBtn.disabled = false;
+        checkAnswerBtn.classList.remove('disabled-action-btn');
+        checkAnswerBtn.classList.add('primary-action-btn');
+        checkAnswerBtn.innerHTML = '<i class="fas fa-check-circle"></i> Check Answer';
+    }
+    
+    // Show toast notification
+    showToast('Answer selected. Click "Check Answer" to verify.', 'info');
+}
 // Update options display - FIXED VERSION
 function updateOptionsDisplay(question) {
     const optionsContainer = document.getElementById('optionsContainer');
