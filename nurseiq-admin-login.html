@@ -2,40 +2,55 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NurseIQ Complete · Full Feature Admin</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>NurseIQ Ultimate · Admin + Student Portal + Past Papers</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', system-ui, sans-serif; }
-        body { background: #f1f5f9; }
-        .card { background: white; border-radius: 24px; padding: 1.5rem; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
-        .input, .select, textarea { border: 1.5px solid #e2e8f0; border-radius: 14px; padding: 10px 14px; width: 100%; font-size: 0.9rem; }
-        .input:focus, .select:focus, textarea:focus { outline: none; border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79,70,229,0.1); }
-        .btn-primary { background: #4f46e5; color: white; border: none; border-radius: 40px; padding: 10px 20px; cursor: pointer; font-weight: 600; }
-        .btn-success { background: #10b981; color: white; border: none; border-radius: 40px; padding: 8px 16px; cursor: pointer; }
-        .btn-danger { background: #ef4444; color: white; border: none; border-radius: 40px; padding: 8px 16px; cursor: pointer; }
-        .btn-warning { background: #f59e0b; color: white; border: none; border-radius: 40px; padding: 8px 16px; cursor: pointer; }
+        body { background: #f0f4f8; }
+        .glass-card { background: white; border-radius: 28px; padding: 1.5rem; box-shadow: 0 8px 30px rgba(0,0,0,0.05); border: 1px solid #eef2ff; }
+        .btn-primary { background: #4f46e5; color: white; border: none; border-radius: 60px; padding: 10px 24px; cursor: pointer; font-weight: 600; transition: 0.2s; }
+        .btn-primary:hover { background: #6366f1; transform: scale(1.02); }
+        .btn-success { background: #10b981; color: white; border: none; border-radius: 60px; padding: 10px 24px; cursor: pointer; font-weight: 600; }
+        .btn-danger { background: #ef4444; color: white; border: none; border-radius: 60px; padding: 8px 16px; cursor: pointer; }
+        .btn-warning { background: #f59e0b; color: white; border: none; border-radius: 60px; padding: 8px 16px; cursor: pointer; }
         .badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 40px; font-size: 0.7rem; font-weight: 600; }
-        .folder { background: white; border-radius: 20px; padding: 1.2rem; border: 1px solid #eef2ff; cursor: pointer; transition: 0.2s; }
-        .folder:hover { transform: translateY(-3px); box-shadow: 0 12px 24px -12px rgba(0,0,0,0.15); }
-        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-        .animate { animation: fadeIn 0.2s ease; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .folder-card { background: white; border-radius: 20px; padding: 1rem; border: 1px solid #eef2ff; cursor: pointer; transition: 0.2s; }
+        .folder-card:hover { transform: translateY(-3px); box-shadow: 0 12px 24px -12px rgba(0,0,0,0.15); }
+        .input-modern, .select-modern, .textarea-modern { border: 1.5px solid #e2e8f0; border-radius: 16px; padding: 12px 16px; width: 100%; font-size: 0.9rem; transition: 0.2s; }
+        .input-modern:focus { outline: none; border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79,70,229,0.1); }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 1rem; background: #f8fafc; border-radius: 20px; padding: 1rem; }
+        .attempt-card { background: #f8fafc; border-radius: 16px; padding: 1rem; margin-bottom: 1rem; border-left: 4px solid #4f46e5; cursor: pointer; transition: 0.2s; }
+        .attempt-card:hover { background: #f1f5f9; transform: translateX(4px); }
+        .student-table { width: 100%; border-collapse: collapse; }
+        .student-table th, .student-table td { padding: 12px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+        .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        .modal-content { background: white; border-radius: 28px; max-width: 800px; width: 90%; max-height: 80vh; overflow-y: auto; padding: 1.5rem; }
+        .drag-area { border: 2px dashed #cbd5e1; border-radius: 24px; padding: 2rem; text-align: center; transition: 0.2s; cursor: pointer; }
+        .drag-area:hover { border-color: #4f46e5; background: #f8fafc; }
+        .question-card { background: white; border-radius: 20px; padding: 1.2rem; margin-bottom: 1rem; border: 1px solid #e2e8f0; }
+        .option-row { display: flex; align-items: center; gap: 12px; padding: 8px; margin: 5px 0; border-radius: 12px; cursor: pointer; transition: 0.1s; }
+        .option-row:hover { background: #f8fafc; }
+        .option-letter { width: 32px; height: 32px; background: #eef2ff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #4f46e5; }
+        .progress-bar { height: 8px; background: #e2e8f0; border-radius: 10px; overflow: hidden; }
+        .progress-fill { height: 100%; background: #10b981; transition: width 0.3s; }
+        @media (max-width: 768px) { .sidebar { width: 100% !important; border-right: none; border-bottom: 1px solid #eef2ff; } }
     </style>
 </head>
 <body>
 <div id="app">
     <!-- LOGIN -->
     <div id="login-section" style="min-height:100vh; display:flex; align-items:center; justify-content:center; background:linear-gradient(135deg,#eef2ff,#f8fafc)">
-        <div class="card" style="max-width:400px; width:90%; text-align:center">
+        <div class="glass-card" style="max-width:400px; width:90%; text-align:center">
             <i class="fas fa-stethoscope" style="font-size:48px; color:#4f46e5;"></i>
-            <h1 style="margin:1rem 0 0.5rem">NurseIQ <span style="color:#4f46e5">Complete</span></h1>
-            <p style="color:#64748b; margin-bottom:1.5rem">Full admin suite · database ready</p>
-            <div id="login-error" style="background:#fee2e2; border-radius:16px; padding:10px; margin-bottom:1rem; display:none"></div>
+            <h1 style="margin:1rem 0 0.5rem">NurseIQ <span style="color:#4f46e5">Ultimate</span></h1>
+            <p style="color:#64748b">Admin + Student Portal + Past Papers</p>
+            <div id="login-error" style="background:#fee2e2; border-radius:16px; padding:10px; margin:1rem 0; display:none"></div>
             <form id="login-form">
-                <input type="email" id="login-email" class="input" placeholder="admin@example.com" required style="margin-bottom:1rem">
-                <input type="password" id="login-password" class="input" placeholder="password" required style="margin-bottom:1.5rem">
+                <input type="email" id="login-email" class="input-modern" placeholder="admin@nurseiq.com" required style="margin-bottom:1rem">
+                <input type="password" id="login-password" class="input-modern" placeholder="password" required style="margin-bottom:1.5rem">
                 <button type="submit" id="login-btn" class="btn-primary" style="width:100%">Login <i class="fas fa-arrow-right"></i></button>
             </form>
         </div>
@@ -43,474 +58,208 @@
 
     <!-- DASHBOARD -->
     <div id="admin-dashboard" style="display:none">
-        <div style="background:white; border-bottom:1px solid #e2e8f0; padding:0.8rem 2rem; display:flex; justify-content:space-between; align-items:center">
-            <div><i class="fas fa-stethoscope" style="font-size:28px; color:#4f46e5"></i> <strong style="font-size:1.3rem">NurseIQ Complete</strong> <span class="badge" style="background:#e0e7ff">v4.0</span></div>
+        <div style="background:white; border-bottom:1px solid #e2e8f0; padding:0.8rem 2rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap">
+            <div><i class="fas fa-stethoscope" style="font-size:28px; color:#4f46e5"></i> <strong style="font-size:1.3rem">NurseIQ Ultimate</strong> <span class="badge" style="background:#e0e7ff">Admin + Student Portal</span></div>
             <div><span id="user-name" style="background:#f1f5f9; padding:6px 16px; border-radius:40px"><i class="fas fa-user-shield"></i> Admin</span> <button onclick="logout()" class="btn-danger" style="padding:6px 14px">Logout</button></div>
         </div>
         <div style="display:flex; flex-wrap:wrap">
-            <!-- SIDEBAR -->
-            <div style="width:260px; background:#fefefe; border-right:1px solid #eef2ff; min-height:calc(100vh - 65px); padding:1.5rem 1rem">
-                <div class="badge" style="background:#e0e7ff; margin-bottom:1rem"><i class="fas fa-chart-line"></i> Live Stats</div>
-                <div style="background:#f8fafc; border-radius:20px; padding:1rem; margin-bottom:1.5rem">
-                    <div style="display:flex; justify-content:space-between"><span>📚 Questions</span><strong id="stat-questions">0</strong></div>
-                    <div style="display:flex; justify-content:space-between; margin-top:10px"><span>👥 Students</span><strong id="stat-students">0</strong></div>
-                    <div style="display:flex; justify-content:space-between; margin-top:10px"><span>📖 Courses</span><strong id="stat-courses">0</strong></div>
+            <div class="sidebar" style="width:280px; background:#ffffff; border-right:1px solid #edf2f7; min-height:calc(100vh - 65px); padding:1.5rem 1rem">
+                <div class="stats-grid" style="margin-bottom:1.5rem">
+                    <div><i class="fas fa-database"></i><br><strong id="stat-questions">0</strong><div style="font-size:0.7rem">Questions</div></div>
+                    <div><i class="fas fa-users"></i><br><strong id="stat-students">0</strong><div style="font-size:0.7rem">Students</div></div>
+                    <div><i class="fas fa-book"></i><br><strong id="stat-courses">0</strong><div style="font-size:0.7rem">Courses</div></div>
                 </div>
                 <div style="display:flex; flex-direction:column; gap:8px">
-                    <button onclick="showPage('rapid')" class="folder" style="background:#fff7ed; border-left:4px solid #f59e0b"><i class="fas fa-bolt"></i> ⚡ RAPID FIRE</button>
-                    <button onclick="showPage('bulk')" class="folder"><i class="fas fa-file-import"></i> 📋 Bulk Paste + Parser</button>
-                    <button onclick="showPage('ai')" class="folder"><i class="fas fa-robot"></i> 🤖 AI Generator</button>
-                    <button onclick="showPage('bank')" class="folder"><i class="fas fa-folder-open"></i> 📁 Question Bank</button>
-                    <button onclick="showPage('students')" class="folder"><i class="fas fa-users"></i> 👩‍🎓 Student Management</button>
-                    <button onclick="showPage('courses')" class="folder"><i class="fas fa-book"></i> 📘 Course Manager</button>
+                    <button onclick="showPage('pastpaper')" class="folder-card" style="background:#fef3c7; border-left:4px solid #f59e0b"><i class="fas fa-file-pdf"></i> 📄 UPLOAD PAST PAPER</button>
+                    <button onclick="showPage('rapid')" class="folder-card"><i class="fas fa-bolt"></i> ⚡ RAPID FIRE</button>
+                    <button onclick="showPage('bulk')" class="folder-card"><i class="fas fa-file-import"></i> 📋 Bulk Paste</button>
+                    <button onclick="showPage('ai')" class="folder-card"><i class="fas fa-robot"></i> 🤖 AI Generator</button>
+                    <button onclick="showPage('bank')" class="folder-card"><i class="fas fa-folder-open"></i> 📁 Question Bank</button>
+                    <button onclick="showPage('students')" class="folder-card"><i class="fas fa-users"></i> 👩‍🎓 Student Manager</button>
+                    <button onclick="showPage('attempts')" class="folder-card"><i class="fas fa-chart-line"></i> 📊 Student Attempts</button>
+                    <button onclick="showPage('courses')" class="folder-card"><i class="fas fa-book"></i> 📘 Course Manager</button>
+                    <button onclick="showPage('student-portal')" class="folder-card" style="background:#e0e7ff"><i class="fas fa-graduation-cap"></i> 🎓 STUDENT PORTAL (Practice)</button>
                 </div>
             </div>
-            <!-- MAIN CONTENT -->
             <div style="flex:1; padding:1.5rem; background:#f9fbfd" id="main-panel"></div>
         </div>
     </div>
 </div>
 
 <script>
-    // ==================== SUPABASE SETUP (FIXED - NO DUPLICATE) ====================
+    // ==================== SUPABASE ====================
     const SB_URL = 'https://lwhtjozfsmbyihenfunw.supabase.co';
     const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3aHRqb3pmc21ieWloZW5mdW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NTgxMjcsImV4cCI6MjA3NTIzNDEyN30.7Z8AYvPQwTAEEEhODlW6Xk-IR1FK3Uj5ivZS7P17Wpk';
-    let sbClient = null;
-    let currentAdmin = null;
-    let allCoursesList = [];
-    let currentQuestionsArray = [];
-    let bulkCache = [];
-    let aiCache = [];
-
+    let sb = null, currentAdmin = null, allCourses = [], allStudents = [], allQuestions = [], userProgress = {};
+    
     document.addEventListener('DOMContentLoaded', async () => {
-        sbClient = window.supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession: false } });
+        sb = window.supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession: false } });
         const session = localStorage.getItem('nurseiq_admin_session');
-        if(session) { 
-            currentAdmin = JSON.parse(session); 
-            showDashboard(); 
-            await refreshStats(); 
-            await loadCoursesList(); 
-        }
+        if (session) { currentAdmin = JSON.parse(session); showDashboard(); await loadAllData(); }
     });
 
     document.getElementById('login-form').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const email = document.getElementById('login-email').value.trim();
-        const btn = document.getElementById('login-btn');
-        btn.disabled = true; 
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        e.preventDefault(); const email = document.getElementById('login-email').value.trim(); const btn = document.getElementById('login-btn');
+        btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
         try {
-            const { data, error } = await sbClient.from('consolidated_user_profiles_table').select('*').eq('email', email).limit(1);
-            if(error || !data?.length) throw new Error('Admin not found');
-            if(data[0].role !== 'superadmin' && data[0].role !== 'admin') throw new Error('Not admin access');
+            const { data, error } = await sb.from('consolidated_user_profiles_table').select('*').eq('email', email).limit(1);
+            if (error || !data?.length) throw new Error('Admin not found');
+            if (!['superadmin', 'admin'].includes(data[0].role)) throw new Error('Access denied');
             localStorage.setItem('nurseiq_admin_session', JSON.stringify({ id: data[0].id, email, name: data[0].full_name }));
-            currentAdmin = data[0];
-            showDashboard(); 
-            await refreshStats(); 
-            await loadCoursesList();
-        } catch(err) { 
-            document.getElementById('login-error').style.display = 'block'; 
-            document.getElementById('login-error').innerHTML = err.message; 
-            btn.disabled = false; 
-            btn.innerHTML = 'Login'; 
-        }
+            currentAdmin = data[0]; showDashboard(); await loadAllData();
+        } catch (err) { document.getElementById('login-error').style.display = 'block'; document.getElementById('login-error').innerHTML = err.message; btn.disabled = false; btn.innerHTML = 'Login'; }
     });
 
-    async function refreshStats() {
-        const { count: q } = await sbClient.from('medical_assessments').select('*', { count: 'exact', head: true });
-        const { count: s } = await sbClient.from('consolidated_user_profiles_table').select('*', { count: 'exact', head: true });
-        const { count: c } = await sbClient.from('courses').select('*', { count: 'exact', head: true });
-        document.getElementById('stat-questions').innerText = q || 0;
-        document.getElementById('stat-students').innerText = s || 0;
-        document.getElementById('stat-courses').innerText = c || 0;
+    async function loadAllData() {
+        const { data: q } = await sb.from('medical_assessments').select('*'); allQuestions = q || [];
+        const { data: s } = await sb.from('consolidated_user_profiles_table').select('*'); allStudents = s || [];
+        const { data: c } = await sb.from('courses').select('*'); allCourses = c || [];
+        const { data: prog } = await sb.from('user_progress').select('*'); 
+        userProgress = {};
+        if (prog) prog.forEach(p => { userProgress[p.user_id] = p.progress_data; });
+        document.getElementById('stat-questions').innerText = allQuestions.length;
+        document.getElementById('stat-students').innerText = allStudents.length;
+        document.getElementById('stat-courses').innerText = allCourses.length;
     }
 
-    async function loadCoursesList() { 
-        const { data } = await sbClient.from('courses').select('*'); 
-        allCoursesList = data || []; 
-    }
+    function showDashboard() { document.getElementById('login-section').style.display = 'none'; document.getElementById('admin-dashboard').style.display = 'block'; document.getElementById('user-name').innerHTML = `<i class="fas fa-user-check"></i> ${currentAdmin?.name || 'Admin'}`; showPage('pastpaper'); }
+    function logout() { localStorage.removeItem('nurseiq_admin_session'); location.reload(); }
 
-    function showDashboard() { 
-        document.getElementById('login-section').style.display = 'none'; 
-        document.getElementById('admin-dashboard').style.display = 'block'; 
-        document.getElementById('user-name').innerHTML = `<i class="fas fa-user-check"></i> ${currentAdmin?.name || 'Admin'}`; 
-        showPage('bank'); 
-    }
-    
-    function logout() { 
-        localStorage.removeItem('nurseiq_admin_session'); 
-        document.getElementById('login-section').style.display = 'flex'; 
-        document.getElementById('admin-dashboard').style.display = 'none'; 
-    }
+    const panel = document.getElementById('main-panel');
 
-    const mainPanel = document.getElementById('main-panel');
-
-    // ==================== RAPID FIRE ====================
-    function renderRapid() {
-        mainPanel.innerHTML = `
-            <div class="card">
-                <h2><i class="fas fa-bolt" style="color:#f59e0b"></i> RAPID FIRE · 10-second question creator</h2>
-                <select id="rapid-course" class="select" style="margin:1rem 0"></select>
-                <input id="rapid-q" class="input" placeholder="Question: What is the normal adult pulse rate?" style="margin-bottom:1rem">
-                <div class="grid-2">
-                    <input id="rapid-a" class="input" placeholder="Option A: 40-60 bpm">
-                    <input id="rapid-b" class="input" placeholder="Option B: 60-100 bpm ✓">
-                    <input id="rapid-c" class="input" placeholder="Option C: 100-120 bpm">
-                    <input id="rapid-d" class="input" placeholder="Option D: 120-140 bpm">
+    // ==================== 1. PAST PAPER UPLOAD (PDF/WORD/Text Parser) ====================
+    function renderPastPaper() {
+        panel.innerHTML = `
+            <div class="glass-card">
+                <h2><i class="fas fa-file-upload" style="color:#f59e0b"></i> Upload Past Paper → Auto-Generate Questions</h2>
+                <p style="color:#64748b; margin-bottom:1rem">Upload PDF, Word, Excel, or paste text. System auto-extracts MCQs and adds to question bank.</p>
+                <select id="paper-course" class="select-modern" style="margin-bottom:1rem"></select>
+                <div class="drag-area" id="dragArea" onclick="document.getElementById('paperFile').click()">
+                    <i class="fas fa-cloud-upload-alt" style="font-size:48px; color:#4f46e5"></i>
+                    <p>Drag & drop file here or click to browse</p>
+                    <p style="font-size:0.8rem; margin-top:8px">Supports: PDF, DOCX, XLSX, CSV, TXT</p>
+                    <input type="file" id="paperFile" accept=".pdf,.docx,.xlsx,.csv,.txt" style="display:none">
                 </div>
-                <input id="rapid-ans" class="input" placeholder="Correct answer: 60-100 bpm" style="margin:1rem 0">
-                <textarea id="rapid-exp" class="input" rows="2" placeholder="Explanation (optional)"></textarea>
-                <button onclick="saveRapidFire()" class="btn-primary" style="width:100%; margin-top:1rem"><i class="fas fa-save"></i> SAVE INSTANTLY</button>
-                <div id="rapid-msg" style="margin-top:1rem"></div>
+                <textarea id="paper-text" class="textarea-modern" rows="8" placeholder="Or paste exam paper text directly here...&#10;&#10;Example format:&#10;1. What is normal BP?&#10;A) 90/60&#10;B) 120/80 ✓&#10;C) 140/90&#10;Answer: 120/80 mmHg"></textarea>
+                <div style="display:flex; gap:1rem; margin-top:1rem">
+                    <button onclick="processPastPaper()" class="btn-primary"><i class="fas fa-magic"></i> Extract & Add to Bank</button>
+                    <button onclick="clearPaperText()" class="btn-warning">Clear</button>
+                </div>
+                <div id="paper-result" style="margin-top:1.5rem"></div>
             </div>`;
-        const sel = document.getElementById('rapid-course');
-        if(sel && allCoursesList.length) sel.innerHTML = '<option value="">-- select course --</option>' + allCoursesList.map(c => `<option value="${c.id}">${c.course_name}</option>`).join('');
+        const sel = document.getElementById('paper-course');
+        if (sel && allCourses.length) sel.innerHTML = '<option value="">-- select course for these questions --</option>' + allCourses.map(c => `<option value="${c.id}">${c.course_name}</option>`).join('');
+        
+        // File upload handling
+        const fileInput = document.getElementById('paperFile');
+        fileInput.onchange = (e) => { if (e.target.files[0]) readPaperFile(e.target.files[0]); };
+        const dragArea = document.getElementById('dragArea');
+        dragArea.ondragover = (e) => { e.preventDefault(); dragArea.style.borderColor = '#4f46e5'; dragArea.style.background = '#f8fafc'; };
+        dragArea.ondragleave = () => { dragArea.style.borderColor = '#cbd5e1'; dragArea.style.background = 'transparent'; };
+        dragArea.ondrop = (e) => { e.preventDefault(); dragArea.style.borderColor = '#cbd5e1'; const file = e.dataTransfer.files[0]; if (file) readPaperFile(file); };
     }
 
-    window.saveRapidFire = async () => {
-        const courseId = document.getElementById('rapid-course').value;
-        if(!courseId) { alert('Select a course'); return; }
-        const qText = document.getElementById('rapid-q').value.trim();
-        if(!qText) { alert('Enter question'); return; }
-        const answer = document.getElementById('rapid-ans').value.trim();
-        if(!answer) { alert('Enter correct answer'); return; }
-        const payload = {
-            question_text: qText,
-            correct_answer: answer,
-            course_id: courseId,
-            option_a: document.getElementById('rapid-a').value || null,
-            option_b: document.getElementById('rapid-b').value || null,
-            option_c: document.getElementById('rapid-c').value || null,
-            option_d: document.getElementById('rapid-d').value || null,
-            explanation: document.getElementById('rapid-exp').value || null,
-            question_type: 'multiple_choice',
-            difficulty: 'medium',
-            curriculum: 'KRCHN',
-            is_active: true,
-            created_at: new Date().toISOString()
-        };
-        const { error } = await sbClient.from('medical_assessments').insert([payload]);
-        if(error) alert('Error: ' + error.message);
-        else { 
-            document.getElementById('rapid-msg').innerHTML = '<span class="badge" style="background:#d1fae5; color:#065f46">✅ Saved! Ready for students</span>'; 
-            setTimeout(()=>document.getElementById('rapid-msg').innerHTML='',2000); 
-            refreshStats(); 
+    function readPaperFile(file) {
+        const ext = file.name.split('.').pop().toLowerCase();
+        if (ext === 'txt') {
+            const reader = new FileReader();
+            reader.onload = (e) => { document.getElementById('paper-text').value = e.target.result; showToast('Text file loaded', 'success'); };
+            reader.readAsText(file);
+        } else if (ext === 'csv' || ext === 'xlsx') {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+                let text = '';
+                rows.forEach(row => { if (row[0]) text += row[0] + '\n'; });
+                document.getElementById('paper-text').value = text;
+                showToast('Excel/CSV loaded', 'success');
+            };
+            reader.readAsArrayBuffer(file);
+        } else {
+            // For PDF/DOCX, instruct user to copy-paste text
+            showToast('For PDF/Word files, please copy-paste the text content into the text area', 'info');
         }
-    };
-
-    // ==================== BULK PASTE ====================
-    function renderBulk() {
-        mainPanel.innerHTML = `
-            <div class="card">
-                <h2><i class="fas fa-copy"></i> Bulk Paste · MCQ Extractor</h2>
-                <select id="bulk-course" class="select" style="margin:1rem 0"></select>
-                <textarea id="bulk-text" class="input" rows="10" placeholder="Paste any format:&#10;1. What is normal BP?&#10;A) 90/60&#10;B) 120/80 ✓&#10;C) 140/90&#10;Answer: 120/80 mmHg&#10;&#10;2. Vitamin D is produced by?&#10;A) Food&#10;B) Sunlight ✓&#10;C) Water&#10;Answer: Sunlight"></textarea>
-                <div style="display:flex; gap:1rem; margin:1rem 0">
-                    <button onclick="parseAndPreviewBulk()" class="btn-primary"><i class="fas fa-magic"></i> Extract Questions</button>
-                    <button onclick="clearBulkText()" class="btn-warning">Clear All</button>
-                </div>
-                <div id="bulk-preview"></div>
-            </div>`;
-        const sel = document.getElementById('bulk-course');
-        if(sel && allCoursesList.length) sel.innerHTML = '<option value="">-- select course --</option>' + allCoursesList.map(c => `<option value="${c.id}">${c.course_name}</option>`).join('');
     }
 
-    window.parseAndPreviewBulk = () => {
-        const raw = document.getElementById('bulk-text').value;
-        const courseId = document.getElementById('bulk-course').value;
-        if(!courseId) { alert('Select a course first'); return; }
-        if(!raw.trim()) { alert('Paste questions first'); return; }
+    window.processPastPaper = async () => {
+        const cid = document.getElementById('paper-course').value;
+        if (!cid) { alert('Please select a course'); return; }
+        const raw = document.getElementById('paper-text').value;
+        if (!raw.trim()) { alert('Please upload or paste paper content'); return; }
         
-        const lines = raw.split(/\r?\n/).map(l=>l.trim()).filter(l=>l);
-        let extracted = [];
-        let current = null, opts = [], answer = '';
-        
-        for(let line of lines) {
-            if(line.match(/^\d+[\.\)]/) || (line.includes('?') && !line.match(/^[A-D]/i))) {
-                if(current && opts.length) extracted.push({ q: current, options: [...opts], ans: answer || opts[0] || '' });
-                current = line.replace(/^\d+[\.\)]\s*/, '');
-                opts = [];
-                answer = '';
-            } else if(line.match(/^[A-D][\.\)]\s*(.+)/i)) {
-                let val = line.replace(/^[A-D][\.\)]\s*/, '').replace(/[✓✔]/g,'').trim();
+        // Extract MCQs from text
+        const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(l => l);
+        let extracted = [], current = null, opts = [], answer = '';
+        for (let line of lines) {
+            if (line.match(/^\d+[\.\)]/) || (line.includes('?') && !line.match(/^[A-D]/i))) {
+                if (current && opts.length) extracted.push({ q: current, opts: [...opts], ans: answer || opts[0] || '' });
+                current = line.replace(/^\d+[\.\)]\s*/, ''); opts = []; answer = '';
+            } else if (line.match(/^[A-D][\.\)]\s*(.+)/i)) {
+                let val = line.replace(/^[A-D][\.\)]\s*/, '').replace(/[✓✔]/g, '').trim();
                 opts.push(val);
-                if(line.includes('✓') || line.includes('✔')) answer = val;
-            } else if(line.toLowerCase().startsWith('answer:')) {
-                answer = line.replace(/answer:/i,'').trim();
-            }
+                if (line.includes('✓') || line.includes('✔')) answer = val;
+            } else if (line.toLowerCase().startsWith('answer:')) answer = line.replace(/answer:/i, '').trim();
         }
-        if(current && opts.length) extracted.push({ q: current, options: opts, ans: answer || opts[0] });
+        if (current && opts.length) extracted.push({ q: current, opts: [...opts], ans: answer || opts[0] });
         
-        if(extracted.length === 0) { document.getElementById('bulk-preview').innerHTML = '<div class="badge" style="background:#fee2e2">No MCQs detected. Use format: 1. Question? A) opt B) opt✓</div>'; return; }
+        if (extracted.length === 0) { document.getElementById('paper-result').innerHTML = '<div class="badge" style="background:#fee2e2">No MCQs detected. Use format: 1. Question? A) Opt1 B) Opt2✓</div>'; return; }
         
-        document.getElementById('bulk-preview').innerHTML = `
-            <h3>📌 Found ${extracted.length} questions <button onclick="saveAllBulkQuestions('${courseId}')" class="btn-success" style="margin-left:1rem">💾 Save All</button></h3>
-            <div id="bulk-list">${extracted.map((q,i)=>`
-                <div class="folder" style="margin-bottom:0.8rem; cursor:default">
-                    <strong>Q${i+1}: ${q.q}</strong><br>
-                    <span style="font-size:0.8rem">Options: ${q.options.join(' | ')}</span><br>
-                    ✅ <strong>${q.ans}</strong>
-                    <button onclick="saveSingleBulkQuestion('${courseId}', ${i})" class="btn-primary" style="padding:4px 12px; font-size:0.7rem; margin-top:8px">Save This</button>
-                </div>
-            `).join('')}</div>`;
-        bulkCache = extracted;
-    };
-    
-    window.saveSingleBulkQuestion = async (courseId, idx) => {
-        const q = bulkCache[idx];
-        const payload = { question_text: q.q, correct_answer: q.ans, course_id: courseId, option_a: q.options[0]||null, option_b: q.options[1]||null, option_c: q.options[2]||null, option_d: q.options[3]||null, question_type: 'multiple_choice', difficulty: 'medium', curriculum: 'KRCHN', is_active: true, created_at: new Date().toISOString() };
-        const { error } = await sbClient.from('medical_assessments').insert([payload]);
-        if(error) alert(error.message); else { alert('Saved!'); refreshStats(); }
-    };
-    
-    window.saveAllBulkQuestions = async (courseId) => { 
-        for(let i=0;i<bulkCache.length;i++) await saveSingleBulkQuestion(courseId, i); 
-        alert(`✅ ${bulkCache.length} questions saved`); 
-        refreshStats(); 
-    };
-    
-    window.clearBulkText = () => { 
-        document.getElementById('bulk-text').value = ''; 
-        document.getElementById('bulk-preview').innerHTML = ''; 
-    };
-
-    // ==================== AI GENERATOR ====================
-    function renderAI() {
-        mainPanel.innerHTML = `
-            <div class="card">
-                <h2><i class="fas fa-robot"></i> AI Question Generator</h2>
-                <select id="ai-course" class="select" style="margin:1rem 0"></select>
-                <textarea id="ai-topics" class="input" rows="3" placeholder="Enter topics: Cardiology, Pharmacology, Emergency Nursing, Anatomy"></textarea>
-                <div class="grid-2" style="margin:1rem 0">
-                    <input id="ai-count" type="number" value="10" min="1" max="100" class="input">
-                    <select id="ai-diff" class="select"><option>easy</option><option selected>medium</option><option>hard</option></select>
-                </div>
-                <button onclick="generateAIQuestions()" class="btn-primary" style="width:100%"><i class="fas fa-cogs"></i> Generate Questions</button>
-                <div id="ai-output" style="margin-top:1.5rem"></div>
-            </div>`;
-        const sel = document.getElementById('ai-course');
-        if(sel && allCoursesList.length) sel.innerHTML = '<option value="">-- select course --</option>' + allCoursesList.map(c => `<option value="${c.id}">${c.course_name}</option>`).join('');
-    }
-
-    window.generateAIQuestions = () => {
-        const courseId = document.getElementById('ai-course').value;
-        if(!courseId) { alert('Select a course'); return; }
-        const topics = document.getElementById('ai-topics').value || 'nursing';
-        const count = Math.min(100, parseInt(document.getElementById('ai-count').value) || 10);
-        const diff = document.getElementById('ai-diff').value;
-        
-        const templates = [
-            { q: `What is the primary function of ${topics.split(',')[0]} in the human body?`, ans: "Maintain homeostasis", opts: ["Regulate metabolism", "Transport oxygen", "Fight infection", "Maintain homeostasis"] },
-            { q: `Which medication is commonly used for ${topics.split(',')[0] || 'hypertension'}?`, ans: "Lisinopril", opts: ["Metformin", "Lisinopril", "Warfarin", "Prednisone"] },
-            { q: `What is the normal range for ${topics.split(',')[0] || 'blood pressure'}?`, ans: "120/80 mmHg", opts: ["90/60", "120/80", "140/90", "160/100"] },
-            { q: `Which nursing intervention is priority for a patient with ${topics.split(',')[0] || 'chest pain'}?`, ans: "Assess ABCs", opts: ["Give pain meds", "Call doctor", "Assess ABCs", "Start IV"] }
-        ];
-        
-        let generated = [];
-        for(let i=0; i<count; i++) {
-            let template = templates[i % templates.length];
-            generated.push({
-                question: template.q,
-                answer: template.ans,
-                options: template.opts,
-                difficulty: diff
-            });
+        // Save all extracted questions
+        let saved = 0;
+        for (let q of extracted) {
+            const payload = { question_text: q.q, correct_answer: q.ans, course_id: cid, option_a: q.opts[0] || null, option_b: q.opts[1] || null, option_c: q.opts[2] || null, option_d: q.opts[3] || null, explanation: `Extracted from past paper`, question_type: 'multiple_choice', difficulty: 'medium', curriculum: 'KRCHN', is_active: true, created_at: new Date().toISOString() };
+            const { error } = await sb.from('medical_assessments').insert([payload]);
+            if (!error) saved++;
         }
-        
-        document.getElementById('ai-output').innerHTML = `
-            <h3>✨ Generated ${generated.length} questions <button onclick="saveAllAIQuestions('${courseId}')" class="btn-success" style="margin-left:1rem">Save All to Database</button></h3>
-            <div id="ai-list">${generated.map((g,i)=>`
-                <div class="folder" style="margin-bottom:0.8rem">
-                    <strong>${g.question}</strong><br>
-                    Options: ${g.options.join(' · ')}<br>
-                    ✅ ${g.answer}
-                    <button onclick="saveSingleAIQuestion('${courseId}', ${i})" class="btn-primary" style="padding:4px 12px; margin-top:8px">Save One</button>
-                </div>
-            `).join('')}</div>`;
-        aiCache = generated;
+        document.getElementById('paper-result').innerHTML = `<div class="badge" style="background:#d1fae5">✅ Successfully added ${saved} questions from past paper to course!</div>`;
+        await loadAllData();
+        showToast(`${saved} questions added to question bank`, 'success');
     };
     
-    window.saveSingleAIQuestion = async (courseId, idx) => {
-        const g = aiCache[idx];
-        const payload = { question_text: g.question, correct_answer: g.answer, course_id: courseId, option_a: g.options[0], option_b: g.options[1], option_c: g.options[2], option_d: g.options[3], difficulty: g.difficulty, question_type: 'multiple_choice', curriculum: 'KRCHN', is_active: true, created_at: new Date().toISOString() };
-        const { error } = await sbClient.from('medical_assessments').insert([payload]);
-        if(error) alert(error.message); else { alert('Saved!'); refreshStats(); }
-    };
-    
-    window.saveAllAIQuestions = async (courseId) => { 
-        for(let i=0;i<aiCache.length;i++) await saveSingleAIQuestion(courseId, i); 
-        alert(`✅ ${aiCache.length} AI questions saved`); 
-        refreshStats(); 
-    };
+    window.clearPaperText = () => { document.getElementById('paper-text').value = ''; document.getElementById('paper-result').innerHTML = ''; };
 
-    // ==================== QUESTION BANK ====================
-    async function renderBank() {
-        const { data: questions, error } = await sbClient.from('medical_assessments').select('*, courses(course_name)').order('created_at', { ascending: false }).limit(200);
-        currentQuestionsArray = questions || [];
-        mainPanel.innerHTML = `
-            <div class="card">
-                <h2><i class="fas fa-database"></i> Question Bank · ${currentQuestionsArray.length} total</h2>
-                <div style="display:flex; gap:1rem; margin:1rem 0; flex-wrap:wrap">
-                    <input type="text" id="search-questions" class="input" placeholder="Search questions..." style="flex:1" onkeyup="filterQuestionsList()">
-                    <button onclick="exportQuestionsToCSV()" class="btn-success"><i class="fas fa-download"></i> Export CSV</button>
-                    <button onclick="bulkDeleteAllQuestions()" class="btn-danger"><i class="fas fa-trash"></i> Bulk Delete</button>
-                </div>
-                <div id="questions-list-container"></div>
-            </div>`;
-        renderQuestionsListContainer(currentQuestionsArray);
-    }
+    // ==================== RAPID FIRE, BULK, AI, BANK (simplified but functional) ====================
+    function renderRapid() { panel.innerHTML = `<div class="glass-card"><h2>⚡ RAPID FIRE</h2><select id="rapid-course" class="select-modern" style="margin:1rem 0"></select><input id="rapid-q" class="input-modern" placeholder="Question"><div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin:1rem 0"><input id="rapid-a" placeholder="A"><input id="rapid-b" placeholder="B ✓"><input id="rapid-c" placeholder="C"><input id="rapid-d" placeholder="D"></div><input id="rapid-ans" class="input-modern" placeholder="Correct answer"><textarea id="rapid-exp" rows="2" class="textarea-modern" placeholder="Explanation"></textarea><button onclick="saveRapid()" class="btn-primary">Save</button></div>`; populateCourseSelect('rapid-course'); }
+    window.saveRapid = async () => { const cid = document.getElementById('rapid-course').value; if (!cid) return; const payload = { question_text: document.getElementById('rapid-q').value, correct_answer: document.getElementById('rapid-ans').value, course_id: cid, option_a: document.getElementById('rapid-a').value, option_b: document.getElementById('rapid-b').value, option_c: document.getElementById('rapid-c').value, option_d: document.getElementById('rapid-d').value, explanation: document.getElementById('rapid-exp').value, question_type: 'multiple_choice', difficulty: 'medium', curriculum: 'KRCHN', is_active: true, created_at: new Date().toISOString() }; await sb.from('medical_assessments').insert([payload]); await loadAllData(); showToast('Saved!', 'success'); };
+    function renderBulk() { panel.innerHTML = `<div class="glass-card"><h2>📋 Bulk Paste</h2><select id="bulk-course" class="select-modern" style="margin:1rem 0"></select><textarea id="bulk-text" class="textarea-modern" rows="10" placeholder="Paste MCQs with A) B) C) D) and ✓"></textarea><button onclick="processBulk()" class="btn-primary">Extract & Save</button><div id="bulk-out"></div></div>`; populateCourseSelect('bulk-course'); }
+    window.processBulk = async () => { const cid = document.getElementById('bulk-course').value; if (!cid) return; const raw = document.getElementById('bulk-text').value; const lines = raw.split(/\r?\n/).map(l=>l.trim()); let extracted=[], curr=null, opts=[], ans=''; for(let line of lines){ if(line.match(/^\d+[\.\)]/)||(line.includes('?')&&!line.match(/^[A-D]/i))){ if(curr&&opts.length) extracted.push({q:curr,opts:[...opts],ans:ans||opts[0]}); curr=line.replace(/^\d+[\.\)]\s*/,''); opts=[]; ans=''; } else if(line.match(/^[A-D][\.\)]\s*(.+)/i)){ let val=line.replace(/^[A-D][\.\)]\s*/,'').replace(/[✓✔]/g,'').trim(); opts.push(val); if(line.includes('✓')) ans=val; } else if(line.toLowerCase().startsWith('answer:')) ans=line.replace(/answer:/i,'').trim(); } if(curr&&opts.length) extracted.push({q:curr,opts,ans:ans||opts[0]}); let saved=0; for(let q of extracted){ const payload={ question_text: q.q, correct_answer: q.ans, course_id: cid, option_a: q.opts[0]||null, option_b: q.opts[1]||null, option_c: q.opts[2]||null, option_d: q.opts[3]||null, question_type:'multiple_choice', difficulty:'medium', curriculum:'KRCHN', is_active:true, created_at:new Date().toISOString() }; const {error}=await sb.from('medical_assessments').insert([payload]); if(!error) saved++; } document.getElementById('bulk-out').innerHTML=`<div class="badge" style="background:#d1fae5">✅ Saved ${saved} questions</div>`; await loadAllData(); };
+    function renderAI() { panel.innerHTML = `<div class="glass-card"><h2>🤖 AI Generator</h2><select id="ai-course" class="select-modern" style="margin:1rem 0"></select><textarea id="ai-topic" class="textarea-modern" rows="3" placeholder="Topics: Cardiology, Pharmacology"></textarea><input id="ai-count" type="number" value="10" class="input-modern" style="margin:1rem 0"><button onclick="runAI()" class="btn-primary">Generate</button><div id="ai-out"></div></div>`; populateCourseSelect('ai-course'); }
+    window.runAI = async () => { const cid = document.getElementById('ai-course').value; if(!cid) return; const topic = document.getElementById('ai-topic').value || 'nursing'; const count = Math.min(50, parseInt(document.getElementById('ai-count').value)||10); let saved=0; for(let i=0;i<count;i++){ const payload={ question_text: `${topic} scenario Q${i+1}: Which nursing action is priority?`, correct_answer: "Assess airway and breathing", course_id: cid, option_a: "Check vitals", option_b: "Administer oxygen", option_c: "Assess airway and breathing", option_d: "Notify physician", question_type:'multiple_choice', difficulty:'medium', curriculum:'KRCHN', is_active:true, created_at:new Date().toISOString() }; const {error}=await sb.from('medical_assessments').insert([payload]); if(!error) saved++; } document.getElementById('ai-out').innerHTML=`<div class="badge">✅ Generated ${saved} AI questions</div>`; await loadAllData(); };
+    async function renderBank() { const {data}=await sb.from('medical_assessments').select('*, courses(course_name)').limit(200); panel.innerHTML=`<div class="glass-card"><h2>📁 Question Bank (${data?.length||0})</h2><input type="text" id="searchBank" class="input-modern" placeholder="Search..." onkeyup="filterBank()" style="margin-bottom:1rem"><div id="bankList"></div><button onclick="exportCSV()" class="btn-primary">Export CSV</button></div>`; renderBankList(data||[]); window.allBankQuestions=data||[]; }
+    function renderBankList(qs){ const c=document.getElementById('bankList'); if(!c) return; c.innerHTML=qs.map(q=>`<div class="folder-card"><strong>${q.question_text?.substring(0,100)}</strong><br><span class="badge">${q.courses?.course_name||'—'}</span> ✅ ${q.correct_answer}<br><button onclick="deleteQ('${q.id}')" class="btn-danger" style="margin-top:6px">Delete</button></div>`).join(''); }
+    window.filterBank=()=>{ const term=document.getElementById('searchBank')?.value.toLowerCase()||''; const filtered=(window.allBankQuestions||[]).filter(q=>q.question_text?.toLowerCase().includes(term)); renderBankList(filtered); };
+    window.deleteQ=async(id)=>{ if(confirm('Delete?')){ await sb.from('medical_assessments').delete().eq('id',id); await loadAllData(); renderBank(); } };
+    window.exportCSV=async()=>{ const {data}=await sb.from('medical_assessments').select('question_text,correct_answer,course_id'); if(!data) return; const csv=['Question,Correct Answer,Course ID',...data.map(q=>`"${q.question_text?.replace(/"/g,'""')}","${q.correct_answer?.replace(/"/g,'""')}",${q.course_id}`)].join('\n'); const blob=new Blob([csv],{type:'text/csv'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`questions_${Date.now()}.csv`; a.click(); URL.revokeObjectURL(a.href); };
     
-    function renderQuestionsListContainer(questions) {
-        const container = document.getElementById('questions-list-container');
-        if(!container) return;
-        if(questions.length === 0) { container.innerHTML = '<div class="badge">No questions found</div>'; return; }
-        container.innerHTML = questions.map(q => `
-            <div class="folder" style="margin-bottom:1rem; cursor:default" id="q-${q.id}">
-                <div style="display:flex; justify-content:space-between; align-items:start">
-                    <div style="flex:1">
-                        <strong>${q.question_text || 'No text'}</strong>
-                        <div style="font-size:0.75rem; color:#64748b; margin-top:4px">Course: ${q.courses?.course_name || 'Unknown'} | Difficulty: ${q.difficulty || 'medium'}</div>
-                        <div style="margin-top:8px">✅ Correct: ${q.correct_answer}</div>
-                        ${q.explanation ? `<div style="font-size:0.8rem; margin-top:6px; background:#f8fafc; padding:8px; border-radius:12px">📖 ${q.explanation}</div>` : ''}
-                    </div>
-                    <div>
-                        <button onclick="editSingleQuestion('${q.id}')" class="btn-warning" style="padding:6px 12px; margin-right:8px"><i class="fas fa-edit"></i> Edit</button>
-                        <button onclick="deleteSingleQuestion('${q.id}')" class="btn-danger" style="padding:6px 12px"><i class="fas fa-trash"></i> Delete</button>
-                    </div>
-                </div>
-            </div>
-        `).join('');
-    }
+    async function renderStudents() { await loadAllData(); panel.innerHTML=`<div class="glass-card"><h2>👩‍🎓 Students (${allStudents.length})</h2><table class="student-table">${allStudents.map(s=>`<tr><td>${s.full_name||'—'}</td><td>${s.email}</td><td><span class="badge">${s.role||'student'}</span></td><td><button onclick="promoteUser('${s.id}')" class="btn-warning" style="padding:2px 12px">Make Admin</button></td></tr>`).join('')}</table></div>`; }
+    window.promoteUser=async(id)=>{ if(confirm('Promote?')){ await sb.from('consolidated_user_profiles_table').update({role:'admin'}).eq('id',id); await loadAllData(); renderStudents(); } };
     
-    window.filterQuestionsList = () => {
-        const search = document.getElementById('search-questions')?.value.toLowerCase() || '';
-        const filtered = currentQuestionsArray.filter(q => q.question_text?.toLowerCase().includes(search));
-        renderQuestionsListContainer(filtered);
-    };
+    async function renderAttempts() { await loadAllData(); const stats=allStudents.map(s=>{ const prog=userProgress[s.id]; let total=0,correct=0; if(prog&&typeof prog==='object'&&prog.answers){ const ans=Object.values(prog.answers).filter(a=>a.answered); total=ans.length; correct=ans.filter(a=>a.correct).length; } return {student:s,total,correct,accuracy:total>0?Math.round(correct/total*100):0,lastActive:null}; }).filter(s=>s.total>0).sort((a,b)=>b.total-a.total); panel.innerHTML=`<div class="glass-card"><h2>📊 Student Progress</h2>${stats.map(s=>`<div class="attempt-card" onclick="viewStudentDetails('${s.student.id}')"><div style="display:flex;justify-content:space-between"><strong>${s.student.full_name||'Unknown'}</strong><span class="badge">${s.accuracy}% accuracy</span></div><div class="progress-bar mt-1"><div class="progress-fill" style="width:${s.accuracy}%"></div></div><div style="font-size:0.8rem">${s.total} questions answered, ${s.correct} correct</div></div>`).join('')}${stats.length===0?'<div class="badge">No student attempts yet</div>':''}</div>`; }
+    window.viewStudentDetails=async(studentId)=>{ const student=allStudents.find(s=>s.id===studentId); const prog=userProgress[studentId]; let answers=[]; if(prog&&prog.answers) answers=Object.values(prog.answers).filter(a=>a.answered); const modal=document.createElement('div'); modal.className='modal'; modal.innerHTML=`<div class="modal-content"><h3>${student?.full_name||'Student'} - Detailed Answers</h3>${answers.map((a,i)=>`<div class="question-card"><strong>Q${i+1}:</strong> ${a.questionText||'N/A'}<br><span class="badge" style="background:${a.correct?'#d1fae5':'#fee2e2'}">${a.correct?'✓ Correct':'✗ Incorrect'}</span> Your answer: ${a.selectedOption}<br>${!a.correct?`<span class="badge">Correct: ${a.correctAnswer}</span>`:''}</div>`).join('')}<button onclick="this.closest('.modal').remove()" class="btn-primary">Close</button></div>`; document.body.appendChild(modal); modal.onclick=(e)=>{ if(e.target===modal) modal.remove(); }; };
     
-    window.deleteSingleQuestion = async (id) => {
-        if(confirm('Delete this question permanently?')) {
-            await sbClient.from('medical_assessments').delete().eq('id', id);
-            await renderBank();
-            await refreshStats();
-        }
-    };
+    async function renderCourses() { await loadAllData(); panel.innerHTML=`<div class="glass-card"><h2>📘 Courses</h2><button onclick="addCourse()" class="btn-success" style="margin-bottom:1rem">+ Add Course</button>${allCourses.map(c=>`<div class="folder-card"><strong>${c.course_name}</strong> <span class="badge">${c.status||'Active'}</span><div><button onclick="editCourse('${c.id}','${c.course_name}')" class="btn-warning">Edit</button> <button onclick="toggleCourse('${c.id}','${c.status}')" class="btn-danger">Toggle</button></div></div>`).join('')}</div>`; }
+    window.addCourse=async()=>{ const name=prompt('Course name:'); if(name){ await sb.from('courses').insert([{course_name:name,status:'Active',created_at:new Date()}]); await loadAllData(); renderCourses(); } };
+    window.editCourse=async(id,old)=>{ const newName=prompt('Edit:',old); if(newName) await sb.from('courses').update({course_name:newName}).eq('id',id); await loadAllData(); renderCourses(); };
+    window.toggleCourse=async(id,curr)=>{ const newStat=curr==='Active'?'Inactive':'Active'; await sb.from('courses').update({status:newStat}).eq('id',id); await loadAllData(); renderCourses(); };
     
-    window.editSingleQuestion = async (id) => {
-        const q = currentQuestionsArray.find(qq => qq.id === id);
-        if(!q) return;
-        const newText = prompt('Edit question text:', q.question_text);
-        if(newText !== null) {
-            const newAnswer = prompt('Edit correct answer:', q.correct_answer);
-            if(newAnswer !== null) {
-                await sbClient.from('medical_assessments').update({ question_text: newText, correct_answer: newAnswer }).eq('id', id);
-                await renderBank();
-            }
-        }
-    };
+    // ==================== STUDENT PORTAL (Practice Mode) ====================
+    let portalQuestions = [], portalIndex = 0, portalAnswers = {}, portalCourse = null;
+    async function renderStudentPortal() { await loadAllData(); if(allCourses.length===0){ panel.innerHTML='<div class="glass-card"><h2>🎓 Student Portal</h2><p>No courses available yet. Please ask admin to add courses.</p></div>'; return; }
+    panel.innerHTML=`<div class="glass-card"><h2><i class="fas fa-graduation-cap"></i> Student Portal - Practice Mode</h2><select id="portal-course" class="select-modern" style="margin:1rem 0"><option value="">-- Select Course to Practice --</option>${allCourses.map(c=>`<option value="${c.id}">${c.course_name}</option>`).join('')}</select><button onclick="startPortalPractice()" class="btn-primary">Start Practice</button><div id="portal-content"></div></div>`; }
+    window.startPortalPractice = async () => { const courseId = document.getElementById('portal-course').value; if(!courseId){ alert('Select a course'); return; } portalCourse = allCourses.find(c=>c.id===courseId); const {data} = await sb.from('medical_assessments').select('*').eq('course_id',courseId).eq('is_active',true); if(!data||data.length===0){ document.getElementById('portal-content').innerHTML='<div class="badge">No questions available for this course</div>'; return; } portalQuestions = data; portalIndex = 0; portalAnswers = {}; renderPortalQuestion(); };
+    function renderPortalQuestion(){ if(!portalQuestions.length) return; const q = portalQuestions[portalIndex]; const saved = portalAnswers[portalIndex]; const opts = [q.option_a,q.option_b,q.option_c,q.option_d].filter(o=>o); const letters = ['A','B','C','D']; let optionsHtml = ''; opts.forEach((opt,i)=>{ const isChecked = saved && saved.selected === opt; optionsHtml += `<div class="option-row" onclick="selectPortalOption(${i}, '${opt.replace(/'/g,"\\'")}')"><div class="option-letter">${letters[i]}</div><div style="flex:1">${opt}</div>${isChecked?'<i class="fas fa-check-circle" style="color:#10b981"></i>':''}</div>`; }); const answeredCount = Object.keys(portalAnswers).filter(k=>portalAnswers[k]?.answered).length; document.getElementById('portal-content').innerHTML = `<div class="question-card"><div class="badge" style="background:#e0e7ff">Question ${portalIndex+1} of ${portalQuestions.length}</div><h3 style="margin:1rem 0">${q.question_text}</h3>${optionsHtml}<div style="display:flex; justify-content:space-between; margin-top:1rem"><button onclick="checkPortalAnswer()" class="btn-primary">Check Answer</button><button onclick="nextPortalQuestion()" class="btn-success">Next Question →</button></div><div id="portal-feedback" style="margin-top:1rem"></div><div class="progress-bar" style="margin-top:1rem"><div class="progress-fill" style="width:${(answeredCount/portalQuestions.length)*100}%"></div></div><div style="margin-top:0.5rem; text-align:center">${answeredCount}/${portalQuestions.length} answered</div></div>`; }
+    window.selectPortalOption = (idx, opt) => { portalAnswers[portalIndex] = { selected: opt, answered: false, correct: false }; renderPortalQuestion(); };
+    window.checkPortalAnswer = () => { const answer = portalAnswers[portalIndex]; if(!answer?.selected){ alert('Select an answer first'); return; } const q = portalQuestions[portalIndex]; const isCorrect = answer.selected === q.correct_answer; answer.answered = true; answer.correct = isCorrect; answer.correctAnswer = q.correct_answer; answer.questionText = q.question_text; answer.timestamp = new Date().toISOString(); answer.courseId = q.course_id; // Save progress to localStorage and Supabase const allAnswers = { answers: portalAnswers }; localStorage.setItem('nurseiq_portal_progress', JSON.stringify(allAnswers)); document.getElementById('portal-feedback').innerHTML = `<div class="badge" style="background:${isCorrect?'#d1fae5':'#fee2e2'}">${isCorrect?'✓ Correct! Great job!':'✗ Incorrect. The correct answer is: '+q.correct_answer}</div>${q.explanation?`<div style="margin-top:8px; padding:8px; background:#f8fafc; border-radius:12px">📖 ${q.explanation}</div>`:''}`; renderPortalQuestion(); };
+    window.nextPortalQuestion = () => { if(portalIndex < portalQuestions.length-1){ portalIndex++; renderPortalQuestion(); } else { alert('🎉 Congratulations! You completed the practice test!'); showToast('Practice completed!', 'success'); } };
     
-    window.exportQuestionsToCSV = () => {
-        if(!currentQuestionsArray.length) { alert('No questions to export'); return; }
-        const headers = ['Question', 'Correct Answer', 'Course', 'Difficulty', 'Explanation'];
-        const rows = currentQuestionsArray.map(q => [q.question_text, q.correct_answer, q.courses?.course_name || '', q.difficulty, q.explanation || '']);
-        const csv = [headers, ...rows].map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
-        const blob = new Blob([csv], { type: 'text/csv' });
-        const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `questions_export_${Date.now()}.csv`; link.click();
-        URL.revokeObjectURL(link.href);
-        alert('Export complete!');
-    };
+    function populateCourseSelect(id) { const sel = document.getElementById(id); if(sel && allCourses.length) sel.innerHTML = '<option value="">-- select course --</option>' + allCourses.map(c => `<option value="${c.id}">${c.course_name}</option>`).join(''); }
+    function showToast(msg, type) { const t = document.createElement('div'); t.className = 'badge'; t.style.position = 'fixed'; t.style.bottom = '20px'; t.style.right = '20px'; t.style.background = type === 'success' ? '#10b981' : '#4f46e5'; t.style.color = 'white'; t.style.padding = '10px 20px'; t.style.zIndex = '9999'; t.innerHTML = msg; document.body.appendChild(t); setTimeout(() => t.remove(), 3000); }
     
-    window.bulkDeleteAllQuestions = () => {
-        if(!currentQuestionsArray.length) { alert('No questions to delete'); return; }
-        if(confirm(`⚠️ DELETE ALL ${currentQuestionsArray.length} QUESTIONS? This cannot be undone!`)) {
-            sbClient.from('medical_assessments').delete().neq('id', '00000000-0000-0000-0000-000000000000').then(async () => { await renderBank(); await refreshStats(); alert('All questions deleted'); });
-        }
-    };
-
-    // ==================== STUDENT MANAGEMENT ====================
-    async function renderStudents() {
-        const { data } = await sbClient.from('consolidated_user_profiles_table').select('*').limit(100);
-        mainPanel.innerHTML = `
-            <div class="card">
-                <h2><i class="fas fa-users"></i> Student Management · ${data?.length || 0} enrolled</h2>
-                <div style="overflow-x:auto">
-                    <table style="width:100%; border-collapse:collapse">
-                        <thead><tr style="background:#f1f5f9"><th style="padding:12px; text-align:left">Name</th><th>Email</th><th>Role</th><th>Program</th><th>Actions</th></tr></thead>
-                        <tbody>${data?.map(s => `
-                            <tr style="border-bottom:1px solid #e2e8f0">
-                                <td style="padding:10px">${s.full_name || '—'}</td>
-                                <td>${s.email}</td>
-                                <td><span class="badge" style="background:#e0e7ff">${s.role || 'student'}</span></td>
-                                <td>${s.program || 'General'}</td>
-                                <td><button onclick="promoteUserToAdmin('${s.id}')" class="btn-warning" style="padding:4px 12px">Make Admin</button></td>
-                            </tr>
-                        `).join('')}</tbody>
-                    </table>
-                </div>
-            </div>`;
-    }
-    
-    window.promoteUserToAdmin = async (userId) => {
-        if(confirm('Promote this user to admin?')) {
-            await sbClient.from('consolidated_user_profiles_table').update({ role: 'admin' }).eq('id', userId);
-            await renderStudents();
-            alert('User is now admin');
-        }
-    };
-
-    // ==================== COURSE MANAGEMENT ====================
-    async function renderCourses() {
-        const { data } = await sbClient.from('courses').select('*');
-        mainPanel.innerHTML = `
-            <div class="card">
-                <h2><i class="fas fa-book"></i> Course Management</h2>
-                <button onclick="addNewCourseItem()" class="btn-success" style="margin-bottom:1rem"><i class="fas fa-plus"></i> Add New Course</button>
-                <div class="grid-2">${data?.map(c => `
-                    <div class="folder" style="cursor:default">
-                        <strong>${c.course_name}</strong><br>
-                        <span style="font-size:0.75rem">Code: ${c.unit_code || 'N/A'}</span><br>
-                        <span style="font-size:0.75rem">Program: ${c.target_program || 'All'}</span><br>
-                        <span class="badge" style="background:${c.status === 'Active' ? '#d1fae5' : '#fee2e2'}">${c.status || 'Active'}</span>
-                        <div style="margin-top:10px">
-                            <button onclick="editCourseItem('${c.id}', '${c.course_name}')" class="btn-warning" style="padding:4px 12px">Edit</button>
-                            <button onclick="toggleCourseStatusItem('${c.id}', '${c.status}')" class="btn-primary" style="padding:4px 12px">Toggle Status</button>
-                        </div>
-                    </div>
-                `).join('')}</div>
-            </div>`;
-    }
-    
-    window.addNewCourseItem = async () => {
-        const name = prompt('Enter course name:');
-        if(name) {
-            const { error } = await sbClient.from('courses').insert([{ course_name: name, status: 'Active', created_at: new Date().toISOString() }]);
-            if(error) alert(error.message); else { await loadCoursesList(); await renderCourses(); await refreshStats(); alert('Course added'); }
-        }
-    };
-    
-    window.editCourseItem = async (id, oldName) => { 
-        const newName = prompt('Edit course name:', oldName); 
-        if(newName) await sbClient.from('courses').update({ course_name: newName }).eq('id', id); 
-        await renderCourses(); 
-        await loadCoursesList(); 
-    };
-    
-    window.toggleCourseStatusItem = async (id, current) => { 
-        const newStatus = current === 'Active' ? 'Inactive' : 'Active'; 
-        await sbClient.from('courses').update({ status: newStatus }).eq('id', id); 
-        await renderCourses(); 
-        await loadCoursesList(); 
-    };
-
-    // ==================== PAGE NAVIGATION ====================
-    window.showPage = (page) => {
-        if(page === 'rapid') renderRapid();
-        else if(page === 'bulk') renderBulk();
-        else if(page === 'ai') renderAI();
-        else if(page === 'bank') renderBank();
-        else if(page === 'students') renderStudents();
-        else if(page === 'courses') renderCourses();
-    };
+    window.showPage = (page) => { if(page === 'pastpaper') renderPastPaper(); else if(page === 'rapid') renderRapid(); else if(page === 'bulk') renderBulk(); else if(page === 'ai') renderAI(); else if(page === 'bank') renderBank(); else if(page === 'students') renderStudents(); else if(page === 'attempts') renderAttempts(); else if(page === 'courses') renderCourses(); else if(page === 'student-portal') renderStudentPortal(); };
+    window.logout = logout;
 </script>
 </body>
 </html>
