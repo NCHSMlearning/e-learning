@@ -4451,6 +4451,510 @@ window.enable2FAForAll = enable2FAForAll;
 window.terminateAllSessions = terminateAllSessions;
 window.filterErrors = filterErrors;
 window.updateVisualization = updateVisualization;
+/*******************************************************
+ * 19. SUPER ADMIN APPROVAL SYSTEM
+ * All admin actions require Super Admin approval
+ *******************************************************/
 
+// Global variable for current action being reviewed
+let currentActionId = null;
+
+// Function to request admin action (called from admin functions)
+async function requestAdminAction(actionType, actionData, description, targetId = null) {
+    try {
+        const { data: { user } } = await sb.auth.getUser();
+        
+        // Get admin name
+        const { data: adminProfile } = await sb
+            .from('consolidated_user_profiles_table')
+            .select('full_name, email')
+            .eq('user_id', user.id)
+            .single();
+        
+        const actionRequest = {
+            admin_id: user.id,
+            admin_name: adminProfile?.full_name || adminProfile?.email || user.email,
+            action_type: actionType,
+            action_data: actionData,
+            description: description,
+            target_id: targetId,
+            status: 'pending',
+            requested_at: new Date().toISOString(),
+            reviewed_at: null,
+            reviewed_by: null,
+            review_notes: null
+        };
+        
+        const { data, error } = await sb
+            .from('admin_action_requests')
+            .insert([actionRequest])
+            .select();
+        
+        if (error) throw error;
+        
+        // Show notification to admin
+        showFeedback(`✅ Action submitted for Super Admin approval. Request ID: ${data[0].id.substring(0, 8)}`, 'success');
+        
+        // Send notification to Super Admins
+        await notifySuperAdmins(actionRequest);
+        
+        // Update badge if on super admin dashboard
+        if (document.getElementById('pendingApprovalsBadge')) {
+            loadAdminActions();
+        }
+        
+        return { success: true, requestId: data[0].id };
+    } catch (error) {
+        console.error('Error requesting admin action:', error);
+        showFeedback(`Failed to submit approval request: ${error.message}`, 'error');
+        return { success: false, error: error.message };
+    }
+}
+
+// Notify Super Admins about pending action
+async function notifySuperAdmins(actionRequest) {
+    try {
+        const { data: superAdmins } = await sb
+            .from('consolidated_user_profiles_table')
+            .select('user_id')
+            .eq('role', 'superadmin');
+        
+        if (!superAdmins || superAdmins.length === 0) return;
+        
+        // Create notifications for all super admins
+        const notifications = superAdmins.map(admin => ({
+            user_id: admin.user_id,
+            title: '🛡️ New Admin Action Requires Approval',
+            message: `${actionRequest.admin_name} requested: ${actionRequest.description.substring(0, 100)}`,
+            type: 'admin_approval',
+            related_id: actionRequest.id,
+            created_at: new Date().toISOString(),
+            is_read: false
+        }));
+        
+        const { error } = await sb.from('notifications').insert(notifications);
+        if (error) console.error('Error creating notifications:', error);
+        
+        // Also log to audit
+        await logAudit('ADMIN_ACTION_REQUEST', `${actionRequest.admin_name} requested: ${actionRequest.description}`, actionRequest.id, 'PENDING');
+        
+    } catch (error) {
+        console.error('Error notifying super admins:', error);
+    }
+}
+
+// Load all admin actions for Super Admin review
+async function loadAdminActions() {
+    const tbody = document.getElementById('admin-actions-body');
+    if (!tbody) return;
+    
+    const typeFilter = document.getElementById('approvalTypeFilter')?.value || 'all';
+    const statusFilter = document.getElementById('approvalStatusFilter')?.value || 'pending';
+    
+    let query = sb
+        .from('admin_action_requests')
+        .select('*')
+        .order('requested_at', { ascending: false });
+    
+    if (statusFilter !== 'all') {
+        query = query.eq('status', statusFilter);
+    }
+    if (typeFilter !== 'all') {
+        query = query.eq('action_type', typeFilter);
+    }
+    
+    const { data, error } = await query;
+    
+    if (error) {
+        console.error('Error loading admin actions:', error);
+        tbody.innerHTML = `<tr><td colspan="8">Error loading actions: ${error.message}</td></tr>`;
+        return;
+    }
+    
+    displayAdminActions(data || []);
+    updateApprovalStats(data || []);
+}
+
+// Display admin actions in table
+function displayAdminActions(actions) {
+    const tbody = document.getElementById('admin-actions-body');
+    if (!tbody) return;
+    
+    if (!actions || actions.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8">✅ No pending actions. All clear!</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = actions.map(action => `
+        <tr style="${action.status === 'pending' ? 'background: #fef3c7;' : (action.status === 'approved' ? 'background: #d1fae5;' : 'background: #fee2e2;')}">
+            <td><small>#${action.id.substring(0, 8)}</small></td>
+            <td>${escapeHtml(action.admin_name)}</td>
+            <td><span class="badge badge-info">${formatActionType(action.action_type)}</span></td>
+            <td>${escapeHtml(action.description)}</td>
+            <td>${action.target_id ? escapeHtml(action.target_id.substring(0, 8)) : '-'}</td>
+            <td>${formatDate(action.requested_at)}</td>
+            <td>${getStatusBadge(action.status)}</td>
+            <td>
+                <button onclick="viewActionDetail('${action.id}')" class="btn-sm btn-edit">
+                    <i class="fas fa-eye"></i> ${action.status === 'pending' ? 'Review' : 'View'}
+                </button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+// Format action type for display
+function formatActionType(type) {
+    const types = {
+        'create_user': '➕ Create User',
+        'delete_user': '❌ Delete User',
+        'edit_user': '✏️ Edit User',
+        'create_course': '📚 Create Course',
+        'delete_course': '🗑️ Delete Course',
+        'edit_course': '✏️ Edit Course',
+        'create_unit': '📖 Create Unit',
+        'delete_unit': '🗑️ Delete Unit',
+        'edit_unit': '✏️ Edit Unit',
+        'schedule_session': '📅 Schedule Session',
+        'delete_session': '❌ Delete Session',
+        'upload_resource': '📎 Upload Resource',
+        'delete_resource': '🗑️ Delete Resource',
+        'mass_promotion': '🔼 Mass Promotion',
+        'send_announcement': '📢 Send Announcement'
+    };
+    return types[type] || type;
+}
+
+// Get status badge HTML
+function getStatusBadge(status) {
+    const badges = {
+        'pending': '<span style="background: #fef3c7; color: #d97706; padding: 4px 8px; border-radius: 12px;">⏳ Pending</span>',
+        'approved': '<span style="background: #d1fae5; color: #059669; padding: 4px 8px; border-radius: 12px;">✅ Approved</span>',
+        'rejected': '<span style="background: #fee2e2; color: #dc2626; padding: 4px 8px; border-radius: 12px;">❌ Rejected</span>'
+    };
+    return badges[status] || status;
+}
+
+// Format date for display
+function formatDate(dateString) {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    return date.toLocaleString();
+}
+
+// Update approval statistics on dashboard
+function updateApprovalStats(actions) {
+    const pending = actions?.filter(a => a.status === 'pending').length || 0;
+    const approvedToday = actions?.filter(a => {
+        if (a.status !== 'approved') return false;
+        const reviewedDate = new Date(a.reviewed_at);
+        const today = new Date();
+        return reviewedDate.toDateString() === today.toDateString();
+    }).length || 0;
+    const rejected = actions?.filter(a => a.status === 'rejected').length || 0;
+    
+    document.getElementById('pendingActionsCount')?.innerText = pending;
+    document.getElementById('approvedTodayCount')?.innerText = approvedToday;
+    document.getElementById('rejectedCount')?.innerText = rejected;
+    
+    // Get active admins count
+    loadActiveAdminsCount();
+    
+    // Update sidebar badge
+    const badge = document.getElementById('pendingApprovalsBadge');
+    if (badge) {
+        if (pending > 0) {
+            badge.innerText = pending;
+            badge.style.display = 'inline-block';
+        } else {
+            badge.style.display = 'none';
+        }
+    }
+}
+
+// Load count of active admins
+async function loadActiveAdminsCount() {
+    try {
+        const { count, error } = await sb
+            .from('consolidated_user_profiles_table')
+            .select('user_id', { count: 'exact', head: true })
+            .eq('role', 'admin')
+            .eq('status', 'approved');
+        
+        if (!error) {
+            document.getElementById('activeAdminsCount')?.innerText = count || 0;
+        }
+    } catch (error) {
+        console.error('Error loading admin count:', error);
+    }
+}
+
+// View action details
+async function viewActionDetail(actionId) {
+    currentActionId = actionId;
+    
+    const { data: action, error } = await sb
+        .from('admin_action_requests')
+        .select('*')
+        .eq('id', actionId)
+        .single();
+    
+    if (error) {
+        showFeedback('Error loading action details', 'error');
+        return;
+    }
+    
+    const modalBody = document.getElementById('actionDetailBody');
+    if (!modalBody) return;
+    
+    modalBody.innerHTML = `
+        <div style="padding: 15px;">
+            <p><strong>📋 Request ID:</strong> ${action.id}</p>
+            <p><strong>👤 Admin:</strong> ${escapeHtml(action.admin_name)}</p>
+            <p><strong>⚡ Action Type:</strong> ${formatActionType(action.action_type)}</p>
+            <p><strong>📝 Description:</strong> ${escapeHtml(action.description)}</p>
+            <p><strong>🎯 Target ID:</strong> ${action.target_id || 'N/A'}</p>
+            <p><strong>📅 Requested At:</strong> ${formatDate(action.requested_at)}</p>
+            <p><strong>📊 Status:</strong> ${getStatusBadge(action.status)}</p>
+            <hr>
+            <h4>📦 Full Action Data:</h4>
+            <pre style="background: #f3f4f6; padding: 10px; border-radius: 6px; overflow-x: auto; font-size: 12px;">${JSON.stringify(action.action_data, null, 2)}</pre>
+            ${action.review_notes ? `<hr><p><strong>📌 Review Notes:</strong> ${escapeHtml(action.review_notes)}</p>` : ''}
+        </div>
+    `;
+    
+    const modal = document.getElementById('actionDetailModal');
+    if (modal) modal.style.display = 'flex';
+}
+
+// Approve current action
+async function approveCurrentAction() {
+    const notes = prompt('Add approval notes (optional):');
+    
+    const { data: { user } } = await sb.auth.getUser();
+    
+    const { error } = await sb
+        .from('admin_action_requests')
+        .update({
+            status: 'approved',
+            reviewed_at: new Date().toISOString(),
+            reviewed_by: user.id,
+            review_notes: notes || 'Approved by Super Admin'
+        })
+        .eq('id', currentActionId);
+    
+    if (error) {
+        showFeedback(`Error approving action: ${error.message}`, 'error');
+        return;
+    }
+    
+    // Execute the actual action
+    await executeApprovedAction(currentActionId);
+    
+    showFeedback('✅ Action approved and executed successfully!', 'success');
+    closeModal('actionDetailModal');
+    loadAdminActions();
+    loadAuditLogs();
+}
+
+// Reject current action
+async function rejectCurrentAction() {
+    const reason = prompt('❌ Please provide rejection reason:');
+    if (!reason) return;
+    
+    const { data: { user } } = await sb.auth.getUser();
+    
+    const { error } = await sb
+        .from('admin_action_requests')
+        .update({
+            status: 'rejected',
+            reviewed_at: new Date().toISOString(),
+            reviewed_by: user.id,
+            review_notes: reason
+        })
+        .eq('id', currentActionId);
+    
+    if (error) {
+        showFeedback(`Error rejecting action: ${error.message}`, 'error');
+        return;
+    }
+    
+    showFeedback('❌ Action rejected', 'warning');
+    closeModal('actionDetailModal');
+    loadAdminActions();
+    loadAuditLogs();
+}
+
+// Execute the approved action
+async function executeApprovedAction(actionId) {
+    const { data: action, error } = await sb
+        .from('admin_action_requests')
+        .select('*')
+        .eq('id', actionId)
+        .single();
+    
+    if (error) {
+        console.error('Error fetching action for execution:', error);
+        return;
+    }
+    
+    try {
+        switch (action.action_type) {
+            case 'delete_user':
+                await sb.from('consolidated_user_profiles_table').delete().eq('user_id', action.target_id);
+                await sb.auth.admin.deleteUser(action.target_id);
+                await logAudit('USER_DELETE_APPROVED', `Approved deletion of user: ${action.target_id}`, action.target_id, 'SUCCESS');
+                break;
+                
+            case 'create_user':
+                const userData = action.action_data;
+                const { data: newUser, error: createError } = await sb.auth.signUp({
+                    email: userData.email,
+                    password: userData.password,
+                    options: { data: userData.user_metadata }
+                });
+                if (!createError && newUser) {
+                    await sb.from('consolidated_user_profiles_table').insert({
+                        user_id: newUser.user.id,
+                        ...userData.profile_data
+                    });
+                }
+                break;
+                
+            case 'delete_course':
+                await sb.from('courses').delete().eq('id', action.target_id);
+                break;
+                
+            case 'delete_unit':
+                await sb.from('units').delete().eq('id', action.target_id);
+                break;
+                
+            case 'delete_session':
+                await sb.from('scheduled_sessions').delete().eq('id', action.target_id);
+                break;
+                
+            case 'delete_resource':
+                const filePath = action.action_data.file_path;
+                await sb.storage.from(RESOURCES_BUCKET).remove([filePath]);
+                await sb.from('resources').delete().eq('id', action.target_id);
+                break;
+                
+            default:
+                console.log('Action type not implemented for execution:', action.action_type);
+        }
+        
+        // Refresh affected tables
+        if (document.getElementById('users')) loadAllUsers();
+        if (document.getElementById('courses')) loadCourses();
+        if (document.getElementById('sessions')) loadScheduledSessions();
+        if (document.getElementById('resources')) loadResources();
+        
+    } catch (err) {
+        console.error('Error executing approved action:', err);
+        await logAudit('ACTION_EXECUTION_FAILED', `Failed to execute approved action ${actionId}: ${err.message}`, actionId, 'FAILURE');
+    }
+}
+
+// Filter admin actions from dropdown
+function filterAdminActions() {
+    loadAdminActions();
+}
+
+// Load approval history for the log
+async function loadApprovalHistory() {
+    const tbody = document.getElementById('approval-log-body');
+    if (!tbody) return;
+    
+    const { data, error } = await sb
+        .from('admin_action_requests')
+        .select('*')
+        .not('status', 'eq', 'pending')
+        .order('reviewed_at', { ascending: false })
+        .limit(50);
+    
+    if (error) {
+        tbody.innerHTML = `<tr><td colspan="5">Error loading history: ${error.message}</td></tr>`;
+        return;
+    }
+    
+    if (!data || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5">No approval history found</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = data.map(action => `
+        <tr>
+            <td>${formatDate(action.reviewed_at)}</td>
+            <td>${escapeHtml(action.admin_name)}</td>
+            <td>${formatActionType(action.action_type)}</td>
+            <td>${getStatusBadge(action.status)}</td>
+            <td>${action.review_notes ? escapeHtml(action.review_notes.substring(0, 50)) : '-'}</td>
+        </tr>
+    `).join('');
+}
+
+// Initialize admin approvals when tab is opened
+function initAdminApprovals() {
+    loadAdminActions();
+    loadApprovalHistory();
+    // Refresh every 30 seconds
+    if (window.approvalInterval) clearInterval(window.approvalInterval);
+    window.approvalInterval = setInterval(() => {
+        if (document.getElementById('admin-approvals')?.classList.contains('active')) {
+            loadAdminActions();
+        }
+    }, 30000);
+}
+
+// Export admin actions to CSV
+async function exportAdminActionsToCSV() {
+    const { data, error } = await sb
+        .from('admin_action_requests')
+        .select('*')
+        .order('requested_at', { ascending: false });
+    
+    if (error) {
+        showFeedback('Error exporting actions', 'error');
+        return;
+    }
+    
+    const csvRows = [
+        ['Request ID', 'Admin Name', 'Action Type', 'Description', 'Target ID', 'Requested At', 'Status', 'Reviewed At', 'Review Notes']
+    ];
+    
+    data.forEach(action => {
+        csvRows.push([
+            action.id,
+            action.admin_name,
+            action.action_type,
+            action.description,
+            action.target_id || '',
+            action.requested_at,
+            action.status,
+            action.reviewed_at || '',
+            action.review_notes || ''
+        ]);
+    });
+    
+    const csvContent = csvRows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `admin_actions_export_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    showFeedback('Admin actions exported successfully!', 'success');
+}
+
+// Make functions globally available
+window.loadAdminActions = loadAdminActions;
+window.viewActionDetail = viewActionDetail;
+window.approveCurrentAction = approveCurrentAction;
+window.rejectCurrentAction = rejectCurrentAction;
+window.filterAdminActions = filterAdminActions;
+window.exportAdminActionsToCSV = exportAdminActionsToCSV;
+window.requestAdminAction = requestAdminAction;
 // Initialize the application
 document.addEventListener('DOMContentLoaded', initSession);
